@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+*.vsix
+
+# Tests
+coverage/
+.vscode-test/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
+.env.*
+!.env.example

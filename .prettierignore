@@ -1,0 +1,9 @@
+dist/
+out/
+coverage/
+.vscode-test/
+node_modules/
+package-lock.json
+test/fixtures/
+# Project docs are formatted by hand (Russian text, wide tables).
+*.md

@@ -1,0 +1,154 @@
+// @ts-check
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+/**
+ * Node version shipped with the oldest supported editor (VS Code 1.90 → Electron 29 → Node 20).
+ * Raising engines.vscode is the only reason to change it.
+ */
+export const NODE_TARGET = 'node20';
+
+/** Modules provided by the editor at runtime and never bundled. */
+export const EXTERNALS = ['vscode'];
+
+/**
+ * Each driver lives in src/drivers/<id>/index.ts and is bundled separately to
+ * dist/drivers/<id>.js, so it is loaded only on the first connection to that DBMS.
+ *
+ * @param {string} rootDir project root
+ * @returns {Record<string, string>} esbuild entry name → source path
+ */
+export function findDriverEntries(rootDir) {
+  const driversDir = join(rootDir, 'src', 'drivers');
+  if (!existsSync(driversDir)) {
+    return {};
+  }
+  /** @type {Record<string, string>} */
+  const entries = {};
+  const dirs = readdirSync(driversDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  for (const id of dirs) {
+    const index = join(driversDir, id, 'index.ts');
+    if (existsSync(index)) {
+      entries[`drivers/${id}`] = index;
+    }
+  }
+  return entries;
+}
+
+/**
+ * @param {{ rootDir: string; outDir?: string; production?: boolean }} options
+ * @returns {import('esbuild').BuildOptions}
+ */
+export function createHostBuildOptions({ rootDir, outDir, production = false }) {
+  return {
+    absWorkingDir: rootDir,
+    entryPoints: {
+      extension: join(rootDir, 'src', 'extension.ts'),
+      ...findDriverEntries(rootDir),
+    },
+    outdir: outDir ?? join(rootDir, 'dist'),
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: NODE_TARGET,
+    external: EXTERNALS,
+    sourcemap: production ? false : 'linked',
+    sourcesContent: false,
+    minify: production,
+    keepNames: true,
+    logLevel: 'info',
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(production ? 'production' : 'development'),
+    },
+  };
+}
+
+/** Webview bundles are written here; panels restrict localResourceRoots to this folder. */
+export const WEBVIEW_OUT_DIR = 'dist/webview';
+
+/**
+ * Each webview app lives in webview/src/apps/<name>/main.ts and is built to
+ * dist/webview/<name>.js (+ <name>.css), so the host can reference it by a fixed name.
+ *
+ * @param {string} rootDir project root
+ * @returns {Record<string, string>} app name → entry path
+ */
+export function findWebviewApps(rootDir) {
+  const appsDir = join(rootDir, 'webview', 'src', 'apps');
+  if (!existsSync(appsDir)) {
+    return {};
+  }
+  /** @type {Record<string, string>} */
+  const apps = {};
+  const dirs = readdirSync(appsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  for (const name of dirs) {
+    const main = join(appsDir, name, 'main.ts');
+    if (existsSync(main)) {
+      apps[name] = main;
+    }
+  }
+  return apps;
+}
+
+/** Compiled e2e tests; @vscode/test-cli runs them inside VS Code. */
+export const E2E_OUT_DIR = 'out/test/e2e';
+
+/**
+ * @param {string} dir
+ * @param {string} prefix
+ * @returns {string[]} files relative to `dir`, POSIX separators
+ */
+function listRecursive(dir, prefix = '') {
+  if (!existsSync(dir)) {
+    return [];
+  }
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? listRecursive(join(dir, entry.name), `${prefix}${entry.name}/`)
+      : [`${prefix}${entry.name}`],
+  );
+}
+
+/**
+ * @param {string} rootDir project root
+ * @returns {Record<string, string>} output name (without .js) → test source path
+ */
+export function findE2eTests(rootDir) {
+  const e2eDir = join(rootDir, 'test', 'e2e');
+  /** @type {Record<string, string>} */
+  const entries = {};
+  for (const file of listRecursive(e2eDir).sort()) {
+    if (file.endsWith('.test.ts')) {
+      entries[file.slice(0, -'.ts'.length)] = join(e2eDir, file);
+    }
+  }
+  return entries;
+}
+
+/**
+ * Each e2e test file becomes a standalone CommonJS bundle; `vscode` and `mocha`
+ * come from the test host at runtime.
+ *
+ * @param {{ rootDir: string; outDir?: string }} options
+ * @returns {import('esbuild').BuildOptions}
+ */
+export function createE2eBuildOptions({ rootDir, outDir }) {
+  return {
+    absWorkingDir: rootDir,
+    entryPoints: findE2eTests(rootDir),
+    outdir: outDir ?? join(rootDir, E2E_OUT_DIR),
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: NODE_TARGET,
+    external: [...EXTERNALS, 'mocha'],
+    sourcemap: 'inline',
+    logLevel: 'warning',
+  };
+}

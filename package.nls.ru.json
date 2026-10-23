@@ -1,0 +1,7 @@
+{
+  "extension.displayName": "DataNest",
+  "extension.description": "Бесплатный клиент баз данных с открытым кодом: MySQL, MariaDB, PostgreSQL, SQLite и другие.",
+  "viewsContainers.datanest.title": "DataNest",
+  "views.connections.name": "Подключения",
+  "viewsWelcome.connections.empty": "Подключений пока нет."
+}

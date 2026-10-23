@@ -1,0 +1,97 @@
+{
+  "name": "datanest",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "datanest",
+  "license": "MIT",
+  "categories": [
+    "Data Science",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "database",
+    "sql",
+    "mysql",
+    "mariadb",
+    "postgresql",
+    "sqlite",
+    "client"
+  ],
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=22.12.0"
+  },
+  "main": "./dist/extension.js",
+  "l10n": "./l10n",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "datanest",
+          "title": "%viewsContainers.datanest.title%",
+          "icon": "resources/activity-bar.svg"
+        }
+      ]
+    },
+    "views": {
+      "datanest": [
+        {
+          "id": "datanest.connections",
+          "name": "%views.connections.name%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "datanest.connections",
+        "contents": "%viewsWelcome.connections.empty%"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:prod": "node scripts/build.mjs --production",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc -p . && tsc -p test/e2e && svelte-check --tsconfig ./webview/tsconfig.json --fail-on-warnings --threshold warning",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint --max-warnings 0 . && prettier --check .",
+    "format": "prettier --write . && eslint --fix .",
+    "test:e2e": "npm run build && node scripts/build-e2e.mjs && vscode-test",
+    "package": "node scripts/build.mjs --production && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@testing-library/svelte": "5.4.2",
+    "@types/mocha": "10.0.10",
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.90.0",
+    "@vitest/coverage-v8": "5.0.5",
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-svelte": "3.23.1",
+    "globals": "17.13.0",
+    "jsdom": "30.1.3",
+    "prettier": "3.9.10",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.7",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.1.3",
+    "diff": "^8.0.3"
+  }
+}

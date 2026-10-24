@@ -1,0 +1,4 @@
+# LF everywhere, so checks behave the same on Windows runners.
+* text=auto eol=lf
+*.png binary
+*.vsix binary

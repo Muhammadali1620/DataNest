@@ -56,7 +56,7 @@
 **Итог:** пустое расширение с иконкой в Activity Bar запускается по F5, сборка и тесты работают, CI зелёный.
 
 - [~] **V0.0** Выбрать название, `publisher` id и проверить, что имя свободно в Marketplace и Open VSX.
-  Название **DataNest** свободно (Marketplace, Open VSX, npm — 2026-10-23, D11). Токен Open VSX получен (в `.env`), публикация в Marketplace — вручную (D18). Осталось: создать namespace `datanest` в Open VSX и publisher `datanest` в Marketplace (свободны на 2026-10-24).
+  Название **DataNest** свободно (Marketplace, Open VSX, npm — 2026-10-23, D11). Токен Open VSX получен (в `.env`), публикация в Marketplace — вручную (D18). Namespace `datanest` в Open VSX создан 2026-10-24, токен проверен (`ovsx verify-pat`). Осталось: создать publisher `datanest` в Marketplace (вручную, владелец).
 - [x] **V0.1** Репозиторий: `git init`, `.gitignore`, `LICENSE` (MIT), `.editorconfig`, заготовки `README.md` и `CHANGELOG.md`.
 - [x] **V0.2** `package.json`: метаданные, `engines.vscode`, контейнер в Activity Bar, пустой view, `activationEvents`.
 - [x] **V0.3** TypeScript (strict) + esbuild: сборка extension host, watch-режим, source maps, отдельные бандлы драйверов.

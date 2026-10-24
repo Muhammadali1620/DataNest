@@ -22,6 +22,20 @@ describe('connections view', () => {
     assert.ok(all.includes(`${VIEW_ID}.focus`), 'the view command is missing');
   });
 
+  it('hides system objects by default and can be switched at runtime', async () => {
+    const config = vscode.workspace.getConfiguration('datanest');
+    assert.equal(config.get('showSystemObjects'), false);
+    try {
+      await config.update('showSystemObjects', true, vscode.ConfigurationTarget.Global);
+      assert.equal(vscode.workspace.getConfiguration('datanest').get('showSystemObjects'), true);
+    } finally {
+      await vscode.workspace
+        .getConfiguration('datanest')
+        .update('showSystemObjects', undefined, vscode.ConfigurationTarget.Global);
+    }
+    assert.equal(vscode.workspace.getConfiguration('datanest').get('showSystemObjects'), false);
+  });
+
   it('registers every tree command', async () => {
     const all = await vscode.commands.getCommands(true);
     for (const id of [

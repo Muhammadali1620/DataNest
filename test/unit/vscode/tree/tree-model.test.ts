@@ -23,6 +23,7 @@ describe('TreeModel', () => {
   let drivers: FakeDriverProvider;
   let manager: ConnectionManager;
   let cache: MetadataCache;
+  let showSystemObjects: boolean;
   let logger: RecordingLogger;
   let model: TreeModel;
   let mysql: ConnectionConfig;
@@ -37,7 +38,15 @@ describe('TreeModel', () => {
     drivers = new FakeDriverProvider();
     manager = new ConnectionManager({ store, drivers, logger });
     cache = new MetadataCache({ logger });
-    model = new TreeModel({ store, manager, cache, logger, texts: TEXTS });
+    showSystemObjects = false;
+    model = new TreeModel({
+      store,
+      manager,
+      cache,
+      settings: { showSystemObjects: () => showSystemObjects },
+      logger,
+      texts: TEXTS,
+    });
     mysql = await store.add({ name: 'Local', driver: 'mysql', host: 'h' });
   });
 
@@ -91,6 +100,43 @@ describe('TreeModel', () => {
       ]);
     });
 
+    it("hides the server's own databases by default", async () => {
+      drivers.driver('mysql').sessionMetadata.databases = [
+        'app',
+        'information_schema',
+        'mysql',
+        'shop',
+      ];
+      const children = await model.children({ kind: 'connection', connectionId: mysql.id });
+      expect(children).toEqual([
+        { kind: 'database', connectionId: mysql.id, database: 'app' },
+        { kind: 'database', connectionId: mysql.id, database: 'shop' },
+      ]);
+    });
+
+    it('shows them when the setting is on, without asking the server again', async () => {
+      const driver = drivers.driver('mysql');
+      driver.sessionMetadata.databases = ['app', 'information_schema'];
+      await model.children({ kind: 'connection', connectionId: mysql.id });
+      showSystemObjects = true;
+      const children = await model.children({ kind: 'connection', connectionId: mysql.id });
+      expect(children.map((node) => (node.kind === 'database' ? node.database : ''))).toEqual([
+        'app',
+        'information_schema',
+      ]);
+      // The list came from the cache: filtering is local to the tree.
+      expect(driver.lastSession?.metadata.calls.filter((c) => c === 'listDatabases')).toHaveLength(
+        1,
+      );
+    });
+
+    it('says there are no databases when only system ones exist', async () => {
+      drivers.driver('mysql').sessionMetadata.databases = ['mysql', 'sys'];
+      expect(await model.children({ kind: 'connection', connectionId: mysql.id })).toEqual([
+        { kind: 'message', text: 'No databases', connectionId: mysql.id },
+      ]);
+    });
+
     it('shows the failure as a leaf instead of breaking the tree', async () => {
       drivers.driver('mysql').openError = new DbError('auth-failed', 'Access denied');
       const children = await model.children({ kind: 'connection', connectionId: mysql.id });
@@ -109,6 +155,34 @@ describe('TreeModel', () => {
         { kind: 'group', group: 'tables', connectionId: mysql.id, scope: { database: 'app' } },
         { kind: 'group', group: 'views', connectionId: mysql.id, scope: { database: 'app' } },
       ]);
+    });
+
+    it('hides system schemas by default and shows them when asked', async () => {
+      const pg = await store.add({ name: 'PG2', driver: 'postgres', host: 'h' });
+      const driver = drivers.driver('postgres');
+      driver.capabilities = {
+        databases: true,
+        schemas: true,
+        databaseScopedSessions: true,
+        cancel: true,
+      };
+      driver.sessionMetadata.schemas = ['public', 'pg_catalog', 'information_schema', 'audit'];
+      const hidden = await model.children({
+        kind: 'database',
+        connectionId: pg.id,
+        database: 'app',
+      });
+      expect(hidden.map((node) => (node.kind === 'schema' ? node.schema : ''))).toEqual([
+        'public',
+        'audit',
+      ]);
+      showSystemObjects = true;
+      const shown = await model.children({
+        kind: 'database',
+        connectionId: pg.id,
+        database: 'app',
+      });
+      expect(shown).toHaveLength(4);
     });
 
     it('lists schemas when the driver has them', async () => {

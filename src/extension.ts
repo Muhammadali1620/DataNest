@@ -6,6 +6,7 @@ import { MetadataCache } from './services/metadata-cache';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
+import { createSettings } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
@@ -27,7 +28,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(manager);
   const cache = new MetadataCache({ logger });
 
-  const tree = new ConnectionsTreeProvider({ store, manager, cache, logger });
+  const settings = createSettings();
+  const tree = new ConnectionsTreeProvider({ store, manager, cache, settings, logger });
   context.subscriptions.push(
     tree,
     vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {

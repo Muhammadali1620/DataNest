@@ -1,13 +1,15 @@
 // Decides what every tree node contains. Free of `vscode`: the provider only turns
 // these nodes into TreeItems, so the whole structure is unit-tested with fakes.
 
-import { errorMessage } from '../../core/errors';
+import { DbError, errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
 import type { ObjectScope } from '../../core/model/objects';
+import { withoutSystemDatabases, withoutSystemSchemas } from '../../core/model/system-objects';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
 import { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
+import type { DriverId } from '../../shared/connection';
 import type { TreeNode } from './nodes';
 
 export interface TreeTexts {
@@ -19,10 +21,17 @@ export interface TreeTexts {
   readonly noColumns: string;
 }
 
+/** Settings the tree reads; asked every time, so a change takes effect at once. */
+export interface TreeSettings {
+  /** `datanest.showSystemObjects`: show the server's own databases and schemas. */
+  showSystemObjects(): boolean;
+}
+
 export interface TreeModelDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
+  readonly settings: TreeSettings;
   readonly logger: Logger;
   readonly texts: TreeTexts;
 }
@@ -95,7 +104,12 @@ export class TreeModel {
       // A single-file database (SQLite): objects sit right under the connection.
       return this.groups(connectionId, {});
     }
-    const databases = await metadata.listDatabases();
+    const all = await metadata.listDatabases();
+    // Filtering happens here, not in the cache: toggling the setting needs no
+    // server round trip, and the cache keeps what the server actually said.
+    const databases = this.deps.settings.showSystemObjects()
+      ? all
+      : withoutSystemDatabases(this.driverIdOf(connectionId), all);
     if (databases.length === 0) {
       return [{ kind: 'message', text: this.deps.texts.noDatabases, connectionId }];
     }
@@ -108,7 +122,10 @@ export class TreeModel {
       return this.groups(connectionId, { database });
     }
     const metadata = await this.metadataOf(connectionId, database);
-    const schemas = await metadata.listSchemas(database);
+    const all = await metadata.listSchemas(database);
+    const schemas = this.deps.settings.showSystemObjects()
+      ? all
+      : withoutSystemSchemas(this.driverIdOf(connectionId), all);
     return schemas.map((schema) => ({ kind: 'schema', connectionId, database, schema }));
   }
 
@@ -159,6 +176,15 @@ export class TreeModel {
       table: { ...node.scope, name: node.name },
       column,
     }));
+  }
+
+  /** The driver of a saved connection; an unknown id cannot reach here. */
+  private driverIdOf(connectionId: string): DriverId {
+    const config = this.deps.store.get(connectionId);
+    if (!config) {
+      throw new DbError('not-found', `Connection "${connectionId}" does not exist`);
+    }
+    return config.driver;
   }
 
   private async capabilitiesOf(connectionId: string): Promise<DriverCapabilities> {

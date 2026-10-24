@@ -29,4 +29,6 @@ export const CONFIG_SECTION = 'datanest';
 
 export const CONFIG_KEYS = {
   logLevel: 'logLevel',
+  /** Show the server's own databases and schemas in the tree. */
+  showSystemObjects: 'showSystemObjects',
 } as const;

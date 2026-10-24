@@ -4,8 +4,9 @@ import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import { describeTarget } from '../../shared/connection';
+import { affectsDataNest } from '../settings';
 import { CONNECTIONS_VIEW_ID, describeColumn, nodeId, TREE_CONTEXT, type TreeNode } from './nodes';
-import { TreeModel } from './tree-model';
+import { TreeModel, type TreeSettings } from './tree-model';
 
 export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
@@ -13,6 +14,7 @@ export interface ConnectionsTreeDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
+  readonly settings: TreeSettings;
   readonly logger: Logger;
 }
 
@@ -33,6 +35,7 @@ export class ConnectionsTreeProvider
       store: deps.store,
       manager: deps.manager,
       cache: deps.cache,
+      settings: deps.settings,
       logger: deps.logger,
       texts: {
         tables: vscode.l10n.t('Tables'),
@@ -47,6 +50,12 @@ export class ConnectionsTreeProvider
       this.changed,
       deps.store.onDidChange(() => {
         this.refresh();
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        // Hiding system objects is a local filter: redrawing is enough.
+        if (affectsDataNest(event)) {
+          this.refresh();
+        }
       }),
       deps.manager.onDidChangeState((connectionId) => {
         // A connection that dropped or reconnected may have a different structure.

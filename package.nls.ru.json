@@ -18,5 +18,6 @@
   "commands.connections.connect.title": "Подключиться",
   "commands.connections.disconnect.title": "Отключиться",
   "commands.tree.refresh.title": "Обновить",
-  "commands.tree.copyName.title": "Копировать имя"
+  "commands.tree.copyName.title": "Копировать имя",
+  "configuration.showSystemObjects.description": "Показывать служебные базы и схемы сервера, например `information_schema` и `pg_catalog`."
 }

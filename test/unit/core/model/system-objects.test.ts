@@ -1,0 +1,108 @@
+import { describe, expect, it } from 'vitest';
+import {
+  isSystemDatabase,
+  isSystemSchema,
+  withoutSystemDatabases,
+  withoutSystemSchemas,
+} from '../../../../src/core/model/system-objects';
+
+describe('isSystemDatabase', () => {
+  it('knows the MySQL built-ins', () => {
+    for (const name of ['information_schema', 'performance_schema', 'mysql', 'sys']) {
+      expect(isSystemDatabase('mysql', name), name).toBe(true);
+    }
+  });
+
+  it('knows the PostgreSQL templates', () => {
+    expect(isSystemDatabase('postgres', 'template0')).toBe(true);
+    expect(isSystemDatabase('postgres', 'template1')).toBe(true);
+  });
+
+  it('keeps the PostgreSQL "postgres" database visible, since people use it', () => {
+    expect(isSystemDatabase('postgres', 'postgres')).toBe(false);
+  });
+
+  it('ignores case', () => {
+    expect(isSystemDatabase('mysql', 'INFORMATION_SCHEMA')).toBe(true);
+    expect(isSystemDatabase('mysql', 'MySQL')).toBe(true);
+  });
+
+  it('leaves user databases alone', () => {
+    for (const name of ['app', 'datanest_test', 'my_information_schema', 'sysadmin']) {
+      expect(isSystemDatabase('mysql', name), name).toBe(false);
+    }
+  });
+
+  it('does not apply the list of one server to another', () => {
+    // `mysql` is a built-in database only on MySQL.
+    expect(isSystemDatabase('postgres', 'mysql')).toBe(false);
+    expect(isSystemDatabase('mysql', 'template0')).toBe(false);
+  });
+
+  it('has nothing to hide for a single-file database', () => {
+    expect(isSystemDatabase('sqlite', 'main')).toBe(false);
+  });
+});
+
+describe('isSystemSchema', () => {
+  it('knows the PostgreSQL catalogs', () => {
+    expect(isSystemSchema('postgres', 'pg_catalog')).toBe(true);
+    expect(isSystemSchema('postgres', 'information_schema')).toBe(true);
+  });
+
+  it('knows the generated schemas by prefix', () => {
+    expect(isSystemSchema('postgres', 'pg_toast')).toBe(true);
+    expect(isSystemSchema('postgres', 'pg_toast_temp_7')).toBe(true);
+    expect(isSystemSchema('postgres', 'pg_temp_3')).toBe(true);
+  });
+
+  it('leaves user schemas alone, including look-alikes', () => {
+    for (const name of ['public', 'audit', 'pgcrypto', 'my_pg_catalog']) {
+      expect(isSystemSchema('postgres', name), name).toBe(false);
+    }
+  });
+
+  it('ignores case', () => {
+    expect(isSystemSchema('postgres', 'PG_CATALOG')).toBe(true);
+    expect(isSystemSchema('postgres', 'PG_Temp_1')).toBe(true);
+  });
+
+  it('has nothing to hide where there are no schemas', () => {
+    expect(isSystemSchema('mysql', 'information_schema')).toBe(false);
+    expect(isSystemSchema('sqlite', 'main')).toBe(false);
+  });
+});
+
+describe('withoutSystemDatabases', () => {
+  it('keeps the server order and drops only the built-ins', () => {
+    expect(
+      withoutSystemDatabases('mysql', ['app', 'information_schema', 'shop', 'mysql', 'sys']),
+    ).toEqual(['app', 'shop']);
+  });
+
+  it('returns an empty list when everything is a built-in', () => {
+    expect(withoutSystemDatabases('mysql', ['mysql', 'sys'])).toEqual([]);
+  });
+
+  it('passes an empty list through', () => {
+    expect(withoutSystemDatabases('postgres', [])).toEqual([]);
+  });
+});
+
+describe('withoutSystemSchemas', () => {
+  it('keeps user schemas in order', () => {
+    expect(
+      withoutSystemSchemas('postgres', [
+        'public',
+        'pg_catalog',
+        'audit',
+        'information_schema',
+        'pg_toast',
+      ]),
+    ).toEqual(['public', 'audit']);
+  });
+
+  it('leaves MySQL schema lists untouched', () => {
+    expect(withoutSystemSchemas('mysql', ['whatever'])).toEqual(['whatever']);
+  });
+});

@@ -221,6 +221,12 @@
           ],
           "markdownDescription": "%configuration.logLevel.description%",
           "scope": "application"
+        },
+        "datanest.showSystemObjects": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%configuration.showSystemObjects.description%",
+          "scope": "window"
         }
       }
     }

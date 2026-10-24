@@ -18,5 +18,6 @@
   "commands.connections.connect.title": "Connect",
   "commands.connections.disconnect.title": "Disconnect",
   "commands.tree.refresh.title": "Refresh",
-  "commands.tree.copyName.title": "Copy Name"
+  "commands.tree.copyName.title": "Copy Name",
+  "configuration.showSystemObjects.description": "Show the databases and schemas the server keeps for itself, such as `information_schema` and `pg_catalog`."
 }

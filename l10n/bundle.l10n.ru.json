@@ -29,5 +29,10 @@
   "failed": "ошибка",
   "not connected": "не подключено",
   "Open a SQL query first: DataNest: New Query": "Сначала откройте SQL-запрос: DataNest: Новый запрос",
-  "Pick a database": "Выберите базу данных"
+  "Pick a database": "Выберите базу данных",
+  "Nothing to run": "Нечего выполнять",
+  "Query cancelled": "Запрос отменён",
+  "{0} rows in {1} ms": "строк: {0}, за {1} мс",
+  "{0} rows affected in {1} ms": "затронуто строк: {0}, за {1} мс",
+  "$(play) Run": "$(play) Выполнить"
 }

@@ -21,5 +21,10 @@
   "commands.tree.copyName.title": "Копировать имя",
   "configuration.showSystemObjects.description": "Показывать служебные базы и схемы сервера, например `information_schema` и `pg_catalog`.",
   "commands.query.new.title": "Новый запрос",
-  "commands.query.selectConnection.title": "Выбрать подключение для запроса"
+  "commands.query.selectConnection.title": "Выбрать подключение для запроса",
+  "commands.query.run.title": "Выполнить запрос",
+  "commands.query.runAll.title": "Выполнить все запросы",
+  "commands.query.runRange.title": "Выполнить этот запрос",
+  "commands.query.cancel.title": "Отменить запрос",
+  "configuration.rowLimit.description": "Сколько строк вернёт один запрос. Большие результаты обрезаются, и в результате видно, что он обрезан."
 }

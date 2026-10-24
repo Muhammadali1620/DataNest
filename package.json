@@ -125,6 +125,29 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.query.run",
+        "title": "%commands.query.run.title%",
+        "category": "DataNest",
+        "icon": "$(play)"
+      },
+      {
+        "command": "datanest.query.runAll",
+        "title": "%commands.query.runAll.title%",
+        "category": "DataNest",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "datanest.query.runRange",
+        "title": "%commands.query.runRange.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.query.cancel",
+        "title": "%commands.query.cancel.title%",
+        "category": "DataNest",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -135,6 +158,10 @@
         {
           "command": "datanest.dev.openPing",
           "when": "datanest.isDevelopment"
+        },
+        {
+          "command": "datanest.query.runRange",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -225,6 +252,30 @@
           "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
           "group": "0_query@1"
         }
+      ],
+      "editor/title": [
+        {
+          "command": "datanest.query.run",
+          "when": "editorLangId == sql",
+          "group": "navigation@1"
+        },
+        {
+          "command": "datanest.query.runAll",
+          "when": "editorLangId == sql",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "datanest.query.run",
+          "when": "editorLangId == sql",
+          "group": "0_datanest@1"
+        },
+        {
+          "command": "datanest.query.runAll",
+          "when": "editorLangId == sql",
+          "group": "0_datanest@2"
+        }
       ]
     },
     "configuration": {
@@ -253,9 +304,31 @@
           "default": false,
           "markdownDescription": "%configuration.showSystemObjects.description%",
           "scope": "window"
+        },
+        "datanest.rowLimit": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 1,
+          "maximum": 1000000,
+          "markdownDescription": "%configuration.rowLimit.description%",
+          "scope": "window"
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "datanest.query.run",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == sql"
+      },
+      {
+        "command": "datanest.query.runAll",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "editorTextFocus && editorLangId == sql"
+      }
+    ]
   },
   "scripts": {
     "build": "node scripts/build.mjs",

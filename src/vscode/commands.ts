@@ -4,6 +4,8 @@ import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
+import { runCommandHandlers } from './editor/run-query';
+import type { QueryRunner } from '../services/query-runner';
 import { connectionIdOf, isTreeNode, scopeOf } from './tree/nodes';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
@@ -22,6 +24,7 @@ export interface CommandDeps {
   readonly tree: ConnectionsTreeProvider;
   readonly cache: MetadataCache;
   readonly editors: QueryEditors;
+  readonly runner: QueryRunner;
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
@@ -35,6 +38,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     extensionUri: deps.extensionUri,
     store: deps.store,
     manager: deps.manager,
+    logger: deps.logger,
+  });
+  const runCommands = runCommandHandlers({
+    runner: deps.runner,
+    editors: deps.editors,
+    store: deps.store,
     logger: deps.logger,
   });
   const treeCommands = treeCommandHandlers({
@@ -71,6 +80,10 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       );
     },
     [COMMAND_IDS.selectConnection]: async () => await deps.editors.selectConnection(),
+    [COMMAND_IDS.runQuery]: runCommands.run,
+    [COMMAND_IDS.runAll]: runCommands.runAll,
+    [COMMAND_IDS.runRange]: runCommands.runRange,
+    [COMMAND_IDS.cancelQuery]: runCommands.cancel,
     [COMMAND_IDS.openPing]: () => {
       const panel = new PingPanel(deps.extensionUri, deps.logger);
       pings = [...pings.filter((open) => !open.isDisposed), panel];

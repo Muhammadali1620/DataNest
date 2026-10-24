@@ -21,5 +21,10 @@
   "commands.tree.copyName.title": "Copy Name",
   "configuration.showSystemObjects.description": "Show the databases and schemas the server keeps for itself, such as `information_schema` and `pg_catalog`.",
   "commands.query.new.title": "New Query",
-  "commands.query.selectConnection.title": "Select Connection for Query"
+  "commands.query.selectConnection.title": "Select Connection for Query",
+  "commands.query.run.title": "Run Query",
+  "commands.query.runAll.title": "Run All Queries",
+  "commands.query.runRange.title": "Run This Statement",
+  "commands.query.cancel.title": "Cancel Query",
+  "configuration.rowLimit.description": "How many rows one statement may bring back. Larger results are cut off, and the result shows that it was truncated."
 }

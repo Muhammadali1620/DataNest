@@ -17,6 +17,14 @@ export const COMMAND_IDS = {
   newQuery: 'datanest.query.new',
   /** Picks the connection and database of the active SQL document. */
   selectConnection: 'datanest.query.selectConnection',
+  /** Runs the selection, or the statement the cursor is in. */
+  runQuery: 'datanest.query.run',
+  /** Runs every statement of the document. */
+  runAll: 'datanest.query.runAll',
+  /** Runs one statement by offsets; used by the CodeLens above it. */
+  runRange: 'datanest.query.runRange',
+  /** Stops the statement running in this editor. */
+  cancelQuery: 'datanest.query.cancel',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;
@@ -35,4 +43,6 @@ export const CONFIG_KEYS = {
   logLevel: 'logLevel',
   /** Show the server's own databases and schemas in the tree. */
   showSystemObjects: 'showSystemObjects',
+  /** Largest number of rows one statement brings back. */
+  rowLimit: 'rowLimit',
 } as const;

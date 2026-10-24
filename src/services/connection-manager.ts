@@ -91,6 +91,11 @@ export class ConnectionManager implements Disposable {
     return toDisposable(() => this.listeners.delete(listener));
   }
 
+  /** The live session of an owner, or undefined when it holds none. */
+  sessionOf(owner: string): Session | undefined {
+    return this.holders.get(owner)?.session;
+  }
+
   /** Connection ids that currently hold at least one live session. */
   connectedIds(): string[] {
     return [...new Set([...this.holders.values()].map((held) => held.target.connectionId))];

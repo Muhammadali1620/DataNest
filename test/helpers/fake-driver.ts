@@ -63,6 +63,8 @@ export class FakeSession implements Session {
   executeError: Error | undefined;
   /** Rows every execute() yields. */
   rows: CellValue[][] = [[1]];
+  /** Awaited before the first event, so a test can keep a statement running. */
+  gate: (() => Promise<void>) | undefined;
 
   constructor(readonly config: ResolvedConnectionConfig) {}
 
@@ -88,6 +90,7 @@ export class FakeSession implements Session {
   private async *stream(): AsyncGenerator<ExecuteEvent> {
     // A real driver always crosses an async boundary before the first event.
     await Promise.resolve();
+    await this.gate?.();
     if (this.executeError !== undefined) {
       throw this.executeError;
     }
@@ -115,11 +118,37 @@ export class FakeDriver implements Driver {
   metadataError: Error | undefined;
   /** What the metadata of each new session answers; set it before expanding a tree. */
   readonly sessionMetadata = new FakeMetadata();
+  /** Rows each new session yields from execute(). */
+  sessionRows: CellValue[][] = [[1]];
+  /** While true, every statement waits for `releaseExecute()`. */
+  holdExecute = false;
+
+  private gate: Promise<void> | undefined;
+  private openGate: (() => void) | undefined;
 
   constructor(readonly id: DriverId = 'mysql') {}
 
   get lastSession(): FakeSession | undefined {
     return this.sessions.at(-1);
+  }
+
+  /** Lets every held statement finish. */
+  releaseExecute(): void {
+    this.holdExecute = false;
+    const open = this.openGate;
+    this.gate = undefined;
+    this.openGate = undefined;
+    open?.();
+  }
+
+  private waitGate(): Promise<void> {
+    if (!this.holdExecute) {
+      return Promise.resolve();
+    }
+    this.gate ??= new Promise<void>((resolve) => {
+      this.openGate = resolve;
+    });
+    return this.gate;
   }
 
   openSession(config: ResolvedConnectionConfig): Promise<Session> {
@@ -129,6 +158,8 @@ export class FakeDriver implements Driver {
     }
     const session = new FakeSession(config);
     session.executeError = this.executeError;
+    session.rows = [...this.sessionRows];
+    session.gate = () => this.waitGate();
     session.metadata.databases = [...this.sessionMetadata.databases];
     session.metadata.schemas = [...this.sessionMetadata.schemas];
     session.metadata.tables = [...this.sessionMetadata.tables];

@@ -15,6 +15,16 @@ export function createSettings(): TreeSettings {
   };
 }
 
+/** How many rows one statement may bring back; the rest needs a bigger limit. */
+export const DEFAULT_ROW_LIMIT = 1000;
+
+export function readRowLimit(): number {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<number>(CONFIG_KEYS.rowLimit, DEFAULT_ROW_LIMIT);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_ROW_LIMIT;
+}
+
 /** True when a configuration change touches one of our settings. */
 export function affectsDataNest(event: vscode.ConfigurationChangeEvent): boolean {
   return event.affectsConfiguration(CONFIG_SECTION);

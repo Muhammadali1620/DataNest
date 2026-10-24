@@ -4,6 +4,8 @@ export type DbErrorCode =
   | 'auth-failed'
   | 'timeout'
   | 'cancelled'
+  /** Something else is already using the resource, e.g. a query is still running. */
+  | 'busy'
   | 'syntax'
   | 'constraint'
   | 'permission-denied'

@@ -6,8 +6,11 @@ import { MetadataCache } from './services/metadata-cache';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
+import { QueryRunner } from './services/query-runner';
+import { ResultStore } from './services/result-store';
 import { QueryEditors } from './vscode/editor/query-editor';
-import { createSettings } from './vscode/settings';
+import { RunCodeLensProvider } from './vscode/editor/run-query';
+import { createSettings, readRowLimit } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
@@ -32,6 +35,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const editors = new QueryEditors({ store, manager, logger });
   context.subscriptions.push(editors);
 
+  const results = new ResultStore();
+  const runner = new QueryRunner({
+    manager,
+    results,
+    cache,
+    limits: { rowLimit: () => readRowLimit() },
+    logger,
+  });
+  const lenses = new RunCodeLensProvider({ runner, editors, store, logger });
+  context.subscriptions.push(
+    lenses,
+    vscode.languages.registerCodeLensProvider({ language: 'sql' }, lenses),
+    editors.bindings.onDidChange(() => {
+      // The dialect may have changed with the connection, so the split may differ.
+      lenses.refresh();
+    }),
+  );
+
   const settings = createSettings();
   const tree = new ConnectionsTreeProvider({ store, manager, cache, settings, logger });
   context.subscriptions.push(
@@ -52,6 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       tree,
       cache,
       editors,
+      runner,
     }),
   );
 

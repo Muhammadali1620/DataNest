@@ -2,7 +2,10 @@
 // dateStrings, bigNumberStrings and jsonStrings, so precision-critical types arrive
 // as text and only need tagging by column type.
 
+import { BINARY_PREVIEW_BYTES, binaryValue, safeIntOrTag } from '../common/values';
 import type { CellValue } from '../../shared/cell-value';
+
+export { BINARY_PREVIEW_BYTES };
 
 /** MySQL protocol column type codes (a stable part of the wire protocol). */
 export const MYSQL_TYPE = {
@@ -71,9 +74,6 @@ export function mysqlTypeName(columnType: number | undefined): string | undefine
   return columnType === undefined ? undefined : TYPE_NAMES[columnType];
 }
 
-/** How many bytes of a binary value travel to the UI as a hex preview. */
-export const BINARY_PREVIEW_BYTES = 256;
-
 const DATETIME_TYPES: ReadonlySet<number> = new Set([
   MYSQL_TYPE.TIMESTAMP,
   MYSQL_TYPE.DATE,
@@ -112,13 +112,7 @@ export function toCellValue(value: unknown, columnType?: number): CellValue {
     return safeIntOrTag(value.toString());
   }
   if (value instanceof Uint8Array) {
-    return {
-      kind: 'binary',
-      size: value.byteLength,
-      preview: Buffer.from(value.buffer, value.byteOffset, value.byteLength)
-        .subarray(0, BINARY_PREVIEW_BYTES)
-        .toString('hex'),
-    };
+    return binaryValue(value);
   }
   if (value instanceof Date) {
     // Defensive: dateStrings should prevent this; render without timezone math.
@@ -126,18 +120,6 @@ export function toCellValue(value: unknown, columnType?: number): CellValue {
   }
   // Parsed JSON or geometry objects: keep them readable as JSON text.
   return { kind: 'json', text: safeJson(value) };
-}
-
-/** BIGINT values that survive a JS number stay numbers; the rest keep exact text. */
-function safeIntOrTag(text: string): CellValue {
-  if (/^-?\d{1,15}$/.test(text)) {
-    return Number(text);
-  }
-  const parsed = Number(text);
-  if (Number.isSafeInteger(parsed) && String(parsed) === text) {
-    return parsed;
-  }
-  return { kind: 'bigint', text };
 }
 
 function formatLocalDateTime(date: Date): string {

@@ -99,13 +99,22 @@ export class FakeSession implements Session {
 
 export class FakeDriver implements Driver {
   readonly dialect = fakeDialect;
-  capabilities: DriverCapabilities = { databases: true, schemas: false, cancel: true };
+  capabilities: DriverCapabilities = {
+    databases: true,
+    schemas: false,
+    databaseScopedSessions: false,
+    cancel: true,
+  };
   readonly sessions: FakeSession[] = [];
   readonly opened: ResolvedConnectionConfig[] = [];
   /** Thrown by openSession() when set. */
   openError: Error | undefined;
   /** Copied onto every session this driver opens, so failures can be set up ahead. */
   executeError: Error | undefined;
+  /** Thrown by every metadata reader of every session this driver opens. */
+  metadataError: Error | undefined;
+  /** What the metadata of each new session answers; set it before expanding a tree. */
+  readonly sessionMetadata = new FakeMetadata();
 
   constructor(readonly id: DriverId = 'mysql') {}
 
@@ -120,6 +129,11 @@ export class FakeDriver implements Driver {
     }
     const session = new FakeSession(config);
     session.executeError = this.executeError;
+    session.metadata.databases = [...this.sessionMetadata.databases];
+    session.metadata.schemas = [...this.sessionMetadata.schemas];
+    session.metadata.tables = [...this.sessionMetadata.tables];
+    session.metadata.columns = [...this.sessionMetadata.columns];
+    session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);
   }

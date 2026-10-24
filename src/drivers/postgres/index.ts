@@ -8,6 +8,6 @@ import { openPostgresSession } from './session';
 export const driver: Driver = {
   id: 'postgres',
   dialect: postgresDialect,
-  capabilities: { databases: true, schemas: true, cancel: true },
+  capabilities: { databases: true, schemas: true, databaseScopedSessions: true, cancel: true },
   openSession: openPostgresSession,
 };

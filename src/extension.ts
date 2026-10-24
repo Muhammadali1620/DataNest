@@ -5,6 +5,7 @@ import { ConnectionStore } from './services/connection-store';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
+import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -23,6 +24,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const manager = new ConnectionManager({ store, drivers, logger });
   context.subscriptions.push(manager);
+
+  const tree = new ConnectionsTreeProvider({ store, manager, logger });
+  context.subscriptions.push(
+    tree,
+    vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
+      treeDataProvider: tree,
+      showCollapseAll: true,
+    }),
+  );
 
   context.subscriptions.push(
     ...registerCommands({

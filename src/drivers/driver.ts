@@ -11,6 +11,12 @@ export interface DriverCapabilities {
   readonly databases: boolean;
   /** Objects live inside schemas within a database (PostgreSQL). */
   readonly schemas: boolean;
+  /**
+   * A session sees only the database it connected to, so reading another one needs
+   * its own session (PostgreSQL). False where one session can query across databases
+   * by qualifying names (MySQL).
+   */
+  readonly databaseScopedSessions: boolean;
   /** A running statement can be cancelled from another connection or API. */
   readonly cancel: boolean;
 }

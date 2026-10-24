@@ -8,6 +8,6 @@ import { openMysqlSession } from './session';
 export const driver: Driver = {
   id: 'mysql',
   dialect: mysqlDialect,
-  capabilities: { databases: true, schemas: false, cancel: true },
+  capabilities: { databases: true, schemas: false, databaseScopedSessions: false, cancel: true },
   openSession: openMysqlSession,
 };

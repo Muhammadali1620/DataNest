@@ -67,9 +67,13 @@ export class ConnectionManager implements Disposable {
     this.logger = deps.logger.child('connections');
   }
 
-  /** Owner key of the session the tree and completion share. */
-  static treeOwner(connectionId: string): string {
-    return `tree:${connectionId}`;
+  /**
+   * Owner key of the session the tree and completion share. Drivers whose session
+   * sees only its own database get one session per database, so browsing does not
+   * reconnect on every switch; `disconnect` still closes all of them together.
+   */
+  static treeOwner(connectionId: string, database?: string): string {
+    return database === undefined ? `tree:${connectionId}` : `tree:${connectionId}:${database}`;
   }
 
   getState(connectionId: string): ConnectionState {

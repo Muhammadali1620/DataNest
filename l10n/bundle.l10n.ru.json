@@ -10,5 +10,16 @@
   "Delete the connection \"{0}\"?": "Удалить подключение «{0}»?",
   "Delete": "Удалить",
   "Pick a connection": "Выберите подключение",
-  "There are no saved connections yet": "Сохранённых подключений пока нет"
+  "There are no saved connections yet": "Сохранённых подключений пока нет",
+  "Tables": "Таблицы",
+  "Views": "Представления",
+  "No tables": "Нет таблиц",
+  "No views": "Нет представлений",
+  "No databases": "Нет баз данных",
+  "No columns": "Нет колонок",
+  "Connected": "Подключено",
+  "Connecting…": "Подключаемся…",
+  "Connection failed": "Не удалось подключиться",
+  "Not connected": "Не подключено",
+  "This connection no longer exists": "Этого подключения больше нет"
 }

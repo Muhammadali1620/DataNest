@@ -14,7 +14,7 @@ function fakeDriver(id: DriverId): Driver {
       literal: () => 'NULL',
       paginate: (sql) => sql,
     },
-    capabilities: { databases: true, schemas: false, cancel: true },
+    capabilities: { databases: true, schemas: false, databaseScopedSessions: false, cancel: true },
     openSession: () => Promise.reject(new Error('not implemented')),
   };
 }

@@ -8,7 +8,8 @@
   } from '../../../../src/shared/protocols/result-grid';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import type { Translate } from '../../lib/i18n';
-  import { displayOf } from './cells';
+  import { keepWidths } from './columns';
+  import Grid from './Grid.svelte';
   import { RowCache, windowFor } from './rows';
 
   interface Props {
@@ -18,39 +19,36 @@
 
   const { rpc, t }: Props = $props();
 
-  /** How many rows the simple view shows at once; V1.19 makes this virtualized. */
-  const PAGE_SIZE = 200;
-
   let gridState = $state<ResultGridState | undefined>(undefined);
-  let loading = $state(false);
   let failure = $state<string | undefined>(undefined);
-  /** What is on screen: rebuilt from the cache whenever a window arrives. */
-  let rows = $state<{ index: number; cells: readonly CellValue[] | undefined }[]>([]);
-  let loadedCount = $state(0);
+  let widths = $state<number[]>([]);
+  /** Bumped when rows arrive, so the grid re-reads the cache. */
+  let loaded = $state(0);
 
-  /** Rows live here; the snapshot above is what the view renders. */
-  const cache = new RowCache();
+  /** Rows live here; the grid reads them through `rowAt`. */
+  let cache = new RowCache();
+  /** The window being fetched, so the same range is not asked for twice. */
+  let pending: string | undefined;
 
   const activeTab = $derived<ResultTab | undefined>(
     gridState?.tabs.find((tab) => tab.id === gridState?.activeId),
   );
 
-  function takeSnapshot(): void {
-    const count = Math.min(cache.rowCount, PAGE_SIZE);
-    const list: { index: number; cells: readonly CellValue[] | undefined }[] = [];
-    for (let index = 0; index < count; index++) {
-      list.push({ index, cells: cache.get(index) });
-    }
-    rows = list;
-    loadedCount = cache.rowCount;
+  function rowAt(index: number): readonly CellValue[] | undefined {
+    // Reading `loaded` ties the grid's cells to the rows that have arrived.
+    return loaded >= 0 ? cache.get(index) : undefined;
   }
 
-  async function loadRows(tab: ResultTab): Promise<void> {
-    const range = windowFor(0, PAGE_SIZE, tab.rowCount);
+  async function fetchRows(tab: ResultTab, firstIndex: number, count: number): Promise<void> {
+    const range = windowFor(firstIndex, count, tab.rowCount);
     if (range === undefined || cache.hasRange(range.offset, range.limit)) {
       return;
     }
-    loading = true;
+    const key = `${tab.id}:${range.offset}:${range.limit}`;
+    if (pending === key) {
+      return;
+    }
+    pending = key;
     failure = undefined;
     try {
       const window = await rpc.request('rows', {
@@ -61,13 +59,35 @@
       // A late answer for another tab must not land in this one.
       if (window.resultId === gridState?.activeId) {
         cache.put(window.offset, window.rows, window.rowCount);
-        takeSnapshot();
+        if (window.offset === 0 && window.rows.length > 0) {
+          // The first rows are what the column widths are measured from.
+          widths = keepWidths(widths, tab.columns, window.rows);
+        }
+        loaded += 1;
       }
     } catch (error) {
       failure = error instanceof Error ? error.message : t('grid.loadFailed');
     } finally {
-      loading = false;
+      if (pending === key) {
+        pending = undefined;
+      }
     }
+  }
+
+  function onVisible(firstIndex: number, count: number): void {
+    const tab = activeTab;
+    if (tab !== undefined && tab.error === undefined) {
+      void fetchRows(tab, firstIndex, count);
+    }
+  }
+
+  function resetFor(tab: ResultTab | undefined): void {
+    cache = new RowCache();
+    cache.reset(tab?.rowCount ?? 0);
+    pending = undefined;
+    failure = undefined;
+    widths = tab === undefined ? [] : keepWidths([], tab.columns);
+    loaded += 1;
   }
 
   function selectTab(resultId: string): void {
@@ -76,27 +96,25 @@
     }
     gridState = { ...gridState, activeId: resultId };
     rpc.emit('selectTab', { resultId });
-    const tab = gridState.tabs.find((candidate) => candidate.id === resultId);
-    cache.reset(tab?.rowCount ?? 0);
-    takeSnapshot();
-    if (tab) {
-      void loadRows(tab);
-    }
+    resetFor(gridState.tabs.find((candidate) => candidate.id === resultId));
+  }
+
+  function onResize(index: number, width: number): void {
+    const next = [...widths];
+    next[index] = width;
+    widths = next;
   }
 
   onMount(() => {
     const subscription = rpc.on('state', (next) => {
-      const sameTab = gridState?.activeId === next.activeId;
       const previous = activeTab;
       gridState = next;
       const tab = next.tabs.find((candidate) => candidate.id === next.activeId);
-      // Rows are kept only while the same result is still on screen.
-      if (!sameTab || previous?.rowCount !== tab?.rowCount) {
-        cache.reset(tab?.rowCount ?? 0);
-        takeSnapshot();
-      }
-      if (tab !== undefined && tab.error === undefined) {
-        void loadRows(tab);
+      // Rows are kept only while the very same result is still on screen.
+      const sameResult =
+        tab !== undefined && previous?.id === tab.id && previous.rowCount === tab.rowCount;
+      if (!sameResult) {
+        resetFor(tab);
       }
     });
     rpc.emit('ready', {});
@@ -158,41 +176,15 @@
         {/if}
       </p>
       {#if activeTab.columns.length > 0}
-        <div class="scroll">
-          <table data-testid="grid">
-            <thead>
-              <tr>
-                <th class="rownum" scope="col">#</th>
-                {#each activeTab.columns as column, index (index)}
-                  <th scope="col" title={column.dataType ?? column.name}>{column.name}</th>
-                {/each}
-              </tr>
-            </thead>
-            <tbody>
-              {#each rows as row (row.index)}
-                <tr>
-                  <td class="rownum">{row.index + 1}</td>
-                  {#if row.cells === undefined}
-                    <td class="pending" colspan={activeTab.columns.length}>{t('grid.loading')}</td>
-                  {:else}
-                    {#each activeTab.columns as _column, column (column)}
-                      {@const cell = displayOf(row.cells[column] ?? null)}
-                      <td class:null={cell.isNull} class:numeric={cell.numeric} title={cell.text}>
-                        {cell.text}
-                      </td>
-                    {/each}
-                  {/if}
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-        {#if loadedCount > rows.length}
-          <p class="hint">{t('grid.moreRows', loadedCount - rows.length)}</p>
-        {/if}
-      {/if}
-      {#if loading}
-        <p class="hint" data-testid="loading">{t('grid.loading')}</p>
+        <Grid
+          columns={activeTab.columns}
+          rowCount={activeTab.rowCount}
+          {widths}
+          {rowAt}
+          {onVisible}
+          {onResize}
+          {t}
+        />
       {/if}
       {#if failure !== undefined}
         <p class="error" role="alert">{failure}</p>
@@ -211,6 +203,7 @@
 
   .tabs {
     display: flex;
+    flex: none;
     gap: 2px;
     align-items: center;
     padding: 4px 8px 0;
@@ -250,6 +243,7 @@
   .summary,
   .hint,
   .error {
+    flex: none;
     margin: 4px 8px;
     font-size: 0.95em;
   }
@@ -266,54 +260,5 @@
 
   .error {
     color: var(--vscode-errorForeground);
-  }
-
-  .scroll {
-    flex: 1;
-    overflow: auto;
-  }
-
-  table {
-    border-collapse: collapse;
-    font-family: var(--vscode-editor-font-family);
-    font-size: var(--vscode-editor-font-size);
-  }
-
-  th,
-  td {
-    max-width: 400px;
-    padding: 2px 8px;
-    overflow: hidden;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    border-right: 1px solid var(--vscode-panel-border);
-    border-bottom: 1px solid var(--vscode-panel-border);
-  }
-
-  th {
-    position: sticky;
-    top: 0;
-    background: var(--vscode-editorGroupHeader-tabsBackground);
-    font-weight: 600;
-  }
-
-  td.numeric {
-    text-align: right;
-  }
-
-  td.null {
-    color: var(--vscode-descriptionForeground);
-    font-style: italic;
-  }
-
-  td.pending {
-    color: var(--vscode-descriptionForeground);
-  }
-
-  .rownum {
-    color: var(--vscode-descriptionForeground);
-    text-align: right;
-    user-select: none;
   }
 </style>

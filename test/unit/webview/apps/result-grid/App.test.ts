@@ -8,6 +8,7 @@ import {
 } from '../../../../../src/shared/protocols/result-grid';
 import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/result-grid/App.svelte';
+import { MIN_COLUMN_WIDTH } from '../../../../../webview/src/apps/result-grid/columns';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
@@ -72,11 +73,20 @@ async function withState(state: ResultGridState, lang = 'en') {
   return { ...harness, handler };
 }
 
+/** Row-number plus cell texts of every data row, in order. */
 function cellTexts(): string[][] {
   return screen
     .getAllByRole('row')
-    .slice(1)
-    .map((row) => [...row.querySelectorAll('td')].map((cell) => cell.textContent.trim()));
+    .filter((row) => row.querySelector('[role="gridcell"]') !== null)
+    .map((row) =>
+      [...row.querySelectorAll('[role="rowheader"], [role="gridcell"]')].map((cell) =>
+        cell.textContent.trim(),
+      ),
+    );
+}
+
+function headerTexts(): string[] {
+  return screen.getAllByRole('columnheader').map((cell) => cell.textContent.trim());
 }
 
 describe('result grid App', () => {
@@ -116,14 +126,17 @@ describe('result grid App', () => {
     });
   });
 
-  it('shows the column names in order', async () => {
+  it('shows the column names in order, after the row-number column', async () => {
     await withState({ tabs: [tab()], activeId: 'result-1', running: false });
     await waitFor(() => {
-      expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
-        '#',
-        'id',
-        'email',
-      ]);
+      expect(headerTexts()).toEqual(['#', 'id', 'email']);
+    });
+  });
+
+  it('numbers the rows from one', async () => {
+    await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+    await waitFor(() => {
+      expect(cellTexts().map((row) => row[0])).toEqual(['1', '2']);
     });
   });
 
@@ -255,14 +268,16 @@ describe('result grid App', () => {
     expect(document.querySelector('img')).toBeNull();
   });
 
-  it('asks for a page-sized window when the result is large', async () => {
+  it('asks for a window around the visible rows when the result is large', async () => {
     const harness = setup();
-    const handler = vi.fn(({ resultId, offset }: { resultId: string; offset: number }) => ({
-      resultId,
-      offset,
-      rows: ROWS,
-      rowCount: 10_000,
-    }));
+    const handler = vi.fn(
+      ({ resultId, offset }: { resultId: string; offset: number; limit: number }) => ({
+        resultId,
+        offset,
+        rows: ROWS,
+        rowCount: 10_000,
+      }),
+    );
     harness.host.handle('rows', handler);
     await flush();
     harness.host.emit('state', {
@@ -273,13 +288,123 @@ describe('result grid App', () => {
     await waitFor(() => {
       expect(handler).toHaveBeenCalled();
     });
-    expect(handler.mock.calls[0]?.[0]).toMatchObject({ offset: 0, limit: 250 });
+    const asked = handler.mock.calls[0]?.[0];
+    expect(asked?.offset).toBe(0);
+    // Enough for the viewport and its overscan, and never a whole result.
+    expect(asked?.limit).toBeGreaterThanOrEqual(20);
+    expect(asked?.limit).toBeLessThan(10_000);
   });
 
   it('uses the page language', async () => {
     await withState({ tabs: [], running: false }, 'ru');
     await waitFor(() => {
       expect(screen.getByText('Выполните запрос, чтобы увидеть результат')).toBeTruthy();
+    });
+  });
+
+  describe('virtualization', () => {
+    it('renders only a window of rows for a huge result', async () => {
+      const harness = setup();
+      harness.host.handle('rows', ({ resultId, offset, limit }) => ({
+        resultId,
+        offset,
+        rows: Array.from({ length: limit }, (_, index) => [offset + index, 'x']),
+        rowCount: 100_000,
+      }));
+      await flush();
+      harness.host.emit('state', {
+        tabs: [tab({ rowCount: 100_000 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(cellTexts().length).toBeGreaterThan(0);
+      });
+      // A hundred thousand rows must never all be in the DOM.
+      expect(cellTexts().length).toBeLessThan(100);
+    });
+
+    it('sizes the scroll canvas for the whole result', async () => {
+      const harness = setup();
+      serveRows(harness.host);
+      await flush();
+      harness.host.emit('state', {
+        tabs: [tab({ rowCount: 1000 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('grid').querySelector('.canvas')).not.toBeNull();
+      });
+      const canvas = screen.getByTestId('grid').querySelector('.canvas');
+      // 1000 rows at 22px each; the scrollbar must match the result, not the DOM.
+      expect(canvas?.getAttribute('style')).toContain('height: 22000px');
+    });
+
+    it('exposes the row and column counts for assistive technology', async () => {
+      await withState({ tabs: [tab({ rowCount: 500 })], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getByTestId('grid').getAttribute('aria-rowcount')).toBe('500');
+      });
+      expect(screen.getByTestId('grid').getAttribute('aria-colcount')).toBe('2');
+    });
+  });
+
+  describe('column resize', () => {
+    it('offers a separator per column', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getAllByRole('separator')).toHaveLength(2);
+      });
+      expect(screen.getByRole('separator', { name: 'Resize column id' })).toBeTruthy();
+    });
+
+    it('changes the column width while the pointer moves', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getAllByRole('separator')).toHaveLength(2);
+      });
+      const header = screen.getAllByRole('columnheader')[1];
+      const grip = screen.getByRole('separator', { name: 'Resize column id' });
+      const before = header?.getAttribute('style') ?? '';
+      await fireEvent.pointerDown(grip, { clientX: 100, pointerId: 1 });
+      await fireEvent.pointerMove(grip, { clientX: 180, pointerId: 1 });
+      await waitFor(() => {
+        expect(header?.getAttribute('style')).not.toBe(before);
+      });
+      const width = Number(/width: (\d+)px/.exec(header?.getAttribute('style') ?? '')?.[1]);
+      expect(width).toBeGreaterThan(80);
+      await fireEvent.pointerUp(grip, { pointerId: 1 });
+    });
+
+    it('never narrows a column below the minimum', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getAllByRole('separator')).toHaveLength(2);
+      });
+      const header = screen.getAllByRole('columnheader')[1];
+      const grip = screen.getByRole('separator', { name: 'Resize column id' });
+      await fireEvent.pointerDown(grip, { clientX: 100, pointerId: 1 });
+      await fireEvent.pointerMove(grip, { clientX: -5000, pointerId: 1 });
+      await waitFor(() => {
+        expect(header?.getAttribute('style')).toContain(`width: ${MIN_COLUMN_WIDTH}px`);
+      });
+      await fireEvent.pointerUp(grip, { pointerId: 1 });
+    });
+
+    it('stops following the pointer after the drag ends', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getAllByRole('separator')).toHaveLength(2);
+      });
+      const header = screen.getAllByRole('columnheader')[1];
+      const grip = screen.getByRole('separator', { name: 'Resize column id' });
+      await fireEvent.pointerDown(grip, { clientX: 100, pointerId: 1 });
+      await fireEvent.pointerMove(grip, { clientX: 150, pointerId: 1 });
+      await fireEvent.pointerUp(grip, { pointerId: 1 });
+      const settled = header?.getAttribute('style');
+      await fireEvent.pointerMove(grip, { clientX: 400, pointerId: 1 });
+      expect(header?.getAttribute('style')).toBe(settled);
     });
   });
 });

@@ -49,6 +49,7 @@ export const en = {
   'grid.truncated': 'the row limit cut this result',
   'grid.moreRows': '{0} more rows are loaded as you scroll',
   'grid.loadFailed': 'Could not load the rows',
+  'grid.resize': 'Resize column {0}',
 } as const;
 
 export type MessageKey = keyof typeof en;

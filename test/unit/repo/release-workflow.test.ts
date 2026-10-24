@@ -49,9 +49,11 @@ describe('.github/workflows/release.yml (V1.28)', () => {
   });
 
   it('runs the same gate as CI before publishing anything', () => {
-    for (const script of ['npm run lint', 'npm run typecheck', 'npm test', 'npm run test:e2e']) {
+    for (const script of ['npm run lint', 'npm run typecheck', 'npm test']) {
       expect(runs, `${script} is missing`).toContain(script);
     }
+    // The runner has no display, so VS Code needs a virtual one.
+    expect(runs.some((run) => run.includes('xvfb-run -a npm run test:e2e'))).toBe(true);
   });
 
   it('refuses to publish when the tag and package.json disagree', () => {

@@ -5,12 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-10-24
+## [0.1.2] - 2026-10-24
 
 ### Fixed
 
 - Column resizing no longer depends on `setPointerCapture`, which not every host
   provides; the drag works without it.
+
+> 0.1.1 was tagged but never published: its release run failed before publishing,
+> and a tag that is already pushed is not moved.
 
 ## [0.1.0] - 2026-10-24
 

@@ -35,7 +35,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run test:e2e
+      # The runner has no display; VS Code needs one, as in ci.yml.
+      - name: Run e2e (virtual display)
+        run: xvfb-run -a npm run test:e2e
 
       - name: Check the tag matches package.json
         if: startsWith(github.ref, 'refs/tags/v')

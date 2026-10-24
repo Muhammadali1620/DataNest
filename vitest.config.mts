@@ -11,9 +11,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts', 'scripts/**/*.mjs', 'webview/src/**/*.{ts,svelte}'],
-      // Thin entry points are covered by the e2e tests and real builds.
+      // Code that needs the vscode runtime and thin entry points are covered by e2e tests and real builds.
       exclude: [
         'src/extension.ts',
+        'src/vscode/commands.ts',
+        'src/vscode/logging.ts',
         'webview/src/apps/*/main.ts',
         'scripts/build.mjs',
         'scripts/build-e2e.mjs',

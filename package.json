@@ -58,7 +58,37 @@
         "view": "datanest.connections",
         "contents": "%viewsWelcome.connections.empty%"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "datanest.logs.show",
+        "title": "%commands.logs.show.title%",
+        "category": "DataNest"
+      }
+    ],
+    "configuration": {
+      "title": "DataNest",
+      "properties": {
+        "datanest.logLevel": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "enumDescriptions": [
+            "%configuration.logLevel.error%",
+            "%configuration.logLevel.warn%",
+            "%configuration.logLevel.info%",
+            "%configuration.logLevel.debug%"
+          ],
+          "markdownDescription": "%configuration.logLevel.description%",
+          "scope": "application"
+        }
+      }
+    }
   },
   "scripts": {
     "build": "node scripts/build.mjs",

@@ -69,7 +69,8 @@
   MySQL 8.4 → `127.0.0.1:7306`, MariaDB 11.4 → `7307`, PostgreSQL 17 → `7432` (D17). Seed: `docker/seed/`, проверка — `test/integration/docker/`.
 - [x] **V0.8** `.vscode/launch.json` и `tasks.json`: F5 запускает Extension Development Host с watch-сборкой.
   Problem matcher задачи `watch` проверяется тестом на реальном выводе esbuild (`test/unit/repo/vscode-config.test.ts`).
-- [ ] **V0.9** Базовая инфраструктура: логгер (Output Channel), класс ошибок, сборка сервисов в `activate()`, Disposable-паттерн.
+- [x] **V0.9** Базовая инфраструктура: логгер (Output Channel), класс ошибок, сборка сервисов в `activate()`, Disposable-паттерн.
+  `core/errors.ts` (`DbError`), `core/disposable.ts`, `core/logging/` (логгер с уровнями и маскировкой секретов), настройка `datanest.logLevel`, команда «DataNest: Show Logs», обёртка команд `vscode/command-runner.ts` (D20).
 - [ ] **V0.10** Типизированный RPC между host и webview (запрос/ответ/события) + тестовая страница «ping».
 - [ ] **V0.11** GitHub Actions: lint, typecheck, test, сборка `.vsix` как артефакт.
 - [ ] **V0.12** Исследование: доступен ли `node:sqlite` в VS Code / VSCodium / Cursor → выбрать движок SQLite (см. ARCHITECTURE, решение D5).

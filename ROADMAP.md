@@ -55,6 +55,8 @@
 
 **Итог:** пустое расширение с иконкой в Activity Bar запускается по F5, сборка и тесты работают, CI зелёный.
 
+> **Статус (2026-10-24):** итог достигнут — шаги V0.1–V0.12 готовы, CI зелёный на Linux, Windows и macOS. Открыт только V0.0: publisher `datanest` в VS Marketplace (создаёт владелец). Следующая веха — V1, первая публикация 0.1.0.
+
 - [~] **V0.0** Выбрать название, `publisher` id и проверить, что имя свободно в Marketplace и Open VSX.
   Название **DataNest** свободно (Marketplace, Open VSX, npm — 2026-10-23, D11). Токен Open VSX получен (в `.env`), публикация в Marketplace — вручную (D18). Namespace `datanest` в Open VSX создан 2026-10-24, токен проверен (`ovsx verify-pat`). Осталось: создать publisher `datanest` в Marketplace (вручную, владелец).
 - [x] **V0.1** Репозиторий: `git init`, `.gitignore`, `LICENSE` (MIT), `.editorconfig`, заготовки `README.md` и `CHANGELOG.md`.

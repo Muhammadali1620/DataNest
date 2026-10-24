@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
-import type { ConnectionConfig } from '../../../src/core/model/connection';
+import type { ConnectionConfig } from '../../../src/shared/connection';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import { FakeDriverProvider, linkLostError } from '../../helpers/fake-driver';

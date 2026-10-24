@@ -2,7 +2,7 @@
 // real database. Failures are injected by setting the `*Error` fields.
 
 import { DbError } from '../../src/core/errors';
-import type { DriverId, ResolvedConnectionConfig } from '../../src/core/model/connection';
+import type { DriverId, ResolvedConnectionConfig } from '../../src/shared/connection';
 import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../../src/core/model/objects';
 import type {
   Dialect,

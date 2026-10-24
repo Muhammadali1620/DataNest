@@ -1,7 +1,7 @@
 import * as mysql from 'mysql2';
 import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
-import { effectivePort, type ResolvedConnectionConfig } from '../../core/model/connection';
+import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import type { ExecuteEvent, ExecuteOptions, ResultColumn, Session } from '../driver';
 import { toMysqlDbError } from './errors';

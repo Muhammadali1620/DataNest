@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
+import { ConnectionManager } from './services/connection-manager';
+import { ConnectionStore } from './services/connection-store';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
@@ -7,8 +10,28 @@ import { createOutputLogger } from './vscode/logging';
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const { logger, channel, disposables } = createOutputLogger();
   context.subscriptions.push(...disposables);
+
+  const store = new ConnectionStore({
+    state: context.globalState,
+    secrets: context.secrets,
+    logger,
+  });
+  const drivers = new DriverRegistry({
+    // Driver bundles sit next to the extension bundle and load on first use (§7).
+    loader: createBundleDriverLoader(__filename),
+    logger,
+  });
+  const manager = new ConnectionManager({ store, drivers, logger });
+  context.subscriptions.push(manager);
+
   context.subscriptions.push(
-    ...registerCommands({ logger, channel, extensionUri: context.extensionUri }),
+    ...registerCommands({
+      logger,
+      channel,
+      extensionUri: context.extensionUri,
+      store,
+      manager,
+    }),
   );
 
   const isDevelopment = context.extensionMode !== vscode.ExtensionMode.Production;

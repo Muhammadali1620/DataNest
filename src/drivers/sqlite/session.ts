@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
-import type { ResolvedConnectionConfig } from '../../core/model/connection';
+import type { ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import type { ExecuteEvent, ExecuteOptions, Session } from '../driver';
 import { fromWireError, toSqliteDbError } from './errors';

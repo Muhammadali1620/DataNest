@@ -3,12 +3,16 @@
   "extension.description": "Бесплатный клиент баз данных с открытым кодом: MySQL, MariaDB, PostgreSQL, SQLite и другие.",
   "viewsContainers.datanest.title": "DataNest",
   "views.connections.name": "Подключения",
-  "viewsWelcome.connections.empty": "Подключений пока нет.",
+  "viewsWelcome.connections.empty": "Пока нет подключений.\n[Новое подключение](command:datanest.connections.add)",
   "commands.logs.show.title": "Показать логи",
   "configuration.logLevel.description": "Сколько DataNest пишет в свой канал вывода. Пароли и токены никогда не попадают в лог.",
   "configuration.logLevel.error": "Только ошибки.",
   "configuration.logLevel.warn": "Ошибки и предупреждения.",
   "configuration.logLevel.info": "Ошибки, предупреждения и основные события.",
   "configuration.logLevel.debug": "Всё подряд, для поиска проблем.",
-  "commands.dev.openPing.title": "Открыть страницу ping (разработка)"
+  "commands.dev.openPing.title": "Открыть страницу ping (разработка)",
+  "commands.connections.add.title": "Новое подключение",
+  "commands.connections.edit.title": "Изменить подключение",
+  "commands.connections.duplicate.title": "Дублировать подключение",
+  "commands.connections.remove.title": "Удалить подключение"
 }

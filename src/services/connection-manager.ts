@@ -8,8 +8,8 @@ import type {
   ConnectionConfig,
   ConnectionInput,
   ResolvedConnectionConfig,
-} from '../core/model/connection';
-import type { DriverId } from '../core/model/connection';
+} from '../shared/connection';
+import type { DriverId } from '../shared/connection';
 import type { Driver, Session } from '../drivers/driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';

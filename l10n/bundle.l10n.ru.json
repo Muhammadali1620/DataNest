@@ -1,5 +1,14 @@
 {
   "DataNest: {0}": "DataNest: {0}",
   "DataNest Ping": "DataNest Ping",
-  "Connected to the extension host": "Связь с расширением установлена"
+  "Connected to the extension host": "Связь с расширением установлена",
+  "New Connection": "Новое подключение",
+  "Connection: {0}": "Подключение: {0}",
+  "SQLite database": "База SQLite",
+  "New SQLite Database": "Новая база SQLite",
+  "Open SQLite Database": "Открыть базу SQLite",
+  "Delete the connection \"{0}\"?": "Удалить подключение «{0}»?",
+  "Delete": "Удалить",
+  "Pick a connection": "Выберите подключение",
+  "There are no saved connections yet": "Сохранённых подключений пока нет"
 }

@@ -3,12 +3,16 @@
   "extension.description": "Free and open-source database client: MySQL, MariaDB, PostgreSQL, SQLite and more.",
   "viewsContainers.datanest.title": "DataNest",
   "views.connections.name": "Connections",
-  "viewsWelcome.connections.empty": "No connections yet.",
+  "viewsWelcome.connections.empty": "No connections yet.\n[New Connection](command:datanest.connections.add)",
   "commands.logs.show.title": "Show Logs",
   "configuration.logLevel.description": "How much DataNest writes to its output channel. Passwords and tokens are never logged.",
   "configuration.logLevel.error": "Only errors.",
   "configuration.logLevel.warn": "Errors and warnings.",
   "configuration.logLevel.info": "Errors, warnings and main events.",
   "configuration.logLevel.debug": "Everything, for troubleshooting.",
-  "commands.dev.openPing.title": "Open Ping Page (development)"
+  "commands.dev.openPing.title": "Open Ping Page (development)",
+  "commands.connections.add.title": "New Connection",
+  "commands.connections.edit.title": "Edit Connection",
+  "commands.connections.duplicate.title": "Duplicate Connection",
+  "commands.connections.remove.title": "Delete Connection"
 }

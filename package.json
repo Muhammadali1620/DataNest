@@ -34,7 +34,9 @@
   },
   "main": "./dist/extension.js",
   "l10n": "./l10n",
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:datanest.connections"
+  ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -64,6 +66,29 @@
         "command": "datanest.logs.show",
         "title": "%commands.logs.show.title%",
         "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.add",
+        "title": "%commands.connections.add.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.connections.edit",
+        "title": "%commands.connections.edit.title%",
+        "category": "DataNest",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "datanest.connections.duplicate",
+        "title": "%commands.connections.duplicate.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.remove",
+        "title": "%commands.connections.remove.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
       },
       {
         "command": "datanest.dev.openPing",

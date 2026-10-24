@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DriverId } from '../../../src/core/model/connection';
+import type { DriverId } from '../../../src/shared/connection';
 import type { Driver, DriverModule } from '../../../src/drivers/driver';
 import { DriverRegistry } from '../../../src/drivers/registry';
 import { RecordingLogger } from '../../helpers/fakes';

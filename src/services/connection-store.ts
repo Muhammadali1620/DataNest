@@ -12,7 +12,7 @@ import {
   connectionProblems,
   DRIVER_IDS,
   isFileDriver,
-} from '../core/model/connection';
+} from '../shared/connection';
 import { array, literal, number, object, optional, type Schema, string } from '../shared/schema';
 
 /** The slice of `vscode.Memento` the store needs. */

@@ -2,7 +2,7 @@
 // Both servers share one seed (docker/seed/mysql), so the suite runs twice.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { ResolvedConnectionConfig } from '../../../src/core/model/connection';
+import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
 import { driver } from '../../../src/drivers/mysql';
 import type { Session } from '../../../src/drivers/driver';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';

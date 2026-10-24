@@ -3,6 +3,12 @@
 /** Every command the extension contributes: `<extId>.<area>.<action>` (ARCHITECTURE.md §10). */
 export const COMMAND_IDS = {
   showLogs: 'datanest.logs.show',
+  /** Opens the form for a new connection. */
+  addConnection: 'datanest.connections.add',
+  /** Opens the form for an existing connection. */
+  editConnection: 'datanest.connections.edit',
+  duplicateConnection: 'datanest.connections.duplicate',
+  removeConnection: 'datanest.connections.remove',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

@@ -1,7 +1,7 @@
 // The PostgreSQL driver against the real PostgreSQL 17 from docker/compose.yml.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { ResolvedConnectionConfig } from '../../../src/core/model/connection';
+import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
 import type { Session } from '../../../src/drivers/driver';
 import { driver } from '../../../src/drivers/postgres';
 import { testDatabase } from '../../helpers/databases';

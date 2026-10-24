@@ -100,8 +100,10 @@ webview/ ───────────────────────�
 │  ├─ extension.ts            # activate/deactivate: создаём сервисы и регистрируем фичи
 │  ├─ core/
 │  │  ├─ sql/                 # токенизатор, разбиение на запросы, контекст автодополнения
-│  │  ├─ model/               # ConnectionConfig, ObjectRef, ColumnInfo, …
-│  │  ├─ values/              # нормализация значений ячеек
+│  │  ├─ model/objects.ts     # ObjectScope, TableRef, ColumnInfo
+│  │  ├─ logging/             # логгер с уровнями и маскировкой секретов
+│  │  ├─ async-queue.ts       # поток событий драйвера → async iteration
+│  │  ├─ disposable.ts        # Disposable, DisposableStore
 │  │  └─ errors.ts            # DbError и коды ошибок
 │  ├─ drivers/
 │  │  ├─ driver.ts            # интерфейсы Driver, Session, Dialect
@@ -121,14 +123,19 @@ webview/ ───────────────────────�
 │  │  ├─ editor/
 │  │  ├─ panels/
 │  │  └─ commands.ts          # регистрация всех команд в одном месте
-│  └─ shared/
-│     ├─ protocol.ts          # типы сообщений host ↔ webview
+│  └─ shared/                 # всё, что нужно и host, и webview (D27)
+│     ├─ protocols/           # по файлу на панель: ping, connection-form, …
+│     ├─ rpc.ts               # конверт сообщений и RpcPeer
+│     ├─ schema.ts            # свои рантайм-схемы (D22)
+│     ├─ connection.ts        # ConnectionConfig, валидация, порты по умолчанию
 │     └─ cell-value.ts        # формат значений, понятный обеим сторонам
 ├─ webview/
 │  ├─ src/
 │  │  ├─ apps/                # по одной точке входа на тип панели
-│  │  ├─ components/
-│  │  └─ lib/rpc.ts           # клиентская сторона протокола
+│  │  ├─ components/          # общие элементы интерфейса (Field, …)
+│  │  ├─ l10n/                # словари en/ru
+│  │  ├─ styles/              # base.css, controls.css на переменных --vscode-*
+│  │  └─ lib/                 # i18n, доступ к vscode api, транспорт RPC
 │  └─ vite.config.ts
 ├─ test/                     # ВСЕ тесты проекта — только здесь (раздел 11)
 │  ├─ unit/                   # повторяет структуру src/ (+ webview/, repo/)
@@ -383,3 +390,4 @@ lint + типы + `npm audit` → unit-тесты и e2e на **Linux, Windows �
 | D24 | Драйверы нормализуют значения в `CellValue`: точность важнее удобства — `BIGINT`/`DECIMAL`/даты приходят текстом (`dateStrings`, `bigNumberStrings` в MySQL; свои type-парсеры в PG; `setReadBigInts` в SQLite). Целые, влезающие в `Number`, остаются числами | Таблица и экспорт не должны «ронять» значения, которые не помещаются в double; при этом обычные id остаются числами и не выглядят как объекты | Принято (V1.3–V1.5) |
 | D25 | Отмена запроса: MySQL — `KILL QUERY`, PG — `pg_cancel_backend` с отдельного служебного соединения, причём отмена привязана к конкретному запросу (токену). SQLite: worker бросается (`terminate()` без ожидания) и сразу поднимается новый | `node:sqlite` синхронный и не умеет `interrupt`, а `terminate()` не прерывает нативный вызов и ждёт конца запроса (замер: 23 с). Токен в MySQL/PG не даёт отмене «догнать» уже следующий запрос в той же сессии. SQLite crash-safe, поэтому брошенный worker безопасен | Принято (V1.3–V1.5) |
 | D26 | Переподключение при обрыве: `ManagedSession` помечает связь потерянной только на коде `connection-failed`, менеджер закрывает мёртвую сессию, и новая открывается при следующем `acquire()`. Упавший запрос автоматически не повторяется | Молчаливый повтор мог бы выполнить запись дважды. Пользователь видит одну ошибку, а следующий запрос уже идёт по живому соединению | Принято (V1.6) |
+| D27 | Модель подключения живёт в `shared/connection.ts`, а не в `core/model/` | Форма подключения в webview использует те же типы и ту же валидацию (`connectionProblems`), что и host; дублировать правила проверки в двух местах — путь к расхождению. `webview/` по правилу зависимостей видит только `shared/` | Принято (V1.7) |

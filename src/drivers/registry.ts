@@ -4,7 +4,7 @@
 import { createRequire } from 'node:module';
 import { DbError, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
-import { type DriverId, isDriverId } from '../core/model/connection';
+import { type DriverId, isDriverId } from '../shared/connection';
 import type { Driver, DriverModule } from './driver';
 
 export type DriverLoader = (id: DriverId) => Promise<DriverModule>;

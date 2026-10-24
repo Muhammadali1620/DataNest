@@ -1,7 +1,7 @@
 // The one interface every DBMS implements (ARCHITECTURE.md §5). UI and services
 // know only these types; a new database means a new folder here, not UI changes.
 
-import type { DriverId, ResolvedConnectionConfig } from '../core/model/connection';
+import type { DriverId, ResolvedConnectionConfig } from '../shared/connection';
 import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../core/model/objects';
 import type { CellValue } from '../shared/cell-value';
 

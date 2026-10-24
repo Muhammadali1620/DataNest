@@ -7,7 +7,7 @@ import {
   effectivePort,
   isDriverId,
   isFileDriver,
-} from '../../../../src/core/model/connection';
+} from '../../../src/shared/connection';
 
 describe('isDriverId', () => {
   it('accepts every known driver id', () => {

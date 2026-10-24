@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { ResolvedConnectionConfig } from '../../../src/core/model/connection';
+import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
 import type { Driver, Session } from '../../../src/drivers/driver';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';

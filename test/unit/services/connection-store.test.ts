@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
-import type { ConnectionInput } from '../../../src/core/model/connection';
+import type { ConnectionInput } from '../../../src/shared/connection';
 import {
   CONNECTIONS_STATE_KEY,
   ConnectionStore,

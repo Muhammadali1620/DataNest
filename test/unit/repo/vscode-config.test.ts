@@ -200,13 +200,37 @@ describe('.vscode/tasks.json', () => {
 
         expect(lines.filter((line) => ends.test(line))).toHaveLength(2);
         expect(lines.filter((line) => begins.test(line))).toHaveLength(1);
-        expect(findProblems(output)).toEqual([
+        // On Windows the path may use backslashes; VS Code resolves both.
+        const problems = findProblems(output).map((p) => ({
+          ...p,
+          file: p.file.replaceAll('\\', '/'),
+        }));
+        expect(problems).toEqual([
           { message: 'Unexpected ";"', file: 'src/extension.ts', line: 1, column: 17 },
           { message: 'Unexpected ";"', file: 'src/extension.ts', line: 1, column: 17 },
         ]);
       },
       30_000,
     );
+
+    it('understands the Windows error marker of esbuild', () => {
+      const windowsOutput = [
+        'X [ERROR] Expected ";" but found "x"',
+        '',
+        '    src\\vscode\\commands.ts:12:4:',
+        '      12 │ foo x',
+        '',
+        '[watch] build finished, watching for changes...',
+      ].join('\r\n');
+      expect(findProblems(windowsOutput)).toEqual([
+        {
+          message: 'Expected ";" but found "x"',
+          file: 'src\\vscode\\commands.ts',
+          line: 12,
+          column: 4,
+        },
+      ]);
+    });
 
     it('reports nothing for a clean build', () => {
       expect(findProblems('[watch] build finished, watching for changes...\n')).toEqual([]);

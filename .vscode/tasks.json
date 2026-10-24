@@ -13,7 +13,7 @@
         "source": "esbuild",
         "fileLocation": ["relative", "${workspaceFolder}"],
         "pattern": [
-          { "regexp": "^✘ \\[ERROR\\] (.+)$", "message": 1 },
+          { "regexp": "^(?:✘|X) \\[ERROR\\] (.+)$", "message": 1 },
           { "regexp": "^\\s*$" },
           { "regexp": "^\\s+(.+?):(\\d+):(\\d+):$", "file": 1, "line": 2, "column": 3 }
         ],

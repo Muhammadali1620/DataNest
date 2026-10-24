@@ -30,7 +30,7 @@ export class DocumentBindings {
   /** Points a document at a connection; an unchanged binding fires no event. */
   bind(documentUri: string, binding: DocumentBinding): void {
     const current = this.bindings.get(documentUri);
-    if (current?.connectionId === binding.connectionId && current?.database === binding.database) {
+    if (current?.connectionId === binding.connectionId && current.database === binding.database) {
       return;
     }
     this.bindings.set(documentUri, {

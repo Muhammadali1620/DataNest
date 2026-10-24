@@ -8,6 +8,8 @@ interface Manifest {
   publisher: string;
   version: string;
   license: string;
+  repository: { type: string; url: string };
+  bugs: { url: string };
   main: string;
   type?: string;
   l10n?: string;
@@ -59,6 +61,14 @@ describe('package.json manifest', () => {
   it('is MIT-licensed and ships the license file', () => {
     expect(manifest.license).toBe('MIT');
     expect(existsSync(join(ROOT, 'LICENSE'))).toBe(true);
+  });
+
+  it('links the GitHub repository so vsce can rewrite README links', () => {
+    expect(manifest.repository).toEqual({
+      type: 'git',
+      url: 'https://github.com/Muhammadali1620/DataNest.git',
+    });
+    expect(manifest.bugs.url).toBe('https://github.com/Muhammadali1620/DataNest/issues');
   });
 
   it('points main to the CommonJS bundle (D7)', () => {

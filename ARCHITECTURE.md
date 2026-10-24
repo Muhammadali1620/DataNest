@@ -307,6 +307,8 @@ Webview хранит только видимые строки (плюс небо
 | `npm run test:watch` | То же в watch-режиме |
 | `npm run test:coverage` | Unit-тесты с отчётом о покрытии (`coverage/`) |
 | `npm run test:e2e` | Сборка + smoke-тесты в настоящем VS Code минимальной версии (`test/e2e/`, mocha) |
+| `npm run db:up` / `db:down` / `db:reset` | Поднять / удалить / пересоздать тестовые БД из `docker/compose.yml` (порты 7000–7999, D17) |
+| `npm run test:integration` | Интеграционные тесты (`test/integration/`) против БД из Docker; без `db:up` сразу падают с подсказкой |
 | `npm run lint` / `npm run typecheck` | ESLint + Prettier / `tsc` для host, e2e и `svelte-check` для webview |
 
 ### Правила тестов (обязательны всегда)
@@ -359,3 +361,6 @@ Webview хранит только видимые строки (плюс небо
 | D14 | CSP webview: скрипты только с nonce, `'unsafe-inline'` разрешён только для стилей | Svelte и виртуализированная таблица задают `style`-атрибуты; скрипты остаются строго под nonce | Принято |
 | D15 | E2E-тесты на mocha через `@vscode/test-cli`, запуск в VS Code минимальной поддерживаемой версии (1.90) | Использование API новее `engines.vscode` ломает тесты сразу | Принято |
 | D16 | Уязвимые транзитивные dev-зависимости закрываем через `overrides` в `package.json` | `npm audit` должен быть чистым; в `.vsix` они не попадают, но CI и разработка — тоже поверхность атаки | Принято |
+| D17 | Наши Docker-контейнеры и БД — только на портах хоста 7000–7999, на `127.0.0.1`, проект compose `datanest` | На машине разработчика работают чужие контейнеры; не мешаем им и не светим БД в сеть | Принято |
+| D18 | Публикация: Open VSX через `ovsx` с `OPEN_VSX_TOKEN` (локально в `.env`, в CI — секрет); в VS Marketplace пока загружаем `.vsix` вручную | Токен Marketplace пока не получен | Принято |
+| D19 | Библиотеки, которые попадают в бандл (`mysql2`, `pg`, …), — в `devDependencies`; `.vsix` собирается с `--no-dependencies` | esbuild уже включил их код в `dist/`; `node_modules` в пакет не попадает, пакет маленький | Принято |

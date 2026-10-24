@@ -1,0 +1,104 @@
+# Local databases for development and integration tests (ARCHITECTURE.md D17):
+# host ports 7000-7999 on 127.0.0.1 only, data in tmpfs, so every `npm run db:up` starts from the seed.
+name: datanest
+
+x-healthcheck: &healthcheck
+  interval: 2s
+  timeout: 5s
+  retries: 90
+  start_period: 5s
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: datanest-mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_ROOT_PASSWORD: datanest_root
+      MYSQL_DATABASE: datanest_test
+      MYSQL_USER: datanest
+      MYSQL_PASSWORD: datanest
+    ports:
+      - 127.0.0.1:7306:3306
+    volumes:
+      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      <<: *healthcheck
+      # Healthy only after the seed has finished (init runs without TCP).
+      test:
+        [
+          'CMD',
+          'mysql',
+          '-h127.0.0.1',
+          '-udatanest',
+          '-pdatanest',
+          '-e',
+          'SELECT 1 FROM datanest_test.big_table LIMIT 1',
+        ]
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: datanest-mariadb
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+    environment:
+      MARIADB_ROOT_PASSWORD: datanest_root
+      MARIADB_DATABASE: datanest_test
+      MARIADB_USER: datanest
+      MARIADB_PASSWORD: datanest
+    ports:
+      - 127.0.0.1:7307:3306
+    volumes:
+      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'mariadb',
+          '-h127.0.0.1',
+          '-udatanest',
+          '-pdatanest',
+          '-e',
+          'SELECT 1 FROM datanest_test.big_table LIMIT 1',
+        ]
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: datanest-postgres
+    environment:
+      POSTGRES_USER: datanest
+      POSTGRES_PASSWORD: datanest
+      POSTGRES_DB: datanest_test
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - 127.0.0.1:7432:5432
+    volumes:
+      - ./seed/postgres:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'psql',
+          '-h',
+          '127.0.0.1',
+          '-U',
+          'datanest',
+          '-d',
+          'datanest_test',
+          '-c',
+          'SELECT 1 FROM big_table LIMIT 1',
+        ]

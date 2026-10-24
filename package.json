@@ -6,6 +6,14 @@
   "private": true,
   "publisher": "datanest",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Muhammadali1620/DataNest.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Muhammadali1620/DataNest/issues"
+  },
+  "homepage": "https://github.com/Muhammadali1620/DataNest#readme",
   "categories": [
     "Data Science",
     "Programming Languages",
@@ -63,7 +71,12 @@
     "lint": "eslint --max-warnings 0 . && prettier --check .",
     "format": "prettier --write . && eslint --fix .",
     "test:e2e": "npm run build && node scripts/build-e2e.mjs && vscode-test",
-    "package": "node scripts/build.mjs --production && vsce package --no-dependencies --allow-missing-repository"
+    "package": "node scripts/build.mjs --production && vsce package --no-dependencies",
+    "db:up": "docker compose -f docker/compose.yml up -d --wait",
+    "db:down": "docker compose -f docker/compose.yml down --volumes",
+    "db:reset": "npm run db:down && npm run db:up",
+    "db:logs": "docker compose -f docker/compose.yml logs -f",
+    "test:integration": "vitest run --config vitest.integration.config.mts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -71,6 +84,7 @@
     "@testing-library/svelte": "5.4.2",
     "@types/mocha": "10.0.10",
     "@types/node": "22.20.5",
+    "@types/pg": "8.23.1",
     "@types/vscode": "1.90.0",
     "@vitest/coverage-v8": "5.0.5",
     "@vscode/test-cli": "0.0.15",
@@ -82,16 +96,20 @@
     "eslint-plugin-svelte": "3.23.1",
     "globals": "17.13.0",
     "jsdom": "30.1.3",
+    "mysql2": "3.24.6",
+    "pg": "8.23.1",
     "prettier": "3.9.10",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
     "vite": "8.3.5",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "yaml": "2.9.1"
   },
   "overrides": {
     "serialize-javascript": "^7.1.3",
-    "diff": "^8.0.3"
+    "diff": "^8.0.3",
+    "@azure/msal-node": "^7.1.1"
   }
 }

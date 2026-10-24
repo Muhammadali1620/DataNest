@@ -2,7 +2,7 @@
 
 A free and open-source database client for VS Code and its forks (VSCodium, Cursor, Windsurf).
 
-> **Status:** early development, not published yet. The plan is in `ROADMAP.md`.
+> **Status:** early development, not published yet. See [ROADMAP.md](ROADMAP.md).
 
 ## Principles
 
@@ -22,8 +22,8 @@ npm test           # run unit tests
 
 Press `F5` in VS Code to launch the Extension Development Host.
 
-Architecture and contribution rules are in `ARCHITECTURE.md`.
+Architecture and contribution rules: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

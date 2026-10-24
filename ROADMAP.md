@@ -56,7 +56,7 @@
 **Итог:** пустое расширение с иконкой в Activity Bar запускается по F5, сборка и тесты работают, CI зелёный.
 
 - [~] **V0.0** Выбрать название, `publisher` id и проверить, что имя свободно в Marketplace и Open VSX.
-  Название **DataNest** свободно (Marketplace, Open VSX, npm — 2026-10-23, D11). Осталось: создать publisher в Marketplace и namespace в Open VSX; пока в `package.json` временно стоит `datanest`.
+  Название **DataNest** свободно (Marketplace, Open VSX, npm — 2026-10-23, D11). Токен Open VSX получен (в `.env`), публикация в Marketplace — вручную (D18). Осталось: создать namespace `datanest` в Open VSX и publisher `datanest` в Marketplace (свободны на 2026-10-24).
 - [x] **V0.1** Репозиторий: `git init`, `.gitignore`, `LICENSE` (MIT), `.editorconfig`, заготовки `README.md` и `CHANGELOG.md`.
 - [x] **V0.2** `package.json`: метаданные, `engines.vscode`, контейнер в Activity Bar, пустой view, `activationEvents`.
 - [x] **V0.3** TypeScript (strict) + esbuild: сборка extension host, watch-режим, source maps, отдельные бандлы драйверов.
@@ -65,7 +65,8 @@
 - [x] **V0.5** ESLint + Prettier, правила границ между слоями, npm-скрипты: `build`, `watch`, `lint`, `typecheck`, `test`, `package`.
 - [x] **V0.6** Vitest для unit-тестов; скелет интеграционных тестов на `@vscode/test-electron`.
   Сделан сразу после V0.3, чтобы все следующие шаги шли с тестами. Unit: проекты `host` (node) и `webview` (jsdom); e2e: `@vscode/test-cli` в VS Code 1.90.
-- [ ] **V0.7** `docker/compose.yml`: MySQL 8, MariaDB, PostgreSQL с тестовыми данными (seed) для локальной разработки и тестов.
+- [x] **V0.7** `docker/compose.yml`: MySQL 8, MariaDB, PostgreSQL с тестовыми данными (seed) для локальной разработки и тестов.
+  MySQL 8.4 → `127.0.0.1:7306`, MariaDB 11.4 → `7307`, PostgreSQL 17 → `7432` (D17). Seed: `docker/seed/`, проверка — `test/integration/docker/`.
 - [ ] **V0.8** `.vscode/launch.json` и `tasks.json`: F5 запускает Extension Development Host с watch-сборкой.
 - [ ] **V0.9** Базовая инфраструктура: логгер (Output Channel), класс ошибок, сборка сервисов в `activate()`, Disposable-паттерн.
 - [ ] **V0.10** Типизированный RPC между host и webview (запрос/ответ/события) + тестовая страница «ping».

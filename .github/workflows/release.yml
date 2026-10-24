@@ -1,0 +1,85 @@
+# Publishes a release when a version tag is pushed (v0.1.0, v0.2.0, …).
+# Step tags (V1.3) are not version tags and never trigger this.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Build the .vsix without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      # The same gate as CI: nothing is published that would not pass review.
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:e2e
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: '*.vsix'
+          retention-days: 90
+
+      # A version can be published to Open VSX only once, so re-running the
+      # workflow for a tag that is already out must not fail the release.
+      - name: Check whether this version is already on Open VSX
+        id: published
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          url="https://open-vsx.org/api/datanest/datanest/$version"
+          if curl -sf "$url" | grep -q '"version"'; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to Open VSX
+        if: >-
+          startsWith(github.ref, 'refs/tags/v') && inputs.dry-run != true &&
+          steps.published.outputs.already == 'false'
+        env:
+          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+        run: npx ovsx publish *.vsix --pat "$OPEN_VSX_TOKEN"
+
+      # The VS Marketplace has no token yet (ARCHITECTURE.md D18): the .vsix above
+      # is attached to the release and uploaded by hand.
+      - name: Attach the .vsix to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.vsix'
+          generate_release_notes: true

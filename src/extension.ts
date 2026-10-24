@@ -9,6 +9,7 @@ import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
 import { ResultStore } from './services/result-store';
 import { QueryEditors } from './vscode/editor/query-editor';
+import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/completion';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { RunStatus } from './vscode/editor/run-status';
 import { createSettings, readRowLimit } from './vscode/settings';
@@ -44,7 +45,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     limits: { rowLimit: () => readRowLimit() },
     logger,
   });
-  context.subscriptions.push(new RunStatus(runner));
+  context.subscriptions.push(
+    new RunStatus(runner),
+    vscode.languages.registerCompletionItemProvider(
+      { language: 'sql' },
+      new SqlCompletionProvider({ editors, store, manager, cache, logger }),
+      ...TRIGGER_CHARACTERS,
+    ),
+  );
   const lenses = new RunCodeLensProvider({ runner, editors, store, logger });
   context.subscriptions.push(
     lenses,

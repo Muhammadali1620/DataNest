@@ -47,6 +47,14 @@ const tabSchema = object({
   affectedRows: optional(number({ integer: true, min: 0 })),
   durationMs: number({ min: 0 }),
   error: optional(errorSchema),
+  /** Set for a table view: which page is shown and how big the table is. */
+  page: optional(
+    object({
+      offset: number({ integer: true, min: 0 }),
+      pageSize: number({ integer: true, min: 1 }),
+      totalRows: optional(number({ integer: true, min: 0 })),
+    }),
+  ),
   /** How the result is ordered right now; absent means the server's own order. */
   sort: optional(
     object({
@@ -85,6 +93,11 @@ export const resultGridProtocol = defineProtocol({
           column: number({ integer: true, min: 0 }),
           direction: optional(literal('asc', 'desc')),
         }),
+        result: object({ resultId, applied: boolean() }),
+      },
+      /** Page → host: show another page of a table view. */
+      pageTo: {
+        params: object({ resultId, offset: number({ integer: true, min: 0 }) }),
         result: object({ resultId, applied: boolean() }),
       },
       /** Page → host: which rows contain this text. */

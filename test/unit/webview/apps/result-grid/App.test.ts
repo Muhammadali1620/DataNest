@@ -925,4 +925,110 @@ describe('result grid App', () => {
       });
     });
   });
+
+  describe('table view pages', () => {
+    function pagedTab(overrides: Partial<ResultTab> = {}): ResultTab {
+      return tab({
+        statement: 'SELECT * FROM customers LIMIT 2 OFFSET 0',
+        title: 'SELECT * FROM customers…',
+        page: { offset: 0, pageSize: 2, totalRows: 7 },
+        ...overrides,
+      });
+    }
+
+    it('shows which rows of how many are on screen', async () => {
+      await withState({ tabs: [pagedTab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getByTestId('pager').textContent).toContain('rows 1–2 of 7');
+      });
+    });
+
+    it('has no pager for an ordinary query result', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getByTestId('summary')).toBeTruthy();
+      });
+      expect(screen.queryByTestId('pager')).toBeNull();
+    });
+
+    it('cannot go back from the first page', async () => {
+      await withState({ tabs: [pagedTab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Previous' })).toBeTruthy();
+      });
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Previous' }).disabled).toBe(
+        true,
+      );
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next' }).disabled).toBe(false);
+    });
+
+    it('asks the host for the next and the previous page', async () => {
+      const harness = await withState({
+        tabs: [pagedTab({ page: { offset: 2, pageSize: 2, totalRows: 7 } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      const pageTo = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+      harness.host.handle('pageTo', pageTo);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Next' })).toBeTruthy();
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() => {
+        expect(pageTo).toHaveBeenCalledWith({ resultId: 'result-1', offset: 4 });
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+      await waitFor(() => {
+        expect(pageTo).toHaveBeenLastCalledWith({ resultId: 'result-1', offset: 0 });
+      });
+    });
+
+    it('cannot go past the last page', async () => {
+      await withState({
+        tabs: [pagedTab({ page: { offset: 6, pageSize: 2, totalRows: 7 }, rowCount: 1 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('pager').textContent).toContain('rows 7–7 of 7');
+      });
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next' }).disabled).toBe(true);
+    });
+
+    it('still pages when the row count is unknown', async () => {
+      await withState({
+        tabs: [pagedTab({ page: { offset: 0, pageSize: 2 } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('pager').textContent).toContain('rows 1–2');
+      });
+      // A full page suggests there may be more.
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next' }).disabled).toBe(false);
+    });
+
+    it('stops at the end when a short page arrives and the count is unknown', async () => {
+      await withState({
+        tabs: [pagedTab({ page: { offset: 0, pageSize: 10 } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('pager')).toBeTruthy();
+      });
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next' }).disabled).toBe(true);
+    });
+
+    it('shows an empty table honestly', async () => {
+      await withState({
+        tabs: [pagedTab({ rowCount: 0, page: { offset: 0, pageSize: 2, totalRows: 0 } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('pager').textContent).toContain('rows 0–0 of 0');
+      });
+    });
+  });
 });

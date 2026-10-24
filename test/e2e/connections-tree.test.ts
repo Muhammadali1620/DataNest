@@ -43,9 +43,15 @@ describe('connections view', () => {
       'datanest.connections.disconnect',
       'datanest.tree.refresh',
       'datanest.tree.copyName',
+      'datanest.table.open',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
+  });
+
+  it('opening a table without a node does nothing', async () => {
+    // The command is driven by the tree; from the palette there is no table.
+    await vscode.commands.executeCommand('datanest.table.open');
   });
 
   it('refreshing the whole tree works without a selected node', async () => {

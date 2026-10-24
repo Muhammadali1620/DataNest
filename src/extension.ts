@@ -1,20 +1,23 @@
 import * as vscode from 'vscode';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
-import { ConnectionManager } from './services/connection-manager';
+import { ConnectionManager, type SessionTarget } from './services/connection-manager';
 import { ConnectionStore } from './services/connection-store';
 import { MetadataCache } from './services/metadata-cache';
+import type { TableRef } from './core/model/objects';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
 import { ResultStore } from './services/result-store';
+import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
 import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/completion';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
-import { createSettings, readRowLimit } from './vscode/settings';
+import { createSettings, readPageSize, readRowLimit } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
+import type { TableNode } from './vscode/tree/nodes';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -54,9 +57,52 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ...TRIGGER_CHARACTERS,
     ),
   );
-  const showResults = (documentUri: string): void => {
-    ResultsPanel.show({ extensionUri: context.extensionUri, results, runner, logger }, documentUri);
+  const tables = new TableViewer({
+    manager,
+    results,
+    limits: { pageSize: () => readPageSize() },
+    logger,
+  });
+
+  /** What each open table view was opened with, so paging can repeat it. */
+  const openRequests = new Map<string, { target: SessionTarget; table: TableRef }>();
+
+  /** Re-reads a table view at another offset, keeping the row count it already has. */
+  const pageTo = async (resultId: string, offset: number): Promise<boolean> => {
+    const summary = results.get(resultId);
+    const page = summary?.page;
+    const request = summary === undefined ? undefined : openRequests.get(summary.documentUri);
+    if (page === undefined || request === undefined) {
+      return false;
+    }
+    await tables.open({
+      ...request,
+      offset,
+      ...(page.totalRows === undefined ? {} : { totalRows: page.totalRows }),
+    });
+    return true;
   };
+
+  const showResults = (documentUri: string): void => {
+    ResultsPanel.show(
+      { extensionUri: context.extensionUri, results, runner, pageTo, logger },
+      documentUri,
+    );
+  };
+
+  const openTable = async (node: TableNode): Promise<void> => {
+    const target: SessionTarget = {
+      connectionId: node.connectionId,
+      ...(node.scope.database === undefined ? {} : { database: node.scope.database }),
+    };
+    const table: TableRef = { ...node.scope, name: node.name };
+    const documentUri = tableDocumentUri(target, table);
+    openRequests.set(documentUri, { target, table });
+    // The panel opens first, so a slow table shows "Running…" instead of nothing.
+    showResults(documentUri);
+    await tables.open({ target, table });
+  };
+
   const lenses = new RunCodeLensProvider({ runner, editors, store, logger, showResults });
   context.subscriptions.push(
     lenses,
@@ -93,6 +139,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       editors,
       runner,
       showResults,
+      openTable,
     }),
   );
 

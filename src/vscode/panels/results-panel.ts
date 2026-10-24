@@ -15,6 +15,8 @@ export interface ResultsPanelDeps {
   readonly extensionUri: vscode.Uri;
   readonly results: ResultStore;
   readonly runner: QueryRunner;
+  /** Shows another page of a table view; absent where paging makes no sense. */
+  readonly pageTo?: (resultId: string, offset: number) => Promise<boolean>;
   readonly logger: Logger;
 }
 
@@ -98,6 +100,10 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.handle('sort', ({ resultId, column, direction }) => {
       const sorted = this.deps.results.sort(resultId, column, direction);
       return { resultId, applied: sorted !== undefined };
+    });
+    this.rpc.handle('pageTo', async ({ resultId, offset }) => {
+      const applied = (await this.deps.pageTo?.(resultId, offset)) ?? false;
+      return { resultId, applied };
     });
     this.rpc.handle('search', ({ resultId, text }) => {
       const hits = this.deps.results.search(resultId, text, MAX_SEARCH_HITS);

@@ -61,4 +61,9 @@ export const ru: Record<MessageKey, string> = {
   'grid.searchFailed': 'Не удалось выполнить поиск',
   'grid.errorAt': 'на символе {0}',
   'grid.goToError': 'Перейти к ошибке',
+  'grid.previousPage': 'Назад',
+  'grid.nextPage': 'Вперёд',
+  'grid.range': 'строки {0}–{1} из {2}',
+  'grid.rangeUnknown': 'строки {0}–{1}',
+  'grid.pageFailed': 'Не удалось загрузить страницу',
 };

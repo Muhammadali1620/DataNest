@@ -10,6 +10,16 @@ import type { CellValue } from '../shared/cell-value';
 
 export type ResultRow = readonly CellValue[];
 
+/** A page of a table view, so the panel can offer Prev/Next and a count. */
+export interface ResultPage {
+  /** Rows skipped before this page. */
+  readonly offset: number;
+  /** Rows one page holds. */
+  readonly pageSize: number;
+  /** Rows the whole table has, when counting succeeded. */
+  readonly totalRows?: number;
+}
+
 /** How a result is currently ordered; absent means "as the server returned it". */
 export interface ResultSort {
   readonly column: number;
@@ -35,6 +45,8 @@ export interface ResultSummary {
   readonly error?: ResultError;
   /** Set once the user sorted the result in the grid. */
   readonly sort?: ResultSort;
+  /** Set for a table view, which is paged rather than scrolled to the end. */
+  readonly page?: ResultPage;
 }
 
 export interface ResultError {
@@ -70,6 +82,7 @@ export interface NewResult {
   readonly affectedRows?: number;
   readonly durationMs: number;
   readonly error?: ResultError;
+  readonly page?: ResultPage;
 }
 
 /** How many results of one document are kept; older ones are dropped. */
@@ -105,6 +118,7 @@ export class ResultStore {
       ...(result.affectedRows === undefined ? {} : { affectedRows: result.affectedRows }),
       durationMs: result.durationMs,
       ...(result.error === undefined ? {} : { error: result.error }),
+      ...(result.page === undefined ? {} : { page: result.page }),
     };
     this.results.set(id, stored);
     const ids = this.byDocument.get(result.documentUri) ?? [];

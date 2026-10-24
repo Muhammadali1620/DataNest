@@ -154,6 +154,12 @@
         "icon": "$(table)"
       },
       {
+        "command": "datanest.table.open",
+        "title": "%commands.table.open.title%",
+        "category": "DataNest",
+        "icon": "$(table)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -167,6 +173,10 @@
         },
         {
           "command": "datanest.query.runRange",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.open",
           "when": "false"
         }
       ],
@@ -188,6 +198,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "datanest.table.open",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "inline@0"
+        },
         {
           "command": "datanest.query.new",
           "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
@@ -257,6 +272,11 @@
           "command": "datanest.query.new",
           "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
           "group": "0_query@1"
+        },
+        {
+          "command": "datanest.table.open",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "0_query@0"
         }
       ],
       "editor/title": [
@@ -332,6 +352,14 @@
           "minimum": 1,
           "maximum": 1000000,
           "markdownDescription": "%configuration.rowLimit.description%",
+          "scope": "window"
+        },
+        "datanest.pageSize": {
+          "type": "integer",
+          "default": 200,
+          "minimum": 1,
+          "maximum": 100000,
+          "markdownDescription": "%configuration.pageSize.description%",
           "scope": "window"
         }
       }

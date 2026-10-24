@@ -61,6 +61,8 @@ export class FakeSession implements Session {
   cancelCount = 0;
   /** Thrown while iterating execute() when set. */
   executeError: Error | undefined;
+  /** When it returns true for a statement, that statement fails. */
+  failExecuteWhen: ((sql: string) => boolean) | undefined;
   /** Rows every execute() yields. */
   rows: CellValue[][] = [[1]];
   /** Awaited before the first event, so a test can keep a statement running. */
@@ -74,7 +76,7 @@ export class FakeSession implements Session {
 
   execute(sql: string, _options?: ExecuteOptions): AsyncIterable<ExecuteEvent> {
     this.executed.push(sql);
-    return this.stream();
+    return this.stream(sql);
   }
 
   cancel(): Promise<void> {
@@ -87,12 +89,15 @@ export class FakeSession implements Session {
     return Promise.resolve();
   }
 
-  private async *stream(): AsyncGenerator<ExecuteEvent> {
+  private async *stream(sql: string): AsyncGenerator<ExecuteEvent> {
     // A real driver always crosses an async boundary before the first event.
     await Promise.resolve();
     await this.gate?.();
     if (this.executeError !== undefined) {
       throw this.executeError;
+    }
+    if (this.failExecuteWhen?.(sql) === true) {
+      throw new DbError('permission-denied', `Not allowed: ${sql}`);
     }
     yield { kind: 'columns', columns: [{ name: 'one' }] };
     yield { kind: 'rows', rows: this.rows };
@@ -114,6 +119,8 @@ export class FakeDriver implements Driver {
   openError: Error | undefined;
   /** Copied onto every session this driver opens, so failures can be set up ahead. */
   executeError: Error | undefined;
+  /** Copied onto every session: statements it matches fail. */
+  failExecuteWhen: ((sql: string) => boolean) | undefined;
   /** Thrown by every metadata reader of every session this driver opens. */
   metadataError: Error | undefined;
   /** What the metadata of each new session answers; set it before expanding a tree. */
@@ -158,6 +165,7 @@ export class FakeDriver implements Driver {
     }
     const session = new FakeSession(config);
     session.executeError = this.executeError;
+    session.failExecuteWhen = this.failExecuteWhen;
     session.rows = [...this.sessionRows];
     session.gate = () => this.waitGate();
     session.metadata.databases = [...this.sessionMetadata.databases];

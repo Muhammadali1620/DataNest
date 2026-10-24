@@ -25,6 +25,16 @@ export function readRowLimit(): number {
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_ROW_LIMIT;
 }
 
+/** Rows one page of a table view holds. */
+export const DEFAULT_PAGE_SIZE = 200;
+
+export function readPageSize(): number {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<number>(CONFIG_KEYS.pageSize, DEFAULT_PAGE_SIZE);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_PAGE_SIZE;
+}
+
 /** True when a configuration change touches one of our settings. */
 export function affectsDataNest(event: vscode.ConfigurationChangeEvent): boolean {
   return event.affectsConfiguration(CONFIG_SECTION);

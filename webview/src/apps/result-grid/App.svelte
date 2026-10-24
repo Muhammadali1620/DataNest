@@ -198,6 +198,19 @@
     revealRow = row;
   }
 
+  /** Shows another page of a table view. */
+  async function goToPage(offset: number): Promise<void> {
+    const tab = activeTab;
+    if (tab?.page === undefined || offset < 0) {
+      return;
+    }
+    try {
+      await rpc.request('pageTo', { resultId: tab.id, offset });
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.pageFailed');
+    }
+  }
+
   function onResize(index: number, width: number): void {
     const next = [...widths];
     next[index] = width;
@@ -363,6 +376,40 @@
           {t}
         />
       {/if}
+      {#if activeTab.page !== undefined}
+        {@const page = activeTab.page}
+        {@const from = activeTab.rowCount === 0 ? 0 : page.offset + 1}
+        {@const to = page.offset + activeTab.rowCount}
+        <div class="pager" data-testid="pager">
+          <button
+            type="button"
+            class="button secondary"
+            disabled={page.offset === 0}
+            onclick={() => {
+              void goToPage(Math.max(0, page.offset - page.pageSize));
+            }}
+          >
+            {t('grid.previousPage')}
+          </button>
+          <span class="range">
+            {page.totalRows === undefined
+              ? t('grid.rangeUnknown', from, to)
+              : t('grid.range', from, to, page.totalRows)}
+          </span>
+          <button
+            type="button"
+            class="button secondary"
+            disabled={page.totalRows !== undefined
+              ? to >= page.totalRows
+              : activeTab.rowCount < page.pageSize}
+            onclick={() => {
+              void goToPage(page.offset + page.pageSize);
+            }}
+          >
+            {t('grid.nextPage')}
+          </button>
+        </div>
+      {/if}
       {#if failure !== undefined}
         <p class="error" role="alert">{failure}</p>
       {/if}
@@ -445,6 +492,20 @@
   .step:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  .pager {
+    display: flex;
+    flex: none;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 8px;
+    border-top: 1px solid var(--vscode-panel-border);
+  }
+
+  .range {
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
   }
 
   .summary,

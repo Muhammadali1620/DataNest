@@ -27,6 +27,8 @@ export const COMMAND_IDS = {
   cancelQuery: 'datanest.query.cancel',
   /** Opens (or brings back) the result panel of the active query. */
   showResults: 'datanest.results.show',
+  /** Opens a table or view from the tree as a paged result. */
+  openTable: 'datanest.table.open',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;
@@ -49,4 +51,6 @@ export const CONFIG_KEYS = {
   showSystemObjects: 'showSystemObjects',
   /** Largest number of rows one statement brings back. */
   rowLimit: 'rowLimit',
+  /** Rows one page of a table view holds. */
+  pageSize: 'pageSize',
 } as const;

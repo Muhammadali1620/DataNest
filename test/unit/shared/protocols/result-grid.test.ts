@@ -110,8 +110,9 @@ describe('state event', () => {
 });
 
 describe('protocol shape', () => {
-  it('lets the host answer rows, sorting and searching', () => {
+  it('lets the host answer rows, paging, sorting and searching', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
+      'pageTo',
       'rows',
       'search',
       'sort',
@@ -272,5 +273,55 @@ describe('sorted tab state', () => {
         running: false,
       }),
     ).toThrow('direction');
+  });
+});
+describe('pageTo request', () => {
+  const pageTo = resultGridProtocol.host.requests.pageTo;
+
+  it('accepts an offset and answers whether the page was shown', () => {
+    expect(pageTo.params.parse({ resultId: 'r', offset: 200 })).toEqual({
+      resultId: 'r',
+      offset: 200,
+    });
+    expect(pageTo.result.parse({ resultId: 'r', applied: false })).toEqual({
+      resultId: 'r',
+      applied: false,
+    });
+  });
+
+  it('rejects a negative or fractional offset', () => {
+    expect(() => pageTo.params.parse({ resultId: 'r', offset: -1 })).toThrow('offset');
+    expect(() => pageTo.params.parse({ resultId: 'r', offset: 1.5 })).toThrow('offset');
+  });
+});
+
+describe('paged tab state', () => {
+  const base = {
+    id: 'result-1',
+    title: 'SELECT *',
+    statement: 'SELECT * FROM t',
+    columns: [{ name: 'one' }],
+    rowCount: 2,
+    truncated: false,
+    durationMs: 1,
+  };
+
+  it('carries the page and the row count of a table view', () => {
+    const payload = {
+      tabs: [{ ...base, page: { offset: 100, pageSize: 50, totalRows: 4242 } }],
+      running: false,
+    };
+    expect(state.parse(payload)).toEqual(payload);
+  });
+
+  it('accepts a page whose total is unknown', () => {
+    const payload = { tabs: [{ ...base, page: { offset: 0, pageSize: 50 } }], running: false };
+    expect(state.parse(payload)).toEqual(payload);
+  });
+
+  it('rejects a page with a nonsense size', () => {
+    expect(() =>
+      state.parse({ tabs: [{ ...base, page: { offset: 0, pageSize: 0 } }], running: false }),
+    ).toThrow('pageSize');
   });
 });

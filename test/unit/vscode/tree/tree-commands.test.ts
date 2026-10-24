@@ -10,14 +10,16 @@ function setup() {
   const refresh = vi.fn();
   const invalidate = vi.fn();
   const writeText = vi.fn(() => Promise.resolve());
+  const openTable = vi.fn(() => Promise.resolve());
   const handlers = treeCommandHandlers({
     manager: { connect, disconnect } as never,
     tree: { refresh },
     cache: { invalidate },
+    openTable,
     clipboard: { writeText },
     noTargetMessage: NO_TARGET,
   });
-  return { handlers, connect, disconnect, refresh, invalidate, writeText };
+  return { handlers, connect, disconnect, refresh, invalidate, writeText, openTable };
 }
 
 const connectionNode: TreeNode = { kind: 'connection', connectionId: 'c1' };
@@ -62,6 +64,7 @@ describe('connect', () => {
       },
       tree: { refresh },
       cache: { invalidate: () => undefined },
+      openTable: () => Promise.resolve(),
       clipboard: { writeText: () => Promise.resolve() },
       noTargetMessage: NO_TARGET,
     });
@@ -121,6 +124,7 @@ describe('refresh', () => {
           order.push('invalidate');
         },
       },
+      openTable: () => Promise.resolve(),
       clipboard: { writeText: () => Promise.resolve() },
       noTargetMessage: NO_TARGET,
     });
@@ -166,5 +170,29 @@ describe('copyName', () => {
     await harness.handlers.copyName();
     await harness.handlers.copyName('c1');
     expect(harness.writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe('openTable', () => {
+  it('opens a table node', async () => {
+    const { handlers, openTable } = setup();
+    await handlers.openTable(tableNode);
+    expect(openTable).toHaveBeenCalledWith(tableNode);
+  });
+
+  it('opens a view the same way', async () => {
+    const { handlers, openTable } = setup();
+    const view: TreeNode = { ...tableNode, name: 'order_totals', tableKind: 'view' };
+    await handlers.openTable(view);
+    expect(openTable).toHaveBeenCalledWith(view);
+  });
+
+  it('ignores nodes that are not tables', async () => {
+    const { handlers, openTable } = setup();
+    await handlers.openTable(connectionNode);
+    await handlers.openTable({ kind: 'group', group: 'tables', connectionId: 'c1', scope: {} });
+    await handlers.openTable();
+    await handlers.openTable('c1');
+    expect(openTable).not.toHaveBeenCalled();
   });
 });

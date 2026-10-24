@@ -3,7 +3,7 @@
 
 import { DbError } from '../../core/errors';
 import type { ConnectionManager } from '../../services/connection-manager';
-import { connectionIdOf, isTreeNode, nameOf, type TreeNode } from './nodes';
+import { connectionIdOf, isTreeNode, nameOf, type TableNode, type TreeNode } from './nodes';
 
 /** What the tree view offers; `vscode.env.clipboard` satisfies it. */
 export interface Clipboard {
@@ -22,6 +22,8 @@ export interface InvalidatableCache {
 
 export interface TreeCommandDeps {
   readonly manager: Pick<ConnectionManager, 'connect' | 'disconnect'>;
+  /** Opens a table from the tree; the host wires this to the table viewer. */
+  readonly openTable: (node: TableNode) => Promise<void>;
   readonly tree: RefreshableTree;
   readonly cache: InvalidatableCache;
   readonly clipboard: Clipboard;
@@ -29,7 +31,7 @@ export interface TreeCommandDeps {
   readonly noTargetMessage: string;
 }
 
-export type TreeCommandName = 'connect' | 'disconnect' | 'refresh' | 'copyName';
+export type TreeCommandName = 'connect' | 'disconnect' | 'refresh' | 'copyName' | 'openTable';
 
 /** What a tree command receives: the clicked node, a bare id, or nothing. */
 export type CommandTarget = TreeNode | string | undefined;
@@ -66,6 +68,14 @@ export function treeCommandHandlers(
       const node = isTreeNode(target) ? target : undefined;
       deps.cache.invalidate(node === undefined ? undefined : connectionIdOf(node));
       deps.tree.refresh(node);
+      return undefined;
+    },
+
+    /** Opens a table or a view; other nodes are ignored. */
+    openTable: async (target?: CommandTarget) => {
+      if (isTreeNode(target) && target.kind === 'table') {
+        await deps.openTable(target);
+      }
       return undefined;
     },
 

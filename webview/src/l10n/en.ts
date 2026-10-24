@@ -60,6 +60,11 @@ export const en = {
   'grid.searchFailed': 'Could not search the result',
   'grid.errorAt': 'at character {0}',
   'grid.goToError': 'Go to the error',
+  'grid.previousPage': 'Previous',
+  'grid.nextPage': 'Next',
+  'grid.range': 'rows {0}–{1} of {2}',
+  'grid.rangeUnknown': 'rows {0}–{1}',
+  'grid.pageFailed': 'Could not load the page',
 } as const;
 
 export type MessageKey = keyof typeof en;

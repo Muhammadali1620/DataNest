@@ -163,6 +163,24 @@ describe('tree menus', () => {
     expect(remove?.group?.split('@')[0]).not.toBe(edit?.group?.split('@')[0]);
   });
 
+  it('offers Open Table on tables and views only', () => {
+    const entries = items.filter((entry) => entry.command === COMMAND_IDS.openTable);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry.when).toContain(TREE_CONTEXT.table);
+      expect(entry.when).toContain(TREE_CONTEXT.view);
+      expect(entry.when).not.toContain(TREE_CONTEXT.column);
+      expect(entry.when).not.toContain(TREE_CONTEXT.group);
+    }
+  });
+
+  it('keeps Open Table out of the palette, where there is no node to open', () => {
+    expect(contributes.menus.commandPalette).toContainEqual({
+      command: COMMAND_IDS.openTable,
+      when: 'false',
+    });
+  });
+
   it('offers copy name on named objects only', () => {
     const copy = items.filter((entry) => entry.command === COMMAND_IDS.copyName);
     expect(copy).toHaveLength(1);

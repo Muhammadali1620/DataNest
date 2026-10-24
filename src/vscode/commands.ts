@@ -6,7 +6,7 @@ import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
 import { runCommandHandlers } from './editor/run-query';
 import type { QueryRunner } from '../services/query-runner';
-import { connectionIdOf, isTreeNode, scopeOf } from './tree/nodes';
+import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, type CommandId } from './command-ids';
@@ -27,6 +27,8 @@ export interface CommandDeps {
   readonly editors: QueryEditors;
   readonly runner: QueryRunner;
   readonly showResults: (documentUri: string) => void;
+  /** Opens a table from the tree as a paged result. */
+  readonly openTable: (node: TableNode) => Promise<void>;
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
@@ -53,6 +55,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     tree: deps.tree,
     cache: deps.cache,
+    openTable: deps.openTable,
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
   });
@@ -69,6 +72,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.disconnect]: treeCommands.disconnect,
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,
     [COMMAND_IDS.copyName]: treeCommands.copyName,
+    [COMMAND_IDS.openTable]: treeCommands.openTable,
     [COMMAND_IDS.newQuery]: async (target?: CommandTarget) => {
       // From the tree the query starts on the clicked connection and database.
       const connectionId = connectionIdOf(target);

@@ -6,6 +6,7 @@ import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
 import { runCommandHandlers } from './editor/run-query';
 import type { QueryRunner } from '../services/query-runner';
+import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
@@ -29,6 +30,8 @@ export interface CommandDeps {
   readonly showResults: (documentUri: string) => void;
   /** Opens a table from the tree as a paged result. */
   readonly openTable: (node: TableNode) => Promise<void>;
+  /** Writes a result to a file the user picks. */
+  readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
@@ -73,6 +76,26 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,
     [COMMAND_IDS.copyName]: treeCommands.copyName,
     [COMMAND_IDS.openTable]: treeCommands.openTable,
+    [COMMAND_IDS.exportResult]: async () => {
+      const document = vscode.window.activeTextEditor?.document;
+      const panel =
+        document?.languageId === 'sql' ? ResultsPanel.find(document.uri.toString()) : undefined;
+      const resultId = panel?.activeResultId;
+      if (resultId === undefined) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Run a query first: there is no result to export'),
+        );
+        return undefined;
+      }
+      const format = await vscode.window.showQuickPick([...EXPORT_FORMATS], {
+        placeHolder: vscode.l10n.t('Pick a format'),
+      });
+      if (format === undefined || !isExportFormat(format)) {
+        return undefined;
+      }
+      await deps.exportResult(resultId, format);
+      return undefined;
+    },
     [COMMAND_IDS.newQuery]: async (target?: CommandTarget) => {
       // From the tree the query starts on the clicked connection and database.
       const connectionId = connectionIdOf(target);

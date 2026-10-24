@@ -65,6 +65,9 @@ export const en = {
   'grid.range': 'rows {0}–{1} of {2}',
   'grid.rangeUnknown': 'rows {0}–{1}',
   'grid.pageFailed': 'Could not load the page',
+  'grid.exportCsv': 'CSV',
+  'grid.exportJson': 'JSON',
+  'grid.exportHint': 'Export every row of this result to a file',
 } as const;
 
 export type MessageKey = keyof typeof en;

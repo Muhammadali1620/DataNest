@@ -120,6 +120,7 @@ describe('protocol shape', () => {
     expect(Object.keys(resultGridProtocol.host.events).sort()).toEqual([
       'cancel',
       'copyText',
+      'exportResult',
       'ready',
       'revealError',
       'selectTab',
@@ -323,5 +324,24 @@ describe('paged tab state', () => {
     expect(() =>
       state.parse({ tabs: [{ ...base, page: { offset: 0, pageSize: 0 } }], running: false }),
     ).toThrow('pageSize');
+  });
+});
+describe('exportResult event', () => {
+  const exportResult = resultGridProtocol.host.events.exportResult;
+
+  it('accepts the formats the extension writes', () => {
+    expect(exportResult.parse({ resultId: 'r', format: 'csv' })).toEqual({
+      resultId: 'r',
+      format: 'csv',
+    });
+    expect(exportResult.parse({ resultId: 'r', format: 'json' })).toEqual({
+      resultId: 'r',
+      format: 'json',
+    });
+  });
+
+  it('rejects a format the host cannot write', () => {
+    expect(() => exportResult.parse({ resultId: 'r', format: 'xlsx' })).toThrow('format');
+    expect(() => exportResult.parse({ resultId: 'r' })).toThrow('format');
   });
 });

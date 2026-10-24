@@ -29,5 +29,6 @@
   "configuration.rowLimit.description": "Сколько строк вернёт один запрос. Большие результаты обрезаются, и в результате видно, что он обрезан.",
   "commands.results.show.title": "Показать результаты",
   "commands.table.open.title": "Открыть таблицу",
-  "configuration.pageSize.description": "Сколько строк показывать на одной странице при открытии таблицы из дерева."
+  "configuration.pageSize.description": "Сколько строк показывать на одной странице при открытии таблицы из дерева.",
+  "commands.results.export.title": "Экспортировать результат"
 }

@@ -44,13 +44,15 @@ function setup(lang = 'en') {
   const cancelled = vi.fn();
   const copied = vi.fn();
   const revealed = vi.fn();
+  const exported = vi.fn();
   host.on('ready', ready);
   host.on('selectTab', selected);
   host.on('cancel', cancelled);
   host.on('copyText', copied);
   host.on('revealError', revealed);
+  host.on('exportResult', exported);
   const view = render(App, { props: { rpc, t: createTranslator(lang) } });
-  return { host, rpc, ready, selected, cancelled, copied, revealed, view };
+  return { host, rpc, ready, selected, cancelled, copied, revealed, exported, view };
 }
 
 const ROWS = [
@@ -1029,6 +1031,70 @@ describe('result grid App', () => {
       await waitFor(() => {
         expect(screen.getByTestId('pager').textContent).toContain('rows 0–0 of 0');
       });
+    });
+  });
+
+  describe('export', () => {
+    it('offers CSV and JSON for a result that has rows', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
+      });
+      expect(screen.getByRole('button', { name: 'JSON' })).toBeTruthy();
+    });
+
+    it('asks the host to write the shown result', async () => {
+      const { exported } = await withState({
+        tabs: [tab()],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
+      await waitFor(() => {
+        expect(exported).toHaveBeenCalledWith({ resultId: 'result-1', format: 'csv' });
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+      await waitFor(() => {
+        expect(exported).toHaveBeenLastCalledWith({ resultId: 'result-1', format: 'json' });
+      });
+    });
+
+    it('exports the tab the user is looking at', async () => {
+      const { exported } = await withState({
+        tabs: [tab(), tab({ id: 'result-2', title: 'SELECT 2' })],
+        activeId: 'result-2',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
+      await waitFor(() => {
+        expect(exported).toHaveBeenCalledWith({ resultId: 'result-2', format: 'csv' });
+      });
+    });
+
+    it('offers no export for a failed statement', async () => {
+      await withState({
+        tabs: [tab({ error: { code: 'syntax', message: 'bad' } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toBeTruthy();
+      });
+      expect(screen.queryByRole('button', { name: 'CSV' })).toBeNull();
+    });
+
+    it('offers cancelling rather than exporting while a query runs', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: true });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+      });
+      expect(screen.queryByRole('button', { name: 'CSV' })).toBeNull();
     });
   });
 });

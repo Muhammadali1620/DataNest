@@ -269,6 +269,7 @@
           {tab.title}
         </button>
       {/each}
+      <span class="spacer"></span>
       {#if gridState.running}
         <button
           type="button"
@@ -278,6 +279,27 @@
           }}
         >
           {t('grid.cancel')}
+        </button>
+      {:else if activeTab !== undefined && activeTab.error === undefined}
+        <button
+          type="button"
+          class="cancel"
+          title={t('grid.exportHint')}
+          onclick={() => {
+            rpc.emit('exportResult', { resultId: activeTab.id, format: 'csv' });
+          }}
+        >
+          {t('grid.exportCsv')}
+        </button>
+        <button
+          type="button"
+          class="cancel"
+          title={t('grid.exportHint')}
+          onclick={() => {
+            rpc.emit('exportResult', { resultId: activeTab.id, format: 'json' });
+          }}
+        >
+          {t('grid.exportJson')}
         </button>
       {/if}
     </div>
@@ -454,8 +476,11 @@
     color: var(--vscode-errorForeground);
   }
 
+  .spacer {
+    flex: 1;
+  }
+
   .cancel {
-    margin-left: auto;
     padding: 2px 10px;
     color: var(--vscode-button-secondaryForeground);
     background: var(--vscode-button-secondaryBackground);

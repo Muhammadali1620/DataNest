@@ -37,5 +37,10 @@
   "$(play) Run": "$(play) Выполнить",
   "$(sync~spin) Running… {0}": "$(sync~spin) Выполняется… {0}",
   "DataNest: click to cancel the running query": "DataNest: нажмите, чтобы отменить запрос",
-  "Results": "Результаты"
+  "Results": "Результаты",
+  "Export Result": "Экспорт результата",
+  "Exported {0} rows": "Экспортировано строк: {0}",
+  "This result is no longer available": "Этого результата больше нет",
+  "Run a query first: there is no result to export": "Сначала выполните запрос: экспортировать нечего",
+  "Pick a format": "Выберите формат"
 }

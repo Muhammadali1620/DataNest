@@ -133,6 +133,8 @@ export const resultGridProtocol = defineProtocol({
       copyText: object({ text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
       /** Page → host: put the cursor where this result's error is. */
       revealError: object({ resultId }),
+      /** Page → host: write this result to a file the user picks. */
+      exportResult: object({ resultId, format: literal('csv', 'json') }),
     },
   },
   webview: {

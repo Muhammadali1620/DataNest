@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
+import type { ExportFormat } from '../../services/result-export';
 import type { ResultStore } from '../../services/result-store';
 import {
   MAX_SEARCH_HITS,
@@ -17,6 +18,8 @@ export interface ResultsPanelDeps {
   readonly runner: QueryRunner;
   /** Shows another page of a table view; absent where paging makes no sense. */
   readonly pageTo?: (resultId: string, offset: number) => Promise<boolean>;
+  /** Writes a result to a file the user picks. */
+  readonly exportResult?: (resultId: string, format: ExportFormat) => Promise<void>;
   readonly logger: Logger;
 }
 
@@ -124,6 +127,9 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.on('revealError', ({ resultId }) => {
       void this.revealError(resultId);
     });
+    this.rpc.on('exportResult', ({ resultId, format }) => {
+      void this.deps.exportResult?.(resultId, format);
+    });
     this.subscriptions.push(
       deps.results.onDidChange((documentUri) => {
         if (documentUri === this.documentUri) {
@@ -143,6 +149,11 @@ export class ResultsPanel implements vscode.Disposable {
 
   get isDisposed(): boolean {
     return this.disposed;
+  }
+
+  /** The result the user is looking at, for commands outside the page. */
+  get activeResultId(): string | undefined {
+    return this.activeId;
   }
 
   /** Brings the panel forward without stealing focus from the editor. */

@@ -160,6 +160,12 @@
         "icon": "$(table)"
       },
       {
+        "command": "datanest.results.export",
+        "title": "%commands.results.export.title%",
+        "category": "DataNest",
+        "icon": "$(export)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -299,6 +305,11 @@
           "command": "datanest.results.show",
           "when": "editorLangId == sql",
           "group": "navigation@3"
+        },
+        {
+          "command": "datanest.results.export",
+          "when": "editorLangId == sql",
+          "group": "navigation@4"
         }
       ],
       "editor/context": [

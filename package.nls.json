@@ -29,5 +29,6 @@
   "configuration.rowLimit.description": "How many rows one statement may bring back. Larger results are cut off, and the result shows that it was truncated.",
   "commands.results.show.title": "Show Results",
   "commands.table.open.title": "Open Table",
-  "configuration.pageSize.description": "Rows shown on one page when a table is opened from the tree."
+  "configuration.pageSize.description": "Rows shown on one page when a table is opened from the tree.",
+  "commands.results.export.title": "Export Result"
 }

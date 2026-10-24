@@ -8,6 +8,12 @@ import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
+import {
+  type ExportFormat,
+  exportResult as exportResultText,
+  extensionOf,
+  suggestedFileName,
+} from './services/result-export';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
@@ -83,9 +89,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return true;
   };
 
+  /** Writes a result to a file the user picks; the whole result, not just a page. */
+  const exportResult = async (resultId: string, format: ExportFormat): Promise<void> => {
+    const summary = results.get(resultId);
+    const rows = results.allRows(resultId);
+    if (summary === undefined || rows === undefined) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t('This result is no longer available'),
+      );
+      return;
+    }
+    const target = await vscode.window.showSaveDialog({
+      title: vscode.l10n.t('Export Result'),
+      defaultUri: vscode.Uri.file(suggestedFileName(summary.statement, format)),
+      filters: { [format.toUpperCase()]: [extensionOf(format)] },
+    });
+    if (target === undefined) {
+      return;
+    }
+    const text = exportResultText({ columns: summary.columns, rows }, format);
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(text));
+    logger.info(`Exported ${rows.length} rows to ${target.fsPath}`);
+    void vscode.window.showInformationMessage(vscode.l10n.t('Exported {0} rows', rows.length));
+  };
+
   const showResults = (documentUri: string): void => {
     ResultsPanel.show(
-      { extensionUri: context.extensionUri, results, runner, pageTo, logger },
+      { extensionUri: context.extensionUri, results, runner, pageTo, exportResult, logger },
       documentUri,
     );
   };
@@ -140,6 +170,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       runner,
       showResults,
       openTable,
+      exportResult,
     }),
   );
 

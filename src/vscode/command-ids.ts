@@ -29,6 +29,8 @@ export const COMMAND_IDS = {
   showResults: 'datanest.results.show',
   /** Opens a table or view from the tree as a paged result. */
   openTable: 'datanest.table.open',
+  /** Writes the shown result to a CSV or JSON file. */
+  exportResult: 'datanest.results.export',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

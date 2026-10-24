@@ -66,4 +66,7 @@ export const ru: Record<MessageKey, string> = {
   'grid.range': 'строки {0}–{1} из {2}',
   'grid.rangeUnknown': 'строки {0}–{1}',
   'grid.pageFailed': 'Не удалось загрузить страницу',
+  'grid.exportCsv': 'CSV',
+  'grid.exportJson': 'JSON',
+  'grid.exportHint': 'Выгрузить все строки результата в файл',
 };

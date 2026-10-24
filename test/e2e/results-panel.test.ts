@@ -93,8 +93,15 @@ describe('results panel', () => {
     assert.equal(resultTabs().length, 0);
   });
 
-  it('registers the command', async () => {
+  it('registers the commands', async () => {
     const all = await vscode.commands.getCommands(true);
     assert.ok(all.includes('datanest.results.show'));
+    assert.ok(all.includes('datanest.results.export'));
+  });
+
+  it('exporting without a result only says so', async () => {
+    await openQuery();
+    // No query has run, so there is nothing to write; the command must not throw.
+    await vscode.commands.executeCommand('datanest.results.export');
   });
 });

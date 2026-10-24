@@ -191,6 +191,12 @@ export class ResultStore {
     return findRows(stored.rows, text, limit);
   }
 
+  /** Every row of a result, for exporting it to a file. */
+  allRows(id: string): ResultRow[] | undefined {
+    const stored = this.results.get(id);
+    return stored === undefined ? undefined : [...stored.rows];
+  }
+
   /** Drops every result of a document, e.g. when its editor closes. */
   clearDocument(documentUri: string): void {
     const ids = this.byDocument.get(documentUri);

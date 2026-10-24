@@ -3,6 +3,8 @@ import type { Logger } from '../core/logging/logger';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
+import type { QueryEditors } from './editor/query-editor';
+import { connectionIdOf, isTreeNode, scopeOf } from './tree/nodes';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, type CommandId } from './command-ids';
@@ -19,6 +21,7 @@ export interface CommandDeps {
   readonly manager: ConnectionManager;
   readonly tree: ConnectionsTreeProvider;
   readonly cache: MetadataCache;
+  readonly editors: QueryEditors;
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
@@ -54,6 +57,20 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.disconnect]: treeCommands.disconnect,
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,
     [COMMAND_IDS.copyName]: treeCommands.copyName,
+    [COMMAND_IDS.newQuery]: async (target?: CommandTarget) => {
+      // From the tree the query starts on the clicked connection and database.
+      const connectionId = connectionIdOf(target);
+      if (connectionId === undefined) {
+        return await deps.editors.newQuery();
+      }
+      const scope = isTreeNode(target) ? scopeOf(target) : {};
+      return await deps.editors.newQuery(
+        scope.database === undefined
+          ? { connectionId }
+          : { connectionId, database: scope.database },
+      );
+    },
+    [COMMAND_IDS.selectConnection]: async () => await deps.editors.selectConnection(),
     [COMMAND_IDS.openPing]: () => {
       const panel = new PingPanel(deps.extensionUri, deps.logger);
       pings = [...pings.filter((open) => !open.isDisposed), panel];

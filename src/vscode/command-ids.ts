@@ -13,6 +13,10 @@ export const COMMAND_IDS = {
   disconnect: 'datanest.connections.disconnect',
   refreshTree: 'datanest.tree.refresh',
   copyName: 'datanest.tree.copyName',
+  /** Opens an empty SQL document bound to a connection. */
+  newQuery: 'datanest.query.new',
+  /** Picks the connection and database of the active SQL document. */
+  selectConnection: 'datanest.query.selectConnection',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

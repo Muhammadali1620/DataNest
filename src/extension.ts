@@ -6,6 +6,7 @@ import { MetadataCache } from './services/metadata-cache';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
+import { QueryEditors } from './vscode/editor/query-editor';
 import { createSettings } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 
@@ -28,6 +29,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(manager);
   const cache = new MetadataCache({ logger });
 
+  const editors = new QueryEditors({ store, manager, logger });
+  context.subscriptions.push(editors);
+
   const settings = createSettings();
   const tree = new ConnectionsTreeProvider({ store, manager, cache, settings, logger });
   context.subscriptions.push(
@@ -47,6 +51,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       manager,
       tree,
       cache,
+      editors,
     }),
   );
 

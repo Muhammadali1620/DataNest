@@ -76,6 +76,11 @@ export class ConnectionManager implements Disposable {
     return database === undefined ? `tree:${connectionId}` : `tree:${connectionId}:${database}`;
   }
 
+  /** Owner key of the session belonging to one SQL editor. */
+  static editorOwner(documentUri: string): string {
+    return `editor:${documentUri}`;
+  }
+
   getState(connectionId: string): ConnectionState {
     return this.states.get(connectionId) ?? DISCONNECTED;
   }

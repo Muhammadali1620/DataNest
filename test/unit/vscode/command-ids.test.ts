@@ -120,11 +120,21 @@ describe('tree menus', () => {
     }
   });
 
-  it('offers new connection and refresh in the view title', () => {
+  it('offers new connection, refresh and new query in the view title', () => {
     expect(title.map((entry) => entry.command)).toEqual([
       COMMAND_IDS.addConnection,
       COMMAND_IDS.refreshTree,
+      COMMAND_IDS.newQuery,
     ]);
+  });
+
+  it('offers a new query only where a connection is live', () => {
+    const entries = [...title, ...items].filter((entry) => entry.command === COMMAND_IDS.newQuery);
+    expect(entries.length).toBeGreaterThan(1);
+    for (const entry of entries.filter((e) => e.when.includes('viewItem'))) {
+      expect(entry.when).toContain(TREE_CONTEXT.connectionConnected);
+      expect(entry.when).not.toContain(`viewItem == ${TREE_CONTEXT.column}`);
+    }
   });
 
   it('shows connect and disconnect on opposite states, never both at once', () => {

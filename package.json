@@ -114,6 +114,17 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.query.new",
+        "title": "%commands.query.new.title%",
+        "category": "DataNest",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "datanest.query.selectConnection",
+        "title": "%commands.query.selectConnection.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -136,9 +147,19 @@
           "command": "datanest.tree.refresh",
           "when": "view == datanest.connections",
           "group": "navigation@2"
+        },
+        {
+          "command": "datanest.query.new",
+          "when": "view == datanest.connections",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
+        {
+          "command": "datanest.query.new",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "group": "inline@0"
+        },
         {
           "command": "datanest.connections.connect",
           "when": "view == datanest.connections && viewItem == datanest.connection",
@@ -198,6 +219,11 @@
           "command": "datanest.tree.refresh",
           "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column)",
           "group": "1_state@1"
+        },
+        {
+          "command": "datanest.query.new",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "group": "0_query@1"
         }
       ]
     },

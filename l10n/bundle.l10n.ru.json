@@ -22,5 +22,12 @@
   "Connection failed": "Не удалось подключиться",
   "Not connected": "Не подключено",
   "This connection no longer exists": "Этого подключения больше нет",
-  "Pick a connection in the DataNest view first": "Сначала выберите подключение в панели DataNest"
+  "Pick a connection in the DataNest view first": "Сначала выберите подключение в панели DataNest",
+  "$(database) Select connection": "$(database) Выбрать подключение",
+  "DataNest: choose the connection and database for this query": "DataNest: выберите подключение и базу для этого запроса",
+  "connecting…": "подключаемся…",
+  "failed": "ошибка",
+  "not connected": "не подключено",
+  "Open a SQL query first: DataNest: New Query": "Сначала откройте SQL-запрос: DataNest: Новый запрос",
+  "Pick a database": "Выберите базу данных"
 }

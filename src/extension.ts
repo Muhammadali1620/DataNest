@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
 import { ConnectionManager } from './services/connection-manager';
 import { ConnectionStore } from './services/connection-store';
+import { MetadataCache } from './services/metadata-cache';
 import { CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
@@ -24,8 +25,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const manager = new ConnectionManager({ store, drivers, logger });
   context.subscriptions.push(manager);
+  const cache = new MetadataCache({ logger });
 
-  const tree = new ConnectionsTreeProvider({ store, manager, logger });
+  const tree = new ConnectionsTreeProvider({ store, manager, cache, logger });
   context.subscriptions.push(
     tree,
     vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
@@ -42,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       store,
       manager,
       tree,
+      cache,
     }),
   );
 

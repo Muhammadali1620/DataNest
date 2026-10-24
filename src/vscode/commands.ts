@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { Logger } from '../core/logging/logger';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
+import type { MetadataCache } from '../services/metadata-cache';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, type CommandId } from './command-ids';
@@ -17,6 +18,7 @@ export interface CommandDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly tree: ConnectionsTreeProvider;
+  readonly cache: MetadataCache;
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
@@ -35,6 +37,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
     tree: deps.tree,
+    cache: deps.cache,
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
   });

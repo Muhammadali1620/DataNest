@@ -7,6 +7,7 @@ import type { ObjectScope } from '../../core/model/objects';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
 import { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
+import type { MetadataCache } from '../../services/metadata-cache';
 import type { TreeNode } from './nodes';
 
 export interface TreeTexts {
@@ -21,6 +22,7 @@ export interface TreeTexts {
 export interface TreeModelDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
+  readonly cache: MetadataCache;
   readonly logger: Logger;
   readonly texts: TreeTexts;
 }
@@ -175,6 +177,6 @@ export class TreeModel {
       ConnectionManager.treeOwner(connectionId, scoped ? database : undefined),
       scoped ? { connectionId, database } : { connectionId },
     );
-    return session.metadata;
+    return this.deps.cache.wrap(connectionId, session.metadata);
   }
 }

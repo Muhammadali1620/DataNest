@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import { ConnectionManager } from '../../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../../src/services/connection-store';
+import { MetadataCache } from '../../../../src/services/metadata-cache';
 import type { ConnectionConfig } from '../../../../src/shared/connection';
 import { TreeModel, type TreeTexts } from '../../../../src/vscode/tree/tree-model';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
@@ -21,6 +22,7 @@ describe('TreeModel', () => {
   let store: ConnectionStore;
   let drivers: FakeDriverProvider;
   let manager: ConnectionManager;
+  let cache: MetadataCache;
   let logger: RecordingLogger;
   let model: TreeModel;
   let mysql: ConnectionConfig;
@@ -34,7 +36,8 @@ describe('TreeModel', () => {
     });
     drivers = new FakeDriverProvider();
     manager = new ConnectionManager({ store, drivers, logger });
-    model = new TreeModel({ store, manager, logger, texts: TEXTS });
+    cache = new MetadataCache({ logger });
+    model = new TreeModel({ store, manager, cache, logger, texts: TEXTS });
     mysql = await store.add({ name: 'Local', driver: 'mysql', host: 'h' });
   });
 

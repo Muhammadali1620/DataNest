@@ -8,14 +8,16 @@ function setup() {
   const connect = vi.fn(() => Promise.resolve());
   const disconnect = vi.fn(() => Promise.resolve());
   const refresh = vi.fn();
+  const invalidate = vi.fn();
   const writeText = vi.fn(() => Promise.resolve());
   const handlers = treeCommandHandlers({
     manager: { connect, disconnect } as never,
     tree: { refresh },
+    cache: { invalidate },
     clipboard: { writeText },
     noTargetMessage: NO_TARGET,
   });
-  return { handlers, connect, disconnect, refresh, writeText };
+  return { handlers, connect, disconnect, refresh, invalidate, writeText };
 }
 
 const connectionNode: TreeNode = { kind: 'connection', connectionId: 'c1' };
@@ -59,6 +61,7 @@ describe('connect', () => {
         disconnect: () => Promise.resolve(),
       },
       tree: { refresh },
+      cache: { invalidate: () => undefined },
       clipboard: { writeText: () => Promise.resolve() },
       noTargetMessage: NO_TARGET,
     });
@@ -83,22 +86,46 @@ describe('disconnect', () => {
 });
 
 describe('refresh', () => {
-  it('refreshes the clicked subtree', () => {
-    const { handlers, refresh } = setup();
+  it('refreshes the clicked subtree and drops that connection from the cache', () => {
+    const { handlers, refresh, invalidate } = setup();
     handlers.refresh(tableNode);
+    expect(invalidate).toHaveBeenCalledWith('c1');
     expect(refresh).toHaveBeenCalledWith(tableNode);
   });
 
-  it('refreshes everything from the view title', () => {
-    const { handlers, refresh } = setup();
+  it('refreshes everything from the view title and drops the whole cache', () => {
+    const { handlers, refresh, invalidate } = setup();
     handlers.refresh();
+    expect(invalidate).toHaveBeenCalledWith(undefined);
     expect(refresh).toHaveBeenCalledWith(undefined);
   });
 
   it('refreshes everything when given a bare id', () => {
-    const { handlers, refresh } = setup();
+    const { handlers, refresh, invalidate } = setup();
     handlers.refresh('c1');
+    expect(invalidate).toHaveBeenCalledWith(undefined);
     expect(refresh).toHaveBeenCalledWith(undefined);
+  });
+
+  it('drops the cache before the tree asks for children again', () => {
+    const order: string[] = [];
+    const handlers = treeCommandHandlers({
+      manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
+      tree: {
+        refresh: () => {
+          order.push('refresh');
+        },
+      },
+      cache: {
+        invalidate: () => {
+          order.push('invalidate');
+        },
+      },
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+    });
+    handlers.refresh(tableNode);
+    expect(order).toEqual(['invalidate', 'refresh']);
   });
 });
 

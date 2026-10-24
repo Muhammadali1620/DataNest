@@ -15,9 +15,15 @@ export interface RefreshableTree {
   refresh(node?: TreeNode): void;
 }
 
+/** The part of the metadata cache these commands drive. */
+export interface InvalidatableCache {
+  invalidate(connectionId?: string): void;
+}
+
 export interface TreeCommandDeps {
   readonly manager: Pick<ConnectionManager, 'connect' | 'disconnect'>;
   readonly tree: RefreshableTree;
+  readonly cache: InvalidatableCache;
   readonly clipboard: Clipboard;
   /** Shown when a command that needs a connection is run from the palette. */
   readonly noTargetMessage: string;
@@ -52,9 +58,14 @@ export function treeCommandHandlers(
       return undefined;
     },
 
-    /** Refreshes the clicked subtree, or everything when run from the view title. */
+    /**
+     * Refreshes the clicked subtree, or everything when run from the view title.
+     * The cached structure is dropped first: Refresh means "ask the server again".
+     */
     refresh: (target?: CommandTarget) => {
-      deps.tree.refresh(isTreeNode(target) ? target : undefined);
+      const node = isTreeNode(target) ? target : undefined;
+      deps.cache.invalidate(node === undefined ? undefined : connectionIdOf(node));
+      deps.tree.refresh(node);
       return undefined;
     },
 

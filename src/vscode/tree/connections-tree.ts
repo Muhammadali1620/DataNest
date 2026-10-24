@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
+import type { MetadataCache } from '../../services/metadata-cache';
 import { describeTarget } from '../../shared/connection';
 import { CONNECTIONS_VIEW_ID, describeColumn, nodeId, TREE_CONTEXT, type TreeNode } from './nodes';
 import { TreeModel } from './tree-model';
@@ -11,6 +12,7 @@ export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 export interface ConnectionsTreeDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
+  readonly cache: MetadataCache;
   readonly logger: Logger;
 }
 
@@ -30,6 +32,7 @@ export class ConnectionsTreeProvider
     this.model = new TreeModel({
       store: deps.store,
       manager: deps.manager,
+      cache: deps.cache,
       logger: deps.logger,
       texts: {
         tables: vscode.l10n.t('Tables'),
@@ -45,7 +48,9 @@ export class ConnectionsTreeProvider
       deps.store.onDidChange(() => {
         this.refresh();
       }),
-      deps.manager.onDidChangeState(() => {
+      deps.manager.onDidChangeState((connectionId) => {
+        // A connection that dropped or reconnected may have a different structure.
+        deps.cache.invalidate(connectionId);
         // Status decorations live on connection items, which sit at the root.
         this.refresh();
       }),

@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL } from '../../../src/core/logging/logger';
-import { COMMAND_IDS, CONFIG_KEYS, CONFIG_SECTION } from '../../../src/vscode/command-ids';
+import {
+  COMMAND_IDS,
+  CONFIG_KEYS,
+  CONFIG_SECTION,
+  CONTEXT_KEYS,
+} from '../../../src/vscode/command-ids';
 import { readJson } from '../../helpers/repo';
 
 interface Manifest {
   contributes: {
     commands: { command: string; title: string; category?: string }[];
+    menus: { commandPalette: { command: string; when: string }[] };
     configuration: {
       properties: Record<
         string,
@@ -39,6 +45,34 @@ describe('command ids', () => {
     for (const command of contributes.commands) {
       expect(command.category).toBe('DataNest');
     }
+  });
+});
+
+describe('command palette', () => {
+  const palette = contributes.menus.commandPalette;
+
+  it('mentions only contributed commands', () => {
+    const ids = new Set(contributes.commands.map((c) => c.command));
+    for (const entry of palette) {
+      expect(ids.has(entry.command)).toBe(true);
+    }
+  });
+
+  it('uses only context keys the extension sets', () => {
+    const known = new Set<string>(Object.values(CONTEXT_KEYS));
+    for (const entry of palette) {
+      const keys = entry.when.match(/datanest\.[\w.]+/g) ?? [];
+      for (const key of keys) {
+        expect(known.has(key)).toBe(true);
+      }
+    }
+  });
+
+  it('hides the ping page outside development', () => {
+    expect(palette).toContainEqual({
+      command: COMMAND_IDS.openPing,
+      when: CONTEXT_KEYS.isDevelopment,
+    });
   });
 });
 

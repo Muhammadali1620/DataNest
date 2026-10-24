@@ -9,5 +9,6 @@
   "configuration.logLevel.error": "Только ошибки.",
   "configuration.logLevel.warn": "Ошибки и предупреждения.",
   "configuration.logLevel.info": "Ошибки, предупреждения и основные события.",
-  "configuration.logLevel.debug": "Всё подряд, для поиска проблем."
+  "configuration.logLevel.debug": "Всё подряд, для поиска проблем.",
+  "commands.dev.openPing.title": "Открыть страницу ping (разработка)"
 }

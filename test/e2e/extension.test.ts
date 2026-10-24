@@ -13,6 +13,10 @@ function extension(): vscode.Extension<unknown> {
   return found;
 }
 
+// Mocha loads every test file before running any test, so this is captured before
+// other files activate the extension, whatever order they run in.
+const activeAtStartup = vscode.extensions.getExtension(EXTENSION_ID)?.isActive;
+
 describe('DataNest extension', () => {
   it('is installed in the test host', () => {
     extension();
@@ -20,7 +24,7 @@ describe('DataNest extension', () => {
 
   it('is not activated on startup', () => {
     // Activation must be lazy (ARCHITECTURE.md §7).
-    assert.equal(extension().isActive, false);
+    assert.equal(activeAtStartup, false);
   });
 
   it('activates without errors', async () => {

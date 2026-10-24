@@ -64,8 +64,21 @@
         "command": "datanest.logs.show",
         "title": "%commands.logs.show.title%",
         "category": "DataNest"
+      },
+      {
+        "command": "datanest.dev.openPing",
+        "title": "%commands.dev.openPing.title%",
+        "category": "DataNest"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "datanest.dev.openPing",
+          "when": "datanest.isDevelopment"
+        }
+      ]
+    },
     "configuration": {
       "title": "DataNest",
       "properties": {

@@ -9,5 +9,6 @@
   "configuration.logLevel.error": "Only errors.",
   "configuration.logLevel.warn": "Errors and warnings.",
   "configuration.logLevel.info": "Errors, warnings and main events.",
-  "configuration.logLevel.debug": "Everything, for troubleshooting."
+  "configuration.logLevel.debug": "Everything, for troubleshooting.",
+  "commands.dev.openPing.title": "Open Ping Page (development)"
 }

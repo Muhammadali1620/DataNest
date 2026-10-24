@@ -3,6 +3,13 @@
 /** Every command the extension contributes: `<extId>.<area>.<action>` (ARCHITECTURE.md §10). */
 export const COMMAND_IDS = {
   showLogs: 'datanest.logs.show',
+  /** Diagnostic page for webview + RPC; in the palette only in development mode. */
+  openPing: 'datanest.dev.openPing',
+} as const;
+
+/** Context keys set with `setContext`, used in `when` clauses of package.json. */
+export const CONTEXT_KEYS = {
+  isDevelopment: 'datanest.isDevelopment',
 } as const;
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

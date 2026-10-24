@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { WEBVIEW_OUT_DIR } from '../../../../scripts/build-config.mjs';
 import {
   buildContentSecurityPolicy,
   createNonce,
   renderWebviewHtml,
+  WEBVIEW_ASSET_DIR,
+  webviewAssetPaths,
   type WebviewHtmlOptions,
 } from '../../../../src/vscode/panels/webview-html';
 
@@ -154,4 +157,24 @@ describe('renderWebviewHtml', () => {
       'Invalid CSP nonce',
     );
   });
+});
+
+describe('webviewAssetPaths', () => {
+  it('points to the folder Vite builds into', () => {
+    expect(WEBVIEW_ASSET_DIR.join('/')).toBe(WEBVIEW_OUT_DIR);
+  });
+
+  it('returns the script and style of an app', () => {
+    expect(webviewAssetPaths('result-grid')).toEqual({
+      script: ['dist', 'webview', 'result-grid.js'],
+      style: ['dist', 'webview', 'result-grid.css'],
+    });
+  });
+
+  it.each([[''], ['../secrets'], ['Ping'], ['a/b'], ['ping.js'], ['1app'], ['a b']])(
+    'rejects the app name %j',
+    (app) => {
+      expect(() => webviewAssetPaths(app)).toThrow('Invalid webview app name');
+    },
+  );
 });

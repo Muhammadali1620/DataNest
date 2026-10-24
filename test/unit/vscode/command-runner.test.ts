@@ -22,10 +22,32 @@ describe('guardCommand', () => {
     expect(logger.entries).toEqual([]);
   });
 
+  it('returns the handler result, so executeCommand can pass it on', async () => {
+    const { deps } = setup();
+    await expect(guardCommand('id', () => ({ value: 1 }), deps)()).resolves.toEqual({ value: 1 });
+    await expect(guardCommand('id', () => Promise.resolve('async'), deps)()).resolves.toBe('async');
+  });
+
+  it('returns undefined when the handler fails or is cancelled', async () => {
+    const { deps } = setup();
+    await expect(
+      guardCommand(
+        'id',
+        (): number => {
+          throw new Error('x');
+        },
+        deps,
+      )(),
+    ).resolves.toBeUndefined();
+    await expect(
+      guardCommand('id', () => Promise.reject(new DbError('cancelled', 'c')), deps)(),
+    ).resolves.toBeUndefined();
+  });
+
   it('supports synchronous handlers', async () => {
     const { deps } = setup();
     const handler = vi.fn(() => 5);
-    await expect(guardCommand('id', handler, deps)()).resolves.toBeUndefined();
+    await expect(guardCommand('id', handler, deps)()).resolves.toBe(5);
     expect(handler).toHaveBeenCalledOnce();
   });
 

@@ -16,6 +16,8 @@ export default defineConfig({
         'src/extension.ts',
         'src/vscode/commands.ts',
         'src/vscode/logging.ts',
+        'src/vscode/panels/webview-panel.ts',
+        'src/vscode/panels/ping-panel.ts',
         'webview/src/apps/*/main.ts',
         'scripts/build.mjs',
         'scripts/build-e2e.mjs',

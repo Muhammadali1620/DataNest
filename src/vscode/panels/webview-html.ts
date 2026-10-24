@@ -14,6 +14,22 @@ export interface WebviewHtmlOptions {
 
 const NONCE_PATTERN = /^[A-Za-z0-9+/]+=*$/;
 
+/** Where Vite writes webview bundles (scripts/build-config.mjs → WEBVIEW_OUT_DIR). */
+export const WEBVIEW_ASSET_DIR = ['dist', 'webview'] as const;
+
+const APP_NAME = /^[a-z][a-z0-9-]*$/;
+
+/** Paths of an app's bundle, relative to the extension root. */
+export function webviewAssetPaths(app: string): { script: string[]; style: string[] } {
+  if (!APP_NAME.test(app)) {
+    throw new Error(`Invalid webview app name: "${app}"`);
+  }
+  return {
+    script: [...WEBVIEW_ASSET_DIR, `${app}.js`],
+    style: [...WEBVIEW_ASSET_DIR, `${app}.css`],
+  };
+}
+
 /** A fresh random nonce for every render: scripts without it are blocked by CSP. */
 export function createNonce(): string {
   return randomBytes(16).toString('base64');

@@ -61,7 +61,7 @@
 - [x] **V0.2** `package.json`: метаданные, `engines.vscode`, контейнер в Activity Bar, пустой view, `activationEvents`.
 - [x] **V0.3** TypeScript (strict) + esbuild: сборка extension host, watch-режим, source maps, отдельные бандлы драйверов.
 - [x] **V0.4** Vite + Svelte для webview: общий HTML-шаблон с CSP и nonce, загрузка ассетов через `asWebviewUri`.
-  Шаблон — `src/vscode/panels/webview-html.ts`. Хелпер панели (`asWebviewUri`, `localResourceRoots`) делаем вместе с первой панелью в V0.10, там же проверяем его e2e-тестом.
+  Шаблон — `src/vscode/panels/webview-html.ts`. Хелпер панели (`asWebviewUri`, `localResourceRoots`) сделан в V0.10 и проверен e2e-тестом.
 - [x] **V0.5** ESLint + Prettier, правила границ между слоями, npm-скрипты: `build`, `watch`, `lint`, `typecheck`, `test`, `package`.
 - [x] **V0.6** Vitest для unit-тестов; скелет интеграционных тестов на `@vscode/test-electron`.
   Сделан сразу после V0.3, чтобы все следующие шаги шли с тестами. Unit: проекты `host` (node) и `webview` (jsdom); e2e: `@vscode/test-cli` в VS Code 1.90.
@@ -71,7 +71,8 @@
   Problem matcher задачи `watch` проверяется тестом на реальном выводе esbuild (`test/unit/repo/vscode-config.test.ts`).
 - [x] **V0.9** Базовая инфраструктура: логгер (Output Channel), класс ошибок, сборка сервисов в `activate()`, Disposable-паттерн.
   `core/errors.ts` (`DbError`), `core/disposable.ts`, `core/logging/` (логгер с уровнями и маскировкой секретов), настройка `datanest.logLevel`, команда «DataNest: Show Logs», обёртка команд `vscode/command-runner.ts` (D20).
-- [ ] **V0.10** Типизированный RPC между host и webview (запрос/ответ/события) + тестовая страница «ping».
+- [x] **V0.10** Типизированный RPC между host и webview (запрос/ответ/события) + тестовая страница «ping».
+  `shared/schema.ts`, `shared/rpc.ts`, `shared/protocols/ping.ts`; панель `vscode/panels/webview-panel.ts` (`asWebviewUri`, `localResourceRoots`) — закрывает хвост V0.4; словарь webview en/ru; команда «Open Ping Page» только в режиме разработки. E2E: страница грузится под CSP, RPC работает в обе стороны, скрытая вкладка оживает при показе.
 - [ ] **V0.11** GitHub Actions: lint, typecheck, test, сборка `.vsix` как артефакт.
 - [ ] **V0.12** Исследование: доступен ли `node:sqlite` в VS Code / VSCodium / Cursor → выбрать движок SQLite (см. ARCHITECTURE, решение D5).
 

@@ -1,5 +1,7 @@
 # DataNest
 
+[![CI](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml)
+
 A free and open-source database client for VS Code and its forks (VSCodium, Cursor, Windsurf).
 
 > **Status:** early development, not published yet. See [ROADMAP.md](ROADMAP.md).

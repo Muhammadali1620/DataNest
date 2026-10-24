@@ -73,7 +73,8 @@
   `core/errors.ts` (`DbError`), `core/disposable.ts`, `core/logging/` (логгер с уровнями и маскировкой секретов), настройка `datanest.logLevel`, команда «DataNest: Show Logs», обёртка команд `vscode/command-runner.ts` (D20).
 - [x] **V0.10** Типизированный RPC между host и webview (запрос/ответ/события) + тестовая страница «ping».
   `shared/schema.ts`, `shared/rpc.ts`, `shared/protocols/ping.ts`; панель `vscode/panels/webview-panel.ts` (`asWebviewUri`, `localResourceRoots`) — закрывает хвост V0.4; словарь webview en/ru; команда «Open Ping Page» только в режиме разработки. E2E: страница грузится под CSP, RPC работает в обе стороны, скрытая вкладка оживает при показе.
-- [ ] **V0.11** GitHub Actions: lint, typecheck, test, сборка `.vsix` как артефакт.
+- [x] **V0.11** GitHub Actions: lint, typecheck, test, сборка `.vsix` как артефакт.
+  `.github/workflows/ci.yml`: lint/типы/audit; unit и e2e на Linux, Windows, macOS; интеграционные тесты на Docker-базах; `.vsix` — артефакт на 30 дней. Первый же запуск нашёл баг matcher-а на Windows (исправлен).
 - [ ] **V0.12** Исследование: доступен ли `node:sqlite` в VS Code / VSCodium / Cursor → выбрать движок SQLite (см. ARCHITECTURE, решение D5).
 
 ---

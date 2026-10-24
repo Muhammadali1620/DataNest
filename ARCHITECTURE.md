@@ -318,6 +318,11 @@ Webview хранит только видимые строки (плюс небо
 | `npm run test:integration` | Интеграционные тесты (`test/integration/`) против БД из Docker; без `db:up` сразу падают с подсказкой |
 | `npm run lint` / `npm run typecheck` | ESLint + Prettier / `tsc` для host, e2e и `svelte-check` для webview |
 
+### CI
+
+`.github/workflows/ci.yml` запускается на каждый push в `main`, на теги шагов и на pull request:
+lint + типы + `npm audit` → unit-тесты и e2e на **Linux, Windows и macOS** → интеграционные тесты на БД из `docker/compose.yml` → сборка `.vsix` (артефакт). Шаг отмечается `[x]` и получает тег только при зелёном CI.
+
 ### Правила тестов (обязательны всегда)
 
 1. **Тесты пишутся вместе с фичей, в том же шаге.** Шаг без тестов не считается готовым (`[x]` не ставим).

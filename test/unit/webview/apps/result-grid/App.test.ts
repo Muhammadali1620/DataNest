@@ -42,11 +42,13 @@ function setup(lang = 'en') {
   const ready = vi.fn();
   const selected = vi.fn();
   const cancelled = vi.fn();
+  const copied = vi.fn();
   host.on('ready', ready);
   host.on('selectTab', selected);
   host.on('cancel', cancelled);
+  host.on('copyText', copied);
   const view = render(App, { props: { rpc, t: createTranslator(lang) } });
-  return { host, rpc, ready, selected, cancelled, view };
+  return { host, rpc, ready, selected, cancelled, copied, view };
 }
 
 const ROWS = [
@@ -54,13 +56,16 @@ const ROWS = [
   [2, null],
 ];
 
+/** Serves windows the way the host does: only the rows that were asked for. */
 function serveRows(host: HostPeer, rows = ROWS): ReturnType<typeof vi.fn> {
-  const handler = vi.fn(({ resultId, offset }: { resultId: string; offset: number }) => ({
-    resultId,
-    offset,
-    rows,
-    rowCount: rows.length,
-  }));
+  const handler = vi.fn(
+    ({ resultId, offset, limit }: { resultId: string; offset: number; limit: number }) => ({
+      resultId,
+      offset,
+      rows: rows.slice(offset, offset + limit),
+      rowCount: rows.length,
+    }),
+  );
   host.handle('rows', handler);
   return handler;
 }
@@ -405,6 +410,150 @@ describe('result grid App', () => {
       const settled = header?.getAttribute('style');
       await fireEvent.pointerMove(grip, { clientX: 400, pointerId: 1 });
       expect(header?.getAttribute('style')).toBe(settled);
+    });
+  });
+
+  describe('selection and copy', () => {
+    async function grid() {
+      const harness = await withState({
+        tabs: [tab()],
+        activeId: 'result-1',
+        running: false,
+      });
+      // A row whose cells have not arrived renders one placeholder cell, so the
+      // wait is for cells that carry a column index.
+      await waitFor(() => {
+        expect(
+          screen
+            .getAllByRole('gridcell')
+            .filter((item) => item.getAttribute('aria-colindex') !== null).length,
+        ).toBeGreaterThan(0);
+      });
+      return harness;
+    }
+
+    function cell(row: number, column: number): HTMLElement {
+      const cells = screen
+        .getAllByRole('gridcell')
+        .filter((item) => item.getAttribute('aria-colindex') === String(column + 1));
+      const found = cells[row];
+      if (found === undefined) {
+        throw new Error(`no cell at row ${row}, column ${column}`);
+      }
+      return found;
+    }
+
+    it('selects a cell on click', async () => {
+      await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await waitFor(() => {
+        expect(cell(0, 0).getAttribute('aria-selected')).toBe('true');
+      });
+      expect(cell(0, 1).getAttribute('aria-selected')).toBe('false');
+    });
+
+    it('extends the selection by dragging over cells', async () => {
+      await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await fireEvent.pointerEnter(cell(1, 1));
+      await waitFor(() => {
+        expect(cell(1, 1).getAttribute('aria-selected')).toBe('true');
+      });
+      expect(cell(0, 1).getAttribute('aria-selected')).toBe('true');
+      expect(cell(1, 0).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('stops extending once the pointer is up', async () => {
+      await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await fireEvent.pointerUp(screen.getByTestId('grid'));
+      await fireEvent.pointerEnter(cell(1, 1));
+      await waitFor(() => {
+        expect(cell(0, 0).getAttribute('aria-selected')).toBe('true');
+      });
+      expect(cell(1, 1).getAttribute('aria-selected')).toBe('false');
+    });
+
+    it('extends with shift+click', async () => {
+      await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await fireEvent.pointerUp(screen.getByTestId('grid'));
+      await fireEvent.pointerDown(cell(1, 1), { button: 0, shiftKey: true });
+      await waitFor(() => {
+        expect(cell(0, 1).getAttribute('aria-selected')).toBe('true');
+      });
+    });
+
+    it('moves the selection with the arrow keys', async () => {
+      await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'ArrowRight' });
+      await waitFor(() => {
+        expect(cell(0, 1).getAttribute('aria-selected')).toBe('true');
+      });
+      expect(cell(0, 0).getAttribute('aria-selected')).toBe('false');
+    });
+
+    it('extends with shift and an arrow key', async () => {
+      await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'ArrowDown', shiftKey: true });
+      await waitFor(() => {
+        expect(cell(1, 0).getAttribute('aria-selected')).toBe('true');
+      });
+      expect(cell(0, 0).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('selects everything with ctrl+A', async () => {
+      await grid();
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'a', ctrlKey: true });
+      await waitFor(() => {
+        expect(cell(1, 1).getAttribute('aria-selected')).toBe('true');
+      });
+      expect(cell(0, 0).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('copies the selected cell as TSV through the host', async () => {
+      const { copied } = await grid();
+      await fireEvent.pointerDown(cell(0, 1), { button: 0 });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'c', ctrlKey: true });
+      await waitFor(() => {
+        expect(copied).toHaveBeenCalledWith({ text: 'alice@example.com' });
+      });
+    });
+
+    it('copies a range as rows and tabs', async () => {
+      const { copied } = await grid();
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await fireEvent.pointerEnter(cell(1, 1));
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'c', ctrlKey: true });
+      await waitFor(() => {
+        expect(copied).toHaveBeenCalledWith({
+          // NULL copies as an empty cell, which pastes as blank.
+          text: '1\talice@example.com\r\n2\t',
+        });
+      });
+    });
+
+    it('copies nothing when no cell is selected', async () => {
+      const { copied } = await grid();
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'c', ctrlKey: true });
+      await flush();
+      expect(copied).not.toHaveBeenCalled();
+    });
+
+    it('asks the host for exactly the selected rows', async () => {
+      const harness = await grid();
+      harness.handler.mockClear();
+      await fireEvent.pointerDown(cell(1, 0), { button: 0 });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'c', ctrlKey: true });
+      await waitFor(() => {
+        expect(harness.handler).toHaveBeenCalledWith({
+          resultId: 'result-1',
+          offset: 1,
+          limit: 1,
+        });
+      });
     });
   });
 });

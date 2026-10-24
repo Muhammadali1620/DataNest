@@ -51,4 +51,5 @@ export const ru: Record<MessageKey, string> = {
   'grid.moreRows': 'ещё {0} строк загрузятся при прокрутке',
   'grid.loadFailed': 'Не удалось загрузить строки',
   'grid.resize': 'Изменить ширину колонки {0}',
+  'grid.copyFailed': 'Не удалось скопировать выделение',
 };

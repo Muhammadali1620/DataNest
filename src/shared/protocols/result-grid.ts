@@ -11,6 +11,9 @@ export const MAX_WINDOW_ROWS = 2000;
 /** Rows the page keeps around the visible range. */
 export const WINDOW_OVERSCAN = 50;
 
+/** Longest text the page may ask the host to copy. */
+export const MAX_CLIPBOARD_CHARS = 20_000_000;
+
 const resultId = string({ minLength: 1, maxLength: 100 });
 const name = string({ maxLength: 1000 });
 
@@ -76,6 +79,11 @@ export const resultGridProtocol = defineProtocol({
       selectTab: object({ resultId }),
       /** The user asked to stop the running statement. */
       cancel: object({}),
+      /**
+       * Page → host: put this on the clipboard. The host writes it, because a
+       * webview may not have clipboard permission of its own.
+       */
+      copyText: object({ text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
     },
   },
   webview: {

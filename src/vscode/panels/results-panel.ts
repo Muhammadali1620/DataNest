@@ -66,6 +66,8 @@ export class ResultsPanel implements vscode.Disposable {
       title: vscode.l10n.t('Results'),
       app: 'result-grid',
       column: vscode.ViewColumn.Beside,
+      // Results appear next to the query; the cursor stays in the editor.
+      preserveFocus: true,
     });
     this.rpc = new RpcPeer({
       local: resultGridProtocol.host,
@@ -97,6 +99,9 @@ export class ResultsPanel implements vscode.Disposable {
     });
     this.rpc.on('cancel', () => {
       void this.deps.runner.cancel(this.documentUri);
+    });
+    this.rpc.on('copyText', ({ text }) => {
+      void vscode.env.clipboard.writeText(text);
     });
     this.subscriptions.push(
       deps.results.onDidChange((documentUri) => {

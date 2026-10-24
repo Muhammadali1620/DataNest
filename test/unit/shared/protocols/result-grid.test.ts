@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_CLIPBOARD_CHARS,
   MAX_WINDOW_ROWS,
   resultGridProtocol,
   tabTitle,
@@ -111,6 +112,7 @@ describe('protocol shape', () => {
     expect(Object.keys(resultGridProtocol.host.requests)).toEqual(['rows']);
     expect(Object.keys(resultGridProtocol.host.events).sort()).toEqual([
       'cancel',
+      'copyText',
       'ready',
       'selectTab',
     ]);
@@ -148,5 +150,23 @@ describe('tabTitle', () => {
 
   it('handles an empty statement', () => {
     expect(tabTitle('   ')).toBe('');
+  });
+});
+
+describe('copyText event', () => {
+  const copyText = resultGridProtocol.host.events.copyText;
+
+  it('accepts the text a selection produces', () => {
+    expect(copyText.parse({ text: 'a\tb\r\nc\td' })).toEqual({ text: 'a\tb\r\nc\td' });
+    expect(copyText.parse({ text: '' })).toEqual({ text: '' });
+  });
+
+  it('rejects a payload that is not text', () => {
+    expect(() => copyText.parse({ text: 42 })).toThrow('text');
+    expect(() => copyText.parse({})).toThrow('text');
+  });
+
+  it('caps how much may be copied in one go', () => {
+    expect(() => copyText.parse({ text: 'x'.repeat(MAX_CLIPBOARD_CHARS + 1) })).toThrow('at most');
   });
 });

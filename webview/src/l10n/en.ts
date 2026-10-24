@@ -50,6 +50,7 @@ export const en = {
   'grid.moreRows': '{0} more rows are loaded as you scroll',
   'grid.loadFailed': 'Could not load the rows',
   'grid.resize': 'Resize column {0}',
+  'grid.copyFailed': 'Could not copy the selection',
 } as const;
 
 export type MessageKey = keyof typeof en;

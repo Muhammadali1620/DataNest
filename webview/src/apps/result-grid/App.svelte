@@ -1,16 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
-  import type {
-    ResultGridProtocol,
-    ResultGridState,
-    ResultTab,
+  import {
+    MAX_WINDOW_ROWS,
+    type ResultGridProtocol,
+    type ResultGridState,
+    type ResultTab,
   } from '../../../../src/shared/protocols/result-grid';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import type { Translate } from '../../lib/i18n';
+  import { toTsv } from '../../../../src/shared/tsv';
   import { keepWidths } from './columns';
   import Grid from './Grid.svelte';
   import { RowCache, windowFor } from './rows';
+  import { selectionBox, type Selection } from './selection';
 
   interface Props {
     rpc: RpcPeer<ResultGridProtocol['webview'], ResultGridProtocol['host']>;
@@ -99,6 +102,35 @@
     resetFor(gridState.tabs.find((candidate) => candidate.id === resultId));
   }
 
+  /** Copies the selected cells as TSV, fetching whatever is not loaded yet. */
+  async function copySelection(tab: ResultTab, selection: Selection): Promise<void> {
+    const box = selectionBox(selection);
+    const count = box.bottom - box.top + 1;
+    failure = undefined;
+    try {
+      const window = await rpc.request('rows', {
+        resultId: tab.id,
+        offset: box.top,
+        limit: Math.min(count, MAX_WINDOW_ROWS),
+      });
+      if (window.resultId !== gridState?.activeId) {
+        return;
+      }
+      // Only the selected cells travel: headers are a separate action (V2.8).
+      const rows = window.rows.map((row) => row.slice(box.left, box.right + 1));
+      rpc.emit('copyText', { text: toTsv(rows) });
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.copyFailed');
+    }
+  }
+
+  function onCopy(selection: Selection): void {
+    const tab = activeTab;
+    if (tab !== undefined && tab.error === undefined) {
+      void copySelection(tab, selection);
+    }
+  }
+
   function onResize(index: number, width: number): void {
     const next = [...widths];
     next[index] = width;
@@ -177,12 +209,14 @@
       </p>
       {#if activeTab.columns.length > 0}
         <Grid
+          resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}`}
           columns={activeTab.columns}
           rowCount={activeTab.rowCount}
           {widths}
           {rowAt}
           {onVisible}
           {onResize}
+          {onCopy}
           {t}
         />
       {/if}

@@ -9,11 +9,16 @@
     resizedWidths,
   } from './columns';
   import {
-    columnGeometry,
-    columnLayout,
-    rangeOf,
-    rowGeometry,
-  } from './virtual';
+    extendTo,
+    isFocused,
+    isNavigationKey,
+    isSelected,
+    navigate,
+    selectAll,
+    selectCell,
+    type Selection,
+  } from './selection';
+  import { columnGeometry, columnLayout, rangeOf, rowGeometry } from './virtual';
 
   interface Props {
     columns: readonly ResultColumnInfo[];
@@ -26,10 +31,15 @@
     onVisible: (firstIndex: number, count: number) => void;
     /** Called while a column separator is dragged, with the new width. */
     onResize: (index: number, width: number) => void;
+    /** Called when the user asks to copy the selection. */
+    onCopy: (selection: Selection) => void;
+    /** Changes whenever a different result is shown; the selection then starts over. */
+    resetKey: string;
     t: Translate;
   }
 
-  const { columns, rowCount, widths, rowAt, onVisible, onResize, t }: Props = $props();
+  const { columns, rowCount, widths, rowAt, onVisible, onResize, onCopy, resetKey, t }: Props =
+    $props();
 
   /** One row is exactly this tall, which is what makes the arithmetic simple. */
   const ROW_HEIGHT = 22;
@@ -106,6 +116,93 @@
 
   let drag = $state<Drag | undefined>(undefined);
 
+  let selection = $state<Selection | undefined>(undefined);
+  /** True while the pointer is down on a cell, which extends the selection. */
+  let selecting = $state(false);
+
+  const bounds = $derived({ rowCount, columnCount: columns.length });
+  const pageRows = $derived(Math.max(1, Math.floor(height / ROW_HEIGHT) - 1));
+
+  /** A different result means different cells, so the old selection is dropped. */
+  function clearSelection(_key: string): void {
+    selection = undefined;
+  }
+
+  // Reading only the key (never the selection) keeps this out of a write loop.
+  $effect(() => {
+    clearSelection(resetKey);
+  });
+
+  function startSelect(event: PointerEvent, row: number, column: number): void {
+    if (event.button !== 0) {
+      return;
+    }
+    selecting = true;
+    selection = event.shiftKey
+      ? extendTo(selection, { row, column }, bounds)
+      : selectCell({ row, column }, bounds);
+    viewport?.focus();
+  }
+
+  function overCell(row: number, column: number): void {
+    if (selecting) {
+      selection = extendTo(selection, { row, column }, bounds);
+    }
+  }
+
+  function endSelect(): void {
+    selecting = false;
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && (event.key === 'c' || event.key === 'C')) {
+      if (selection !== undefined) {
+        event.preventDefault();
+        onCopy(selection);
+      }
+      return;
+    }
+    if (modifier && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      selection = selectAll(bounds);
+      return;
+    }
+    if (!isNavigationKey(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    selection = navigate(selection, event.key, bounds, {
+      extend: event.shiftKey,
+      jump: modifier,
+      pageRows,
+    });
+    scrollToFocus();
+  }
+
+  /** Keeps the focused cell on screen after a keyboard move. */
+  function scrollToFocus(): void {
+    const focus = selection?.focus;
+    if (focus === undefined || viewport === undefined) {
+      return;
+    }
+    const top = focus.row * ROW_HEIGHT;
+    const bottom = top + ROW_HEIGHT;
+    if (top < viewport.scrollTop) {
+      viewport.scrollTop = top;
+    } else if (bottom > viewport.scrollTop + height - ROW_HEIGHT) {
+      // The header covers one row's worth at the top of the viewport.
+      viewport.scrollTop = bottom - height + ROW_HEIGHT;
+    }
+    const left = layout.offsets[focus.column] ?? 0;
+    const right = layout.offsets[focus.column + 1] ?? left;
+    if (left < viewport.scrollLeft) {
+      viewport.scrollLeft = left;
+    } else if (right > viewport.scrollLeft + width - ROW_NUMBER_WIDTH) {
+      viewport.scrollLeft = right - width + ROW_NUMBER_WIDTH;
+    }
+  }
+
   function startResize(event: PointerEvent, index: number): void {
     event.preventDefault();
     drag = { index, startX: event.clientX, startWidth: widthOf(index) };
@@ -144,10 +241,13 @@
   class="viewport"
   bind:this={viewport}
   onscroll={onScroll}
+  onkeydown={onKeyDown}
+  onpointerup={endSelect}
+  onpointerleave={endSelect}
   role="grid"
   aria-rowcount={rowCount}
   aria-colcount={columns.length}
-  tabindex="-1"
+  tabindex="0"
   data-testid="grid"
 >
   <div class="canvas" style="height: {rows.totalHeight}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
@@ -205,10 +305,20 @@
               class="cell"
               role="gridcell"
               aria-colindex={column + 1}
+              aria-selected={isSelected(selection, index, column)}
+              tabindex={-1}
               class:null={cell.isNull}
               class:numeric={cell.numeric}
+              class:selected={isSelected(selection, index, column)}
+              class:focused={isFocused(selection, index, column)}
               style="width: {widthOf(column)}px;"
               title={cell.truncated || cell.flattened ? cell.text : undefined}
+              onpointerdown={(event) => {
+                startSelect(event, index, column);
+              }}
+              onpointerenter={() => {
+                overCell(index, column);
+              }}
             >
               {cell.text}
             </div>
@@ -317,6 +427,20 @@
   .null {
     color: var(--vscode-descriptionForeground);
     font-style: italic;
+  }
+
+  .selected {
+    background: var(--vscode-list-inactiveSelectionBackground);
+  }
+
+  .viewport:focus-visible .selected {
+    background: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+  }
+
+  .focused {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
   }
 
   .pending {

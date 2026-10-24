@@ -14,6 +14,8 @@ export interface WebviewAppPanelOptions {
   /** Folder name in webview/src/apps. */
   readonly app: string;
   readonly column?: vscode.ViewColumn;
+  /** Leaves the keyboard where it is; a results panel must not steal the editor. */
+  readonly preserveFocus?: boolean;
 }
 
 /**
@@ -28,7 +30,10 @@ export function createWebviewAppPanel(
   const panel = vscode.window.createWebviewPanel(
     options.viewType,
     options.title,
-    options.column ?? vscode.ViewColumn.Active,
+    {
+      viewColumn: options.column ?? vscode.ViewColumn.Active,
+      preserveFocus: options.preserveFocus ?? false,
+    },
     { enableScripts: true, localResourceRoots: [root] },
   );
   const { webview } = panel;

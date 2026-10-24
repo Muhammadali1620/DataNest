@@ -55,4 +55,6 @@ export const CONFIG_KEYS = {
   rowLimit: 'rowLimit',
   /** Rows one page of a table view holds. */
   pageSize: 'pageSize',
+  /** Seconds a statement may run before it is cancelled; 0 means no limit. */
+  queryTimeout: 'queryTimeout',
 } as const;

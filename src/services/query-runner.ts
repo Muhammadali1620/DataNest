@@ -14,6 +14,8 @@ import type { ResultStore, ResultSummary, ResultRow } from './result-store';
 export interface QueryLimits {
   /** Largest number of rows one statement may bring back. */
   rowLimit(): number;
+  /** Milliseconds a statement may run before it is cancelled; 0 means no limit. */
+  timeoutMs?(): number;
 }
 
 export interface QueryRunnerDeps {
@@ -42,6 +44,8 @@ export interface RunOutcome {
 
 interface ActiveRun {
   cancelled: boolean;
+  /** Set when the cancel came from the timeout rather than from the user. */
+  timedOut: boolean;
   readonly owner: string;
   /** When the run started, so the status bar can show a timer. */
   readonly startedAt: number;
@@ -87,7 +91,7 @@ export class QueryRunner {
       throw new DbError('busy', 'A query is already running in this editor');
     }
     const owner = ConnectionManager.editorOwner(request.documentUri);
-    const run: ActiveRun = { cancelled: false, owner, startedAt: Date.now() };
+    const run: ActiveRun = { cancelled: false, timedOut: false, owner, startedAt: Date.now() };
     this.active.set(request.documentUri, run);
     this.notify(request.documentUri);
     const stopOnError = request.stopOnError ?? true;
@@ -157,8 +161,17 @@ export class QueryRunner {
     const rows: ResultRow[] = [];
     let affectedRows: number | undefined;
     let truncated = false;
+    const timeoutMs = Math.max(0, Math.trunc(this.deps.limits.timeoutMs?.() ?? 0));
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const session = await this.deps.manager.acquire(run.owner, request.target);
+      if (timeoutMs > 0) {
+        // The server is asked to stop; what comes back is reported as a timeout.
+        timer = setTimeout(() => {
+          run.timedOut = true;
+          void this.cancel(request.documentUri);
+        }, timeoutMs);
+      }
       for await (const event of session.execute(statement.text, { rowLimit })) {
         switch (event.kind) {
           case 'columns':
@@ -194,6 +207,9 @@ export class QueryRunner {
       const dbError = toDbError(error);
       this.logger.warn(`Statement failed: ${dbError.message}`, dbError);
       // A cancelled statement is an outcome, not a crash: it is stored like any other.
+      // A cancel the timeout asked for is reported as a timeout, which is the
+      // difference the user cares about.
+      const timedOut = run.timedOut && (dbError.code === 'cancelled' || dbError.code === 'timeout');
       return this.deps.results.add({
         documentUri: request.documentUri,
         statement: statement.text,
@@ -203,11 +219,17 @@ export class QueryRunner {
         truncated,
         durationMs: Date.now() - started,
         error: {
-          code: dbError.code,
-          message: dbError.message,
+          code: timedOut ? 'timeout' : dbError.code,
+          message: timedOut
+            ? `Cancelled after ${Math.round(timeoutMs / 1000)} s (datanest.queryTimeout)`
+            : dbError.message,
           ...(dbError.position === undefined ? {} : { position: dbError.position }),
         },
       });
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
     }
   }
 }

@@ -35,6 +35,20 @@ export function readPageSize(): number {
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_PAGE_SIZE;
 }
 
+/** Seconds a statement may run before DataNest cancels it; 0 turns the limit off. */
+export const DEFAULT_QUERY_TIMEOUT_SECONDS = 0;
+
+/** The timeout in milliseconds, or 0 when the user turned it off. */
+export function readQueryTimeoutMs(): number {
+  const seconds = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<number>(CONFIG_KEYS.queryTimeout, DEFAULT_QUERY_TIMEOUT_SECONDS);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 0;
+  }
+  return Math.round(seconds * 1000);
+}
+
 /** True when a configuration change touches one of our settings. */
 export function affectsDataNest(event: vscode.ConfigurationChangeEvent): boolean {
   return event.affectsConfiguration(CONFIG_SECTION);

@@ -32,6 +32,7 @@ describe('QueryRunner', () => {
   let runner: QueryRunner;
   let logger: RecordingLogger;
   let rowLimit: number;
+  let timeoutMs: number;
   let connection: ConnectionConfig;
 
   beforeEach(async () => {
@@ -46,11 +47,12 @@ describe('QueryRunner', () => {
     cache = new MetadataCache({ logger });
     results = new ResultStore();
     rowLimit = 1000;
+    timeoutMs = 0;
     runner = new QueryRunner({
       manager,
       results,
       cache,
-      limits: { rowLimit: () => rowLimit },
+      limits: { rowLimit: () => rowLimit, timeoutMs: () => timeoutMs },
       logger,
     });
     connection = await store.add({ name: 'Local', driver: 'mysql', host: 'h' });
@@ -328,6 +330,52 @@ describe('QueryRunner', () => {
       await runner.run(request('SELECT 1'));
       await reader.listTables({});
       expect(inner.sessionMetadata.calls.filter((c) => c.startsWith('listTables'))).toHaveLength(1);
+    });
+  });
+
+  describe('query timeout', () => {
+    it('lets a statement finish when the limit is off', async () => {
+      timeoutMs = 0;
+      const outcome = await runner.run(request('SELECT 1'));
+      expect(outcome.results[0]?.error).toBeUndefined();
+    });
+
+    it('cancels a statement that runs past the limit and calls it a timeout', async () => {
+      timeoutMs = 20;
+      drivers.driver('mysql').holdExecute = true;
+      const running = runner.run(request('SELECT SLEEP(100)'));
+      await until(() => drivers.driver('mysql').lastSession?.cancelCount === 1);
+      drivers.driver('mysql').releaseExecute();
+      const outcome = await running;
+      const error = outcome.results[0]?.error;
+      expect(error?.code).toBe('timeout');
+      expect(error?.message).toContain('datanest.queryTimeout');
+    });
+
+    it('still reports a user cancel as cancelled, not as a timeout', async () => {
+      timeoutMs = 60_000;
+      drivers.driver('mysql').holdExecute = true;
+      const running = runner.run(request('SELECT 1'));
+      await until(() => drivers.driver('mysql').lastSession !== undefined);
+      await runner.cancel(DOC);
+      drivers.driver('mysql').releaseExecute();
+      const outcome = await running;
+      expect(outcome.cancelled).toBe(true);
+      expect(outcome.results[0]?.error?.code).toBe('cancelled');
+    });
+
+    it('does not fire after the statement finished', async () => {
+      timeoutMs = 10;
+      await runner.run(request('SELECT 1'));
+      // Long enough for a stray timer to fire if one had been left behind.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(drivers.driver('mysql').lastSession?.cancelCount ?? 0).toBe(0);
+    });
+
+    it('treats a nonsense timeout as no limit', async () => {
+      timeoutMs = -5;
+      const outcome = await runner.run(request('SELECT 1'));
+      expect(outcome.results[0]?.error).toBeUndefined();
     });
   });
 });

@@ -372,6 +372,14 @@
           "maximum": 100000,
           "markdownDescription": "%configuration.pageSize.description%",
           "scope": "window"
+        },
+        "datanest.queryTimeout": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 86400,
+          "markdownDescription": "%configuration.queryTimeout.description%",
+          "scope": "window"
         }
       }
     },

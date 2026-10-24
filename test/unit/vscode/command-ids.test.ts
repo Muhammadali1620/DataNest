@@ -15,6 +15,18 @@ interface MenuEntry {
   group?: string;
 }
 
+interface ConfigProperty {
+  type?: string | string[];
+  enum?: string[];
+  default?: unknown;
+  enumDescriptions?: string[];
+  markdownDescription?: string;
+  description?: string;
+  minimum?: number;
+  maximum?: number;
+  scope?: string;
+}
+
 interface Manifest {
   contributes: {
     commands: { command: string; title: string; category?: string }[];
@@ -25,12 +37,7 @@ interface Manifest {
       'editor/title': MenuEntry[];
       'editor/context': MenuEntry[];
     };
-    configuration: {
-      properties: Record<
-        string,
-        { enum?: string[]; default?: unknown; enumDescriptions?: string[] }
-      >;
-    };
+    configuration: { properties: Record<string, ConfigProperty> };
   };
 }
 
@@ -257,6 +264,43 @@ describe('settings', () => {
         .map((key) => `${CONFIG_SECTION}.${key}`)
         .sort(),
     );
+  });
+
+  it('describes every setting, so the Settings UI is never blank', () => {
+    for (const [key, property] of Object.entries(properties)) {
+      const described =
+        property.markdownDescription !== undefined || property.description !== undefined;
+      expect(described, `${key} has no description`).toBe(true);
+    }
+  });
+
+  it('gives every setting a default, so nothing is undefined at runtime', () => {
+    for (const [key, property] of Object.entries(properties)) {
+      expect(property.default, `${key} has no default`).toBeDefined();
+    }
+  });
+
+  it('bounds the numeric settings, so a typo cannot break a query', () => {
+    for (const key of ['rowLimit', 'pageSize', 'queryTimeout']) {
+      const property = properties[`${CONFIG_SECTION}.${key}`];
+      expect(property?.minimum, `${key} has no minimum`).toBeDefined();
+      expect(property?.maximum, `${key} has no maximum`).toBeDefined();
+    }
+  });
+
+  it('keeps the row limit and the page size at least one row', () => {
+    expect(properties[`${CONFIG_SECTION}.rowLimit`]?.minimum).toBe(1);
+    expect(properties[`${CONFIG_SECTION}.pageSize`]?.minimum).toBe(1);
+  });
+
+  it('lets the query timeout be turned off with zero', () => {
+    const timeout = properties[`${CONFIG_SECTION}.queryTimeout`];
+    expect(timeout?.minimum).toBe(0);
+    expect(timeout?.default).toBe(0);
+  });
+
+  it('hides the databases of the server itself by default', () => {
+    expect(properties[`${CONFIG_SECTION}.showSystemObjects`]?.default).toBe(false);
   });
 
   it('offers exactly the logger levels with the logger default', () => {

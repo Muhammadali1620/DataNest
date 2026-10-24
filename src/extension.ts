@@ -21,7 +21,7 @@ import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/compl
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
-import { createSettings, readPageSize, readRowLimit } from './vscode/settings';
+import { createSettings, readPageSize, readQueryTimeoutMs, readRowLimit } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 import type { TableNode } from './vscode/tree/nodes';
 
@@ -52,7 +52,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     manager,
     results,
     cache,
-    limits: { rowLimit: () => readRowLimit() },
+    limits: { rowLimit: () => readRowLimit(), timeoutMs: () => readQueryTimeoutMs() },
     logger,
   });
   context.subscriptions.push(

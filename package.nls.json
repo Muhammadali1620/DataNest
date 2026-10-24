@@ -30,5 +30,6 @@
   "commands.results.show.title": "Show Results",
   "commands.table.open.title": "Open Table",
   "configuration.pageSize.description": "Rows shown on one page when a table is opened from the tree.",
-  "commands.results.export.title": "Export Result"
+  "commands.results.export.title": "Export Result",
+  "configuration.queryTimeout.description": "Seconds a statement may run before DataNest cancels it. `0` means no limit."
 }

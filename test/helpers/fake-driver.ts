@@ -63,6 +63,11 @@ export class FakeSession implements Session {
   executeError: Error | undefined;
   /** When it returns true for a statement, that statement fails. */
   failExecuteWhen: ((sql: string) => boolean) | undefined;
+  /**
+   * Like a real server: cancelling interrupts the statement in flight, so the
+   * stream ends with a `cancelled` error rather than with rows.
+   */
+  failOnCancel = true;
   /** Rows every execute() yields. */
   rows: CellValue[][] = [[1]];
   /** Awaited before the first event, so a test can keep a statement running. */
@@ -81,6 +86,9 @@ export class FakeSession implements Session {
 
   cancel(): Promise<void> {
     this.cancelCount += 1;
+    if (this.failOnCancel) {
+      this.executeError ??= new DbError('cancelled', 'Query was interrupted');
+    }
     return Promise.resolve();
   }
 

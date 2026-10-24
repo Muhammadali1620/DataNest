@@ -30,5 +30,6 @@
   "commands.results.show.title": "Показать результаты",
   "commands.table.open.title": "Открыть таблицу",
   "configuration.pageSize.description": "Сколько строк показывать на одной странице при открытии таблицы из дерева.",
-  "commands.results.export.title": "Экспортировать результат"
+  "commands.results.export.title": "Экспортировать результат",
+  "configuration.queryTimeout.description": "Сколько секунд запрос может выполняться, прежде чем DataNest его отменит. `0` — без ограничения."
 }

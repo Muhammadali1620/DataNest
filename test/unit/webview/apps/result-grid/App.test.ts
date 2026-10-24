@@ -75,6 +75,13 @@ async function withState(state: ResultGridState, lang = 'en') {
   const handler = serveRows(harness.host);
   await flush();
   harness.host.emit('state', state);
+  // The page renders the state asynchronously; every test starts after that.
+  // ("Loading…" is no good as a signal: a row awaiting its cells says the same.)
+  if (state.tabs.length > 0) {
+    await waitFor(() => {
+      expect(screen.queryByRole('tablist')).not.toBeNull();
+    });
+  }
   return { ...harness, handler };
 }
 
@@ -553,6 +560,269 @@ describe('result grid App', () => {
           offset: 1,
           limit: 1,
         });
+      });
+    });
+  });
+
+  describe('sorting', () => {
+    it('asks the host to sort ascending on the first header click', async () => {
+      const harness = await withState({
+        tabs: [tab()],
+        activeId: 'result-1',
+        running: false,
+      });
+      const sort = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+      harness.host.handle('sort', sort);
+      await waitFor(() => {
+        expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(1);
+      });
+      await fireEvent.click(screen.getByRole('button', { name: /^id/ }));
+      await waitFor(() => {
+        expect(sort).toHaveBeenCalledWith({ resultId: 'result-1', column: 0, direction: 'asc' });
+      });
+    });
+
+    it('cycles ascending, descending, then back to the server order', async () => {
+      const harness = setup();
+      serveRows(harness.host);
+      const sort = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+      harness.host.handle('sort', sort);
+      await flush();
+      harness.host.emit('state', { tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(1);
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /^id/ }));
+      await waitFor(() => {
+        expect(sort).toHaveBeenCalledTimes(1);
+      });
+      // The host answers by re-sending the state with the new order.
+      harness.host.emit('state', {
+        tabs: [tab({ sort: { column: 0, direction: 'asc' } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getAllByRole('columnheader')[1]?.getAttribute('aria-sort')).toBe('ascending');
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /^id/ }));
+      await waitFor(() => {
+        expect(sort).toHaveBeenLastCalledWith({
+          resultId: 'result-1',
+          column: 0,
+          direction: 'desc',
+        });
+      });
+      harness.host.emit('state', {
+        tabs: [tab({ sort: { column: 0, direction: 'desc' } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getAllByRole('columnheader')[1]?.getAttribute('aria-sort')).toBe(
+          'descending',
+        );
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /^id/ }));
+      await waitFor(() => {
+        expect(sort).toHaveBeenLastCalledWith({ resultId: 'result-1', column: 0 });
+      });
+    });
+
+    it('starts over at ascending when another column is clicked', async () => {
+      const harness = await withState({
+        tabs: [tab({ sort: { column: 0, direction: 'desc' } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      const sort = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+      harness.host.handle('sort', sort);
+      await waitFor(() => {
+        expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(2);
+      });
+      await fireEvent.click(screen.getByRole('button', { name: /^email/ }));
+      await waitFor(() => {
+        expect(sort).toHaveBeenCalledWith({ resultId: 'result-1', column: 1, direction: 'asc' });
+      });
+    });
+
+    it('marks unsorted columns as such for assistive technology', async () => {
+      await withState({
+        tabs: [tab({ sort: { column: 0, direction: 'asc' } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getAllByRole('columnheader')[2]?.getAttribute('aria-sort')).toBe('none');
+      });
+    });
+
+    it('does not sort a failed result', async () => {
+      const harness = await withState({
+        tabs: [tab({ error: { code: 'syntax', message: 'bad' } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      const sort = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+      harness.host.handle('sort', sort);
+      await flush();
+      expect(screen.queryByRole('columnheader')).toBeNull();
+      expect(sort).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('quick search', () => {
+    function serveSearch(host: HostPeer, matches: number[], total = matches.length) {
+      const search = vi.fn(({ resultId }: { resultId: string }) => ({
+        resultId,
+        rows: matches,
+        total,
+      }));
+      host.handle('search', search);
+      return search;
+    }
+
+    it('asks the host and reports how many rows matched', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      const search = serveSearch(harness.host, [3, 7, 42]);
+      await waitFor(() => {
+        expect(screen.getByLabelText('Find in results')).toBeTruthy();
+      });
+      await fireEvent.input(screen.getByLabelText('Find in results'), {
+        target: { value: 'example' },
+      });
+      await waitFor(() => {
+        expect(search).toHaveBeenCalledWith({ resultId: 'result-1', text: 'example' });
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 3');
+      });
+    });
+
+    it('says when nothing matched', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      serveSearch(harness.host, []);
+      await fireEvent.input(screen.getByLabelText('Find in results'), {
+        target: { value: 'nobody' },
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('no matches');
+      });
+    });
+
+    it('steps through the matches and wraps around', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      serveSearch(harness.host, [3, 7, 42]);
+      await fireEvent.input(screen.getByLabelText('Find in results'), {
+        target: { value: 'example' },
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 3');
+      });
+      await fireEvent.click(screen.getByLabelText('Next match'));
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('2 of 3');
+      });
+      await fireEvent.click(screen.getByLabelText('Previous match'));
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 3');
+      });
+      // Going back past the first match wraps to the last one.
+      await fireEvent.click(screen.getByLabelText('Previous match'));
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('3 of 3');
+      });
+    });
+
+    it('moves to the next match on Enter and back with Shift+Enter', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      serveSearch(harness.host, [1, 5]);
+      const box = screen.getByLabelText('Find in results');
+      await fireEvent.input(box, { target: { value: 'x' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 2');
+      });
+      await fireEvent.keyDown(box, { key: 'Enter' });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('2 of 2');
+      });
+      await fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 2');
+      });
+    });
+
+    it('selects the row of the current match', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      serveSearch(harness.host, [1]);
+      await fireEvent.input(screen.getByLabelText('Find in results'), {
+        target: { value: 'bob' },
+      });
+      await waitFor(() => {
+        const row = screen
+          .getAllByRole('row')
+          .find((item) => item.getAttribute('aria-rowindex') === '2');
+        expect(row?.querySelector('[aria-selected="true"]')).not.toBeNull();
+      });
+    });
+
+    it('clears the matches when the box is emptied', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      serveSearch(harness.host, [1]);
+      const box = screen.getByLabelText('Find in results');
+      await fireEvent.input(box, { target: { value: 'bob' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits')).toBeTruthy();
+      });
+      await fireEvent.input(box, { target: { value: '' } });
+      await waitFor(() => {
+        expect(screen.queryByTestId('hits')).toBeNull();
+      });
+    });
+
+    it('forgets the search when another tab is opened', async () => {
+      const harness = await withState({
+        tabs: [tab(), tab({ id: 'result-2', title: 'SELECT 2' })],
+        activeId: 'result-1',
+        running: false,
+      });
+      serveSearch(harness.host, [0]);
+      await fireEvent.input(screen.getByLabelText('Find in results'), {
+        target: { value: 'alice' },
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits')).toBeTruthy();
+      });
+      await fireEvent.click(screen.getByRole('tab', { name: 'SELECT 2' }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('hits')).toBeNull();
       });
     });
   });

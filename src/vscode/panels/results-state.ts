@@ -23,6 +23,7 @@ export function buildState(
     ...(summary.affectedRows === undefined ? {} : { affectedRows: summary.affectedRows }),
     durationMs: summary.durationMs,
     ...(summary.error === undefined ? {} : { error: summary.error }),
+    ...(summary.sort === undefined ? {} : { sort: summary.sort }),
   }));
   // The newest tab is the one the user just produced, unless they picked another.
   const active =

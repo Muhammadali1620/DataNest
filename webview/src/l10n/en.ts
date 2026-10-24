@@ -51,6 +51,13 @@ export const en = {
   'grid.loadFailed': 'Could not load the rows',
   'grid.resize': 'Resize column {0}',
   'grid.copyFailed': 'Could not copy the selection',
+  'grid.searchPlaceholder': 'Find in results',
+  'grid.noMatches': 'no matches',
+  'grid.matchOf': '{0} of {1}',
+  'grid.nextMatch': 'Next match',
+  'grid.previousMatch': 'Previous match',
+  'grid.sortFailed': 'Could not sort the result',
+  'grid.searchFailed': 'Could not search the result',
 } as const;
 
 export type MessageKey = keyof typeof en;

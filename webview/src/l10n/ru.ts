@@ -52,4 +52,11 @@ export const ru: Record<MessageKey, string> = {
   'grid.loadFailed': 'Не удалось загрузить строки',
   'grid.resize': 'Изменить ширину колонки {0}',
   'grid.copyFailed': 'Не удалось скопировать выделение',
+  'grid.searchPlaceholder': 'Поиск в результате',
+  'grid.noMatches': 'нет совпадений',
+  'grid.matchOf': '{0} из {1}',
+  'grid.nextMatch': 'Следующее совпадение',
+  'grid.previousMatch': 'Предыдущее совпадение',
+  'grid.sortFailed': 'Не удалось отсортировать результат',
+  'grid.searchFailed': 'Не удалось выполнить поиск',
 };

@@ -3,7 +3,7 @@
 
 import { resultRowSchema } from '../cell-value';
 import { defineProtocol } from '../rpc';
-import { array, boolean, type Infer, number, object, optional, string } from '../schema';
+import { array, boolean, type Infer, literal, number, object, optional, string } from '../schema';
 
 /** Rows the page may ask for in one request. */
 export const MAX_WINDOW_ROWS = 2000;
@@ -13,6 +13,12 @@ export const WINDOW_OVERSCAN = 50;
 
 /** Longest text the page may ask the host to copy. */
 export const MAX_CLIPBOARD_CHARS = 20_000_000;
+
+/** Matching rows one search returns; enough to walk through, cheap to send. */
+export const MAX_SEARCH_HITS = 1000;
+
+/** Longest search text; a longer one is the user leaning on the keyboard. */
+export const MAX_SEARCH_LENGTH = 1000;
 
 const resultId = string({ minLength: 1, maxLength: 100 });
 const name = string({ maxLength: 1000 });
@@ -41,6 +47,13 @@ const tabSchema = object({
   affectedRows: optional(number({ integer: true, min: 0 })),
   durationMs: number({ min: 0 }),
   error: optional(errorSchema),
+  /** How the result is ordered right now; absent means the server's own order. */
+  sort: optional(
+    object({
+      column: number({ integer: true, min: 0 }),
+      direction: literal('asc', 'desc'),
+    }),
+  ),
 });
 
 const stateSchema = object({
@@ -62,6 +75,27 @@ const windowSchema = object({
 export const resultGridProtocol = defineProtocol({
   host: {
     requests: {
+      /**
+       * Page → host: order the result by a column, or restore the server's order
+       * when no direction is given. The host answers with the new tab state.
+       */
+      sort: {
+        params: object({
+          resultId,
+          column: number({ integer: true, min: 0 }),
+          direction: optional(literal('asc', 'desc')),
+        }),
+        result: object({ resultId, applied: boolean() }),
+      },
+      /** Page → host: which rows contain this text. */
+      search: {
+        params: object({ resultId, text: string({ maxLength: MAX_SEARCH_LENGTH }) }),
+        result: object({
+          resultId,
+          rows: array(number({ integer: true, min: 0 }), { maxLength: MAX_SEARCH_HITS }),
+          total: number({ integer: true, min: 0 }),
+        }),
+      },
       /** Page → host: the rows of a visible range. */
       rows: {
         params: object({

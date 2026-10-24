@@ -4,9 +4,17 @@
 
 import { type Disposable, toDisposable } from '../core/disposable';
 import type { ResultColumn } from '../drivers/driver';
+import { type SortDirection, sortRows } from '../shared/cell-compare';
+import { findRows, type SearchHits } from '../shared/cell-search';
 import type { CellValue } from '../shared/cell-value';
 
 export type ResultRow = readonly CellValue[];
+
+/** How a result is currently ordered; absent means "as the server returned it". */
+export interface ResultSort {
+  readonly column: number;
+  readonly direction: SortDirection;
+}
 
 export interface ResultSummary {
   readonly id: string;
@@ -23,6 +31,8 @@ export interface ResultSummary {
   readonly durationMs: number;
   /** Set instead of rows when the statement failed. */
   readonly error?: ResultError;
+  /** Set once the user sorted the result in the grid. */
+  readonly sort?: ResultSort;
 }
 
 export interface ResultError {
@@ -34,7 +44,11 @@ export interface ResultError {
 
 /** A result with its rows; only the store sees this whole object. */
 interface StoredResult extends ResultSummary {
-  readonly rows: ResultRow[];
+  /** Rows in the order they are shown. */
+  rows: ResultRow[];
+  /** The order the server returned, so sorting can be undone. */
+  readonly original: readonly ResultRow[];
+  sort?: ResultSort;
 }
 
 export interface ResultWindow {
@@ -81,6 +95,7 @@ export class ResultStore {
       statement: result.statement,
       columns: result.columns,
       rows: result.rows,
+      original: [...result.rows],
       rowCount: result.rows.length,
       truncated: result.truncated,
       ...(result.affectedRows === undefined ? {} : { affectedRows: result.affectedRows }),
@@ -128,6 +143,36 @@ export class ResultStore {
     return { offset: from, rows: stored.rows.slice(from, to), rowCount: stored.rows.length };
   }
 
+  /**
+   * Re-orders a result by one column, or restores the server's order when
+   * `direction` is absent. Sorting happens over every row, not just the loaded
+   * ones, which is the whole point of keeping rows in the host.
+   */
+  sort(id: string, column: number, direction?: SortDirection): ResultSummary | undefined {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return undefined;
+    }
+    if (direction === undefined) {
+      stored.rows = [...stored.original];
+      delete stored.sort;
+    } else {
+      stored.rows = sortRows(stored.original, column, direction);
+      stored.sort = { column, direction };
+    }
+    this.notify(stored.documentUri);
+    return summaryOf(stored);
+  }
+
+  /** Rows containing the text, in the order they are shown. */
+  search(id: string, text: string, limit?: number): SearchHits | undefined {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return undefined;
+    }
+    return findRows(stored.rows, text, limit);
+  }
+
   /** Drops every result of a document, e.g. when its editor closes. */
   clearDocument(documentUri: string): void {
     const ids = this.byDocument.get(documentUri);
@@ -164,6 +209,6 @@ export class ResultStore {
 }
 
 function summaryOf(stored: StoredResult): ResultSummary {
-  const { rows: _rows, ...summary } = stored;
+  const { rows: _rows, original: _original, ...summary } = stored;
   return summary;
 }

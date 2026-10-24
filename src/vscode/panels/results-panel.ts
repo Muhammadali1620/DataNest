@@ -2,7 +2,11 @@ import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
 import type { ResultStore } from '../../services/result-store';
-import { resultGridProtocol, type ResultGridProtocol } from '../../shared/protocols/result-grid';
+import {
+  MAX_SEARCH_HITS,
+  resultGridProtocol,
+  type ResultGridProtocol,
+} from '../../shared/protocols/result-grid';
 import { RpcPeer } from '../../shared/rpc';
 import { buildState } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
@@ -91,6 +95,14 @@ export class ResultsPanel implements vscode.Disposable {
       };
     });
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
+    this.rpc.handle('sort', ({ resultId, column, direction }) => {
+      const sorted = this.deps.results.sort(resultId, column, direction);
+      return { resultId, applied: sorted !== undefined };
+    });
+    this.rpc.handle('search', ({ resultId, text }) => {
+      const hits = this.deps.results.search(resultId, text, MAX_SEARCH_HITS);
+      return { resultId, rows: hits?.rows ?? [], total: hits?.total ?? 0 };
+    });
     this.rpc.on('ready', () => {
       this.update();
     });

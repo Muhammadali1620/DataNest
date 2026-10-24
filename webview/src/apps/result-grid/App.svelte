@@ -25,6 +25,11 @@
   let gridState = $state<ResultGridState | undefined>(undefined);
   let failure = $state<string | undefined>(undefined);
   let widths = $state<number[]>([]);
+  let search = $state('');
+  let hits = $state<number[]>([]);
+  let hitTotal = $state(0);
+  let hitIndex = $state(0);
+  let revealRow = $state<number | undefined>(undefined);
   /** Bumped when rows arrive, so the grid re-reads the cache. */
   let loaded = $state(0);
 
@@ -89,6 +94,11 @@
     cache.reset(tab?.rowCount ?? 0);
     pending = undefined;
     failure = undefined;
+    search = '';
+    hits = [];
+    hitTotal = 0;
+    hitIndex = 0;
+    revealRow = undefined;
     widths = tab === undefined ? [] : keepWidths([], tab.columns);
     loaded += 1;
   }
@@ -131,6 +141,63 @@
     }
   }
 
+  /** Clicking a header cycles ascending → descending → the server's own order. */
+  async function onSort(column: number): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined || tab.error !== undefined) {
+      return;
+    }
+    const current = tab.sort;
+    const direction =
+      current?.column !== column ? 'asc' : current.direction === 'asc' ? 'desc' : undefined;
+    try {
+      await rpc.request('sort', {
+        resultId: tab.id,
+        column,
+        ...(direction === undefined ? {} : { direction }),
+      });
+      // The host answers by re-sending the state; the handler below reloads the
+      // rows and re-runs the search, because sorting moved every row index.
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.sortFailed');
+    }
+  }
+
+  async function runSearch(text: string): Promise<void> {
+    const tab = activeTab;
+    search = text;
+    if (tab === undefined || text.trim() === '') {
+      hits = [];
+      hitTotal = 0;
+      hitIndex = 0;
+      return;
+    }
+    try {
+      const found = await rpc.request('search', { resultId: tab.id, text });
+      if (found.resultId !== gridState?.activeId) {
+        return;
+      }
+      hits = found.rows;
+      hitTotal = found.total;
+      hitIndex = 0;
+      revealRow = found.rows[0];
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.searchFailed');
+    }
+  }
+
+  /** Steps through the matches, wrapping around at both ends. */
+  function stepHit(delta: number): void {
+    if (hits.length === 0) {
+      return;
+    }
+    hitIndex = (hitIndex + delta + hits.length) % hits.length;
+    const row = hits[hitIndex];
+    // Re-pointing at the same row must still scroll, so the value is cleared first.
+    revealRow = undefined;
+    revealRow = row;
+  }
+
   function onResize(index: number, width: number): void {
     const next = [...widths];
     next[index] = width;
@@ -142,11 +209,21 @@
       const previous = activeTab;
       gridState = next;
       const tab = next.tabs.find((candidate) => candidate.id === next.activeId);
-      // Rows are kept only while the very same result is still on screen.
+      // Rows are kept only while the very same result in the very same order is
+      // still on screen; sorting changes which row sits at which index.
       const sameResult =
-        tab !== undefined && previous?.id === tab.id && previous.rowCount === tab.rowCount;
+        tab !== undefined &&
+        previous?.id === tab.id &&
+        previous.rowCount === tab.rowCount &&
+        previous.sort?.column === tab.sort?.column &&
+        previous.sort?.direction === tab.sort?.direction;
       if (!sameResult) {
+        // The same result in a new order keeps the search; another tab starts fresh.
+        const text = tab !== undefined && previous?.id === tab.id ? search : '';
         resetFor(tab);
+        if (text !== '') {
+          void runSearch(text);
+        }
       }
     });
     rpc.emit('ready', {});
@@ -208,8 +285,58 @@
         {/if}
       </p>
       {#if activeTab.columns.length > 0}
+        <div class="find">
+          <input
+            class="control"
+            type="search"
+            placeholder={t('grid.searchPlaceholder')}
+            aria-label={t('grid.searchPlaceholder')}
+            value={search}
+            oninput={(event) => {
+              void runSearch(event.currentTarget.value);
+            }}
+            onkeydown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                stepHit(event.shiftKey ? -1 : 1);
+              }
+            }}
+          />
+          {#if search.trim() !== ''}
+            <span class="hits" data-testid="hits">
+              {hitTotal === 0
+                ? t('grid.noMatches')
+                : t('grid.matchOf', hitIndex + 1, hitTotal)}
+            </span>
+            <button
+              type="button"
+              class="step"
+              aria-label={t('grid.previousMatch')}
+              disabled={hits.length === 0}
+              onclick={() => {
+                stepHit(-1);
+              }}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              class="step"
+              aria-label={t('grid.nextMatch')}
+              disabled={hits.length === 0}
+              onclick={() => {
+                stepHit(1);
+              }}
+            >
+              ↓
+            </button>
+          {/if}
+        </div>
         <Grid
           resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}`}
+          sort={activeTab.sort}
+          {onSort}
+          {revealRow}
           columns={activeTab.columns}
           rowCount={activeTab.rowCount}
           {widths}
@@ -272,6 +399,36 @@
     border: none;
     border-radius: 2px;
     cursor: pointer;
+  }
+
+  .find {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    align-items: center;
+    padding: 0 8px;
+  }
+
+  .find .control {
+    width: 220px;
+  }
+
+  .hits {
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
+  }
+
+  .step {
+    padding: 0 6px;
+    color: var(--vscode-foreground);
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  .step:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .summary,

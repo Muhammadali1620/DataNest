@@ -200,4 +200,114 @@ describe('ResultStore', () => {
       expect(changed).not.toHaveBeenCalled();
     });
   });
+
+  describe('sort', () => {
+    const rows = [
+      [3, 'c'],
+      [1, 'a'],
+      [2, 'b'],
+    ];
+
+    it('orders the stored rows and reports the order on the summary', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      const sorted = store.sort(id, 0, 'asc');
+      expect(sorted?.sort).toEqual({ column: 0, direction: 'asc' });
+      expect(store.window(id, 0, 10)?.rows.map((row) => row[0])).toEqual([1, 2, 3]);
+    });
+
+    it('sorts every row, not just a loaded window', () => {
+      const store = new ResultStore();
+      const many = Array.from({ length: 500 }, (_, index) => [500 - index]);
+      const { id } = store.add(result({ rows: many }));
+      store.sort(id, 0, 'asc');
+      // The first window now holds what was at the very end before.
+      expect(store.window(id, 0, 3)?.rows).toEqual([[1], [2], [3]]);
+    });
+
+    it('sorts descending', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.sort(id, 0, 'desc');
+      expect(store.window(id, 0, 10)?.rows.map((row) => row[0])).toEqual([3, 2, 1]);
+    });
+
+    it('restores the server order when no direction is given', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.sort(id, 0, 'asc');
+      const restored = store.sort(id, 0);
+      expect(restored?.sort).toBeUndefined();
+      expect(store.window(id, 0, 10)?.rows.map((row) => row[0])).toEqual([3, 1, 2]);
+    });
+
+    it('sorts from the server order every time, not from the last sort', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.sort(id, 0, 'asc');
+      store.sort(id, 1, 'desc');
+      expect(store.window(id, 0, 10)?.rows.map((row) => row[1])).toEqual(['c', 'b', 'a']);
+    });
+
+    it('keeps the row count and the rest of the summary', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows, durationMs: 9 }));
+      const sorted = store.sort(id, 0, 'asc');
+      expect(sorted).toMatchObject({ rowCount: 3, durationMs: 9, statement: 'SELECT 1' });
+    });
+
+    it('tells the document that its results changed', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      const changed = vi.fn();
+      store.onDidChange(changed);
+      store.sort(id, 0, 'asc');
+      expect(changed).toHaveBeenCalledWith(DOC);
+    });
+
+    it('returns nothing for an unknown result', () => {
+      expect(new ResultStore().sort('result-404', 0, 'asc')).toBeUndefined();
+    });
+  });
+
+  describe('search', () => {
+    const rows = [
+      [1, 'alice@example.com'],
+      [2, 'bob@test.org'],
+      [3, 'carol@example.com'],
+    ];
+
+    it('finds the rows that contain the text', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      expect(store.search(id, 'example.com')).toEqual({ rows: [0, 2], total: 2 });
+    });
+
+    it('searches in the order the rows are shown', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.sort(id, 0, 'desc');
+      // carol is now the first row, so her index moved.
+      expect(store.search(id, 'carol')?.rows).toEqual([0]);
+    });
+
+    it('honours the cap it is given', () => {
+      const store = new ResultStore();
+      const many = Array.from({ length: 30 }, () => ['match']);
+      const { id } = store.add(result({ rows: many }));
+      const hits = store.search(id, 'match', 5);
+      expect(hits?.rows).toHaveLength(5);
+      expect(hits?.total).toBe(30);
+    });
+
+    it('finds nothing for a blank search', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      expect(store.search(id, '  ')).toEqual({ rows: [], total: 0 });
+    });
+
+    it('returns nothing for an unknown result', () => {
+      expect(new ResultStore().search('result-404', 'x')).toBeUndefined();
+    });
+  });
 });

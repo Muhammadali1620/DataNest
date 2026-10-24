@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_CLIPBOARD_CHARS,
+  MAX_SEARCH_HITS,
+  MAX_SEARCH_LENGTH,
   MAX_WINDOW_ROWS,
   resultGridProtocol,
   tabTitle,
@@ -108,8 +110,12 @@ describe('state event', () => {
 });
 
 describe('protocol shape', () => {
-  it('lets the host answer only the rows request', () => {
-    expect(Object.keys(resultGridProtocol.host.requests)).toEqual(['rows']);
+  it('lets the host answer rows, sorting and searching', () => {
+    expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
+      'rows',
+      'search',
+      'sort',
+    ]);
     expect(Object.keys(resultGridProtocol.host.events).sort()).toEqual([
       'cancel',
       'copyText',
@@ -168,5 +174,102 @@ describe('copyText event', () => {
 
   it('caps how much may be copied in one go', () => {
     expect(() => copyText.parse({ text: 'x'.repeat(MAX_CLIPBOARD_CHARS + 1) })).toThrow('at most');
+  });
+});
+
+describe('sort request', () => {
+  const sort = resultGridProtocol.host.requests.sort;
+
+  it('accepts a direction and its absence, which means the server order', () => {
+    expect(sort.params.parse({ resultId: 'r', column: 2, direction: 'asc' })).toEqual({
+      resultId: 'r',
+      column: 2,
+      direction: 'asc',
+    });
+    expect(sort.params.parse({ resultId: 'r', column: 0 })).toEqual({ resultId: 'r', column: 0 });
+  });
+
+  it('rejects an unknown direction and a bad column', () => {
+    expect(() => sort.params.parse({ resultId: 'r', column: 0, direction: 'sideways' })).toThrow(
+      'direction',
+    );
+    expect(() => sort.params.parse({ resultId: 'r', column: -1 })).toThrow('column');
+  });
+
+  it('answers whether the result was still there', () => {
+    expect(sort.result.parse({ resultId: 'r', applied: true })).toEqual({
+      resultId: 'r',
+      applied: true,
+    });
+  });
+});
+
+describe('search request', () => {
+  const search = resultGridProtocol.host.requests.search;
+
+  it('accepts a needle and answers with row indexes and a total', () => {
+    expect(search.params.parse({ resultId: 'r', text: 'abc' })).toEqual({
+      resultId: 'r',
+      text: 'abc',
+    });
+    expect(search.result.parse({ resultId: 'r', rows: [1, 5], total: 2 })).toEqual({
+      resultId: 'r',
+      rows: [1, 5],
+      total: 2,
+    });
+  });
+
+  it('caps the needle and the number of hits', () => {
+    expect(() =>
+      search.params.parse({ resultId: 'r', text: 'x'.repeat(MAX_SEARCH_LENGTH + 1) }),
+    ).toThrow('at most');
+    expect(() =>
+      search.result.parse({
+        resultId: 'r',
+        rows: Array.from({ length: MAX_SEARCH_HITS + 1 }, (_, index) => index),
+        total: 1,
+      }),
+    ).toThrow('at most');
+  });
+});
+
+describe('sorted tab state', () => {
+  it('carries the current order of a tab', () => {
+    const payload = {
+      tabs: [
+        {
+          id: 'result-1',
+          title: 'SELECT 1',
+          statement: 'SELECT 1',
+          columns: [{ name: 'one' }],
+          rowCount: 1,
+          truncated: false,
+          durationMs: 1,
+          sort: { column: 0, direction: 'desc' },
+        },
+      ],
+      running: false,
+    };
+    expect(state.parse(payload)).toEqual(payload);
+  });
+
+  it('rejects an unknown direction in the state', () => {
+    expect(() =>
+      state.parse({
+        tabs: [
+          {
+            id: 'r',
+            title: 't',
+            statement: 't',
+            columns: [],
+            rowCount: 0,
+            truncated: false,
+            durationMs: 0,
+            sort: { column: 0, direction: 'random' },
+          },
+        ],
+        running: false,
+      }),
+    ).toThrow('direction');
   });
 });

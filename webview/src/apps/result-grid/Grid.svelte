@@ -9,6 +9,7 @@
     resizedWidths,
   } from './columns';
   import {
+    type CellRef,
     extendTo,
     isFocused,
     isNavigationKey,
@@ -35,11 +36,29 @@
     onCopy: (selection: Selection) => void;
     /** Changes whenever a different result is shown; the selection then starts over. */
     resetKey: string;
+    /** How the result is ordered, so the header can show it. */
+    sort?: { column: number; direction: 'asc' | 'desc' } | undefined;
+    /** Called when a header is clicked; the host does the ordering. */
+    onSort: (column: number) => void;
+    /** Row to scroll to and select, e.g. the next search hit. */
+    revealRow?: number | undefined;
     t: Translate;
   }
 
-  const { columns, rowCount, widths, rowAt, onVisible, onResize, onCopy, resetKey, t }: Props =
-    $props();
+  const {
+    columns,
+    rowCount,
+    widths,
+    rowAt,
+    onVisible,
+    onResize,
+    onCopy,
+    resetKey,
+    sort,
+    onSort,
+    revealRow,
+    t,
+  }: Props = $props();
 
   /** One row is exactly this tall, which is what makes the arithmetic simple. */
   const ROW_HEIGHT = 22;
@@ -133,6 +152,26 @@
     clearSelection(resetKey);
   });
 
+  /**
+   * Selects a row the parent asked to reveal, e.g. a search hit. It must not read
+   * `selection` back: an effect that both reads and writes one piece of state
+   * loops forever in Svelte 5.
+   */
+  function reveal(row: number | undefined): void {
+    if (row === undefined) {
+      return;
+    }
+    const cell = selectCell({ row, column: 0 }, { rowCount, columnCount: columns.length });
+    selection = cell;
+    if (cell !== undefined) {
+      scrollTo(cell.focus);
+    }
+  }
+
+  $effect(() => {
+    reveal(revealRow);
+  });
+
   function startSelect(event: PointerEvent, row: number, column: number): void {
     if (event.button !== 0) {
       return;
@@ -183,7 +222,13 @@
   /** Keeps the focused cell on screen after a keyboard move. */
   function scrollToFocus(): void {
     const focus = selection?.focus;
-    if (focus === undefined || viewport === undefined) {
+    if (focus !== undefined) {
+      scrollTo(focus);
+    }
+  }
+
+  function scrollTo(focus: CellRef): void {
+    if (viewport === undefined) {
       return;
     }
     const top = focus.row * ROW_HEIGHT;
@@ -259,10 +304,26 @@
           class="cell head"
           role="columnheader"
           aria-colindex={index + 1}
+          aria-sort={sort?.column === index
+            ? sort.direction === 'asc'
+              ? 'ascending'
+              : 'descending'
+            : 'none'}
           style="width: {widthOf(index)}px;"
           title={columns[index]?.dataType ?? columns[index]?.name ?? ''}
         >
-          <span class="name">{columns[index]?.name ?? ''}</span>
+          <button
+            type="button"
+            class="name"
+            onclick={() => {
+              onSort(index);
+            }}
+          >
+            {columns[index]?.name ?? ''}
+            {#if sort?.column === index}
+              <span class="arrow" aria-hidden="true">{sort.direction === 'asc' ? '▲' : '▼'}</span>
+            {/if}
+          </button>
           <span
             class="grip"
             role="separator"
@@ -382,9 +443,27 @@
   }
 
   .name {
-    display: block;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    width: 100%;
+    padding: 0;
     overflow: hidden;
+    color: inherit;
+    background: none;
+    border: none;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .arrow {
+    flex: none;
+    font-size: 0.8em;
+    opacity: 0.8;
   }
 
   .grip {

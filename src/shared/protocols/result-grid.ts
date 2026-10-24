@@ -118,6 +118,8 @@ export const resultGridProtocol = defineProtocol({
        * webview may not have clipboard permission of its own.
        */
       copyText: object({ text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
+      /** Page → host: put the cursor where this result's error is. */
+      revealError: object({ resultId }),
     },
   },
   webview: {

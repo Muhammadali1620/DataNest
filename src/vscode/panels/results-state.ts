@@ -30,3 +30,20 @@ export function buildState(
     activeId !== undefined && tabs.some((tab) => tab.id === activeId) ? activeId : tabs.at(-1)?.id;
   return { tabs, ...(active === undefined ? {} : { activeId: active }), running };
 }
+
+/**
+ * Where in the document the error of a result points. A server reports the offset
+ * inside the statement it was given, so the statement's own position is added.
+ * The result is clamped to the document, which may have been edited since.
+ */
+export function errorOffsetOf(
+  summary: Pick<ResultSummary, 'statementStart' | 'statement' | 'error'>,
+  documentLength: number,
+): number | undefined {
+  if (summary.error === undefined) {
+    return undefined;
+  }
+  const within = summary.error.position ?? 0;
+  const offset = summary.statementStart + Math.max(0, within);
+  return Math.max(0, Math.min(offset, Math.max(0, documentLength)));
+}

@@ -8,7 +8,7 @@ import {
   type ResultGridProtocol,
 } from '../../shared/protocols/result-grid';
 import { RpcPeer } from '../../shared/rpc';
-import { buildState } from './results-state';
+import { buildState, errorOffsetOf } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface ResultsPanelDeps {
@@ -115,6 +115,9 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.on('copyText', ({ text }) => {
       void vscode.env.clipboard.writeText(text);
     });
+    this.rpc.on('revealError', ({ resultId }) => {
+      void this.revealError(resultId);
+    });
     this.subscriptions.push(
       deps.results.onDidChange((documentUri) => {
         if (documentUri === this.documentUri) {
@@ -153,6 +156,26 @@ export class ResultsPanel implements vscode.Disposable {
     );
     this.activeId = state.activeId;
     this.rpc.emit('state', state);
+  }
+
+  /** Opens the query and puts the cursor on the character the server complained about. */
+  private async revealError(resultId: string): Promise<void> {
+    const summary = this.deps.results.get(resultId);
+    if (summary?.error === undefined) {
+      return;
+    }
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(this.documentUri));
+    const offset = errorOffsetOf(summary, document.getText().length);
+    if (offset === undefined) {
+      return;
+    }
+    const position = document.positionAt(offset);
+    const editor = await vscode.window.showTextDocument(document, { preserveFocus: false });
+    editor.selection = new vscode.Selection(position, position);
+    editor.revealRange(
+      new vscode.Range(position, position),
+      vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+    );
   }
 
   dispose(): void {

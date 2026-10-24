@@ -11,6 +11,7 @@ function result(overrides: Partial<NewResult> = {}): NewResult {
   return {
     documentUri: DOC,
     statement: 'SELECT 1',
+    statementStart: 0,
     columns: [{ name: 'one' }],
     rows: [[1]],
     truncated: false,

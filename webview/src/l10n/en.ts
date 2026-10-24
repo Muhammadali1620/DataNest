@@ -58,6 +58,8 @@ export const en = {
   'grid.previousMatch': 'Previous match',
   'grid.sortFailed': 'Could not sort the result',
   'grid.searchFailed': 'Could not search the result',
+  'grid.errorAt': 'at character {0}',
+  'grid.goToError': 'Go to the error',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -59,4 +59,6 @@ export const ru: Record<MessageKey, string> = {
   'grid.previousMatch': 'Предыдущее совпадение',
   'grid.sortFailed': 'Не удалось отсортировать результат',
   'grid.searchFailed': 'Не удалось выполнить поиск',
+  'grid.errorAt': 'на символе {0}',
+  'grid.goToError': 'Перейти к ошибке',
 };

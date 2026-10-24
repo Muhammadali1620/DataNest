@@ -272,7 +272,23 @@
     {#if activeTab === undefined}
       <p class="hint">{t('grid.empty')}</p>
     {:else if activeTab.error !== undefined}
-      <p class="error" role="alert" data-testid="error">{activeTab.error.message}</p>
+      <div class="failed" role="alert" data-testid="error">
+        <p class="error">{activeTab.error.message}</p>
+        <p class="where">
+          {#if activeTab.error.position !== undefined}
+            {t('grid.errorAt', activeTab.error.position + 1)}
+          {/if}
+          <button
+            type="button"
+            class="link"
+            onclick={() => {
+              rpc.emit('revealError', { resultId: activeTab.id });
+            }}
+          >
+            {t('grid.goToError')}
+          </button>
+        </p>
+      </div>
     {:else}
       <p class="summary" data-testid="summary">
         {#if activeTab.affectedRows !== undefined}
@@ -451,5 +467,34 @@
 
   .error {
     color: var(--vscode-errorForeground);
+  }
+
+  .failed {
+    flex: none;
+    margin: 4px 8px;
+  }
+
+  .failed .error {
+    margin: 0 0 2px;
+    white-space: pre-wrap;
+  }
+
+  .where {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 0;
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
+  }
+
+  .link {
+    padding: 0;
+    color: var(--vscode-textLink-foreground);
+    background: none;
+    border: none;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
 </style>

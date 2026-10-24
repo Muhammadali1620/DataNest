@@ -43,12 +43,14 @@ function setup(lang = 'en') {
   const selected = vi.fn();
   const cancelled = vi.fn();
   const copied = vi.fn();
+  const revealed = vi.fn();
   host.on('ready', ready);
   host.on('selectTab', selected);
   host.on('cancel', cancelled);
   host.on('copyText', copied);
+  host.on('revealError', revealed);
   const view = render(App, { props: { rpc, t: createTranslator(lang) } });
-  return { host, rpc, ready, selected, cancelled, copied, view };
+  return { host, rpc, ready, selected, cancelled, copied, revealed, view };
 }
 
 const ROWS = [
@@ -823,6 +825,103 @@ describe('result grid App', () => {
       await fireEvent.click(screen.getByRole('tab', { name: 'SELECT 2' }));
       await waitFor(() => {
         expect(screen.queryByTestId('hits')).toBeNull();
+      });
+    });
+  });
+
+  describe('messages', () => {
+    it('shows the error message, where it is and a way to get there', async () => {
+      const { revealed } = await withState({
+        tabs: [
+          tab({
+            error: { code: 'syntax', message: 'near "SELEC": syntax error', position: 7 },
+            rowCount: 0,
+          }),
+        ],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('error').textContent).toContain('near "SELEC": syntax error');
+      });
+      // Positions are counted from one for a reader, from zero in the protocol.
+      expect(screen.getByTestId('error').textContent).toContain('at character 8');
+      await fireEvent.click(screen.getByRole('button', { name: 'Go to the error' }));
+      await waitFor(() => {
+        expect(revealed).toHaveBeenCalledWith({ resultId: 'result-1' });
+      });
+    });
+
+    it('omits the position when the server did not give one', async () => {
+      await withState({
+        tabs: [tab({ error: { code: 'timeout', message: 'too slow' }, rowCount: 0 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('error').textContent).toContain('too slow');
+      });
+      expect(screen.getByTestId('error').textContent).not.toContain('at character');
+      // The jump still works: it lands at the start of the statement.
+      expect(screen.getByRole('button', { name: 'Go to the error' })).toBeTruthy();
+    });
+
+    it('reports a write by the rows it affected, with no grid', async () => {
+      await withState({
+        tabs: [tab({ affectedRows: 3, rowCount: 0, columns: [] })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('summary').textContent).toContain('3 rows affected');
+      });
+      expect(screen.queryByTestId('grid')).toBeNull();
+    });
+
+    it('reports zero rows affected rather than staying silent', async () => {
+      await withState({
+        tabs: [tab({ affectedRows: 0, rowCount: 0, columns: [] })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('summary').textContent).toContain('0 rows affected');
+      });
+    });
+
+    it('gives every statement of a script its own tab', async () => {
+      await withState({
+        tabs: [
+          tab({ id: 'result-1', title: 'SELECT 1', statement: 'SELECT 1' }),
+          tab({ id: 'result-2', title: 'SELECT 2', statement: 'SELECT 2' }),
+          tab({
+            id: 'result-3',
+            title: 'SELECTT 3',
+            statement: 'SELECTT 3',
+            error: { code: 'syntax', message: 'bad' },
+          }),
+        ],
+        activeId: 'result-3',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getAllByRole('tab')).toHaveLength(3);
+      });
+      // The failed statement's tab stands out and shows its message.
+      expect(screen.getByTestId('error').textContent).toContain('bad');
+      expect(screen.getByRole('tab', { name: 'SELECTT 3' }).className.includes('failed')).toBe(
+        true,
+      );
+    });
+
+    it('keeps the statement in the tab tooltip', async () => {
+      await withState({
+        tabs: [tab({ title: 'SELECT a, b…', statement: 'SELECT a, b FROM customers' })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('tab').getAttribute('title')).toBe('SELECT a, b FROM customers');
       });
     });
   });

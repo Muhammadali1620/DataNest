@@ -120,6 +120,7 @@ describe('protocol shape', () => {
       'cancel',
       'copyText',
       'ready',
+      'revealError',
       'selectTab',
     ]);
   });

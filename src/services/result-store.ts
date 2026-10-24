@@ -22,6 +22,8 @@ export interface ResultSummary {
   readonly documentUri: string;
   /** The statement as it was sent, for the result tab's title and tooltip. */
   readonly statement: string;
+  /** Offset of the statement in its document, so an error can be pointed at. */
+  readonly statementStart: number;
   readonly columns: readonly ResultColumn[];
   readonly rowCount: number;
   /** True when the row limit stopped the read before the end. */
@@ -61,6 +63,7 @@ export interface ResultWindow {
 export interface NewResult {
   readonly documentUri: string;
   readonly statement: string;
+  readonly statementStart: number;
   readonly columns: readonly ResultColumn[];
   readonly rows: ResultRow[];
   readonly truncated: boolean;
@@ -93,6 +96,7 @@ export class ResultStore {
       id,
       documentUri: result.documentUri,
       statement: result.statement,
+      statementStart: Math.max(0, Math.trunc(result.statementStart)),
       columns: result.columns,
       rows: result.rows,
       original: [...result.rows],

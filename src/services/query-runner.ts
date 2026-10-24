@@ -183,6 +183,7 @@ export class QueryRunner {
       return this.deps.results.add({
         documentUri: request.documentUri,
         statement: statement.text,
+        statementStart: statement.start,
         columns,
         rows,
         truncated,
@@ -196,6 +197,7 @@ export class QueryRunner {
       return this.deps.results.add({
         documentUri: request.documentUri,
         statement: statement.text,
+        statementStart: statement.start,
         columns,
         rows,
         truncated,

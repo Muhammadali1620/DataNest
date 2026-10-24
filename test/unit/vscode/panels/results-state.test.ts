@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ResultSummary } from '../../../../src/services/result-store';
 import { resultGridProtocol } from '../../../../src/shared/protocols/result-grid';
-import { buildState } from '../../../../src/vscode/panels/results-state';
+import { buildState, errorOffsetOf } from '../../../../src/vscode/panels/results-state';
 
 function summary(overrides: Partial<ResultSummary> = {}): ResultSummary {
   return {
     id: 'result-1',
     documentUri: 'untitled:Query-1.sql',
     statement: 'SELECT 1',
+    statementStart: 0,
     columns: [{ name: 'one', dataType: 'int' }],
     rowCount: 1,
     truncated: false,
@@ -106,5 +107,59 @@ describe('buildState', () => {
   it('never carries the document uri into the page', () => {
     const state = buildState([summary()], undefined, false);
     expect(JSON.stringify(state)).not.toContain('untitled:');
+  });
+});
+
+describe('errorOffsetOf', () => {
+  it('adds the position inside the statement to where the statement starts', () => {
+    expect(
+      errorOffsetOf(
+        {
+          statementStart: 100,
+          statement: 'SELECT 1',
+          error: { code: 'syntax', message: 'x', position: 7 },
+        },
+        1000,
+      ),
+    ).toBe(107);
+  });
+
+  it('points at the start of the statement when the server gave no position', () => {
+    expect(
+      errorOffsetOf(
+        { statementStart: 42, statement: 'SELECT 1', error: { code: 'syntax', message: 'x' } },
+        1000,
+      ),
+    ).toBe(42);
+  });
+
+  it('has nothing to point at when the statement succeeded', () => {
+    expect(errorOffsetOf({ statementStart: 10, statement: 'SELECT 1' }, 1000)).toBeUndefined();
+  });
+
+  it('stays inside a document that was edited since the run', () => {
+    expect(
+      errorOffsetOf(
+        {
+          statementStart: 900,
+          statement: 'SELECT 1',
+          error: { code: 'syntax', message: 'x', position: 7 },
+        },
+        50,
+      ),
+    ).toBe(50);
+  });
+
+  it('never goes negative', () => {
+    expect(
+      errorOffsetOf(
+        {
+          statementStart: 0,
+          statement: 'SELECT 1',
+          error: { code: 'syntax', message: 'x', position: 0 },
+        },
+        0,
+      ),
+    ).toBe(0);
   });
 });

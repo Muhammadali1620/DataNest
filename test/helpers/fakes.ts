@@ -1,4 +1,42 @@
 import type { Logger, LogLevel, LogSink } from '../../src/core/logging/logger';
+import type { KeyValueState, SecretState } from '../../src/services/connection-store';
+
+/** In-memory `vscode.Memento` substitute. */
+export class FakeMemento implements KeyValueState {
+  constructor(readonly data = new Map<string, unknown>()) {}
+
+  get(key: string): unknown {
+    return this.data.get(key);
+  }
+
+  update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) {
+      this.data.delete(key);
+    } else {
+      this.data.set(key, value);
+    }
+    return Promise.resolve();
+  }
+}
+
+/** In-memory `vscode.SecretStorage` substitute. */
+export class FakeSecretStorage implements SecretState {
+  constructor(readonly data = new Map<string, string>()) {}
+
+  get(key: string): Promise<string | undefined> {
+    return Promise.resolve(this.data.get(key));
+  }
+
+  store(key: string, value: string): Promise<void> {
+    this.data.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.data.delete(key);
+    return Promise.resolve();
+  }
+}
 
 /** Collects lines written by a SinkLogger. */
 export class MemorySink implements LogSink {

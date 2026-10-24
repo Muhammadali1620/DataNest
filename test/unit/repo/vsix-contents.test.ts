@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { listFiles, PackageManager } from '@vscode/vsce';
 import { createTempDir, ROOT } from '../../helpers/repo';
+import { encodePng, render } from '../../../scripts/make-icon.mjs';
 
 // Applies the real .vscodeignore to a fake project tree, so the result does not
 // depend on whether dist/ is built right now.
@@ -82,5 +83,21 @@ describe('.vsix contents', () => {
     const forbidden =
       /(^(src|webview|test|scripts|out|coverage|node_modules|\.vscode-test)\/)|\.map$|\.ts$|^\.env|^(ROADMAP|ARCHITECTURE|CLAUDE)\.md$|\.vsix$/;
     expect(packed.filter((file) => forbidden.test(file))).toEqual([]);
+  });
+});
+
+describe('icon', () => {
+  it('is a real 128×128 PNG, so the Marketplace accepts it', () => {
+    const bytes = readFileSync(join(ROOT, 'resources/icon.png'));
+    // PNG signature, then IHDR with the size in big-endian.
+    expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(bytes.readUInt32BE(16)).toBe(128);
+    expect(bytes.readUInt32BE(20)).toBe(128);
+  });
+
+  it('can be regenerated from the script that drew it', () => {
+    const generated = encodePng(render());
+    const stored = readFileSync(join(ROOT, 'resources/icon.png'));
+    expect(generated.equals(stored)).toBe(true);
   });
 });

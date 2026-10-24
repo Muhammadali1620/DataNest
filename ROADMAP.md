@@ -145,7 +145,9 @@
 ### Релиз
 - [x] **V1.25** Настройки (`contributes.configuration`): лимит строк, размер страницы, таймаут запроса, скрытие системных баз.
   `datanest.logLevel`, `datanest.showSystemObjects`, `datanest.rowLimit`, `datanest.pageSize`, `datanest.queryTimeout` (0 — без ограничения; по таймауту запрос отменяется, и в результате видно именно таймаут, а не «отменено»). Тест требует у каждой настройки описание, значение по умолчанию и границы.
-- [ ] **V1.26** Иконка, `README.md` со скриншотами и GIF, `CHANGELOG.md`.
+- [x] **V1.26** Иконка, `README.md`, `CHANGELOG.md`.
+  Иконка рисуется кодом (`npm run icon` → `resources/icon.png`, PNG кодируется через `zlib`, без нативных зависимостей), тест пересобирает её и сверяет с файлом. README переписан под Marketplace (возможности, настройки, приватность), CHANGELOG описывает 0.1.0.
+  **Осталось владельцу:** снять скриншоты и GIF в настоящем редакторе — из среды сборки это сделать нельзя. Места под них размечены комментарием в README (`docs/images/`), шаги для съёмки — в `docs/test-plan.md` (V1.27).
 - [ ] **V1.27** Ручной тест-план (`docs/test-plan.md`), прогон в VS Code, VSCodium и Cursor.
 - [ ] **V1.28** Публикация в Open VSX и VS Code Marketplace; workflow релиза по git-тегу.
 

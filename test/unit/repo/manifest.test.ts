@@ -14,6 +14,7 @@ interface Manifest {
   main: string;
   type?: string;
   l10n?: string;
+  icon?: string;
   engines: { vscode: string };
   activationEvents: string[];
   devDependencies: Record<string, string>;
@@ -57,6 +58,11 @@ describe('package.json manifest', () => {
     expect(manifest.name).toBe('datanest');
     expect(manifest.publisher).toMatch(/^[a-z0-9][a-z0-9-]*$/);
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('ships an icon the Marketplace can show', () => {
+    expect(manifest.icon).toBe('resources/icon.png');
+    expect(existsSync(join(ROOT, manifest.icon ?? ''))).toBe(true);
   });
 
   it('is MIT-licensed and ships the license file', () => {

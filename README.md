@@ -5,6 +5,9 @@
 A free, open-source database client for VS Code and its forks — MySQL, MariaDB,
 PostgreSQL and SQLite, without accounts, limits or telemetry.
 
+**Install:** [Open VSX](https://open-vsx.org/extension/datanest/datanest) —
+or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/DataNest/releases).
+
 <!--
   Screenshots go here before the Marketplace release. They have to be captured by
   hand in a real editor; see docs/test-plan.md for the walkthrough they come from.

@@ -3,7 +3,8 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { listFiles, PackageManager } from '@vscode/vsce';
 import { createTempDir, ROOT } from '../../helpers/repo';
-import { encodePng, render } from '../../../scripts/make-icon.mjs';
+import { inflateSync } from 'node:zlib';
+import { render, SIZE } from '../../../scripts/make-icon.mjs';
 
 // Applies the real .vscodeignore to a fake project tree, so the result does not
 // depend on whether dist/ is built right now.
@@ -95,9 +96,32 @@ describe('icon', () => {
     expect(bytes.readUInt32BE(20)).toBe(128);
   });
 
-  it('can be regenerated from the script that drew it', () => {
-    const generated = encodePng(render());
-    const stored = readFileSync(join(ROOT, 'resources/icon.png'));
-    expect(generated.equals(stored)).toBe(true);
+  it('shows the picture the script draws', () => {
+    // Pixels, not bytes: zlib may compress differently on another platform, and
+    // what matters is that the committed icon is the one the script produces.
+    const stored = decodePixels(readFileSync(join(ROOT, 'resources/icon.png')));
+    expect(stored.equals(render())).toBe(true);
   });
 });
+
+/** Raw RGBA of a PNG written with filter 0 on every row, which is what we write. */
+function decodePixels(png: Buffer): Buffer {
+  // IHDR is fixed-size, so IDAT starts right after it: 8 signature + 25 IHDR.
+  let offset = 8;
+  const chunks: Buffer[] = [];
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.toString('ascii', offset + 4, offset + 8);
+    if (type === 'IDAT') {
+      chunks.push(png.subarray(offset + 8, offset + 8 + length));
+    }
+    offset += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(chunks));
+  const out = Buffer.alloc(SIZE * SIZE * 4);
+  for (let y = 0; y < SIZE; y++) {
+    const from = y * (SIZE * 4 + 1) + 1;
+    raw.copy(out, y * SIZE * 4, from, from + SIZE * 4);
+  }
+  return out;
+}

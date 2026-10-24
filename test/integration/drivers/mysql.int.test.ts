@@ -138,16 +138,19 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
   it('cancel interrupts a long statement quickly', async () => {
     const started = Date.now();
     const run = runAll(session, 'SELECT id, SLEEP(0.05) FROM big_table ORDER BY id');
+    // Depending on the server, a killed query either errors with "interrupted" or
+    // completes early; both are fine as long as it does not run to the end. The
+    // handler is attached before the cancel, so a rejection is never left loose.
+    const settled = run.then(
+      () => 'finished' as const,
+      (error: unknown) => error,
+    );
     await new Promise((resolve) => setTimeout(resolve, 300));
     await session.cancel();
-    // Depending on the server, a killed query either errors with "interrupted"
-    // or completes early; both are fine as long as it does not run to the end.
-    await run.then(
-      () => undefined,
-      (error: unknown) => {
-        expect(error).toMatchObject({ name: 'DbError', code: 'cancelled' });
-      },
-    );
+    const outcome = await settled;
+    if (outcome !== 'finished') {
+      expect(outcome).toMatchObject({ name: 'DbError', code: 'cancelled' });
+    }
     expect(Date.now() - started).toBeLessThan(10_000);
     const after = await runAll(session, 'SELECT 3');
     expect(after.rows).toEqual([[3]]);

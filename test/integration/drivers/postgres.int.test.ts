@@ -134,9 +134,12 @@ describe('postgres driver', () => {
   it('cancel interrupts a long statement quickly', async () => {
     const started = Date.now();
     const run = runAll(session, 'SELECT pg_sleep(30)');
+    // The statement rejects inside cancel(), so the expectation is attached first:
+    // otherwise the rejection is briefly unhandled and Node reports it.
+    const cancelled = expect(run).rejects.toMatchObject({ name: 'DbError', code: 'cancelled' });
     await new Promise((resolve) => setTimeout(resolve, 300));
     await session.cancel();
-    await expect(run).rejects.toMatchObject({ name: 'DbError', code: 'cancelled' });
+    await cancelled;
     expect(Date.now() - started).toBeLessThan(10_000);
     const after = await runAll(session, 'SELECT 3');
     expect(after.rows).toEqual([[3]]);

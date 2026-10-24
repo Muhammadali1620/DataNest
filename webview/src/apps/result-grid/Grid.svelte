@@ -252,7 +252,9 @@
     event.preventDefault();
     drag = { index, startX: event.clientX, startWidth: widthOf(index) };
     const target = event.currentTarget;
-    if (target instanceof HTMLElement) {
+    // Pointer capture keeps the drag alive when the pointer leaves the grip. It is
+    // an enhancement: not every host implements it, and the drag works without it.
+    if (target instanceof HTMLElement && typeof target.setPointerCapture === 'function') {
       target.setPointerCapture(event.pointerId);
     }
   }

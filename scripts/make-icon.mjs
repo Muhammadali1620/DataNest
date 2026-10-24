@@ -5,7 +5,7 @@
 
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** Marketplace shows the icon at 128×128; drawing at 4× keeps the edges smooth. */
 export const SIZE = 128;
@@ -183,6 +183,15 @@ export function encodePng(rgba) {
   ]);
 }
 
-const target = fileURLToPath(new URL('../resources/icon.png', import.meta.url));
-writeFileSync(target, encodePng(render()));
-process.stdout.write(`Wrote ${target}\n`);
+/** Writes the icon next to the sources. */
+export function writeIcon() {
+  const target = fileURLToPath(new URL('../resources/icon.png', import.meta.url));
+  writeFileSync(target, encodePng(render()));
+  return target;
+}
+
+// Only `npm run icon` writes the file; importing this module (as the test does)
+// must never touch a checked-in asset.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.stdout.write(`Wrote ${writeIcon()}\n`);
+}

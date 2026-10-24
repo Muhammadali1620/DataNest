@@ -73,6 +73,17 @@ export default defineConfig(
     rules: { 'no-console': 'off', '@typescript-eslint/explicit-module-boundary-types': 'off' },
   },
   {
+    // Research probes run inside many editor versions and feel out APIs that may be
+    // missing there, so they are plain, untyped CommonJS on purpose.
+    files: ['scripts/research/**/*.cjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: { globals: globals.node },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+    },
+  },
+  {
     files: ['test/e2e/**/*.ts'],
     languageOptions: { globals: globals.mocha },
   },

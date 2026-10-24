@@ -2,7 +2,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
-import { findWebviewApps, WEBVIEW_OUT_DIR } from '../scripts/build-config.mjs';
+import { findWebviewApps, WEBVIEW_OUT_DIR, WEBVIEW_TARGET } from '../scripts/build-config.mjs';
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 
@@ -15,8 +15,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: join(rootDir, WEBVIEW_OUT_DIR),
       emptyOutDir: true,
-      // VS Code 1.90 runs webviews in Chromium 122.
-      target: 'chrome122',
+      target: WEBVIEW_TARGET,
       sourcemap: !production,
       minify: production,
       // The polyfill would add a script without our CSP nonce.

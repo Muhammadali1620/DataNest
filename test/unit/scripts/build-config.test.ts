@@ -11,8 +11,10 @@ import {
   findE2eTests,
   findDriverEntries,
   findWebviewApps,
+  MIN_EDITOR,
   NODE_TARGET,
   WEBVIEW_OUT_DIR,
+  WEBVIEW_TARGET,
 } from '../../../scripts/build-config.mjs';
 import { createTempDir } from '../../helpers/repo';
 
@@ -31,6 +33,27 @@ describe('build-config', () => {
 
   afterEach(() => {
     tmp.dispose();
+  });
+
+  describe('MIN_EDITOR (D23)', () => {
+    it('is VS Code 1.105 with the Node and Chromium it ships', () => {
+      expect(MIN_EDITOR).toEqual({
+        vscode: '1.105.0',
+        electron: '37.6.0',
+        node: '22.19.0',
+        chromium: '138',
+      });
+    });
+
+    it('derives the build targets from it', () => {
+      expect(NODE_TARGET).toBe('node22');
+      expect(WEBVIEW_TARGET).toBe('chrome138');
+    });
+
+    it('has Node with built-in node:sqlite (22.13+ without a flag)', () => {
+      const [major = 0, minor = 0] = MIN_EDITOR.node.split('.').map(Number);
+      expect(major > 22 || (major === 22 && minor >= 13)).toBe(true);
+    });
   });
 
   describe('findDriverEntries', () => {

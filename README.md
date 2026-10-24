@@ -12,6 +12,10 @@ A free and open-source database client for VS Code and its forks (VSCodium, Curs
 - Works everywhere: no native modules, only the stable VS Code API.
 - Fast and stable first, more features second.
 
+## Requirements
+
+VS Code 1.105 or newer, or a fork based on it (VSCodium, Cursor, Windsurf, Antigravity, …).
+
 ## Development
 
 Requirements: Node.js 22+, npm, Docker (for integration tests).

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { MIN_EDITOR } from '../../../scripts/build-config.mjs';
 import { readJson, ROOT } from '../../helpers/repo';
 
 interface Manifest {
@@ -77,8 +78,8 @@ describe('package.json manifest', () => {
     expect(manifest.type).toBeUndefined();
   });
 
-  it('supports VS Code 1.90 and newer', () => {
-    expect(manifest.engines.vscode).toBe('^1.90.0');
+  it('supports the minimum editor chosen in V0.12 and newer (D23)', () => {
+    expect(manifest.engines.vscode).toBe(`^${MIN_EDITOR.vscode}`);
   });
 
   it('uses @types/vscode not newer than engines.vscode (vsce rejects that)', () => {

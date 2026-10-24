@@ -75,7 +75,8 @@
   `shared/schema.ts`, `shared/rpc.ts`, `shared/protocols/ping.ts`; панель `vscode/panels/webview-panel.ts` (`asWebviewUri`, `localResourceRoots`) — закрывает хвост V0.4; словарь webview en/ru; команда «Open Ping Page» только в режиме разработки. E2E: страница грузится под CSP, RPC работает в обе стороны, скрытая вкладка оживает при показе.
 - [x] **V0.11** GitHub Actions: lint, typecheck, test, сборка `.vsix` как артефакт.
   `.github/workflows/ci.yml`: lint/типы/audit; unit и e2e на Linux, Windows, macOS; интеграционные тесты на Docker-базах; `.vsix` — артефакт на 30 дней. Первый же запуск нашёл баг matcher-а на Windows (исправлен).
-- [ ] **V0.12** Исследование: доступен ли `node:sqlite` в VS Code / VSCodium / Cursor → выбрать движок SQLite (см. ARCHITECTURE, решение D5).
+- [x] **V0.12** Исследование: доступен ли `node:sqlite` в VS Code / VSCodium / Cursor → выбрать движок SQLite (см. ARCHITECTURE, решение D5).
+  Замеры в 11 редакторах: [docs/research/v0.12-sqlite-engine.md](docs/research/v0.12-sqlite-engine.md). Выбрано: `node:sqlite` в worker, `engines.vscode: ^1.105.0` (D5, D23).
 
 ---
 
@@ -88,7 +89,7 @@
 - [ ] **V1.2** Интерфейс `Driver` + `Dialect`, реестр драйверов, ленивая загрузка бандла драйвера.
 - [ ] **V1.3** Драйвер MySQL/MariaDB (`mysql2`): подключение, запросы, метаданные, отмена запроса.
 - [ ] **V1.4** Драйвер PostgreSQL (`pg`): то же + схемы.
-- [ ] **V1.5** Драйвер SQLite (движок по итогам V0.12), открытие файла, создание новой БД.
+- [ ] **V1.5** Драйвер SQLite (`node:sqlite` в `worker_threads`, D5), открытие файла, создание новой БД. E2E на трёх ОС подтверждает выводы V0.12 для Windows и macOS.
 - [ ] **V1.6** `ConnectionManager`: открытие/закрытие, отдельная сессия для каждого редактора, автопереподключение при обрыве, статусы.
 - [ ] **V1.7** Форма подключения (webview): тип БД, хост/порт/пользователь/пароль/БД, выбор файла для SQLite, «Проверить подключение», редактирование, дублирование, удаление.
 

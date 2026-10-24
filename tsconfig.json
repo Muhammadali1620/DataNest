@@ -31,5 +31,13 @@
     ".vscode-test.mjs",
     "webview/vite.config.mts"
   ],
-  "exclude": ["node_modules", "dist", "coverage", "test/fixtures", "test/unit/webview", "test/e2e"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "test/fixtures",
+    "test/unit/webview",
+    "test/e2e",
+    "scripts/research/**/*.cjs"
+  ]
 }

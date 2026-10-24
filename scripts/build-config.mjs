@@ -3,10 +3,22 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Node version shipped with the oldest supported editor (VS Code 1.90 → Electron 29 → Node 20).
- * Raising engines.vscode is the only reason to change it.
+ * The oldest supported editor and what it runs on (measured in V0.12, see
+ * docs/research/v0.12-sqlite-engine.md). package.json engines, build targets and the
+ * e2e VS Code version are all derived from or checked against this.
  */
-export const NODE_TARGET = 'node20';
+export const MIN_EDITOR = {
+  vscode: '1.105.0',
+  electron: '37.6.0',
+  node: '22.19.0',
+  chromium: '138',
+};
+
+/** Extension host code runs on the Node of the oldest supported editor. */
+export const NODE_TARGET = `node${MIN_EDITOR.node.split('.')[0]}`;
+
+/** Webviews run in the Chromium of the oldest supported editor. */
+export const WEBVIEW_TARGET = `chrome${MIN_EDITOR.chromium}`;
 
 /** Modules provided by the editor at runtime and never bundled. */
 export const EXTERNALS = ['vscode'];

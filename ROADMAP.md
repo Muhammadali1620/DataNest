@@ -67,7 +67,8 @@
   Сделан сразу после V0.3, чтобы все следующие шаги шли с тестами. Unit: проекты `host` (node) и `webview` (jsdom); e2e: `@vscode/test-cli` в VS Code 1.90.
 - [x] **V0.7** `docker/compose.yml`: MySQL 8, MariaDB, PostgreSQL с тестовыми данными (seed) для локальной разработки и тестов.
   MySQL 8.4 → `127.0.0.1:7306`, MariaDB 11.4 → `7307`, PostgreSQL 17 → `7432` (D17). Seed: `docker/seed/`, проверка — `test/integration/docker/`.
-- [ ] **V0.8** `.vscode/launch.json` и `tasks.json`: F5 запускает Extension Development Host с watch-сборкой.
+- [x] **V0.8** `.vscode/launch.json` и `tasks.json`: F5 запускает Extension Development Host с watch-сборкой.
+  Problem matcher задачи `watch` проверяется тестом на реальном выводе esbuild (`test/unit/repo/vscode-config.test.ts`).
 - [ ] **V0.9** Базовая инфраструктура: логгер (Output Channel), класс ошибок, сборка сервисов в `activate()`, Disposable-паттерн.
 - [ ] **V0.10** Типизированный RPC между host и webview (запрос/ответ/события) + тестовая страница «ping».
 - [ ] **V0.11** GitHub Actions: lint, typecheck, test, сборка `.vsix` как артефакт.

@@ -21,6 +21,40 @@ describe('connections view', () => {
     const all = await vscode.commands.getCommands(true);
     assert.ok(all.includes(`${VIEW_ID}.focus`), 'the view command is missing');
   });
+
+  it('registers every tree command', async () => {
+    const all = await vscode.commands.getCommands(true);
+    for (const id of [
+      'datanest.connections.connect',
+      'datanest.connections.disconnect',
+      'datanest.tree.refresh',
+      'datanest.tree.copyName',
+    ]) {
+      assert.ok(all.includes(id), `${id} is not registered`);
+    }
+  });
+
+  it('refreshing the whole tree works without a selected node', async () => {
+    // The view title button passes no argument; it must not fail.
+    await vscode.commands.executeCommand('datanest.tree.refresh');
+  });
+
+  it('copying a name does nothing when nothing is selected', async () => {
+    await vscode.env.clipboard.writeText('untouched');
+    await vscode.commands.executeCommand('datanest.tree.copyName');
+    assert.equal(await vscode.env.clipboard.readText(), 'untouched');
+  });
+
+  it('copies the name of a node it is given', async () => {
+    await vscode.commands.executeCommand('datanest.tree.copyName', {
+      kind: 'table',
+      connectionId: 'c1',
+      scope: { database: 'app' },
+      name: 'orders',
+      tableKind: 'table',
+    });
+    assert.equal(await vscode.env.clipboard.readText(), 'orders');
+  });
 });
 
 describe('tree over a real SQLite database', () => {

@@ -91,6 +91,29 @@
         "icon": "$(trash)"
       },
       {
+        "command": "datanest.connections.connect",
+        "title": "%commands.connections.connect.title%",
+        "category": "DataNest",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "datanest.connections.disconnect",
+        "title": "%commands.connections.disconnect.title%",
+        "category": "DataNest",
+        "icon": "$(close)"
+      },
+      {
+        "command": "datanest.tree.refresh",
+        "title": "%commands.tree.refresh.title%",
+        "category": "DataNest",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "datanest.tree.copyName",
+        "title": "%commands.tree.copyName.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -101,6 +124,80 @@
         {
           "command": "datanest.dev.openPing",
           "when": "datanest.isDevelopment"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "datanest.connections.add",
+          "when": "view == datanest.connections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "datanest.tree.refresh",
+          "when": "view == datanest.connections",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "datanest.connections.connect",
+          "when": "view == datanest.connections && viewItem == datanest.connection",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.connections.disconnect",
+          "when": "view == datanest.connections && viewItem == datanest.connection.connected",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.tree.refresh",
+          "when": "view == datanest.connections && viewItem == datanest.connection.connected",
+          "group": "inline@2"
+        },
+        {
+          "command": "datanest.connections.edit",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "inline@3"
+        },
+        {
+          "command": "datanest.connections.connect",
+          "when": "view == datanest.connections && viewItem == datanest.connection",
+          "group": "1_state@1"
+        },
+        {
+          "command": "datanest.connections.disconnect",
+          "when": "view == datanest.connections && viewItem == datanest.connection.connected",
+          "group": "1_state@1"
+        },
+        {
+          "command": "datanest.tree.refresh",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "1_state@2"
+        },
+        {
+          "command": "datanest.connections.edit",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "datanest.connections.duplicate",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "datanest.connections.remove",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "3_remove@1"
+        },
+        {
+          "command": "datanest.tree.copyName",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column)",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "datanest.tree.refresh",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column)",
+          "group": "1_state@1"
         }
       ]
     },

@@ -6,12 +6,23 @@ import {
   CONFIG_SECTION,
   CONTEXT_KEYS,
 } from '../../../src/vscode/command-ids';
+import { CONNECTIONS_VIEW_ID, TREE_CONTEXT } from '../../../src/vscode/tree/nodes';
 import { readJson } from '../../helpers/repo';
+
+interface MenuEntry {
+  command: string;
+  when: string;
+  group?: string;
+}
 
 interface Manifest {
   contributes: {
     commands: { command: string; title: string; category?: string }[];
-    menus: { commandPalette: { command: string; when: string }[] };
+    menus: {
+      commandPalette: MenuEntry[];
+      'view/title': MenuEntry[];
+      'view/item/context': MenuEntry[];
+    };
     configuration: {
       properties: Record<
         string,
@@ -73,6 +84,87 @@ describe('command palette', () => {
       command: COMMAND_IDS.openPing,
       when: CONTEXT_KEYS.isDevelopment,
     });
+  });
+});
+
+describe('tree menus', () => {
+  const title = contributes.menus['view/title'];
+  const items = contributes.menus['view/item/context'];
+  const contributed = new Set(contributes.commands.map((c) => c.command));
+  const viewIds = new Set([CONNECTIONS_VIEW_ID]);
+  const contextValues = new Set<string>(Object.values(TREE_CONTEXT));
+
+  it('mentions only contributed commands', () => {
+    for (const entry of [...title, ...items]) {
+      expect(contributed.has(entry.command)).toBe(true);
+    }
+  });
+
+  it('binds every entry to a view the extension registers', () => {
+    for (const entry of [...title, ...items]) {
+      const views = entry.when.match(/view == ([\w.]+)/g) ?? [];
+      expect(views.length).toBeGreaterThan(0);
+      for (const view of views) {
+        expect(viewIds.has(view.replace('view == ', ''))).toBe(true);
+      }
+    }
+  });
+
+  it('uses only context values the tree actually sets', () => {
+    for (const entry of items) {
+      const used = entry.when.match(/viewItem == ([\w.]+)/g) ?? [];
+      expect(used.length).toBeGreaterThan(0);
+      for (const value of used) {
+        expect(contextValues.has(value.replace('viewItem == ', ''))).toBe(true);
+      }
+    }
+  });
+
+  it('offers new connection and refresh in the view title', () => {
+    expect(title.map((entry) => entry.command)).toEqual([
+      COMMAND_IDS.addConnection,
+      COMMAND_IDS.refreshTree,
+    ]);
+  });
+
+  it('shows connect and disconnect on opposite states, never both at once', () => {
+    const connect = items.filter((entry) => entry.command === COMMAND_IDS.connect);
+    const disconnect = items.filter((entry) => entry.command === COMMAND_IDS.disconnect);
+    expect(connect.length).toBeGreaterThan(0);
+    expect(disconnect.length).toBeGreaterThan(0);
+    for (const entry of connect) {
+      expect(entry.when).toContain(`viewItem == ${TREE_CONTEXT.connection}`);
+      expect(entry.when).not.toContain(TREE_CONTEXT.connectionConnected);
+    }
+    for (const entry of disconnect) {
+      expect(entry.when).toContain(`viewItem == ${TREE_CONTEXT.connectionConnected}`);
+    }
+  });
+
+  it('puts delete in its own group so it is not next to edit', () => {
+    const remove = items.find((entry) => entry.command === COMMAND_IDS.removeConnection);
+    const edit = items.find(
+      (entry) => entry.command === COMMAND_IDS.editConnection && entry.group !== 'inline@3',
+    );
+    expect(remove?.group).toBeDefined();
+    expect(edit?.group).toBeDefined();
+    expect(remove?.group?.split('@')[0]).not.toBe(edit?.group?.split('@')[0]);
+  });
+
+  it('offers copy name on named objects only', () => {
+    const copy = items.filter((entry) => entry.command === COMMAND_IDS.copyName);
+    expect(copy).toHaveLength(1);
+    const when = copy[0]?.when ?? '';
+    for (const value of [
+      TREE_CONTEXT.database,
+      TREE_CONTEXT.schema,
+      TREE_CONTEXT.table,
+      TREE_CONTEXT.view,
+      TREE_CONTEXT.column,
+    ]) {
+      expect(when).toContain(value);
+    }
+    expect(when).not.toContain(TREE_CONTEXT.group);
   });
 });
 

@@ -21,5 +21,6 @@
   "Connecting…": "Подключаемся…",
   "Connection failed": "Не удалось подключиться",
   "Not connected": "Не подключено",
-  "This connection no longer exists": "Этого подключения больше нет"
+  "This connection no longer exists": "Этого подключения больше нет",
+  "Pick a connection in the DataNest view first": "Сначала выберите подключение в панели DataNest"
 }

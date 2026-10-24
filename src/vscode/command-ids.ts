@@ -9,6 +9,10 @@ export const COMMAND_IDS = {
   editConnection: 'datanest.connections.edit',
   duplicateConnection: 'datanest.connections.duplicate',
   removeConnection: 'datanest.connections.remove',
+  connect: 'datanest.connections.connect',
+  disconnect: 'datanest.connections.disconnect',
+  refreshTree: 'datanest.tree.refresh',
+  copyName: 'datanest.tree.copyName',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

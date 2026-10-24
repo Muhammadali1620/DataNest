@@ -14,5 +14,9 @@
   "commands.connections.add.title": "New Connection",
   "commands.connections.edit.title": "Edit Connection",
   "commands.connections.duplicate.title": "Duplicate Connection",
-  "commands.connections.remove.title": "Delete Connection"
+  "commands.connections.remove.title": "Delete Connection",
+  "commands.connections.connect.title": "Connect",
+  "commands.connections.disconnect.title": "Disconnect",
+  "commands.tree.refresh.title": "Refresh",
+  "commands.tree.copyName.title": "Copy Name"
 }

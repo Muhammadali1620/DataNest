@@ -41,6 +41,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       extensionUri: context.extensionUri,
       store,
       manager,
+      tree,
     }),
   );
 

@@ -5,6 +5,8 @@ import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
 import { describeTarget, type ConnectionConfig } from '../shared/connection';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
+import { connectionIdOf } from './tree/nodes';
+import type { CommandTarget } from './tree/tree-commands';
 
 export interface ConnectionCommandDeps {
   readonly extensionUri: vscode.Uri;
@@ -21,15 +23,15 @@ export type ConnectionCommandName = 'add' | 'edit' | 'duplicate' | 'remove';
  */
 export function connectionCommandHandlers(
   deps: ConnectionCommandDeps,
-): Record<ConnectionCommandName, (id?: string) => unknown> {
+): Record<ConnectionCommandName, (target?: CommandTarget) => unknown> {
   const pick = async (placeholder: string): Promise<string | undefined> =>
     await pickConnection(deps.store, placeholder);
 
   return {
     add: () => ConnectionFormPanel.show(deps),
 
-    edit: async (id?: string) => {
-      const target = id ?? (await pick(vscode.l10n.t('Pick a connection')));
+    edit: async (clicked?: CommandTarget) => {
+      const target = connectionIdOf(clicked) ?? (await pick(vscode.l10n.t('Pick a connection')));
       if (target === undefined) {
         return undefined;
       }
@@ -37,8 +39,8 @@ export function connectionCommandHandlers(
       return ConnectionFormPanel.show(deps, target);
     },
 
-    duplicate: async (id?: string) => {
-      const target = id ?? (await pick(vscode.l10n.t('Pick a connection')));
+    duplicate: async (clicked?: CommandTarget) => {
+      const target = connectionIdOf(clicked) ?? (await pick(vscode.l10n.t('Pick a connection')));
       if (target === undefined) {
         return undefined;
       }
@@ -47,8 +49,8 @@ export function connectionCommandHandlers(
       return ConnectionFormPanel.show(deps, copy.id);
     },
 
-    remove: async (id?: string) => {
-      const target = id ?? (await pick(vscode.l10n.t('Pick a connection')));
+    remove: async (clicked?: CommandTarget) => {
+      const target = connectionIdOf(clicked) ?? (await pick(vscode.l10n.t('Pick a connection')));
       if (target === undefined) {
         return undefined;
       }

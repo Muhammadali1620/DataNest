@@ -3,6 +3,25 @@
 
 import type { ColumnInfo, ObjectScope, TableKind, TableRef } from '../../core/model/objects';
 
+/** The view id the tree is registered under; `package.json` must declare the same. */
+export const CONNECTIONS_VIEW_ID = 'datanest.connections';
+
+/**
+ * `contextValue` of every item kind. Menus in `package.json` match on these, so a
+ * test can check that no menu refers to a value the tree never sets.
+ */
+export const TREE_CONTEXT = {
+  connection: 'datanest.connection',
+  connectionConnected: 'datanest.connection.connected',
+  database: 'datanest.database',
+  schema: 'datanest.schema',
+  group: 'datanest.group',
+  table: 'datanest.table',
+  view: 'datanest.view',
+  column: 'datanest.column',
+  message: 'datanest.message',
+} as const;
+
 export type TableGroup = 'tables' | 'views';
 
 export interface ConnectionNode {
@@ -122,6 +141,55 @@ export function nodeId(node: TreeNode): string {
 
 function join(parts: readonly string[]): string {
   return parts.map((part) => part.replaceAll('\\', '\\\\').replaceAll(':', '\\:')).join(':');
+}
+
+/**
+ * The connection a node belongs to. Tree commands get the clicked node, while the
+ * command palette passes a plain id (or nothing at all).
+ */
+export function connectionIdOf(target: TreeNode | string | undefined): string | undefined {
+  if (typeof target === 'string') {
+    return target === '' ? undefined : target;
+  }
+  if (target === undefined) {
+    return undefined;
+  }
+  return 'connectionId' in target ? target.connectionId : undefined;
+}
+
+/** True for anything that looks like a tree node this extension produced. */
+export function isTreeNode(value: unknown): value is TreeNode {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const { kind } = value as { kind?: unknown };
+  return (
+    kind === 'connection' ||
+    kind === 'database' ||
+    kind === 'schema' ||
+    kind === 'group' ||
+    kind === 'table' ||
+    kind === 'column' ||
+    kind === 'message'
+  );
+}
+
+/** The name a "copy name" command puts on the clipboard. */
+export function nameOf(node: TreeNode): string | undefined {
+  switch (node.kind) {
+    case 'database':
+      return node.database;
+    case 'schema':
+      return node.schema;
+    case 'table':
+      return node.name;
+    case 'column':
+      return node.column.name;
+    case 'connection':
+    case 'group':
+    case 'message':
+      return undefined;
+  }
 }
 
 /** The table a node points at, for "open table" and column lookups. */

@@ -14,5 +14,9 @@
   "commands.connections.add.title": "Новое подключение",
   "commands.connections.edit.title": "Изменить подключение",
   "commands.connections.duplicate.title": "Дублировать подключение",
-  "commands.connections.remove.title": "Удалить подключение"
+  "commands.connections.remove.title": "Удалить подключение",
+  "commands.connections.connect.title": "Подключиться",
+  "commands.connections.disconnect.title": "Отключиться",
+  "commands.tree.refresh.title": "Обновить",
+  "commands.tree.copyName.title": "Копировать имя"
 }

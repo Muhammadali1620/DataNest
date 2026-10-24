@@ -1,0 +1,143 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { treeCommandHandlers } from '../../../../src/vscode/tree/tree-commands';
+import type { TreeNode } from '../../../../src/vscode/tree/nodes';
+
+const NO_TARGET = 'Pick a connection in the DataNest view first';
+
+function setup() {
+  const connect = vi.fn(() => Promise.resolve());
+  const disconnect = vi.fn(() => Promise.resolve());
+  const refresh = vi.fn();
+  const writeText = vi.fn(() => Promise.resolve());
+  const handlers = treeCommandHandlers({
+    manager: { connect, disconnect } as never,
+    tree: { refresh },
+    clipboard: { writeText },
+    noTargetMessage: NO_TARGET,
+  });
+  return { handlers, connect, disconnect, refresh, writeText };
+}
+
+const connectionNode: TreeNode = { kind: 'connection', connectionId: 'c1' };
+const tableNode: TreeNode = {
+  kind: 'table',
+  connectionId: 'c1',
+  scope: { database: 'app' },
+  name: 'orders',
+  tableKind: 'table',
+};
+
+describe('connect', () => {
+  it('connects the clicked connection and refreshes the tree', async () => {
+    const { handlers, connect, refresh } = setup();
+    await handlers.connect(connectionNode);
+    expect(connect).toHaveBeenCalledWith('c1');
+    expect(refresh).toHaveBeenCalledWith();
+  });
+
+  it('works on a node below the connection', async () => {
+    const { handlers, connect } = setup();
+    await handlers.connect(tableNode);
+    expect(connect).toHaveBeenCalledWith('c1');
+  });
+
+  it('explains itself when run from the palette without a target', async () => {
+    const { handlers, connect } = setup();
+    await expect(handlers.connect()).rejects.toMatchObject({
+      name: 'DbError',
+      code: 'not-found',
+      message: NO_TARGET,
+    });
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('lets a failure through and does not refresh', async () => {
+    const refresh = vi.fn();
+    const failing = treeCommandHandlers({
+      manager: {
+        connect: () => Promise.reject(new Error('server down')),
+        disconnect: () => Promise.resolve(),
+      },
+      tree: { refresh },
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+    });
+    await expect(failing.connect(connectionNode)).rejects.toThrow('server down');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('disconnect', () => {
+  it('disconnects the clicked connection and refreshes', async () => {
+    const { handlers, disconnect, refresh } = setup();
+    await handlers.disconnect(connectionNode);
+    expect(disconnect).toHaveBeenCalledWith('c1');
+    expect(refresh).toHaveBeenCalledWith();
+  });
+
+  it('needs a target as well', async () => {
+    const { handlers, disconnect } = setup();
+    await expect(handlers.disconnect()).rejects.toMatchObject({ code: 'not-found' });
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+});
+
+describe('refresh', () => {
+  it('refreshes the clicked subtree', () => {
+    const { handlers, refresh } = setup();
+    handlers.refresh(tableNode);
+    expect(refresh).toHaveBeenCalledWith(tableNode);
+  });
+
+  it('refreshes everything from the view title', () => {
+    const { handlers, refresh } = setup();
+    handlers.refresh();
+    expect(refresh).toHaveBeenCalledWith(undefined);
+  });
+
+  it('refreshes everything when given a bare id', () => {
+    const { handlers, refresh } = setup();
+    handlers.refresh('c1');
+    expect(refresh).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe('copyName', () => {
+  let harness: ReturnType<typeof setup>;
+
+  beforeEach(() => {
+    harness = setup();
+  });
+
+  it('copies the name of an object', async () => {
+    await harness.handlers.copyName(tableNode);
+    expect(harness.writeText).toHaveBeenCalledWith('orders');
+  });
+
+  it('copies a column name', async () => {
+    await harness.handlers.copyName({
+      kind: 'column',
+      connectionId: 'c1',
+      table: { name: 'orders' },
+      column: { name: 'email', dataType: 'text', nullable: true, primaryKey: false },
+    });
+    expect(harness.writeText).toHaveBeenCalledWith('email');
+  });
+
+  it('does nothing for nodes without a name of their own', async () => {
+    await harness.handlers.copyName(connectionNode);
+    await harness.handlers.copyName({
+      kind: 'group',
+      group: 'tables',
+      connectionId: 'c1',
+      scope: {},
+    });
+    expect(harness.writeText).not.toHaveBeenCalled();
+  });
+
+  it('does nothing without a target', async () => {
+    await harness.handlers.copyName();
+    await harness.handlers.copyName('c1');
+    expect(harness.writeText).not.toHaveBeenCalled();
+  });
+});

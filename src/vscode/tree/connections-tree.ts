@@ -3,23 +3,10 @@ import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import { describeTarget } from '../../shared/connection';
-import { describeColumn, nodeId, type TreeNode } from './nodes';
+import { CONNECTIONS_VIEW_ID, describeColumn, nodeId, TREE_CONTEXT, type TreeNode } from './nodes';
 import { TreeModel } from './tree-model';
 
-export const CONNECTIONS_VIEW_ID = 'datanest.connections';
-
-/** Context values for `when` clauses of menus (V1.9). */
-export const TREE_CONTEXT = {
-  connection: 'datanest.connection',
-  connectionConnected: 'datanest.connection.connected',
-  database: 'datanest.database',
-  schema: 'datanest.schema',
-  group: 'datanest.group',
-  table: 'datanest.table',
-  view: 'datanest.view',
-  column: 'datanest.column',
-  message: 'datanest.message',
-} as const;
+export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
 export interface ConnectionsTreeDeps {
   readonly store: ConnectionStore;

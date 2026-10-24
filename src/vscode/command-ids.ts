@@ -32,6 +32,8 @@ export const COMMAND_IDS = {
 /** Context keys set with `setContext`, used in `when` clauses of package.json. */
 export const CONTEXT_KEYS = {
   isDevelopment: 'datanest.isDevelopment',
+  /** True while a query of the active editor is running. */
+  queryRunning: 'datanest.queryRunning',
 } as const;
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

@@ -22,6 +22,8 @@ interface Manifest {
       commandPalette: MenuEntry[];
       'view/title': MenuEntry[];
       'view/item/context': MenuEntry[];
+      'editor/title': MenuEntry[];
+      'editor/context': MenuEntry[];
     };
     configuration: {
       properties: Record<
@@ -175,6 +177,56 @@ describe('tree menus', () => {
       expect(when).toContain(value);
     }
     expect(when).not.toContain(TREE_CONTEXT.group);
+  });
+});
+
+describe('editor menus', () => {
+  const entries = [...contributes.menus['editor/title'], ...contributes.menus['editor/context']];
+  const contributed = new Set(contributes.commands.map((c) => c.command));
+
+  it('mentions only contributed commands', () => {
+    for (const entry of entries) {
+      expect(contributed.has(entry.command)).toBe(true);
+    }
+  });
+
+  it('only ever appears for SQL documents', () => {
+    for (const entry of entries) {
+      expect(entry.when).toContain('editorLangId == sql');
+    }
+  });
+
+  it('offers Run and Run All in both places', () => {
+    for (const menu of ['editor/title', 'editor/context'] as const) {
+      const commands = contributes.menus[menu].map((entry) => entry.command);
+      expect(commands).toContain(COMMAND_IDS.runQuery);
+      expect(commands).toContain(COMMAND_IDS.runAll);
+    }
+  });
+
+  it('shows Cancel only while a query is running', () => {
+    const cancels = entries.filter((entry) => entry.command === COMMAND_IDS.cancelQuery);
+    expect(cancels.length).toBeGreaterThan(0);
+    for (const entry of cancels) {
+      expect(entry.when).toContain(CONTEXT_KEYS.queryRunning);
+    }
+  });
+
+  it('uses only context keys the extension sets', () => {
+    const known = new Set<string>(Object.values(CONTEXT_KEYS));
+    for (const entry of entries) {
+      const keys = entry.when.match(/datanest\.[\w.]+/g) ?? [];
+      for (const key of keys) {
+        expect(known.has(key)).toBe(true);
+      }
+    }
+  });
+
+  it('keeps the CodeLens-only command out of the palette', () => {
+    expect(contributes.menus.commandPalette).toContainEqual({
+      command: COMMAND_IDS.runRange,
+      when: 'false',
+    });
   });
 });
 

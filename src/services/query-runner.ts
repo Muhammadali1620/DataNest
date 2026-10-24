@@ -1,6 +1,7 @@
 // Runs the statements of one editor against its connection, one at a time, and
 // puts what comes back into the ResultStore.
 
+import { type Disposable, toDisposable } from '../core/disposable';
 import { DbError, errorMessage, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { SqlStatement } from '../core/sql/split';
@@ -42,6 +43,8 @@ export interface RunOutcome {
 interface ActiveRun {
   cancelled: boolean;
   readonly owner: string;
+  /** When the run started, so the status bar can show a timer. */
+  readonly startedAt: number;
 }
 
 /** One run per document: a session executes one statement at a time. */
@@ -49,6 +52,7 @@ export class QueryRunner {
   private readonly deps: QueryRunnerDeps;
   private readonly logger: Logger;
   private readonly active = new Map<string, ActiveRun>();
+  private readonly listeners = new Set<(documentUri: string) => void>();
 
   constructor(deps: QueryRunnerDeps) {
     this.deps = deps;
@@ -57,6 +61,17 @@ export class QueryRunner {
 
   isRunning(documentUri: string): boolean {
     return this.active.has(documentUri);
+  }
+
+  /** When the run of a document started, for the elapsed-time display. */
+  startedAt(documentUri: string): number | undefined {
+    return this.active.get(documentUri)?.startedAt;
+  }
+
+  /** Fires with the document whose run started or finished. */
+  onDidChangeRunning(listener: (documentUri: string) => void): Disposable {
+    this.listeners.add(listener);
+    return toDisposable(() => this.listeners.delete(listener));
   }
 
   /** Documents with a statement in flight. */
@@ -72,8 +87,9 @@ export class QueryRunner {
       throw new DbError('busy', 'A query is already running in this editor');
     }
     const owner = ConnectionManager.editorOwner(request.documentUri);
-    const run: ActiveRun = { cancelled: false, owner };
+    const run: ActiveRun = { cancelled: false, owner, startedAt: Date.now() };
     this.active.set(request.documentUri, run);
+    this.notify(request.documentUri);
     const stopOnError = request.stopOnError ?? true;
     const results: ResultSummary[] = [];
     let index = 0;
@@ -96,6 +112,7 @@ export class QueryRunner {
       };
     } finally {
       this.active.delete(request.documentUri);
+      this.notify(request.documentUri);
     }
   }
 
@@ -116,6 +133,16 @@ export class QueryRunner {
     } catch (error) {
       // Cancelling is best effort: the statement may have just finished.
       this.logger.debug(`Cancelling in ${documentUri} failed: ${errorMessage(error)}`);
+    }
+  }
+
+  private notify(documentUri: string): void {
+    for (const listener of [...this.listeners]) {
+      try {
+        listener(documentUri);
+      } catch (error) {
+        this.logger.warn('A run listener failed', error);
+      }
     }
   }
 

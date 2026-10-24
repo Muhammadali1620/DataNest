@@ -255,6 +255,11 @@
       ],
       "editor/title": [
         {
+          "command": "datanest.query.cancel",
+          "when": "editorLangId == sql && datanest.queryRunning",
+          "group": "navigation@0"
+        },
+        {
           "command": "datanest.query.run",
           "when": "editorLangId == sql",
           "group": "navigation@1"
@@ -275,6 +280,11 @@
           "command": "datanest.query.runAll",
           "when": "editorLangId == sql",
           "group": "0_datanest@2"
+        },
+        {
+          "command": "datanest.query.cancel",
+          "when": "editorLangId == sql && datanest.queryRunning",
+          "group": "0_datanest@3"
         }
       ]
     },

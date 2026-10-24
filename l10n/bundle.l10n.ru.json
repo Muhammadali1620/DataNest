@@ -34,5 +34,7 @@
   "Query cancelled": "Запрос отменён",
   "{0} rows in {1} ms": "строк: {0}, за {1} мс",
   "{0} rows affected in {1} ms": "затронуто строк: {0}, за {1} мс",
-  "$(play) Run": "$(play) Выполнить"
+  "$(play) Run": "$(play) Выполнить",
+  "$(sync~spin) Running… {0}": "$(sync~spin) Выполняется… {0}",
+  "DataNest: click to cancel the running query": "DataNest: нажмите, чтобы отменить запрос"
 }

@@ -10,6 +10,7 @@ import { QueryRunner } from './services/query-runner';
 import { ResultStore } from './services/result-store';
 import { QueryEditors } from './vscode/editor/query-editor';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
+import { RunStatus } from './vscode/editor/run-status';
 import { createSettings, readRowLimit } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 
@@ -43,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     limits: { rowLimit: () => readRowLimit() },
     logger,
   });
+  context.subscriptions.push(new RunStatus(runner));
   const lenses = new RunCodeLensProvider({ runner, editors, store, logger });
   context.subscriptions.push(
     lenses,

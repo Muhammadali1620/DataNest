@@ -257,6 +257,60 @@ describe('QueryRunner', () => {
     });
   });
 
+  describe('running state', () => {
+    it('reports nothing for an idle editor', () => {
+      expect(runner.isRunning(DOC)).toBe(false);
+      expect(runner.startedAt(DOC)).toBeUndefined();
+      expect(runner.runningDocuments()).toEqual([]);
+    });
+
+    it('reports a start time while a statement is in flight', async () => {
+      drivers.driver('mysql').holdExecute = true;
+      const before = Date.now();
+      const running = runner.run(request('SELECT 1'));
+      await until(() => runner.isRunning(DOC));
+      const startedAt = runner.startedAt(DOC);
+      expect(startedAt).toBeGreaterThanOrEqual(before);
+      expect(startedAt).toBeLessThanOrEqual(Date.now());
+      drivers.driver('mysql').releaseExecute();
+      await running;
+      expect(runner.startedAt(DOC)).toBeUndefined();
+    });
+
+    it('fires once when a run starts and once when it ends', async () => {
+      const seen: string[] = [];
+      runner.onDidChangeRunning((documentUri) => seen.push(documentUri));
+      await runner.run(request('SELECT 1; SELECT 2'));
+      expect(seen).toEqual([DOC, DOC]);
+    });
+
+    it('fires the end event even when the run fails', async () => {
+      drivers.driver('mysql').executeError = new DbError('syntax', 'bad');
+      let events = 0;
+      runner.onDidChangeRunning(() => events++);
+      await runner.run(request('SELECT 1'));
+      expect(events).toBe(2);
+    });
+
+    it('stops notifying a disposed listener', async () => {
+      let events = 0;
+      runner.onDidChangeRunning(() => events++).dispose();
+      await runner.run(request('SELECT 1'));
+      expect(events).toBe(0);
+    });
+
+    it('survives a listener that throws', async () => {
+      let events = 0;
+      runner.onDidChangeRunning(() => {
+        throw new Error('boom');
+      });
+      runner.onDidChangeRunning(() => events++);
+      await runner.run(request('SELECT 1'));
+      expect(events).toBe(2);
+      expect(logger.messages('warn')).toContain('A run listener failed');
+    });
+  });
+
   describe('metadata cache', () => {
     it('drops cached structure after a statement that changes it', async () => {
       const inner = drivers.driver('mysql');

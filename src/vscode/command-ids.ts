@@ -25,6 +25,8 @@ export const COMMAND_IDS = {
   runRange: 'datanest.query.runRange',
   /** Stops the statement running in this editor. */
   cancelQuery: 'datanest.query.cancel',
+  /** Opens (or brings back) the result panel of the active query. */
+  showResults: 'datanest.results.show',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

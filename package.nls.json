@@ -26,5 +26,6 @@
   "commands.query.runAll.title": "Run All Queries",
   "commands.query.runRange.title": "Run This Statement",
   "commands.query.cancel.title": "Cancel Query",
-  "configuration.rowLimit.description": "How many rows one statement may bring back. Larger results are cut off, and the result shows that it was truncated."
+  "configuration.rowLimit.description": "How many rows one statement may bring back. Larger results are cut off, and the result shows that it was truncated.",
+  "commands.results.show.title": "Show Results"
 }

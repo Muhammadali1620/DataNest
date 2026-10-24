@@ -148,6 +148,12 @@
         "icon": "$(debug-stop)"
       },
       {
+        "command": "datanest.results.show",
+        "title": "%commands.results.show.title%",
+        "category": "DataNest",
+        "icon": "$(table)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -268,6 +274,11 @@
           "command": "datanest.query.runAll",
           "when": "editorLangId == sql",
           "group": "navigation@2"
+        },
+        {
+          "command": "datanest.results.show",
+          "when": "editorLangId == sql",
+          "group": "navigation@3"
         }
       ],
       "editor/context": [

@@ -13,6 +13,7 @@ import {
   optional,
   SchemaError,
   string,
+  union,
   unknown,
 } from '../../../src/shared/schema';
 
@@ -249,5 +250,39 @@ describe('SchemaError', () => {
     expect(error.problem).toBe('bad');
     expect(error.message).toBe('a.b: bad');
     expect(new SchemaError('', 'bad').message).toBe('value: bad');
+  });
+});
+
+describe('union', () => {
+  const value = union(string(), number(), object({ a: boolean() }));
+
+  it('accepts a value matching any member', () => {
+    expect(value.parse('text')).toBe('text');
+    expect(value.parse(42)).toBe(42);
+    expect(value.parse({ a: true })).toEqual({ a: true });
+  });
+
+  it('returns the first member that matches', () => {
+    const either = union(literal('a'), string());
+    expect(either.parse('a')).toBe('a');
+    expect(either.parse('b')).toBe('b');
+  });
+
+  it('rejects a value no member accepts, naming the path', () => {
+    expect(() => value.parse(true)).toThrow('does not match any allowed shape');
+    expect(() => object({ x: value }).parse({ x: true })).toThrow('x');
+  });
+
+  it('mentions the type it was given', () => {
+    expect(() => value.parse(null)).toThrow('null');
+    expect(() => value.parse([])).toThrow('array');
+  });
+
+  it('still rejects unknown fields inside an object member', () => {
+    expect(() => value.parse({ a: true, b: 1 })).toThrow('does not match any allowed shape');
+  });
+
+  it('needs at least one member', () => {
+    expect(() => union()).toThrow('at least one member');
   });
 });

@@ -41,4 +41,13 @@ export const ru: Record<MessageKey, string> = {
   'form.error.hostEmpty': 'Укажите хост',
   'form.error.portInvalid': 'Порт — число от 1 до 65535',
   'form.error.fileEmpty': 'Выберите файл базы',
+  'grid.loading': 'Загрузка…',
+  'grid.running': 'Выполняется…',
+  'grid.empty': 'Выполните запрос, чтобы увидеть результат',
+  'grid.cancel': 'Отменить',
+  'grid.rows': 'строк: {0} · {1} мс',
+  'grid.affected': 'затронуто строк: {0} · {1} мс',
+  'grid.truncated': 'результат обрезан по лимиту строк',
+  'grid.moreRows': 'ещё {0} строк загрузятся при прокрутке',
+  'grid.loadFailed': 'Не удалось загрузить строки',
 };

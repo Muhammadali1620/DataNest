@@ -14,6 +14,8 @@ export interface RunQueryDeps {
   readonly editors: QueryEditors;
   readonly store: ConnectionStore;
   readonly logger: Logger;
+  /** Opens (or reveals) the result panel of a document. */
+  readonly showResults: (documentUri: string) => void;
 }
 
 export type RunCommandName = 'run' | 'runAll' | 'cancel' | 'runRange';
@@ -45,6 +47,8 @@ export function runCommandHandlers(
     if (target === undefined) {
       return undefined;
     }
+    // The panel opens before the run, so a slow query shows "Running…" at once.
+    deps.showResults(documentUri);
     const outcome = await deps.runner.run({ documentUri, target, statements });
     report(outcome, deps.logger);
     return outcome;

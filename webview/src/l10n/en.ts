@@ -40,6 +40,15 @@ export const en = {
   'form.error.hostEmpty': 'Enter a host',
   'form.error.portInvalid': 'Port must be a number from 1 to 65535',
   'form.error.fileEmpty': 'Choose a database file',
+  'grid.loading': 'Loading…',
+  'grid.running': 'Running…',
+  'grid.empty': 'Run a query to see results here',
+  'grid.cancel': 'Cancel',
+  'grid.rows': '{0} rows · {1} ms',
+  'grid.affected': '{0} rows affected · {1} ms',
+  'grid.truncated': 'the row limit cut this result',
+  'grid.moreRows': '{0} more rows are loaded as you scroll',
+  'grid.loadFailed': 'Could not load the rows',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -11,6 +11,7 @@ import { ResultStore } from './services/result-store';
 import { QueryEditors } from './vscode/editor/query-editor';
 import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/completion';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
+import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
 import { createSettings, readRowLimit } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
@@ -53,9 +54,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ...TRIGGER_CHARACTERS,
     ),
   );
-  const lenses = new RunCodeLensProvider({ runner, editors, store, logger });
+  const showResults = (documentUri: string): void => {
+    ResultsPanel.show({ extensionUri: context.extensionUri, results, runner, logger }, documentUri);
+  };
+  const lenses = new RunCodeLensProvider({ runner, editors, store, logger, showResults });
   context.subscriptions.push(
     lenses,
+    // Results belong to a document; closing it throws them away.
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      results.clearDocument(document.uri.toString());
+    }),
     vscode.languages.registerCodeLensProvider({ language: 'sql' }, lenses),
     editors.bindings.onDidChange(() => {
       // The dialect may have changed with the connection, so the split may differ.
@@ -84,6 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       cache,
       editors,
       runner,
+      showResults,
     }),
   );
 

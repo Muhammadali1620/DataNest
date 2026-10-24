@@ -26,5 +26,6 @@
   "commands.query.runAll.title": "Выполнить все запросы",
   "commands.query.runRange.title": "Выполнить этот запрос",
   "commands.query.cancel.title": "Отменить запрос",
-  "configuration.rowLimit.description": "Сколько строк вернёт один запрос. Большие результаты обрезаются, и в результате видно, что он обрезан."
+  "configuration.rowLimit.description": "Сколько строк вернёт один запрос. Большие результаты обрезаются, и в результате видно, что он обрезан.",
+  "commands.results.show.title": "Показать результаты"
 }

@@ -13,6 +13,7 @@ import { COMMAND_IDS, type CommandId } from './command-ids';
 import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
+import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 
 export interface CommandDeps {
@@ -25,6 +26,7 @@ export interface CommandDeps {
   readonly cache: MetadataCache;
   readonly editors: QueryEditors;
   readonly runner: QueryRunner;
+  readonly showResults: (documentUri: string) => void;
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
@@ -45,6 +47,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     editors: deps.editors,
     store: deps.store,
     logger: deps.logger,
+    showResults: deps.showResults,
   });
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
@@ -84,6 +87,17 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runAll]: runCommands.runAll,
     [COMMAND_IDS.runRange]: runCommands.runRange,
     [COMMAND_IDS.cancelQuery]: runCommands.cancel,
+    [COMMAND_IDS.showResults]: () => {
+      const document = vscode.window.activeTextEditor?.document;
+      if (document?.languageId !== 'sql') {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Open a SQL query first: DataNest: New Query'),
+        );
+        return undefined;
+      }
+      deps.showResults(document.uri.toString());
+      return undefined;
+    },
     [COMMAND_IDS.openPing]: () => {
       const panel = new PingPanel(deps.extensionUri, deps.logger);
       pings = [...pings.filter((open) => !open.isDisposed), panel];
@@ -102,6 +116,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         }
         pings = [];
         ConnectionFormPanel.disposeAll();
+        ResultsPanel.disposeAll();
       },
     },
   ];

@@ -158,6 +158,35 @@ export function nullable<T>(schema: Schema<T>): Schema<T | null> {
   };
 }
 
+type InferAny<T extends readonly Schema<unknown>[]> = { [K in keyof T]: Infer<T[K]> }[number];
+
+/**
+ * The first member that accepts the value wins. Members are tried in order, so
+ * put the cheap and the common ones first.
+ */
+export function union<const T extends readonly Schema<unknown>[]>(
+  ...members: T
+): Schema<InferAny<T>> {
+  if (members.length === 0) {
+    throw new Error('A union needs at least one member');
+  }
+  return {
+    parse(value, path = '') {
+      for (const member of members) {
+        try {
+          return member.parse(value, path) as InferAny<T>;
+        } catch (error) {
+          if (!(error instanceof SchemaError)) {
+            throw error;
+          }
+          // Try the next member; the combined failure is reported below.
+        }
+      }
+      throw new SchemaError(path, `does not match any allowed shape (got ${describe(value)})`);
+    },
+  };
+}
+
 export function array<T>(item: Schema<T>, options: { maxLength?: number } = {}): Schema<T[]> {
   const { maxLength = DEFAULT_MAX_ARRAY_LENGTH } = options;
   return {

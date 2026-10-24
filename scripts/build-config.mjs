@@ -26,6 +26,8 @@ export const EXTERNALS = ['vscode'];
 /**
  * Each driver lives in src/drivers/<id>/index.ts and is bundled separately to
  * dist/drivers/<id>.js, so it is loaded only on the first connection to that DBMS.
+ * A driver may also ship a worker (src/drivers/<id>/worker.ts), bundled next to it
+ * as dist/drivers/<id>-worker.js (e.g. the SQLite worker, D5).
  *
  * @param {string} rootDir project root
  * @returns {Record<string, string>} esbuild entry name → source path
@@ -45,6 +47,10 @@ export function findDriverEntries(rootDir) {
     const index = join(driversDir, id, 'index.ts');
     if (existsSync(index)) {
       entries[`drivers/${id}`] = index;
+    }
+    const worker = join(driversDir, id, 'worker.ts');
+    if (existsSync(worker)) {
+      entries[`drivers/${id}-worker`] = worker;
     }
   }
   return entries;

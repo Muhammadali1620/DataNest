@@ -81,6 +81,19 @@ describe('build-config', () => {
       write(tmp.path, 'src/drivers/sqlite/index.ts', '');
       expect(Object.keys(findDriverEntries(tmp.path))).toEqual(['drivers/sqlite']);
     });
+
+    it('bundles a driver worker as <id>-worker next to the driver', () => {
+      write(tmp.path, 'src/drivers/sqlite/index.ts', '');
+      write(tmp.path, 'src/drivers/sqlite/worker.ts', '');
+      write(tmp.path, 'src/drivers/mysql/index.ts', '');
+      const entries = findDriverEntries(tmp.path);
+      expect(Object.keys(entries)).toEqual([
+        'drivers/mysql',
+        'drivers/sqlite',
+        'drivers/sqlite-worker',
+      ]);
+      expect(entries['drivers/sqlite-worker']).toBe(join(tmp.path, 'src/drivers/sqlite/worker.ts'));
+    });
   });
 
   describe('findWebviewApps', () => {

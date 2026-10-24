@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-24
+
+### Fixed
+
+- Column resizing no longer depends on `setPointerCapture`, which not every host
+  provides; the drag works without it.
+
 ## [0.1.0] - 2026-10-24
 
 The first working release: connect, browse, write SQL, read the results.

@@ -91,7 +91,8 @@
   `core/model/connection.ts` (типы, валидация, порты по умолчанию), `services/connection-store.ts` (CRUD, дубликат с копией пароля, события, защита от битого состояния).
 - [x] **V1.2** Интерфейс `Driver` + `Dialect`, реестр драйверов, ленивая загрузка бандла драйвера.
   `drivers/driver.ts` (Driver/Session/Dialect/MetadataReader, поток `ExecuteEvent`), `drivers/registry.ts` (ленивый `require` бандла, кэш, повтор после ошибки), `shared/cell-value.ts`, `core/model/objects.ts`.
-- [ ] **V1.3** Драйвер MySQL/MariaDB (`mysql2`): подключение, запросы, метаданные, отмена запроса.
+- [x] **V1.3** Драйвер MySQL/MariaDB (`mysql2`): подключение, запросы, метаданные, отмена запроса.
+  Поток событий через `core/async-queue.ts`, лимит строк с безопасным `KILL QUERY` (без гонки со следующим запросом), типы без потери точности, маппинг ошибок. Интеграционные тесты идут на MySQL 8 и MariaDB.
 - [ ] **V1.4** Драйвер PostgreSQL (`pg`): то же + схемы.
 - [ ] **V1.5** Драйвер SQLite (`node:sqlite` в `worker_threads`, D5), открытие файла, создание новой БД. E2E на трёх ОС подтверждает выводы V0.12 для Windows и macOS.
 - [ ] **V1.6** `ConnectionManager`: открытие/закрытие, отдельная сессия для каждого редактора, автопереподключение при обрыве, статусы.

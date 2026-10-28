@@ -4,6 +4,7 @@ import type { QueryRunner } from '../../services/query-runner';
 import type { ExportFormat } from '../../services/result-export';
 import type { ResultEditor } from '../../services/result-editor';
 import type { ResultSaver } from '../../services/result-saver';
+import type { TableChange } from '../../services/table-view';
 import type { ResultStore } from '../../services/result-store';
 import { retainedBytes } from '../../shared/binary-bytes';
 import {
@@ -21,8 +22,8 @@ export interface ResultsPanelDeps {
   readonly runner: QueryRunner;
   readonly editor: ResultEditor;
   readonly saver: ResultSaver;
-  /** Shows another page of a table view; absent where paging makes no sense. */
-  readonly pageTo?: (resultId: string, offset: number) => Promise<boolean>;
+  /** Re-reads a table view with another page, filter or order; absent outside table views. */
+  readonly reloadTable?: (resultId: string, change: TableChange) => Promise<boolean>;
   /** Writes a result to a file the user picks. */
   readonly exportResult?: (resultId: string, format: ExportFormat) => Promise<void>;
   readonly logger: Logger;
@@ -166,12 +167,26 @@ export class ResultsPanel implements vscode.Disposable {
       this.deps.editor.editCell(resultId, row, column, input),
     );
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
-    this.rpc.handle('sort', ({ resultId, column, direction }) => {
+    this.rpc.handle('sort', async ({ resultId, column, direction }) => {
+      const summary = this.deps.results.get(resultId);
+      const name = summary?.columns[column]?.name;
+      if (summary?.page !== undefined && name !== undefined) {
+        // A table view is paged, so the server must order the whole table, not one page.
+        const applied =
+          (await this.deps.reloadTable?.(resultId, {
+            sort: direction === undefined ? null : { column: name, direction },
+          })) ?? false;
+        return { resultId, applied };
+      }
       const sorted = this.deps.results.sort(resultId, column, direction);
       return { resultId, applied: sorted !== undefined };
     });
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
-      const applied = (await this.deps.pageTo?.(resultId, offset)) ?? false;
+      const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
+      return { resultId, applied };
+    });
+    this.rpc.handle('filterTable', async ({ resultId, filter }) => {
+      const applied = (await this.deps.reloadTable?.(resultId, { filter })) ?? false;
       return { resultId, applied };
     });
     this.rpc.handle('search', ({ resultId, text }) => {

@@ -77,6 +77,8 @@ export const sqliteDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  likeText: (quotedColumn, quotedPattern) =>
+    `CAST(${quotedColumn} AS TEXT) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: false,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
 };

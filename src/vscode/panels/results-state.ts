@@ -25,6 +25,7 @@ export function buildState(
     ...(summary.error === undefined ? {} : { error: summary.error }),
     ...(summary.sort === undefined ? {} : { sort: summary.sort }),
     ...(summary.page === undefined ? {} : { page: summary.page }),
+    ...(summary.filter === undefined ? {} : { filter: summary.filter }),
     ...(summary.edit === undefined
       ? {}
       : summary.edit.editable

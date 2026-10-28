@@ -68,3 +68,10 @@ describe('sqliteDialect default handling', () => {
     expect(sqliteDialect.insertDefaultRow('"t"')).toBe('INSERT INTO "t" DEFAULT VALUES');
   });
 });
+
+describe('sqliteDialect.likeText', () => {
+  it('casts the column to text and escapes with !', () => {
+    const q = sqliteDialect.quoteIdentifier('c');
+    expect(sqliteDialect.likeText(q, "'%x%'")).toBe(`CAST(${q} AS TEXT) LIKE '%x%' ESCAPE '!'`);
+  });
+});

@@ -75,6 +75,8 @@ export const mysqlDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  likeText: (quotedColumn, quotedPattern) =>
+    `CAST(${quotedColumn} AS CHAR) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} () VALUES ()`,
 };

@@ -5,6 +5,7 @@ import { MAX_BINARY_VIEW_BYTES } from '../binary-bytes';
 import { resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
+import { tableFilterSchema } from '../table-filter';
 import { defineProtocol } from '../rpc';
 import {
   array,
@@ -72,6 +73,8 @@ const tabSchema = object({
       totalRows: optional(number({ integer: true, min: 0 })),
     }),
   ),
+  /** The server-side filter a table view is read with. */
+  filter: optional(tableFilterSchema),
   /** Whether rows can be edited in place, and why not when they cannot. */
   edit: optional(
     object({
@@ -185,6 +188,14 @@ export const resultGridProtocol = defineProtocol({
       /** Page → host: show another page of a table view. */
       pageTo: {
         params: object({ resultId, offset: number({ integer: true, min: 0 }) }),
+        result: object({ resultId, applied: boolean() }),
+      },
+      /**
+       * Page → host: read a table view again with these conditions; `null` removes the
+       * filter. The host answers with the new tab state.
+       */
+      filterTable: {
+        params: object({ resultId, filter: nullable(tableFilterSchema) }),
         result: object({ resultId, applied: boolean() }),
       },
       /** Page → host: which rows contain this text. */

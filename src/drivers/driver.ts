@@ -33,6 +33,12 @@ export interface Dialect {
   literal(value: CellValue): string;
   /** Wraps or extends a SELECT so it returns `limit` rows starting at `offset`. */
   paginate(sql: string, limit: number, offset: number): string;
+  /**
+   * A case-insensitive match of a column's text against a LIKE pattern. Both are
+   * already quoted; `!` is the escape character in the pattern. The column is cast
+   * to text first, because PostgreSQL has no LIKE for numbers.
+   */
+  likeText(quotedColumn: string, quotedPattern: string): string;
   /** True where `UPDATE … SET column = DEFAULT` works; SQLite has no such keyword. */
   readonly defaultKeyword: boolean;
   /** An INSERT that fills every column with its default; the table is already quoted. */

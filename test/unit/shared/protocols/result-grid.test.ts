@@ -139,6 +139,7 @@ describe('protocol shape', () => {
       'binaryBytes',
       'discardChanges',
       'editCell',
+      'filterTable',
       'pageTo',
       'previewChanges',
       'rowAction',

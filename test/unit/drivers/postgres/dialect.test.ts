@@ -69,3 +69,10 @@ describe('postgresDialect default handling', () => {
     expect(postgresDialect.insertDefaultRow('"t"')).toBe('INSERT INTO "t" DEFAULT VALUES');
   });
 });
+
+describe('postgresDialect.likeText', () => {
+  it('casts the column to text and escapes with !', () => {
+    const q = postgresDialect.quoteIdentifier('c');
+    expect(postgresDialect.likeText(q, "'%x%'")).toBe(`CAST(${q} AS TEXT) ILIKE '%x%' ESCAPE '!'`);
+  });
+});

@@ -11,9 +11,12 @@ import type { RowAction } from '../../../../src/shared/row-action';
   } from '../../../../src/shared/protocols/result-grid';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import type { Translate } from '../../lib/i18n';
+  import type { TableFilter } from '../../../../src/shared/table-filter';
   import { toTsv } from '../../../../src/shared/tsv';
   import { keepWidths } from './columns';
   import Grid from './Grid.svelte';
+  import FilterBar from './FilterBar.svelte';
+  import { activeCount } from './filter-model';
   import ValuePanel from './ValuePanel.svelte';
   import { RowCache, windowFor } from './rows';
   import { type CellRef, selectionBox, type Selection } from './selection';
@@ -33,6 +36,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let hitTotal = $state(0);
   let hitIndex = $state(0);
   let revealRow = $state<number | undefined>(undefined);
+  /** The filter bar of a table view, the columns it offers and whether a request is out. */
+  let filterOpen = $state(false);
+  let filterColumns = $state<string[]>([]);
+  let filtering = $state(false);
   /** The value panel beside the grid, and the cell it follows. */
   let valueOpen = $state(false);
   let focused = $state<CellRef | undefined>(undefined);
@@ -173,6 +180,23 @@ import type { RowAction } from '../../../../src/shared/row-action';
    * Sends one edit to the host. Resolves to what went wrong, or undefined when the
    * change was queued; the host then re-sends the state and the rows are re-read.
    */
+  async function onApplyFilter(filter: TableFilter | null): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined || filtering) {
+      return;
+    }
+    filtering = true;
+    failure = undefined;
+    try {
+      // The host answers by re-sending the state with the filtered result as a new tab.
+      await rpc.request('filterTable', { resultId: tab.id, filter });
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('filter.failed');
+    } finally {
+      filtering = false;
+    }
+  }
+
   async function onEdit(row: number, column: number, input: EditInput): Promise<string | undefined> {
     const tab = activeTab;
     if (tab === undefined) {
@@ -362,6 +386,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
       const previous = activeTab;
       gridState = next;
       const tab = next.tabs.find((candidate) => candidate.id === next.activeId);
+      if (tab?.page !== undefined && tab.columns.length > 0) {
+        // A failed read has no columns, but the bar still needs them to be corrected.
+        filterColumns = tab.columns.map((column) => column.name);
+      }
       // Rows are kept only while the very same result in the very same order is
       // still on screen; sorting changes which row sits at which index.
       const sameOrder =
@@ -417,6 +445,21 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </button>
       {/each}
       <span class="spacer"></span>
+      {#if activeTab?.page !== undefined}
+        <button
+          type="button"
+          class="cancel"
+          aria-pressed={filterOpen}
+          data-testid="filter-toggle"
+          onclick={() => {
+            filterOpen = !filterOpen;
+          }}
+        >
+          {activeCount(activeTab.filter) > 0
+            ? t('filter.titleWithCount', activeCount(activeTab.filter))
+            : t('filter.title')}
+        </button>
+      {/if}
       {#if activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
         <button
           type="button"
@@ -464,6 +507,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </button>
       {/if}
     </div>
+
+    {#if activeTab?.page !== undefined && filterOpen}
+      {#key activeTab.id}
+        <FilterBar
+          columns={filterColumns}
+          applied={activeTab.filter}
+          busy={filtering}
+          onApply={(filter: TableFilter | null) => {
+            void onApplyFilter(filter);
+          }}
+          {t}
+        />
+      {/key}
+    {/if}
 
     {#if activeTab === undefined}
       <p class="hint">{t('grid.empty')}</p>

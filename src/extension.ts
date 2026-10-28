@@ -73,25 +73,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
   });
 
-  /** What each open table view was opened with, so paging can repeat it. */
-  const openRequests = new Map<string, { target: SessionTarget; table: TableRef }>();
-
-  /** Re-reads a table view at another offset, keeping the row count it already has. */
-  const pageTo = async (resultId: string, offset: number): Promise<boolean> => {
-    const summary = results.get(resultId);
-    const page = summary?.page;
-    const request = summary === undefined ? undefined : openRequests.get(summary.documentUri);
-    if (page === undefined || request === undefined) {
-      return false;
-    }
-    await tables.open({
-      ...request,
-      offset,
-      ...(page.totalRows === undefined ? {} : { totalRows: page.totalRows }),
-    });
-    return true;
-  };
-
   /** Writes a result to a file the user picks; the whole result, not just a page. */
   const exportResult = async (resultId: string, format: ExportFormat): Promise<void> => {
     const summary = results.get(resultId);
@@ -133,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         runner,
         editor,
         saver,
-        pageTo,
+        reloadTable: (resultId, change) => tables.reload(resultId, change),
         exportResult,
         logger,
       },
@@ -148,7 +129,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     };
     const table: TableRef = { ...node.scope, name: node.name };
     const documentUri = tableDocumentUri(target, table);
-    openRequests.set(documentUri, { target, table });
     // The panel opens first, so a slow table shows "Running…" instead of nothing.
     showResults(documentUri);
     await tables.open({ target, table });

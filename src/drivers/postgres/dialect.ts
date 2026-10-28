@@ -75,6 +75,8 @@ export const postgresDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  likeText: (quotedColumn, quotedPattern) =>
+    `CAST(${quotedColumn} AS TEXT) ILIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
 };

@@ -13,6 +13,7 @@ function fakeDriver(id: DriverId): Driver {
       quoteTable: (table) => table.name,
       literal: () => 'NULL',
       paginate: (sql) => sql,
+      likeText: () => '',
       defaultKeyword: true,
       insertDefaultRow: () => '',
     },

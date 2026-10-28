@@ -197,4 +197,11 @@ describe('errorOffsetOf', () => {
       ),
     ).toBe(0);
   });
+
+  it('carries the filter of a table view to the page', () => {
+    const filter = { conditions: [{ column: 'a', operator: 'isNull' as const }], where: 'b > 1' };
+    const state = buildState([{ ...summary(), filter }], undefined, false);
+    expect(state.tabs[0]?.filter).toEqual(filter);
+    expect(buildState([summary()], undefined, false).tabs[0]).not.toHaveProperty('filter');
+  });
 });

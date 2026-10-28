@@ -10,7 +10,9 @@ import type { ResultColumn, Session } from '../drivers/driver';
 import type { ConnectionManager, SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import { analyzeEditability } from './result-editability';
+import { buildOrderBy, buildWhere, type TableSort } from './table-filter-sql';
 import type { ResultRow, ResultStore, ResultSummary } from './result-store';
+import { isEmptyFilter, type TableFilter } from '../shared/table-filter';
 
 /** Limits the user controls through settings (V1.25). */
 export interface TableViewLimits {
@@ -33,6 +35,19 @@ export interface OpenTableRequest {
   readonly offset?: number;
   /** Known row count, so paging does not count again. */
   readonly totalRows?: number;
+  /** Server-side conditions; the count then covers only the matching rows. */
+  readonly filter?: TableFilter;
+  /** Server-side order. */
+  readonly sort?: TableSort;
+}
+
+/** What `reload` may change about an open table view; absent fields stay as they are. */
+export interface TableChange {
+  readonly offset?: number;
+  /** `null` removes the filter. */
+  readonly filter?: TableFilter | null;
+  /** `null` restores the table's own order. */
+  readonly sort?: TableSort | null;
 }
 
 /** A table view is its own "document", so its results never mix with an editor's. */
@@ -50,6 +65,8 @@ export function tableDocumentUri(target: SessionTarget, table: TableRef): string
 export class TableViewer {
   private readonly deps: TableViewerDeps;
   private readonly logger: Logger;
+  /** What each open table view shows, so paging, filtering and sorting can repeat it. */
+  private readonly views = new Map<string, OpenTableRequest>();
 
   constructor(deps: TableViewerDeps) {
     this.deps = deps;
@@ -61,8 +78,42 @@ export class TableViewer {
     return `table:${documentUri}`;
   }
 
+  /**
+   * Re-reads the table view that owns a result, with some of its settings changed.
+   * A new filter starts at the first page and counts again; a new sort or page keeps
+   * the count it has. Returns false when the result is not a table view.
+   */
+  async reload(resultId: string, change: TableChange): Promise<boolean> {
+    const summary = this.deps.results.get(resultId);
+    const request = summary === undefined ? undefined : this.views.get(summary.documentUri);
+    if (summary?.page === undefined || request === undefined) {
+      return false;
+    }
+    const filter = change.filter === undefined ? request.filter : (change.filter ?? undefined);
+    const sort = change.sort === undefined ? request.sort : (change.sort ?? undefined);
+    const refiltered = change.filter !== undefined;
+    const total = refiltered ? undefined : summary.page.totalRows;
+    const resorted = change.sort !== undefined;
+    await this.open({
+      target: request.target,
+      table: request.table,
+      offset: refiltered || resorted ? 0 : (change.offset ?? summary.page.offset),
+      ...(total === undefined ? {} : { totalRows: total }),
+      ...(filter === undefined ? {} : { filter }),
+      ...(sort === undefined ? {} : { sort }),
+    });
+    return true;
+  }
+
   async open(request: OpenTableRequest): Promise<ResultSummary> {
     const documentUri = tableDocumentUri(request.target, request.table);
+    const filter = isEmptyFilter(request.filter) ? undefined : request.filter;
+    this.views.set(documentUri, {
+      target: request.target,
+      table: request.table,
+      ...(filter === undefined ? {} : { filter }),
+      ...(request.sort === undefined ? {} : { sort: request.sort }),
+    });
     const pageSize = Math.max(1, Math.trunc(this.deps.limits.pageSize()));
     const offset = Math.max(0, Math.trunc(request.offset ?? 0));
     const started = Date.now();
@@ -72,14 +123,22 @@ export class TableViewer {
     try {
       const driver = await this.deps.manager.driverOf(request.target.connectionId);
       const quoted = driver.dialect.quoteTable(request.table);
-      sql = driver.dialect.paginate(`SELECT * FROM ${quoted}`, pageSize, offset);
+      const where = buildWhere(driver.dialect, driver.id, filter);
+      const orderBy = buildOrderBy(driver.dialect, request.sort);
+      const whereSql = where === undefined ? '' : ` WHERE ${where}`;
+      sql = driver.dialect.paginate(
+        `SELECT * FROM ${quoted}${whereSql}${orderBy === undefined ? '' : ` ORDER BY ${orderBy}`}`,
+        pageSize,
+        offset,
+      );
       const session = await this.deps.manager.acquire(
         TableViewer.owner(documentUri),
         request.target,
       );
       const { columns, rows } = await readAll(session, sql, pageSize);
       // Counting is a separate statement, and a failure there must not lose the page.
-      const totalRows = request.totalRows ?? (await this.countRows(session, quoted));
+      const totalRows =
+        request.totalRows ?? (await this.countRows(session, `${quoted}${whereSql}`));
       const edit = await analyzeEditability(
         {
           metadata: this.deps.cache.wrap(request.target.connectionId, session.metadata),
@@ -100,6 +159,10 @@ export class TableViewer {
         truncated: false,
         durationMs: Date.now() - started,
         edit,
+        ...(filter === undefined ? {} : { filter }),
+        ...(sortOf(request.sort, columns) === undefined
+          ? {}
+          : { sort: sortOf(request.sort, columns) }),
         page: {
           offset,
           pageSize,
@@ -118,6 +181,7 @@ export class TableViewer {
         truncated: false,
         durationMs: Date.now() - started,
         error: { code: dbError.code, message: dbError.message },
+        ...(filter === undefined ? {} : { filter }),
         page: { offset, pageSize },
       });
     }
@@ -141,6 +205,18 @@ export class TableViewer {
       return undefined;
     }
   }
+}
+
+/** The sort as the grid shows it: a column index in the result. */
+function sortOf(
+  sort: TableSort | undefined,
+  columns: readonly ResultColumn[],
+): { column: number; direction: 'asc' | 'desc' } | undefined {
+  if (sort === undefined) {
+    return undefined;
+  }
+  const column = columns.findIndex((candidate) => candidate.name === sort.column);
+  return column < 0 ? undefined : { column, direction: sort.direction };
 }
 
 interface Collected {

@@ -95,3 +95,10 @@ describe('mysqlDialect default handling', () => {
     expect(mysqlDialect.insertDefaultRow('`t`')).toBe('INSERT INTO `t` () VALUES ()');
   });
 });
+
+describe('mysqlDialect.likeText', () => {
+  it('casts the column to text and escapes with !', () => {
+    const q = mysqlDialect.quoteIdentifier('c');
+    expect(mysqlDialect.likeText(q, "'%x%'")).toBe(`CAST(${q} AS CHAR) LIKE '%x%' ESCAPE '!'`);
+  });
+});

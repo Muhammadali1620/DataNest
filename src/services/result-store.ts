@@ -8,6 +8,7 @@ import type { SessionTarget } from './connection-manager';
 import type { ResultColumn } from '../drivers/driver';
 import type { ChangePlan } from './change-sql';
 import { type SortDirection, sortRows } from '../shared/cell-compare';
+import type { TableFilter } from '../shared/table-filter';
 import { findRows, type SearchHits } from '../shared/cell-search';
 import {
   type CellChange,
@@ -57,6 +58,8 @@ export interface ResultSummary {
   readonly sort?: ResultSort;
   /** Set for a table view, which is paged rather than scrolled to the end. */
   readonly page?: ResultPage;
+  /** The server-side filter a table view was read with. */
+  readonly filter?: TableFilter;
   /** Whether rows can be edited in place; absent for statements that return no rows. */
   readonly edit?: ResultEdit;
   /** Where the rows came from, so edits can be saved through the same session. */
@@ -131,6 +134,9 @@ export interface NewResult {
   readonly durationMs: number;
   readonly error?: ResultError;
   readonly page?: ResultPage;
+  readonly filter?: TableFilter;
+  /** An order the server already applied (a table view); the rows are not re-sorted. */
+  readonly sort?: ResultSort;
   readonly edit?: ResultEdit;
   readonly origin?: ResultOrigin;
 }
@@ -170,6 +176,8 @@ export class ResultStore {
       durationMs: result.durationMs,
       ...(result.error === undefined ? {} : { error: result.error }),
       ...(result.page === undefined ? {} : { page: result.page }),
+      ...(result.filter === undefined ? {} : { filter: result.filter }),
+      ...(result.sort === undefined ? {} : { sort: result.sort }),
       ...(result.edit === undefined ? {} : { edit: result.edit }),
       ...(result.origin === undefined ? {} : { origin: result.origin }),
     };

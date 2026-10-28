@@ -190,4 +190,176 @@ describe('TableViewer', () => {
     await viewer.open({ target: target(), table: { name: 'orders' }, offset: 100 });
     expect(drivers.driver('mysql').sessions).toHaveLength(1);
   });
+
+  describe('filtering and sorting', () => {
+    const table = { name: 'orders' };
+
+    function executed(): string[] {
+      return drivers.driver('mysql').lastSession?.executed ?? [];
+    }
+
+    it('reads and counts only the matching rows', async () => {
+      const summary = await viewer.open({
+        target: target(),
+        table,
+        filter: { conditions: [{ column: 'status', operator: 'isNull' }], where: 'total > 5' },
+      });
+      expect(executed()[0]).toBe(
+        'SELECT * FROM "orders" WHERE "status" IS NULL AND (\ntotal > 5\n) LIMIT 100 OFFSET 0',
+      );
+      expect(executed()[1]).toBe(
+        'SELECT COUNT(*) FROM "orders" WHERE "status" IS NULL AND (\ntotal > 5\n)',
+      );
+      expect(summary.filter?.where).toBe('total > 5');
+    });
+
+    it('orders by a quoted column before paging, and tells the grid which column', async () => {
+      drivers.driver('mysql').sessionColumns = [{ name: 'id' }, { name: 'total' }];
+      const summary = await viewer.open({
+        target: target(),
+        table,
+        sort: { column: 'total', direction: 'desc' },
+      });
+      expect(executed()[0]).toBe('SELECT * FROM "orders" ORDER BY "total" DESC LIMIT 100 OFFSET 0');
+      expect(summary.sort).toEqual({ column: 1, direction: 'desc' });
+    });
+
+    it('puts WHERE before ORDER BY', async () => {
+      await viewer.open({
+        target: target(),
+        table,
+        filter: { conditions: [{ column: 'a', operator: 'notNull' }] },
+        sort: { column: 'a', direction: 'asc' },
+      });
+      expect(executed()[0]).toContain('WHERE "a" IS NOT NULL ORDER BY "a" ASC LIMIT');
+    });
+
+    it('ignores an empty filter', async () => {
+      const summary = await viewer.open({
+        target: target(),
+        table,
+        filter: { conditions: [], where: '  ' },
+      });
+      expect(executed()[0]).toBe('SELECT * FROM "orders" LIMIT 100 OFFSET 0');
+      expect(summary.filter).toBeUndefined();
+    });
+
+    it('shows an unusable WHERE as an error that keeps the filter', async () => {
+      const summary = await viewer.open({
+        target: target(),
+        table,
+        filter: { conditions: [], where: '1=1; DROP TABLE orders' },
+      });
+      expect(summary.error?.message).toContain(';');
+      expect(summary.filter?.where).toBe('1=1; DROP TABLE orders');
+      expect(summary.page).toEqual({ offset: 0, pageSize: 100 });
+      // Nothing reached the server.
+      expect(executed().some((sql) => sql.includes('DROP'))).toBe(false);
+    });
+
+    it('does not report a sort on a column the result does not have', async () => {
+      const summary = await viewer.open({
+        target: target(),
+        table,
+        sort: { column: 'missing', direction: 'asc' },
+      });
+      expect(summary.sort).toBeUndefined();
+    });
+
+    describe('reload', () => {
+      it('applies a filter from the first page and counts again', async () => {
+        const first = await viewer.open({ target: target(), table, offset: 200, totalRows: 999 });
+        const ok = await viewer.reload(first.id, {
+          filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+        });
+        expect(ok).toBe(true);
+        const sqls = executed();
+        expect(sqls.at(-2)).toBe('SELECT * FROM "orders" WHERE "a" IS NULL LIMIT 100 OFFSET 0');
+        expect(sqls.at(-1)).toBe('SELECT COUNT(*) FROM "orders" WHERE "a" IS NULL');
+      });
+
+      it('keeps the filter while paging and does not count again', async () => {
+        const first = await viewer.open({
+          target: target(),
+          table,
+          filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+        });
+        const before = executed().length;
+        await viewer.reload(first.id, { offset: 100 });
+        expect(executed().slice(before)).toEqual([
+          'SELECT * FROM "orders" WHERE "a" IS NULL LIMIT 100 OFFSET 100',
+        ]);
+      });
+
+      it('sorts from the first page, keeping filter and count', async () => {
+        const first = await viewer.open({
+          target: target(),
+          table,
+          offset: 100,
+          totalRows: 500,
+          filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+        });
+        await viewer.reload(first.id, { sort: { column: 'b', direction: 'asc' } });
+        expect(executed().at(-1)).toBe(
+          'SELECT * FROM "orders" WHERE "a" IS NULL ORDER BY "b" ASC LIMIT 100 OFFSET 0',
+        );
+        const latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+        expect(latest?.page?.totalRows).toBe(500);
+      });
+
+      it('keeps the sort when the filter changes and when paging', async () => {
+        const first = await viewer.open({
+          target: target(),
+          table,
+          sort: { column: 'b', direction: 'desc' },
+        });
+        const second = await viewer.reload(first.id, {
+          filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+        });
+        expect(second).toBe(true);
+        expect(executed().find((sql) => sql.includes('WHERE'))).toContain('ORDER BY "b" DESC');
+      });
+
+      it('removes a filter and a sort with null', async () => {
+        const first = await viewer.open({
+          target: target(),
+          table,
+          filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+          sort: { column: 'b', direction: 'asc' },
+        });
+        const reads = (): string[] => executed().filter((sql) => sql.startsWith('SELECT *'));
+        await viewer.reload(first.id, { filter: null });
+        expect(reads().at(-1)).toBe('SELECT * FROM "orders" ORDER BY "b" ASC LIMIT 100 OFFSET 0');
+        const latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+        await viewer.reload(latest?.id ?? '', { sort: null });
+        expect(reads().at(-1)).toBe('SELECT * FROM "orders" LIMIT 100 OFFSET 0');
+      });
+
+      it('can fix a failed filter, because the failed result is still a table view', async () => {
+        const first = await viewer.open({
+          target: target(),
+          table,
+          filter: { conditions: [], where: 'a = ;' },
+        });
+        expect(first.error).toBeDefined();
+        expect(await viewer.reload(first.id, { filter: null })).toBe(true);
+        const latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+        expect(latest?.error).toBeUndefined();
+      });
+
+      it('refuses a result that is not a table view or no longer exists', async () => {
+        const plain = results.add({
+          documentUri: 'file:///q.sql',
+          statement: 'SELECT 1',
+          statementStart: 0,
+          columns: [],
+          rows: [],
+          truncated: false,
+          durationMs: 1,
+        });
+        expect(await viewer.reload(plain.id, { offset: 10 })).toBe(false);
+        expect(await viewer.reload('result-nope', { offset: 10 })).toBe(false);
+      });
+    });
+  });
 });

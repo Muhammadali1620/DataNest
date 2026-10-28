@@ -61,4 +61,6 @@ export const CONFIG_KEYS = {
   queryTimeout: 'queryTimeout',
   /** How many executed statements the history keeps; 0 turns it off. */
   historyLimit: 'historyLimit',
+  /** What happens before a statement that can destroy data runs: confirm, block or off. */
+  safeMode: 'safeMode',
 } as const;

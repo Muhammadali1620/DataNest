@@ -33,5 +33,9 @@
   "commands.results.export.title": "Экспортировать результат",
   "configuration.queryTimeout.description": "Сколько секунд запрос может выполняться, прежде чем DataNest его отменит. `0` — без ограничения.",
   "commands.history.show.title": "История запросов",
-  "configuration.historyLimit.description": "Сколько выполненных запросов хранить в истории. `0` выключает историю. Пароли в `IDENTIFIED BY '...'`, `password = ...` и подобном маскируются перед сохранением."
+  "configuration.historyLimit.description": "Сколько выполненных запросов хранить в истории. `0` выключает историю. Пароли в `IDENTIFIED BY '...'`, `password = ...` и подобном маскируются перед сохранением.",
+  "configuration.safeMode.description": "Что делает DataNest перед `DELETE` или `UPDATE` без `WHERE`, `DROP` и `TRUNCATE`.",
+  "configuration.safeMode.confirm": "Сначала спросить подтверждение.",
+  "configuration.safeMode.block": "Не выполнять такие запросы.",
+  "configuration.safeMode.off": "Выполнять без вопросов."
 }

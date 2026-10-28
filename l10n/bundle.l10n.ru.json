@@ -71,5 +71,13 @@
   "Show the history of…": "Показать историю подключения…",
   "Remove every query from the history?": "Удалить все запросы из истории?",
   "Remove the queries of this connection from the history?": "Удалить из истории запросы этого подключения?",
-  "Clear": "Очистить"
+  "Clear": "Очистить",
+  "DELETE without WHERE": "DELETE без WHERE",
+  "UPDATE without WHERE": "UPDATE без WHERE",
+  "DROP": "DROP",
+  "TRUNCATE": "TRUNCATE",
+  "…and {0} more": "…и ещё {0}",
+  "Safe mode blocked this run (datanest.safeMode):\n{0}": "Безопасный режим запретил этот запуск (datanest.safeMode):\n{0}",
+  "Run anyway": "Всё равно выполнить",
+  "This can change or delete a lot of data. Run it?": "Это может изменить или удалить много данных. Выполнить?"
 }

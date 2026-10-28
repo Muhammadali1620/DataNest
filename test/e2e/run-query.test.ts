@@ -112,6 +112,12 @@ describe('running queries', () => {
     await vscode.commands.executeCommand('datanest.query.cancel');
   });
 
+  it('asks before dangerous statements unless the user turned it off', () => {
+    const config = vscode.workspace.getConfiguration('datanest');
+    assert.equal(config.get('safeMode'), 'confirm');
+    assert.deepEqual(config.inspect('safeMode')?.defaultValue, 'confirm');
+  });
+
   it('opens the query history even when it is empty, and closes it again', async () => {
     assert.ok((await vscode.commands.getCommands(true)).includes('datanest.history.show'));
     await vscode.commands.executeCommand('datanest.history.show');

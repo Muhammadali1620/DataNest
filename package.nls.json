@@ -33,5 +33,9 @@
   "commands.results.export.title": "Export Result",
   "configuration.queryTimeout.description": "Seconds a statement may run before DataNest cancels it. `0` means no limit.",
   "commands.history.show.title": "Query History",
-  "configuration.historyLimit.description": "Number of executed statements kept in the query history. `0` turns the history off. Passwords in `IDENTIFIED BY '...'`, `password = ...` and similar are masked before saving."
+  "configuration.historyLimit.description": "Number of executed statements kept in the query history. `0` turns the history off. Passwords in `IDENTIFIED BY '...'`, `password = ...` and similar are masked before saving.",
+  "configuration.safeMode.description": "What DataNest does before running a `DELETE` or `UPDATE` without `WHERE`, `DROP` or `TRUNCATE`.",
+  "configuration.safeMode.confirm": "Ask for confirmation first.",
+  "configuration.safeMode.block": "Refuse to run such statements.",
+  "configuration.safeMode.off": "Run them without asking."
 }

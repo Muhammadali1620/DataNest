@@ -399,6 +399,22 @@
           "maximum": 10000,
           "markdownDescription": "%configuration.historyLimit.description%",
           "scope": "window"
+        },
+        "datanest.safeMode": {
+          "type": "string",
+          "enum": [
+            "confirm",
+            "block",
+            "off"
+          ],
+          "default": "confirm",
+          "enumDescriptions": [
+            "%configuration.safeMode.confirm%",
+            "%configuration.safeMode.block%",
+            "%configuration.safeMode.off%"
+          ],
+          "markdownDescription": "%configuration.safeMode.description%",
+          "scope": "window"
         }
       }
     },

@@ -3,6 +3,10 @@ import type { Logger } from '../../core/logging/logger';
 import { splitStatements, statementsIn, type SqlStatement } from '../../core/sql/split';
 import type { QueryRunner, RunOutcome } from '../../services/query-runner';
 import type { ConnectionStore } from '../../services/connection-store';
+import { type Danger } from '../../core/sql/danger';
+import { riskyStatements, type RiskyStatement } from '../../services/safe-mode';
+import { summaryLine } from '../../services/history-format';
+import { readSafeMode } from '../settings';
 import { COMMAND_IDS } from '../command-ids';
 import type { DriverId } from '../../shared/connection';
 import type { DocumentBinding } from './document-bindings';
@@ -45,6 +49,9 @@ export function runCommandHandlers(
     const documentUri = editor.document.uri.toString();
     const target = await resolveTarget(deps, documentUri);
     if (target === undefined) {
+      return undefined;
+    }
+    if (!(await allowed(statements, driverOf(deps, documentUri)))) {
       return undefined;
     }
     // The panel opens before the run, so a slow query shows "Running…" at once.
@@ -127,6 +134,62 @@ async function resolveTarget(
 }
 
 /** The driver of a document's connection, for dialect-aware splitting. */
+function dangerLabel(danger: Danger): string {
+  switch (danger) {
+    case 'delete-without-where':
+      return vscode.l10n.t('DELETE without WHERE');
+    case 'update-without-where':
+      return vscode.l10n.t('UPDATE without WHERE');
+    case 'drop':
+      return vscode.l10n.t('DROP');
+    case 'truncate':
+      return vscode.l10n.t('TRUNCATE');
+  }
+}
+
+/** The risky statements as lines for the dialog: what is wrong, then the statement. */
+function riskLines(risky: readonly RiskyStatement[]): string {
+  const shown = risky
+    .slice(0, 5)
+    .map(
+      ({ statement, dangers }) =>
+        `• ${dangers.map(dangerLabel).join(', ')}: ${summaryLine(statement.text, 70)}`,
+    );
+  if (risky.length > shown.length) {
+    shown.push(vscode.l10n.t('…and {0} more', risky.length - shown.length));
+  }
+  return shown.join('\n');
+}
+
+/**
+ * Safe mode: asks before statements that can destroy data run, or refuses them.
+ * Returns false when the run must not happen.
+ */
+async function allowed(
+  statements: readonly SqlStatement[],
+  driver: DriverId | undefined,
+): Promise<boolean> {
+  const mode = readSafeMode();
+  const risky = riskyStatements(statements, driver, mode);
+  if (risky.length === 0) {
+    return true;
+  }
+  if (mode === 'block') {
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t('Safe mode blocked this run (datanest.safeMode):\n{0}', riskLines(risky)),
+      { modal: true },
+    );
+    return false;
+  }
+  const run = vscode.l10n.t('Run anyway');
+  const choice = await vscode.window.showWarningMessage(
+    vscode.l10n.t('This can change or delete a lot of data. Run it?'),
+    { modal: true, detail: riskLines(risky) },
+    run,
+  );
+  return choice === run;
+}
+
 function driverOf(deps: RunQueryDeps, documentUri: string): DriverId | undefined {
   const binding = deps.editors.bindings.get(documentUri);
   if (binding === undefined) {

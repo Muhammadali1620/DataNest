@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DEFAULT_SAFE_MODE, isSafeMode, type SafeMode } from '../services/safe-mode';
 import { DEFAULT_HISTORY_LIMIT } from '../services/history';
 import { CONFIG_KEYS, CONFIG_SECTION } from './command-ids';
 import type { TreeSettings } from './tree/tree-model';
@@ -56,6 +57,14 @@ export function readHistoryLimit(): number {
     .getConfiguration(CONFIG_SECTION)
     .get<number>(CONFIG_KEYS.historyLimit, DEFAULT_HISTORY_LIMIT);
   return Number.isInteger(value) && value >= 0 ? value : DEFAULT_HISTORY_LIMIT;
+}
+
+/** What to do before running a statement that can destroy data. */
+export function readSafeMode(): SafeMode {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<string>(CONFIG_KEYS.safeMode, DEFAULT_SAFE_MODE);
+  return isSafeMode(value) ? value : DEFAULT_SAFE_MODE;
 }
 
 /** True when a configuration change touches one of our settings. */

@@ -30,6 +30,12 @@ function post(message: WorkerToHost): void {
   parentPort?.postMessage(message);
 }
 
+/** Whether a transaction is open, for the host's indicator (V4.8); older runtimes cannot say. */
+function tx(): { tx?: boolean } {
+  const open = (db as { isTransaction?: unknown } | undefined)?.isTransaction;
+  return typeof open === 'boolean' ? { tx: open } : {};
+}
+
 function open(file: string, readOnly: boolean): void {
   try {
     // A read-only handle cannot be turned writable from SQL, unlike PRAGMA query_only.
@@ -60,7 +66,7 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
     if (described.length === 0) {
       // No result columns: INSERT/UPDATE/DDL/…
       const result = statement.run(...params);
-      post({ t: 'done', id, affectedRows: Number(result.changes) });
+      post({ t: 'done', id, affectedRows: Number(result.changes), ...tx() });
       return;
     }
     // Integers arrive as bigint so they are never silently rounded.
@@ -103,9 +109,9 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
     if (batch.length > 0) {
       postRows(id, batch);
     }
-    post({ t: 'done', id });
+    post({ t: 'done', id, ...tx() });
   } catch (error) {
-    post({ t: 'error', id, error: toWireError(error) });
+    post({ t: 'error', id, error: toWireError(error), ...tx() });
   }
 }
 

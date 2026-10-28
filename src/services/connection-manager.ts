@@ -11,7 +11,7 @@ import type {
   SshHopSecrets,
 } from '../shared/connection';
 import type { DriverId } from '../shared/connection';
-import type { Driver, Session } from '../drivers/driver';
+import type { Driver, Session, TransactionState } from '../drivers/driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
 import {
@@ -73,6 +73,18 @@ interface Holder {
 
 const DISCONNECTED: ConnectionState = { status: 'disconnected' };
 
+/** A session's transaction changed: a statement opened or ended it, or the session went. */
+export interface TransactionChange {
+  readonly owner: string;
+  readonly connectionId: string;
+  readonly state: TransactionState;
+  /**
+   * Set when the session closed (`closed`) or its link dropped (`lost`) while a
+   * transaction was open: the server rolled it back.
+   */
+  readonly ended?: 'closed' | 'lost';
+}
+
 /**
  * Sessions are per owner: each SQL editor gets its own, so a slow query in one tab
  * never blocks another. The tree shares one session per connection (owner `tree:<id>`).
@@ -87,6 +99,7 @@ export class ConnectionManager implements Disposable {
   private readonly opening = new Map<string, Promise<Session>>();
   private readonly states = new Map<string, ConnectionState>();
   private readonly listeners = new Set<(connectionId: string) => void>();
+  private readonly transactionListeners = new Set<(change: TransactionChange) => void>();
   private disposed = false;
 
   constructor(deps: ConnectionManagerDeps) {
@@ -119,6 +132,31 @@ export class ConnectionManager implements Disposable {
   onDidChangeState(listener: (connectionId: string) => void): Disposable {
     this.listeners.add(listener);
     return toDisposable(() => this.listeners.delete(listener));
+  }
+
+  /** Fires when the transaction of a session changes (V4.8). */
+  onDidChangeTransaction(listener: (change: TransactionChange) => void): Disposable {
+    this.transactionListeners.add(listener);
+    return toDisposable(() => this.transactionListeners.delete(listener));
+  }
+
+  /**
+   * The transaction state of an owner's session as the server last reported it;
+   * undefined when it holds no session or the driver cannot tell.
+   */
+  transactionState(owner: string): TransactionState | undefined {
+    return this.holders.get(owner)?.session.transactionState?.();
+  }
+
+  /** Owners of a connection whose session has a transaction open or failed. */
+  ownersInTransaction(connectionId: string): string[] {
+    return [...this.holders.entries()]
+      .filter(([, held]) => held.target.connectionId === connectionId)
+      .filter(([, held]) => {
+        const state = held.session.transactionState?.();
+        return state === 'open' || state === 'failed';
+      })
+      .map(([owner]) => owner);
   }
 
   /** The live session of an owner, or undefined when it holds none. */
@@ -186,6 +224,7 @@ export class ConnectionManager implements Disposable {
       return;
     }
     this.holders.delete(owner);
+    const transaction = held.session.transactionState?.();
     try {
       await held.session.close();
     } catch (error) {
@@ -193,6 +232,7 @@ export class ConnectionManager implements Disposable {
       this.logger.warn(`Closing the session of "${owner}" failed`, error);
     }
     const { connectionId } = held.target;
+    this.endTransaction(owner, connectionId, transaction, 'closed');
     if (!this.connectedIds().includes(connectionId)) {
       this.setState(connectionId, DISCONNECTED);
     }
@@ -248,6 +288,7 @@ export class ConnectionManager implements Disposable {
     this.holders.clear();
     this.states.clear();
     this.listeners.clear();
+    this.transactionListeners.clear();
     for (const held of holders) {
       // Fire and forget: dispose must not be async, and the host is going away.
       held.session.close().catch(() => undefined);
@@ -275,15 +316,17 @@ export class ConnectionManager implements Disposable {
         await lease?.release();
         throw new DbError('internal', 'The connection manager is disposed');
       }
-      const session = new ManagedSession(
-        opened,
-        (error) => {
+      const session = new ManagedSession(opened, {
+        onLinkLost: (error) => {
           this.forget(owner, error);
         },
-        async () => {
+        onClosed: async () => {
           await lease?.release();
         },
-      );
+        onTransaction: (state) => {
+          this.notifyTransaction({ owner, connectionId, state });
+        },
+      });
       this.holders.set(owner, { target, session });
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -309,6 +352,8 @@ export class ConnectionManager implements Disposable {
     this.holders.delete(owner);
     const { connectionId } = held.target;
     this.logger.warn(`The connection of "${owner}" was lost`, error);
+    // The driver still remembers the last state it saw; the server rolled it back.
+    this.endTransaction(owner, connectionId, held.session.transactionState?.(), 'lost');
     held.session.close().catch(() => undefined);
     if (!this.connectedIds().includes(connectionId)) {
       this.setState(connectionId, { status: 'error', error: errorMessage(error) });
@@ -340,6 +385,28 @@ export class ConnectionManager implements Disposable {
       throw new DbError('not-found', `Connection "${connectionId}" does not exist`);
     }
     return config;
+  }
+
+  private endTransaction(
+    owner: string,
+    connectionId: string,
+    state: TransactionState | undefined,
+    ended: 'closed' | 'lost',
+  ): void {
+    if (state === 'open' || state === 'failed') {
+      this.logger.warn(`The open transaction of "${owner}" ended with its session (${ended})`);
+      this.notifyTransaction({ owner, connectionId, state: 'idle', ended });
+    }
+  }
+
+  private notifyTransaction(change: TransactionChange): void {
+    for (const listener of [...this.transactionListeners]) {
+      try {
+        listener(change);
+      } catch (error) {
+        this.logger.warn('A transaction listener failed', error);
+      }
+    }
   }
 
   private setState(connectionId: string, state: ConnectionState): void {

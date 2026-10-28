@@ -200,6 +200,23 @@
         "icon": "$(debug-stop)"
       },
       {
+        "command": "datanest.transaction.commit",
+        "title": "%commands.transaction.commit.title%",
+        "category": "DataNest",
+        "icon": "$(check)"
+      },
+      {
+        "command": "datanest.transaction.rollback",
+        "title": "%commands.transaction.rollback.title%",
+        "category": "DataNest",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "datanest.transaction.toggleMode",
+        "title": "%commands.transaction.toggleMode.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.results.show",
         "title": "%commands.results.show.title%",
         "category": "DataNest",
@@ -804,6 +821,19 @@
           ],
           "markdownDescription": "%configuration.safeMode.description%",
           "scope": "window"
+        },
+        "datanest.transactionMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "%configuration.transactionMode.auto%",
+            "%configuration.transactionMode.manual%"
+          ],
+          "default": "auto",
+          "markdownDescription": "%configuration.transactionMode.description%"
         },
         "datanest.format.keywordCase": {
           "type": "string",

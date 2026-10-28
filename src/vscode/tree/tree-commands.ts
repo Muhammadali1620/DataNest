@@ -41,6 +41,8 @@ export interface TreeCommandDeps {
   readonly noTargetMessage: string;
   /** Reads the project files again (V4.7), for a refresh of the whole tree. */
   readonly reloadProjects?: () => Promise<void>;
+  /** Asked before disconnecting; false keeps the connection (open transactions, V4.8). */
+  readonly confirmDisconnect?: (connectionId: string) => Promise<boolean>;
 }
 
 export type TreeCommandName =
@@ -68,7 +70,11 @@ export function treeCommandHandlers(
     },
 
     disconnect: async (target?: CommandTarget) => {
-      await deps.manager.disconnect(requireConnectionId(target));
+      const connectionId = requireConnectionId(target);
+      if (deps.confirmDisconnect !== undefined && !(await deps.confirmDisconnect(connectionId))) {
+        return undefined;
+      }
+      await deps.manager.disconnect(connectionId);
       deps.tree.refresh();
       return undefined;
     },

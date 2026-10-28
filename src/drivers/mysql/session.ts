@@ -6,7 +6,13 @@ import { DbError } from '../../core/errors';
 import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import { sniName, tlsFailure, type TlsMaterial, tlsMaterial } from '../common/tls';
-import type { ExecuteEvent, ExecuteOptions, ResultColumn, Session } from '../driver';
+import type {
+  ExecuteEvent,
+  ExecuteOptions,
+  ResultColumn,
+  Session,
+  TransactionState,
+} from '../driver';
 import { toMysqlDbError } from './errors';
 import { MysqlMetadata } from './metadata';
 import { mysqlTypeName, toCellValue } from './values';
@@ -17,6 +23,10 @@ export const ROW_BATCH_SIZE = 200;
 export const CONNECT_TIMEOUT_MS = 10_000;
 
 const QUERY_INTERRUPTED = 1317; // ER_QUERY_INTERRUPTED
+const LOCK_DEADLOCK = 1213; // ER_LOCK_DEADLOCK: InnoDB rolled the whole transaction back
+
+/** SERVER_STATUS_IN_TRANS of the OK packet: a transaction is open after this statement. */
+const IN_TRANSACTION = 0x0001;
 
 /** mysql2's TLS options for a mode; it checks the name itself when it can send SNI. */
 export function mysqlSsl(tls: TlsMaterial): mysql.SslOptions {
@@ -113,6 +123,8 @@ class MysqlSession implements Session {
   private closed = false;
   /** Identity of the statement currently on the wire; undefined between statements. */
   private active: object | undefined;
+  /** From the status flags of the last OK packet; rows do not change it. */
+  private inTransaction = false;
 
   constructor(
     conn: mysql.Connection,
@@ -127,6 +139,15 @@ class MysqlSession implements Session {
 
   execute(sql: string, options: ExecuteOptions = {}): AsyncIterable<ExecuteEvent> {
     return this.run(sql, options);
+  }
+
+  /**
+   * MySQL reports the transaction in the status flags of every OK packet, which
+   * BEGIN, COMMIT, writes and DDL (with its implicit commit) all end with. A SELECT
+   * cannot start or end one in the default autocommit mode, so it keeps the last state.
+   */
+  transactionState(): TransactionState {
+    return this.inTransaction ? 'open' : 'idle';
   }
 
   private async *run(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
@@ -181,9 +202,12 @@ class MysqlSession implements Session {
     command.on('result', (row: unknown) => {
       if (!Array.isArray(row)) {
         // An OK packet: INSERT/UPDATE/DDL or the tail of a multi-set CALL.
-        const header = row as { affectedRows?: number };
+        const header = row as { affectedRows?: number; serverStatus?: number };
         if (typeof header.affectedRows === 'number') {
           affectedRows = header.affectedRows;
+        }
+        if (typeof header.serverStatus === 'number') {
+          this.inTransaction = (header.serverStatus & IN_TRANSACTION) !== 0;
         }
         return;
       }
@@ -204,6 +228,9 @@ class MysqlSession implements Session {
     command.on('error', (error: unknown) => {
       release();
       const dbError = toMysqlDbError(error);
+      if (dbError.driverCode === LOCK_DEADLOCK) {
+        this.inTransaction = false;
+      }
       // The kill we issued ourselves after the row limit is a success, not an error.
       if (limitHit && (dbError.code === 'cancelled' || dbError.driverCode === QUERY_INTERRUPTED)) {
         finish();

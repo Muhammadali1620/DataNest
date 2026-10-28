@@ -4,7 +4,7 @@ import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
 import type { ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
-import type { ExecuteEvent, ExecuteOptions, Session } from '../driver';
+import type { ExecuteEvent, ExecuteOptions, Session, TransactionState } from '../driver';
 import { attachBlobs } from './blobs';
 import { fromWireError, toSqliteDbError } from './errors';
 import { SqliteMetadata } from './metadata';
@@ -55,6 +55,8 @@ class SqliteSession implements Session {
   private cancelling: Promise<void> | undefined;
   /** Incremented on every (re)spawn; events of an older worker are ignored. */
   private generation = 0;
+  /** What the worker said after the last statement; a fresh worker has none open. */
+  private inTransaction = false;
 
   constructor(workerPath: string, file: string, readOnly: boolean) {
     this.workerPath = workerPath;
@@ -81,6 +83,11 @@ class SqliteSession implements Session {
 
   execute(sql: string, options: ExecuteOptions = {}): AsyncIterable<ExecuteEvent> {
     return this.run(sql, options);
+  }
+
+  /** SQLite keeps no "failed" state: after an error the transaction is still open. */
+  transactionState(): TransactionState {
+    return this.inTransaction ? 'open' : 'idle';
   }
 
   /** Rows of a parameterized query; used by metadata lookups. */
@@ -160,6 +167,8 @@ class SqliteSession implements Session {
     const previous = await this.ready.catch(() => undefined);
     // Bump first: everything the abandoned worker still sends is now stale.
     this.generation += 1;
+    // The abandoned worker takes its connection, and any open transaction, with it.
+    this.inTransaction = false;
     void previous?.terminate();
     this.failAll(new DbError('cancelled', 'The statement was cancelled'));
     this.ready = this.track(this.spawn());
@@ -241,6 +250,7 @@ class SqliteSession implements Session {
         queue.push({ kind: 'rows', rows: message.rows });
         return;
       case 'done':
+        this.noteTransaction(message.tx);
         queue.push(
           message.affectedRows === undefined
             ? { kind: 'done' }
@@ -250,9 +260,16 @@ class SqliteSession implements Session {
         this.queues.delete(message.id);
         return;
       case 'error':
+        this.noteTransaction(message.tx);
         queue.fail(fromWireError(message.error));
         this.queues.delete(message.id);
         return;
+    }
+  }
+
+  private noteTransaction(open: boolean | undefined): void {
+    if (open !== undefined) {
+      this.inTransaction = open;
     }
   }
 

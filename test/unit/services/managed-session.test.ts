@@ -6,7 +6,7 @@ import { FakeSession, linkLostError } from '../../helpers/fake-driver';
 
 function managed(session: FakeSession) {
   const lost = vi.fn();
-  return { session: new ManagedSession(session, lost), lost };
+  return { session: new ManagedSession(session, { onLinkLost: lost }), lost };
 }
 
 async function collect(events: AsyncIterable<ExecuteEvent>): Promise<ExecuteEvent[]> {
@@ -134,6 +134,46 @@ describe('ManagedSession', () => {
         code: 'unsupported',
       });
       expect(lost).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('transactions (V4.8)', () => {
+    it('reports what the driver says and tells the owner when it changes', async () => {
+      const inner = fake();
+      inner.tracksTransactions = true;
+      const changes: string[] = [];
+      const session = new ManagedSession(inner, {
+        onLinkLost: () => undefined,
+        onTransaction: (state) => changes.push(state),
+      });
+      expect(session.transactionState()).toBe('idle');
+      await collect(session.execute('BEGIN'));
+      await collect(session.execute('UPDATE t SET a = 1'));
+      expect(session.transactionState()).toBe('open');
+      await collect(session.execute('COMMIT'));
+      expect(changes).toEqual(['open', 'idle']);
+    });
+
+    it('tells the owner about a transaction a failed statement spoiled', async () => {
+      const inner = fake();
+      inner.tracksTransactions = true;
+      const changes: string[] = [];
+      const session = new ManagedSession(inner, {
+        onLinkLost: () => undefined,
+        onTransaction: (state) => changes.push(state),
+      });
+      await collect(session.execute('BEGIN'));
+      inner.failExecuteWhen = (sql) => sql.startsWith('INSERT');
+      await expect(collect(session.execute('INSERT INTO t VALUES (1)'))).rejects.toThrow();
+      expect(changes).toEqual(['open', 'failed']);
+    });
+
+    it('stays silent for a driver that cannot tell', async () => {
+      const onTransaction = vi.fn();
+      const session = new ManagedSession(fake(), { onLinkLost: () => undefined, onTransaction });
+      await collect(session.execute('BEGIN'));
+      expect(session.transactionState()).toBeUndefined();
+      expect(onTransaction).not.toHaveBeenCalled();
     });
   });
 });

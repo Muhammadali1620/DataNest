@@ -13,6 +13,7 @@ import { analyzeEditability } from './result-editability';
 import { ConnectionManager, type SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import type { HistoryRecorder } from './history';
+import { BEGIN_STATEMENT, needsBegin } from './manual-commit';
 import type { ResultStore, ResultSummary, ResultRow } from './result-store';
 
 /** Limits the user controls through settings (V1.25). */
@@ -39,6 +40,11 @@ export interface RunRequest {
   readonly statements: readonly SqlStatement[];
   /** Stop the whole run on the first failure. True is what an editor wants. */
   readonly stopOnError?: boolean;
+  /**
+   * Manual commit (V4.8): open a transaction before the first changing statement,
+   * and leave it open for the user to commit or roll back.
+   */
+  readonly manualCommit?: boolean;
 }
 
 export interface RunOutcome {
@@ -167,6 +173,18 @@ export class QueryRunner {
     );
   }
 
+  /** In manual mode, the transaction a changing statement needs, opened first. */
+  private async beginIfNeeded(request: RunRequest, session: Session, sql: string): Promise<void> {
+    const driver = await this.deps.manager.driverOf(request.target.connectionId);
+    if (!needsBegin(sql, driver.id, session.transactionState?.())) {
+      return;
+    }
+    for await (const _event of session.execute(BEGIN_STATEMENT)) {
+      // BEGIN returns nothing worth keeping; a failure becomes this statement's error.
+    }
+    this.logger.debug(`Opened a transaction in ${request.documentUri} (manual commit)`);
+  }
+
   /** Notes a finished statement; the history must never be able to fail a query. */
   private remember(
     request: RunRequest,
@@ -210,6 +228,9 @@ export class QueryRunner {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const session = await this.deps.manager.acquire(run.owner, request.target);
+      if (request.manualCommit === true) {
+        await this.beginIfNeeded(request, session, statement.text);
+      }
       if (timeoutMs > 0) {
         // The server is asked to stop; what comes back is reported as a timeout.
         timer = setTimeout(() => {

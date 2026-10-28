@@ -7,6 +7,7 @@ import type {
   ExecuteOptions,
   MetadataReader,
   Session,
+  TransactionState,
 } from '../../../src/drivers/driver';
 import { ResultEditor } from '../../../src/services/result-editor';
 import { ResultSaver } from '../../../src/services/result-saver';
@@ -54,6 +55,12 @@ class ScriptedSession implements Session {
   affected: (sql: string) => number | undefined = () => 1;
   fail: (sql: string) => Error | undefined = () => undefined;
   readonly limits: (number | undefined)[] = [];
+  /** What the server would say about the transaction; undefined: cannot tell. */
+  transaction: TransactionState | undefined = undefined;
+
+  transactionState(): TransactionState | undefined {
+    return this.transaction;
+  }
 
   execute(sql: string, options?: ExecuteOptions): AsyncIterable<ExecuteEvent> {
     this.executed.push(sql);
@@ -126,6 +133,7 @@ describe('ResultSaver', () => {
           return Promise.resolve(session);
         },
         driverOf: () => Promise.resolve(driver),
+        transactionState: () => session.transaction,
       },
       results: store,
       isBusy: () => busy,
@@ -146,7 +154,7 @@ describe('ResultSaver', () => {
     it('runs deletes, updates and inserts in one transaction, then re-reads the rows', async () => {
       makeChanges();
       const outcome = await saver.save(id);
-      expect(outcome).toEqual({ ok: true, statements: 3, refreshed: true });
+      expect(outcome).toEqual({ ok: true, statements: 3, refreshed: true, inTransaction: false });
       expect(session.executed).toEqual([
         'BEGIN',
         'DELETE FROM "users" WHERE "id" = 2',
@@ -155,6 +163,42 @@ describe('ResultSaver', () => {
         'COMMIT',
         'SELECT * FROM users',
       ]);
+    });
+
+    it('joins a transaction the user opened, fenced by a savepoint (V4.8)', async () => {
+      makeChanges();
+      session.transaction = 'open';
+      const outcome = await saver.save(id);
+      expect(outcome).toEqual({ ok: true, statements: 3, refreshed: true, inTransaction: true });
+      expect(session.executed[0]).toBe('SAVEPOINT datanest_save');
+      expect(session.executed[4]).toBe('RELEASE SAVEPOINT datanest_save');
+      expect(session.executed).not.toContain('BEGIN');
+      expect(session.executed).not.toContain('COMMIT');
+    });
+
+    it('undoes only its own statements when one fails inside the user transaction', async () => {
+      makeChanges();
+      session.transaction = 'open';
+      session.fail = (sql) =>
+        sql.startsWith('UPDATE') ? new DbError('constraint', 'Duplicate entry') : undefined;
+      expect(await saver.save(id)).toMatchObject({ ok: false, code: 'constraint' });
+      expect(session.executed.at(-1)).toBe('ROLLBACK TO SAVEPOINT datanest_save');
+      expect(session.executed).not.toContain('ROLLBACK');
+      expect(store.get(id)?.changedCells).toBe(1);
+    });
+
+    it('refuses to save into a failed transaction', async () => {
+      makeChanges();
+      session.transaction = 'failed';
+      expect(await saver.save(id)).toMatchObject({ ok: false, code: 'transaction-failed' });
+      expect(session.executed).toEqual([]);
+    });
+
+    it('uses its own transaction when the driver cannot tell', async () => {
+      makeChanges();
+      session.transaction = undefined;
+      await saver.save(id);
+      expect(session.executed[0]).toBe('BEGIN');
     });
 
     it('goes through the session that produced the rows', async () => {
@@ -259,7 +303,12 @@ describe('ResultSaver', () => {
       session.fail = (sql) =>
         sql.startsWith('SELECT') ? new DbError('timeout', 'slow') : undefined;
       const outcome = await saver.save(id);
-      expect(outcome).toEqual({ ok: true, statements: 3, refreshed: false });
+      expect(outcome).toEqual({
+        ok: true,
+        statements: 3,
+        refreshed: false,
+        inTransaction: false,
+      });
       expect(store.get(id)).toMatchObject({ changedCells: 0, insertedRows: 0, deletedRows: 0 });
     });
 
@@ -310,6 +359,7 @@ describe('ResultSaver', () => {
           acquire: () => Promise.reject(new DbError('connection-failed', 'refused')),
           driverOf: () =>
             Promise.resolve({ id: 'mysql', dialect: postgresDialect } as unknown as Driver),
+          transactionState: () => undefined,
         },
         results: store,
         isBusy: () => false,
@@ -346,6 +396,14 @@ describe('ResultSaver', () => {
         ].join('\n'),
       });
       expect(session.executed).toEqual([]);
+    });
+
+    it('previews the savepoint when the editor has a transaction open', async () => {
+      makeChanges();
+      session.transaction = 'open';
+      const outcome = await saver.preview(id);
+      expect(outcome.ok && outcome.sql.split('\n')[1]).toBe('SAVEPOINT datanest_save;');
+      expect(outcome.ok && outcome.sql).toContain('RELEASE SAVEPOINT datanest_save;');
     });
 
     it('keeps a long statement on one comment line', async () => {

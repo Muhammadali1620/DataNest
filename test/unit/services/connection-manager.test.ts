@@ -499,4 +499,75 @@ describe('ConnectionManager', () => {
       expect(ConnectionManager.treeOwner('abc')).not.toBe(ConnectionManager.treeOwner('def'));
     });
   });
+
+  describe('transactions (V4.8)', () => {
+    beforeEach(() => {
+      drivers.driver('mysql').tracksTransactions = true;
+    });
+
+    it('reports the state of an owner and every change', async () => {
+      const changes: unknown[] = [];
+      manager.onDidChangeTransaction((change) => changes.push(change));
+      expect(manager.transactionState('editor:a')).toBeUndefined();
+      const session = await manager.acquire('editor:a', { connectionId: mysql.id });
+      expect(manager.transactionState('editor:a')).toBe('idle');
+      await drain(session.execute('BEGIN'));
+      expect(manager.transactionState('editor:a')).toBe('open');
+      await drain(session.execute('ROLLBACK'));
+      expect(changes).toEqual([
+        { owner: 'editor:a', connectionId: mysql.id, state: 'open' },
+        { owner: 'editor:a', connectionId: mysql.id, state: 'idle' },
+      ]);
+    });
+
+    it('says the transaction ended when its session is closed', async () => {
+      const changes: unknown[] = [];
+      manager.onDidChangeTransaction((change) => changes.push(change));
+      const session = await manager.acquire('editor:a', { connectionId: mysql.id });
+      await drain(session.execute('BEGIN'));
+      await manager.release('editor:a');
+      expect(changes.at(-1)).toEqual({
+        owner: 'editor:a',
+        connectionId: mysql.id,
+        state: 'idle',
+        ended: 'closed',
+      });
+    });
+
+    it('says the transaction was lost with the link', async () => {
+      const changes: { ended?: string }[] = [];
+      manager.onDidChangeTransaction((change) => changes.push(change));
+      const session = await manager.acquire('editor:a', { connectionId: mysql.id });
+      await drain(session.execute('BEGIN'));
+      const inner = drivers.driver('mysql').lastSession;
+      if (inner !== undefined) {
+        inner.executeError = linkLostError();
+      }
+      await expect(drain(session.execute('SELECT 1'))).rejects.toThrow();
+      expect(changes.map((change) => change.ended)).toContain('lost');
+    });
+
+    it('lists the owners of a connection that have a transaction to end', async () => {
+      const a = await manager.acquire('editor:a', { connectionId: mysql.id });
+      await manager.acquire('editor:b', { connectionId: mysql.id });
+      expect(manager.ownersInTransaction(mysql.id)).toEqual([]);
+      await drain(a.execute('BEGIN'));
+      expect(manager.ownersInTransaction(mysql.id)).toEqual(['editor:a']);
+      expect(manager.ownersInTransaction('other')).toEqual([]);
+    });
+
+    it('stays quiet when an idle session closes, and survives a failing listener', async () => {
+      const seen = vi.fn();
+      manager.onDidChangeTransaction(() => {
+        throw new Error('boom');
+      });
+      manager.onDidChangeTransaction(seen);
+      await manager.acquire('editor:a', { connectionId: mysql.id });
+      await manager.release('editor:a');
+      expect(seen).not.toHaveBeenCalled();
+      const session = await manager.acquire('editor:b', { connectionId: mysql.id });
+      await drain(session.execute('BEGIN'));
+      expect(seen).toHaveBeenCalledTimes(1);
+    });
+  });
 });

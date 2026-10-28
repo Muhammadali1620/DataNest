@@ -4,6 +4,8 @@ import { splitStatements, statementsIn, type SqlStatement } from '../../core/sql
 import type { QueryRunner, RunOutcome } from '../../services/query-runner';
 import type { ConnectionStore } from '../../services/connection-store';
 import { type Danger } from '../../core/sql/danger';
+import { commitsImplicitly } from '../../core/sql/transaction-control';
+import type { TransactionState } from '../../drivers/driver';
 import { riskyStatements, type RiskyStatement } from '../../services/safe-mode';
 import { policyOf, runVerdict, type WritePolicy } from '../../services/write-policy';
 import { summaryLine } from '../../services/history-format';
@@ -25,6 +27,10 @@ export interface RunQueryDeps {
   readonly diagnostics?: {
     show(documentUri: string, results: RunOutcome['results'], driver: DriverId | undefined): void;
   };
+  /** True when the document runs in manual commit mode (V4.8). */
+  readonly isManual?: (documentUri: string) => boolean;
+  /** The transaction of the document's session, as the server last reported it. */
+  readonly transactionState?: (documentUri: string) => TransactionState | undefined;
 }
 
 export type RunCommandName = 'run' | 'runAll' | 'cancel' | 'runRange';
@@ -57,12 +63,21 @@ export function runCommandHandlers(
       return undefined;
     }
     const policy = policyOf(deps.store.get(target.connectionId));
-    if (!(await allowed(statements, driverOf(deps, documentUri), policy))) {
+    const driver = driverOf(deps, documentUri);
+    if (!(await allowed(statements, driver, policy))) {
+      return undefined;
+    }
+    if (!(await keepsTransaction(statements, driver, deps.transactionState?.(documentUri)))) {
       return undefined;
     }
     // The panel opens before the run, so a slow query shows "Running…" at once.
     deps.showResults(documentUri);
-    const outcome = await deps.runner.run({ documentUri, target, statements });
+    const outcome = await deps.runner.run({
+      documentUri,
+      target,
+      statements,
+      manualCommit: deps.isManual?.(documentUri) === true,
+    });
     deps.diagnostics?.show(documentUri, outcome.results, driverOf(deps, documentUri));
     report(outcome, deps.logger);
     return outcome;
@@ -231,6 +246,38 @@ async function allowed(
   const choice = await vscode.window.showWarningMessage(
     vscode.l10n.t('This can change or delete a lot of data. Run it?'),
     { modal: true, detail: riskLines(risky) },
+    run,
+  );
+  return choice === run;
+}
+
+/**
+ * MySQL commits an open transaction before DDL and a few other statements, silently;
+ * with a transaction open the user is asked first, since its changes then cannot be
+ * rolled back. Returns false when the run must not happen.
+ */
+async function keepsTransaction(
+  statements: readonly SqlStatement[],
+  driver: DriverId | undefined,
+  state: TransactionState | undefined,
+): Promise<boolean> {
+  if (state !== 'open') {
+    return true;
+  }
+  const committing = statements.find((statement) => commitsImplicitly(statement.text, driver));
+  if (committing === undefined) {
+    return true;
+  }
+  const run = vscode.l10n.t('Commit and Run');
+  const choice = await vscode.window.showWarningMessage(
+    vscode.l10n.t('MySQL commits the open transaction before this statement. Run it?'),
+    {
+      modal: true,
+      detail: vscode.l10n.t(
+        '{0}\n\nThe changes made so far are saved for good and cannot be rolled back.',
+        summaryLine(committing.text, 70),
+      ),
+    },
     run,
   );
   return choice === run;

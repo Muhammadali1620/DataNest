@@ -39,5 +39,11 @@ export type WorkerToHost =
        */
       readonly blobs?: readonly WireBlob[];
     }
-  | { readonly t: 'done'; readonly id: number; readonly affectedRows?: number }
-  | { readonly t: 'error'; readonly id: number; readonly error: WireError };
+  | {
+      readonly t: 'done';
+      readonly id: number;
+      readonly affectedRows?: number;
+      /** A transaction is open after the statement; absent where SQLite cannot say. */
+      readonly tx?: boolean;
+    }
+  | { readonly t: 'error'; readonly id: number; readonly error: WireError; readonly tx?: boolean };

@@ -289,3 +289,39 @@ describe('showDefinition', () => {
     await expect(handlers.showDefinition(tableNode)).rejects.toThrow('no rights');
   });
 });
+
+describe('disconnect with open transactions (V4.8)', () => {
+  function withConfirm(answer: boolean) {
+    const disconnect = vi.fn(() => Promise.resolve());
+    const refresh = vi.fn();
+    const asked: string[] = [];
+    const handlers = treeCommandHandlers({
+      manager: { connect: () => Promise.resolve(), disconnect } as never,
+      tree: { refresh },
+      cache: { invalidate: () => undefined },
+      openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.resolve(),
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+      confirmDisconnect: (connectionId) => {
+        asked.push(connectionId);
+        return Promise.resolve(answer);
+      },
+    });
+    return { handlers, disconnect, refresh, asked };
+  }
+
+  it('asks first and disconnects on yes', async () => {
+    const { handlers, disconnect, asked } = withConfirm(true);
+    await handlers.disconnect(connectionNode);
+    expect(asked).toEqual(['c1']);
+    expect(disconnect).toHaveBeenCalledWith('c1');
+  });
+
+  it('keeps the connection on no', async () => {
+    const { handlers, disconnect, refresh } = withConfirm(false);
+    await handlers.disconnect(connectionNode);
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});

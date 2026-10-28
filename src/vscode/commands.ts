@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../core/logging/logger';
-import type { ConnectionManager } from '../services/connection-manager';
+import { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
@@ -35,6 +35,8 @@ import { templateCommandHandlers } from './tree/template-commands';
 import { createSettings } from './settings';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
+import type { TransactionStatus } from './editor/transaction-status';
+import type { TransactionModes } from './editor/transaction-modes';
 
 export interface CommandDeps {
   readonly logger: Logger;
@@ -58,6 +60,9 @@ export interface CommandDeps {
   readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
   /** Reads the project connection files again. */
   readonly reloadProjects?: () => Promise<void>;
+  /** The transaction of the active editor: its status and Commit/Rollback (V4.8). */
+  readonly transactions: TransactionStatus;
+  readonly transactionModes: TransactionModes;
 }
 
 /** The items selected in the tree, which VS Code passes after the clicked one. */
@@ -88,6 +93,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     logger: deps.logger,
     showResults: deps.showResults,
     diagnostics: deps.diagnostics,
+    isManual: (documentUri) => deps.transactionModes.modeOf(documentUri) === 'manual',
+    transactionState: (documentUri) =>
+      deps.manager.transactionState(ConnectionManager.editorOwner(documentUri)),
   });
   /** Opens the DDL of an object in a new SQL editor on its connection and database. */
   const showDefinition = async (connectionId: string, object: ObjectRef): Promise<void> => {
@@ -108,6 +116,22 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
     reloadProjects: deps.reloadProjects,
+    confirmDisconnect: async (connectionId) => {
+      const open = deps.manager.ownersInTransaction(connectionId).length;
+      if (open === 0) {
+        return true;
+      }
+      const disconnect = vscode.l10n.t('Disconnect');
+      const choice = await vscode.window.showWarningMessage(
+        vscode.l10n.t('{0} editor(s) have an open transaction. Disconnect anyway?', open),
+        {
+          modal: true,
+          detail: vscode.l10n.t('The server rolls back every change that was not committed.'),
+        },
+        disconnect,
+      );
+      return choice === disconnect;
+    },
   });
   const schemaDeps = {
     actions: new SchemaActions({ manager: deps.manager, cache: deps.cache, logger: deps.logger }),
@@ -285,6 +309,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runAll]: runCommands.runAll,
     [COMMAND_IDS.runRange]: runCommands.runRange,
     [COMMAND_IDS.cancelQuery]: runCommands.cancel,
+    [COMMAND_IDS.commitTransaction]: () => deps.transactions.end('commit'),
+    [COMMAND_IDS.rollbackTransaction]: () => deps.transactions.end('rollback'),
+    [COMMAND_IDS.toggleTransactionMode]: () => {
+      deps.transactions.toggleMode();
+    },
     [COMMAND_IDS.showResults]: () => {
       const document = vscode.window.activeTextEditor?.document;
       if (document?.languageId !== 'sql') {

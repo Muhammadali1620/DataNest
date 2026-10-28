@@ -80,5 +80,11 @@
   "commands.connections.setColor.title": "Цвет…",
   "commands.connections.moveToProject.title": "Перенести в подключения проекта…",
   "commands.connections.moveToUser.title": "Перенести в мои подключения…",
-  "commands.project.openFile.title": "Открыть файл подключений проекта"
+  "commands.project.openFile.title": "Открыть файл подключений проекта",
+  "commands.transaction.commit.title": "Зафиксировать транзакцию",
+  "commands.transaction.rollback.title": "Откатить транзакцию",
+  "commands.transaction.toggleMode.title": "Переключить автофиксацию / ручную фиксацию",
+  "configuration.transactionMode.description": "Как фиксирует изменения новый SQL-редактор. `auto`: каждый запрос сохраняется сразу. `manual`: первый изменяющий запрос открывает транзакцию, которая ждёт **Commit** или **Rollback** в строке состояния. Там же переключается каждый редактор.",
+  "configuration.transactionMode.auto": "Каждый запрос сохраняется сразу",
+  "configuration.transactionMode.manual": "Изменения ждут Commit или Rollback"
 }

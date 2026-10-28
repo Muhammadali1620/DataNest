@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import { ConnectionManager } from '../../services/connection-manager';
+import { endTransaction } from '../../services/transactions';
 import type { ConnectionStore } from '../../services/connection-store';
 import { describeTarget } from '../../shared/connection';
 import { COMMAND_IDS } from '../command-ids';
@@ -105,8 +106,38 @@ export class QueryEditors implements vscode.Disposable {
     const database = await this.pickDatabase(connectionId);
     const binding: DocumentBinding =
       database === undefined ? { connectionId } : { connectionId, database };
+    const current = this.bindings.get(uri);
+    const moving =
+      current?.connectionId !== binding.connectionId || current.database !== binding.database;
+    if (moving && !(await this.settleTransaction(uri))) {
+      return undefined;
+    }
     this.bindings.bind(uri, binding);
     return binding;
+  }
+
+  /**
+   * A switch closes the editor's session; an open transaction would silently roll
+   * back, so the user decides first (V4.8). False means "stay where you are".
+   */
+  private async settleTransaction(documentUri: string): Promise<boolean> {
+    const owner = ConnectionManager.editorOwner(documentUri);
+    const state = this.deps.manager.transactionState(owner);
+    if (state !== 'open' && state !== 'failed') {
+      return true;
+    }
+    const commit = vscode.l10n.t('Commit');
+    const rollback = vscode.l10n.t('Roll Back');
+    const choice = await vscode.window.showWarningMessage(
+      vscode.l10n.t('This editor has an open transaction. Commit it before switching?'),
+      { modal: true },
+      ...(state === 'open' ? [commit, rollback] : [rollback]),
+    );
+    if (choice === undefined) {
+      return false;
+    }
+    await endTransaction(this.deps.manager, owner, choice === commit ? 'commit' : 'rollback');
+    return true;
   }
 
   dispose(): void {

@@ -43,6 +43,12 @@ export const COMMAND_IDS = {
   runRange: 'datanest.query.runRange',
   /** Stops the statement running in this editor. */
   cancelQuery: 'datanest.query.cancel',
+  /** Saves the open transaction of the active editor (V4.8). */
+  commitTransaction: 'datanest.transaction.commit',
+  /** Undoes the open transaction of the active editor. */
+  rollbackTransaction: 'datanest.transaction.rollback',
+  /** Switches the active editor between auto-commit and manual commit. */
+  toggleTransactionMode: 'datanest.transaction.toggleMode',
   /** Opens (or brings back) the result panel of the active query. */
   showResults: 'datanest.results.show',
   /** Opens a table or view from the tree as a paged result. */
@@ -108,6 +114,8 @@ export const CONFIG_KEYS = {
   historyLimit: 'historyLimit',
   /** What happens before a statement that can destroy data runs: confirm, block or off. */
   safeMode: 'safeMode',
+  /** How new SQL editors commit: each statement at once, or on the user's Commit. */
+  transactionMode: 'transactionMode',
   // How Format Document writes SQL (sql-formatter options).
   formatKeywordCase: 'format.keywordCase',
   formatDataTypeCase: 'format.dataTypeCase',

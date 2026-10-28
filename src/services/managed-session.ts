@@ -15,23 +15,42 @@ import type {
   TableRef,
   TableStructure,
 } from '../core/model/objects';
-import type { ExecuteEvent, ExecuteOptions, MetadataReader, Session } from '../drivers/driver';
+import type {
+  ExecuteEvent,
+  ExecuteOptions,
+  MetadataReader,
+  Session,
+  TransactionState,
+} from '../drivers/driver';
 
 /** Errors that mean the connection itself is unusable, not just this statement. */
 function isLinkLost(code: string): boolean {
   return code === 'connection-failed';
 }
 
+export interface ManagedSessionHooks {
+  /** Called once when a call fails because the link is gone. */
+  readonly onLinkLost: (error: unknown) => void;
+  /** Called after the session closed, e.g. to let go of its SSH tunnel. */
+  readonly onClosed?: () => Promise<void>;
+  /** Called when a statement left the transaction in another state (V4.8). */
+  readonly onTransaction?: (state: TransactionState) => void;
+}
+
 export class ManagedSession implements Session {
   readonly metadata: MetadataReader;
+  private readonly onLinkLost: (error: unknown) => void;
+  private readonly onClosed: () => Promise<void>;
+  private readonly onTransaction: (state: TransactionState) => void;
+  private lastTransaction: TransactionState = 'idle';
 
   constructor(
     private readonly inner: Session,
-    /** Called once when a call fails because the link is gone. */
-    private readonly onLinkLost: (error: unknown) => void,
-    /** Called after the session closed, e.g. to let go of its SSH tunnel. */
-    private readonly onClosed: () => Promise<void> = () => Promise.resolve(),
+    hooks: ManagedSessionHooks,
   ) {
+    this.onLinkLost = hooks.onLinkLost;
+    this.onClosed = hooks.onClosed ?? (() => Promise.resolve());
+    this.onTransaction = hooks.onTransaction ?? (() => undefined);
     this.metadata = new ManagedMetadata(inner.metadata, (error) => {
       this.report(error);
     });
@@ -39,6 +58,11 @@ export class ManagedSession implements Session {
 
   execute(sql: string, options?: ExecuteOptions): AsyncIterable<ExecuteEvent> {
     return this.watch(this.inner.execute(sql, options));
+  }
+
+  /** What the driver says, or undefined where it cannot tell. */
+  transactionState(): TransactionState | undefined {
+    return this.inner.transactionState?.();
   }
 
   async cancel(): Promise<void> {
@@ -66,6 +90,17 @@ export class ManagedSession implements Session {
     } catch (error) {
       this.report(error);
       throw toDbError(error);
+    } finally {
+      this.checkTransaction();
+    }
+  }
+
+  /** Tells the owner when a statement opened, ended or spoiled a transaction. */
+  private checkTransaction(): void {
+    const state = this.inner.transactionState?.();
+    if (state !== undefined && state !== this.lastTransaction) {
+      this.lastTransaction = state;
+      this.onTransaction(state);
     }
   }
 

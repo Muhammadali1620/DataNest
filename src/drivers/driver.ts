@@ -209,6 +209,13 @@ export interface MetadataReader {
 }
 
 /**
+ * Where a session stands with transactions: `idle` (every statement commits on its
+ * own), `open` (changes wait for COMMIT or ROLLBACK), or `failed` (PostgreSQL: an
+ * error spoiled the transaction, and only ROLLBACK helps).
+ */
+export type TransactionState = 'idle' | 'open' | 'failed';
+
+/**
  * One live connection. Each SQL editor gets its own session, so a slow query in
  * one tab never blocks another. Statements run one at a time per session.
  */
@@ -216,6 +223,11 @@ export interface Session {
   execute(sql: string, options?: ExecuteOptions): AsyncIterable<ExecuteEvent>;
   /** Cancels the currently running statement, if any. Safe to call anytime. */
   cancel(): Promise<void>;
+  /**
+   * The transaction state as the server reported it after the last statement (V4.8).
+   * Absent where the driver cannot tell; DataNest never guesses it from the SQL.
+   */
+  transactionState?(): TransactionState | undefined;
   readonly metadata: MetadataReader;
   /** Closes the connection; the session is unusable afterwards. */
   close(): Promise<void>;

@@ -24,6 +24,7 @@ import type {
   MetadataReader,
   ResultColumn,
   Session,
+  TransactionState,
 } from '../../src/drivers/driver';
 import type { CellValue } from '../../src/shared/cell-value';
 
@@ -174,8 +175,29 @@ export class FakeSession implements Session {
   columns: ResultColumn[] = [{ name: 'one' }];
   /** Awaited before the first event, so a test can keep a statement running. */
   gate: (() => Promise<void>) | undefined;
+  /**
+   * When set, transactionState() answers like a server: BEGIN opens a transaction,
+   * COMMIT and ROLLBACK end it, and an error inside one spoils it (as PostgreSQL does).
+   */
+  tracksTransactions = false;
+  private transaction: TransactionState = 'idle';
 
   constructor(readonly config: ResolvedConnectionConfig) {}
+
+  transactionState(): TransactionState | undefined {
+    return this.tracksTransactions ? this.transaction : undefined;
+  }
+
+  private noteTransaction(sql: string, failed: boolean): void {
+    const verb = sql.trim().split(/\s+/)[0]?.toUpperCase();
+    if (failed) {
+      this.transaction = this.transaction === 'idle' ? 'idle' : 'failed';
+    } else if (verb === 'BEGIN') {
+      this.transaction = 'open';
+    } else if (verb === 'COMMIT' || verb === 'ROLLBACK') {
+      this.transaction = 'idle';
+    }
+  }
 
   get isClosed(): boolean {
     return this.closeCount > 0;
@@ -204,11 +226,14 @@ export class FakeSession implements Session {
     await Promise.resolve();
     await this.gate?.();
     if (this.executeError !== undefined) {
+      this.noteTransaction(sql, true);
       throw this.executeError;
     }
     if (this.failExecuteWhen?.(sql) === true) {
+      this.noteTransaction(sql, true);
       throw new DbError('permission-denied', `Not allowed: ${sql}`);
     }
+    this.noteTransaction(sql, false);
     yield { kind: 'columns', columns: this.columns };
     yield { kind: 'rows', rows: this.rowsFor?.(sql) ?? this.rows };
     yield { kind: 'done' };
@@ -244,6 +269,8 @@ export class FakeDriver implements Driver {
   sessionColumns: ResultColumn[] = [{ name: 'one' }];
   /** While true, every statement waits for `releaseExecute()`. */
   holdExecute = false;
+  /** Copied onto every session: it reports transactions like a server. */
+  tracksTransactions = false;
 
   private gate: Promise<void> | undefined;
   private openGate: (() => void) | undefined;
@@ -284,6 +311,7 @@ export class FakeDriver implements Driver {
     session.rows = [...this.sessionRows];
     session.columns = [...this.sessionColumns];
     session.rowsFor = this.sessionRowsFor;
+    session.tracksTransactions = this.tracksTransactions;
     session.gate = () => this.waitGate();
     session.metadata.databases = [...this.sessionMetadata.databases];
     session.metadata.schemas = [...this.sessionMetadata.schemas];

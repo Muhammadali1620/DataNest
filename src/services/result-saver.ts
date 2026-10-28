@@ -24,13 +24,39 @@ export type SaveOutcome =
       readonly statements: number;
       /** False when the changes were saved but the rows could not be read again. */
       readonly refreshed: boolean;
+      /**
+       * True when the session already had a transaction open (V4.8): the changes
+       * joined it and wait for the user's Commit or Rollback.
+       */
+      readonly inTransaction: boolean;
     }
   | SaveFailure;
 
 export type PreviewOutcome = { readonly ok: true; readonly sql: string } | SaveFailure;
 
 /** The part of the connection manager the saver uses. */
-export type SaverConnections = Pick<ConnectionManager, 'acquire' | 'driverOf'>;
+export type SaverConnections = Pick<ConnectionManager, 'acquire' | 'driverOf' | 'transactionState'>;
+
+/**
+ * How a save is fenced. On its own it is a transaction; inside a transaction the user
+ * opened, a savepoint, so a failure undoes only the save and the user's transaction
+ * stays — a nested BEGIN would commit it in MySQL and be ignored in PostgreSQL.
+ */
+interface Fence {
+  readonly begin: string;
+  readonly commit: string;
+  readonly rollback: string;
+}
+
+const OWN_TRANSACTION: Fence = { begin: 'BEGIN', commit: 'COMMIT', rollback: 'ROLLBACK' };
+
+const SAVEPOINT = 'datanest_save';
+
+const JOINED_TRANSACTION: Fence = {
+  begin: `SAVEPOINT ${SAVEPOINT}`,
+  commit: `RELEASE SAVEPOINT ${SAVEPOINT}`,
+  rollback: `ROLLBACK TO SAVEPOINT ${SAVEPOINT}`,
+};
 
 export interface ResultSaverDeps {
   readonly manager: SaverConnections;
@@ -68,11 +94,16 @@ export class ResultSaver {
     if ('ok' in prepared) {
       return prepared;
     }
+    const origin = prepared.summary.origin;
+    const fence =
+      origin !== undefined && this.deps.manager.transactionState(origin.owner) === 'open'
+        ? JOINED_TRANSACTION
+        : OWN_TRANSACTION;
     const lines = [
       `-- DataNest: pending changes of  ${oneLine(prepared.summary.statement)}`,
-      'BEGIN;',
+      `${fence.begin};`,
       ...prepared.statements.map((statement) => `${statement.sql};`),
-      'COMMIT;',
+      `${fence.commit};`,
       '',
     ];
     return { ok: true, sql: lines.join('\n') };
@@ -108,14 +139,22 @@ export class ResultSaver {
       return failure(dbError.code, dbError.message);
     }
 
+    const state = session.transactionState?.();
+    if (state === 'failed') {
+      return failure(
+        'transaction-failed',
+        'The open transaction of this editor failed; roll it back before saving',
+      );
+    }
+    const fence = state === 'open' ? JOINED_TRANSACTION : OWN_TRANSACTION;
     let current: string | undefined;
     try {
-      await runStatement(session, 'BEGIN');
+      await runStatement(session, fence.begin);
       for (const statement of statements) {
         current = statement.sql;
         const affected = await runStatement(session, statement.sql);
         if (statement.expectedRows !== undefined && affected !== statement.expectedRows) {
-          await this.rollback(session);
+          await this.rollback(session, fence);
           return failure(
             'row-missing',
             affected === undefined || affected === 0
@@ -125,10 +164,10 @@ export class ResultSaver {
           );
         }
       }
-      current = 'COMMIT';
-      await runStatement(session, 'COMMIT');
+      current = fence.commit;
+      await runStatement(session, fence.commit);
     } catch (error) {
-      await this.rollback(session);
+      await this.rollback(session, fence);
       const dbError = toDbError(error);
       this.logger.warn(`Saving failed: ${dbError.message}`, dbError);
       return failure(dbError.code, dbError.message, current);
@@ -136,7 +175,12 @@ export class ResultSaver {
 
     this.logger.info(`Saved ${statements.length} change(s) of ${summary.id}`);
     const refreshed = await this.reload(summary, session);
-    return { ok: true, statements: statements.length, refreshed };
+    return {
+      ok: true,
+      statements: statements.length,
+      refreshed,
+      inTransaction: fence === JOINED_TRANSACTION,
+    };
   }
 
   private async prepare(resultId: string): Promise<Prepared | SaveFailure> {
@@ -164,9 +208,9 @@ export class ResultSaver {
     }
   }
 
-  private async rollback(session: Session): Promise<void> {
+  private async rollback(session: Session, fence: Fence): Promise<void> {
     try {
-      await runStatement(session, 'ROLLBACK');
+      await runStatement(session, fence.rollback);
     } catch (error) {
       // The connection may be gone already, which rolls the transaction back itself.
       this.logger.warn(`Rollback failed: ${errorMessage(error)}`);

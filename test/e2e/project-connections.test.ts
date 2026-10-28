@@ -43,6 +43,9 @@ describe('project connections', () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     rmSync(join(root, '.vscode'), { recursive: true, force: true });
     rmSync(join(root, 'project.db'), { force: true });
+    // Later tests expect no saved connections: forget the project now, not whenever
+    // the file watcher notices.
+    await vscode.commands.executeCommand('datanest.tree.refresh');
   });
 
   it('registers the project commands', async () => {

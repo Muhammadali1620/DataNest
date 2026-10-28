@@ -500,4 +500,50 @@ describe('QueryRunner', () => {
       expect((await plain.run(request('SELECT 1'))).results).toHaveLength(1);
     });
   });
+
+  describe('manual commit (V4.8)', () => {
+    beforeEach(() => {
+      drivers.driver('mysql').tracksTransactions = true;
+    });
+
+    function manual(sql: string) {
+      return { ...request(sql), manualCommit: true };
+    }
+
+    it('opens a transaction before the first change and leaves it open', async () => {
+      await runner.run(manual('SELECT 1; UPDATE t SET a = 1; INSERT INTO t VALUES (2)'));
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual([
+        'SELECT 1',
+        'BEGIN',
+        'UPDATE t SET a = 1',
+        'INSERT INTO t VALUES (2)',
+      ]);
+      expect(manager.transactionState(ConnectionManager.editorOwner(DOC))).toBe('open');
+    });
+
+    it('does not open another one in the next run, nor for reads', async () => {
+      await runner.run(manual('UPDATE t SET a = 1'));
+      await runner.run(manual('UPDATE t SET a = 2; SELECT 1'));
+      expect(
+        drivers.driver('mysql').lastSession?.executed.filter((sql) => sql === 'BEGIN'),
+      ).toHaveLength(1);
+    });
+
+    it('does not wrap the user own transaction statements', async () => {
+      await runner.run(manual('COMMIT; ROLLBACK'));
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual(['COMMIT', 'ROLLBACK']);
+    });
+
+    it('opens nothing in auto-commit mode', async () => {
+      await runner.run(request('UPDATE t SET a = 1'));
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual(['UPDATE t SET a = 1']);
+    });
+
+    it('reports a BEGIN that fails as the error of the statement it was for', async () => {
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql === 'BEGIN';
+      const outcome = await runner.run(manual('UPDATE t SET a = 1'));
+      expect(outcome.results[0]?.error?.message).toBe('Not allowed: BEGIN');
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual(['BEGIN']);
+    });
+  });
 });

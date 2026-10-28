@@ -4,7 +4,13 @@ import { DbError } from '../../core/errors';
 import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import { identityCheck, sniName, tlsFailure, type TlsMaterial, tlsMaterial } from '../common/tls';
-import type { ExecuteEvent, ExecuteOptions, ResultColumn, Session } from '../driver';
+import type {
+  ExecuteEvent,
+  ExecuteOptions,
+  ResultColumn,
+  Session,
+  TransactionState,
+} from '../driver';
 import { toPgDbError } from './errors';
 import { PostgresMetadata } from './metadata';
 import { pgTypeName, pgTypeParser, toCellValue } from './values';
@@ -96,6 +102,8 @@ class PostgresSession implements Session {
   private closed = false;
   /** Identity of the statement currently on the wire; undefined between statements. */
   private active: object | undefined;
+  /** The last statement failed; see transactionState(). */
+  private lastFailed = false;
 
   constructor(client: pg.Client, config: ResolvedConnectionConfig, tls: TlsMaterial | undefined) {
     this.client = client;
@@ -106,6 +114,23 @@ class PostgresSession implements Session {
 
   execute(sql: string, options: ExecuteOptions = {}): AsyncIterable<ExecuteEvent> {
     return this.run(sql, options);
+  }
+
+  /**
+   * From the status byte of the server's last "ready for query" message. An error
+   * arrives just before that message; until it is read, an error inside a
+   * transaction block means the block failed, which is what PostgreSQL does.
+   */
+  transactionState(): TransactionState {
+    const client = this.client as unknown as {
+      readonly readyForQuery?: boolean;
+      getTransactionStatus?(): string | null;
+    };
+    let status = client.getTransactionStatus?.() ?? null;
+    if (this.lastFailed && client.readyForQuery !== true && status === 'T') {
+      status = 'E';
+    }
+    return status === 'T' ? 'open' : status === 'E' ? 'failed' : 'idle';
   }
 
   private async *run(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
@@ -179,6 +204,7 @@ class PostgresSession implements Session {
     });
     query.on('error', (error: unknown) => {
       release();
+      this.lastFailed = true;
       const dbError = toPgDbError(error);
       // The cancel we issued ourselves after the row limit is a success, not an error.
       if (limitHit && (dbError.code === 'cancelled' || dbError.sqlState === QUERY_CANCELLED)) {
@@ -190,6 +216,7 @@ class PostgresSession implements Session {
     });
     query.on('end', (result: ResultLike | undefined) => {
       release();
+      this.lastFailed = false;
       if (settled) {
         return;
       }

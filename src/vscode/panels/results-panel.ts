@@ -151,6 +151,14 @@ export class ResultsPanel implements vscode.Disposable {
             ),
           );
         }
+        if (outcome.inTransaction) {
+          // The rows are written, but only the user's Commit makes them stay (V4.8).
+          void vscode.window.showInformationMessage(
+            vscode.l10n.t(
+              'The changes joined the open transaction of the editor: Commit keeps them, Rollback undoes them.',
+            ),
+          );
+        }
         return { ok: true, statements: outcome.statements, refreshed: outcome.refreshed };
       }
       return {

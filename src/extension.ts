@@ -40,12 +40,15 @@ import { ErrorDiagnostics } from './vscode/editor/error-diagnostics';
 import { createBundleFormatterLoader } from './services/sql-format';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
+import { TransactionModes } from './vscode/editor/transaction-modes';
+import { TransactionStatus } from './vscode/editor/transaction-status';
 import {
   createSettings,
   readHistoryLimit,
   readPageSize,
   readQueryTimeoutMs,
   readRowLimit,
+  readTransactionMode,
 } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 import type { TableNode } from './vscode/tree/nodes';
@@ -105,7 +108,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     limits: { rowLimit: () => readRowLimit(), timeoutMs: () => readQueryTimeoutMs() },
     logger,
   });
+  const transactionModes = new TransactionModes(() => readTransactionMode());
+  const transactions = new TransactionStatus({
+    editors,
+    manager,
+    runner,
+    modes: transactionModes,
+    logger,
+  });
   context.subscriptions.push(
+    transactions,
     new RunStatus(runner),
     vscode.languages.registerCompletionItemProvider(
       { language: 'sql' },
@@ -300,6 +312,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       objectEdits,
       diagnostics,
       reloadProjects: () => projects.reloadAll(),
+      transactions,
+      transactionModes,
     }),
   );
 

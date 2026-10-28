@@ -3,14 +3,38 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-10-28
+
+Connections for real work: remote and production databases, connections shared
+with the team, transactions on your word, and per-connection session settings.
 
 ### Fixed
 
-- Editing a connection no longer drops its TLS settings when it is saved again.
+- Editing a connection no longer drops its TLS settings, or its production and
+  read-only flags, when it is saved again.
+- Saving grid edits in an editor with an open transaction no longer commits that
+  transaction: the edits join it and wait for your Commit or Rollback.
 
 ### Added
 
+- Project connections: a workspace folder can keep connections in
+  `.vscode/datanest.json`, a file without passwords that the team commits. Each person
+  keeps their own passwords on their own computer. The project shows above your
+  folders in the tree; connections move into it and back, and the editor offers
+  completion for the file. Untrusted workspaces list the file but do not use it.
+- Transactions: the status bar shows whether the editor has a transaction open (as the
+  server reports it) with Commit and Rollback buttons, and switches between auto-commit
+  and manual commit, where the first change opens a transaction. DataNest asks before
+  MySQL silently commits an open transaction (DDL), before an editor switches connection
+  and before a disconnect, and says when a closed editor or a lost link rolled one back.
+  New setting `datanest.transactionMode`.
+- Session settings per connection: connect timeout (also for SSH hops), query timeout,
+  keep-alive, time zone, MySQL character set and init SQL that every new session runs
+  first. TCP keep-alive is always on.
+- Filter the databases and schemas a connection shows, by ticking them or with patterns
+  such as `app_*, !app_test`; the object search follows the same filter.
+- Export the connection list to a file (without passwords) and import it on another
+  computer, folders included.
 - Connect through an SSH tunnel: log in with a password, a private key (with its
   passphrase) or an SSH agent. Secrets stay in the editor's secret storage. The first
   connection to a server shows its key fingerprint to trust, and a changed key is
@@ -29,6 +53,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   once) and folders around, or use “Move to Folder…”. Color labels for connections.
 - “Import Connections from .env…” finds database URLs and `DB_HOST`/`PGHOST`-style
   variables in the workspace's `.env` files and adds the ones you pick.
+
+### Changed
+
+- The e2e tests open a scratch workspace folder, and a failed CI e2e run repeats its
+  failures as an annotation.
 
 ## [0.3.0] - 2026-10-28
 

@@ -19,7 +19,18 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 **Connections**
 
 - MySQL, MariaDB, PostgreSQL and SQLite, each driver loaded only when you first use it.
-- A form with “Test connection”, editing, duplicating and deleting.
+- A form with “Test connection”, editing, duplicating and deleting; fill it from a
+  `postgres://` or `mysql://` URL, or import connections from the workspace's `.env` files.
+- SSH tunnels with a password, a key or an SSH agent, through up to five jump hosts,
+  with the server key checked like OpenSSH does.
+- SSL/TLS with a choice of checks, your own CA and client certificates.
+- Folders, drag and drop and color labels in the tree.
+- Production connections stand out in red and confirm every change; read-only
+  connections refuse changes, and the server session is read-only too.
+- Project connections in `.vscode/datanest.json`, committed for the team without passwords.
+- Per connection: timeouts, keep-alive, time zone, character set, init SQL, and which
+  databases and schemas to show.
+- Export the connection list and import it elsewhere — never with passwords.
 - Passwords live in the editor's SecretStorage, never in settings or a file.
 
 **Browsing**
@@ -51,6 +62,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Errors from the server are underlined right where they happened.
 - Generate `SELECT`, `INSERT`, `UPDATE` and `DELETE` templates for a table.
 - A running query shows its elapsed time and can be cancelled.
+- Auto-commit or manual commit per editor: the status bar shows an open transaction,
+  as the server reports it, with Commit and Rollback.
 
 **Results**
 
@@ -93,6 +106,7 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 | `datanest.showSystemObjects` | `false` | Show the server's own databases and schemas. |
 | `datanest.historyLimit` | `500` | Statements kept in the query history; `0` turns it off. |
 | `datanest.safeMode` | `confirm` | Before a destructive statement: `confirm`, `block` or `off`. |
+| `datanest.transactionMode` | `auto` | How a new SQL editor commits: `auto`, or `manual` (Commit/Rollback). |
 | `datanest.format.keywordCase` | `upper` | Keyword case when formatting; also `dataTypeCase`, `functionCase`. |
 | `datanest.format.indentStyle` | `standard` | `standard`, `tabularLeft` or `tabularRight`. |
 | `datanest.format.logicalOperatorNewline` | `before` | Put `AND`/`OR` at the start or the end of a line. |

@@ -17,7 +17,8 @@ function fakeDriver(id: DriverId): Driver {
       defaultKeyword: true,
       insertDefaultRow: () => '',
       ddl: {
-        createTableStub: () => '',
+        designer: { columnComments: false, tableComment: false, types: [] },
+        createTable: () => [],
         dropRelation: () => '',
         renameRelation: () => '',
         truncateTable: () => '',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
+import { newTableDesign } from '../../../../src/shared/table-design';
 
 const { ddl } = mysqlDialect;
 const table = { database: 'shop', name: 'orders' };
@@ -10,13 +11,6 @@ describe('mysql ddl', () => {
     expect(ddl.dropDatabase?.('shop')).toBe('DROP DATABASE `shop`');
     expect(ddl.createSchema).toBeUndefined();
     expect(ddl.dropSchema).toBeUndefined();
-  });
-
-  it('creates a table with an auto-increment key', () => {
-    expect(ddl.createTableStub(table)).toBe(
-      'CREATE TABLE `shop`.`orders` (\n  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY\n)',
-    );
-    expect(ddl.createTableStub({ name: 'loose' })).toMatch(/^CREATE TABLE `loose` \(/);
   });
 
   it('drops, renames and empties tables and views', () => {
@@ -41,5 +35,54 @@ describe('mysql ddl', () => {
 
   it('refuses an empty name instead of writing broken SQL', () => {
     expect(() => ddl.createDatabase?.('')).toThrow('Identifier must not be empty');
+  });
+
+  describe('createTable', () => {
+    it('writes keys, auto numbering, defaults and comments inline', () => {
+      const design = newTableDesign('mysql', 'orders');
+      expect(
+        ddl.createTable(table, {
+          ...design,
+          comment: "it's mine",
+          columns: [
+            ...design.columns,
+            {
+              id: 'n',
+              name: 'note',
+              type: 'varchar',
+              length: '40',
+              nullable: false,
+              defaultValue: "'x'",
+              autoIncrement: false,
+              primaryKey: false,
+              comment: 'a \\ b',
+            },
+          ],
+        }),
+      ).toEqual([
+        [
+          'CREATE TABLE `shop`.`orders` (',
+          '  `id` int AUTO_INCREMENT NOT NULL,',
+          "  `note` varchar(40) NOT NULL DEFAULT 'x' COMMENT 'a \\\\ b',",
+          '  PRIMARY KEY (`id`)',
+          ") COMMENT = 'it''s mine'",
+        ].join('\n'),
+      ]);
+    });
+
+    it('takes the name from the design, not from the reference', () => {
+      const [sql] = ddl.createTable(
+        { database: 'shop', name: 'old' },
+        newTableDesign('mysql', ' new '),
+      );
+      expect(sql).toMatch(/^CREATE TABLE `shop`.`new` \(/);
+    });
+
+    it('offers MySQL types and both kinds of comments', () => {
+      expect(ddl.designer.types).toContain('int unsigned');
+      expect(ddl.designer.types).toContain('enum');
+      expect(ddl.designer.columnComments).toBe(true);
+      expect(ddl.designer.tableComment).toBe(true);
+    });
   });
 });

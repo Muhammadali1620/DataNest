@@ -6,6 +6,7 @@ import { DbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { ObjectRef, RelationKind, TableRef } from '../core/model/objects';
 import type { SchemaDdl, Session } from '../drivers/driver';
+import type { TableDesign } from '../shared/table-design';
 import { browseSession } from './browse-session';
 import { ConnectionManager } from './connection-manager';
 
@@ -19,7 +20,8 @@ export type SchemaAction =
       readonly name: string;
       readonly cascade: boolean;
     }
-  | { readonly kind: 'createTable'; readonly table: TableRef }
+  /** `table` is the scope and `design.name` the name of the new table. */
+  | { readonly kind: 'createTable'; readonly table: TableRef; readonly design: TableDesign }
   | { readonly kind: 'dropTable'; readonly table: TableRef; readonly relation: RelationKind }
   | {
       readonly kind: 'renameTable';
@@ -30,8 +32,23 @@ export type SchemaAction =
   | { readonly kind: 'truncateTable'; readonly table: TableRef }
   | { readonly kind: 'dropObject'; readonly object: ObjectRef };
 
-/** The statement of an action; `unsupported` when this database has no such thing. */
-export function actionSql(action: SchemaAction, ddl: SchemaDdl): string {
+/** The statements of an action; `unsupported` when this database has no such thing. */
+export function actionSql(action: SchemaAction, ddl: SchemaDdl): string[] {
+  if (action.kind === 'createTable') {
+    return ddl.createTable(action.table, action.design);
+  }
+  return [singleStatement(action, ddl)];
+}
+
+/** A script of statements as the user sees it and as it opens in an editor. */
+export function actionScript(statements: readonly string[]): string {
+  return statements.map((statement) => `${statement};`).join('\n\n');
+}
+
+function singleStatement(
+  action: Exclude<SchemaAction, { kind: 'createTable' }>,
+  ddl: SchemaDdl,
+): string {
   switch (action.kind) {
     case 'createDatabase':
       return required(
@@ -44,8 +61,6 @@ export function actionSql(action: SchemaAction, ddl: SchemaDdl): string {
       return required(ddl.createSchema, 'This database has no schemas')(action.name);
     case 'dropSchema':
       return required(ddl.dropSchema, 'This database has no schemas')(action.name, action.cascade);
-    case 'createTable':
-      return ddl.createTableStub(action.table);
     case 'dropTable':
       return ddl.dropRelation(action.table, action.relation);
     case 'renameTable':
@@ -100,21 +115,27 @@ export class SchemaActions {
     this.logger = deps.logger.child('schema');
   }
 
-  /** The SQL the user will see and confirm. */
-  async sqlOf(connectionId: string, action: SchemaAction): Promise<string> {
+  /** The statements the user will see and confirm. */
+  async sqlOf(connectionId: string, action: SchemaAction): Promise<string[]> {
     const driver = await this.deps.manager.driverOf(connectionId);
     return actionSql(action, driver.dialect.ddl);
   }
 
-  /** Runs the confirmed SQL on the browsing session of the right database. */
-  async run(connectionId: string, action: SchemaAction, sql: string): Promise<void> {
+  /** Runs the confirmed statements, in order, on the browsing session of the right database. */
+  async run(
+    connectionId: string,
+    action: SchemaAction,
+    statements: readonly string[],
+  ): Promise<void> {
     if (action.kind === 'dropDatabase') {
       // The tree's own session inside that database would keep it busy.
       await this.deps.manager.release(ConnectionManager.treeOwner(connectionId, action.name));
     }
     const session = await browseSession(this.deps.manager, connectionId, actionDatabase(action));
     try {
-      await drain(session, sql);
+      for (const statement of statements) {
+        await drain(session, statement);
+      }
       this.logger.info(`${action.kind} done on ${connectionId}`);
     } finally {
       // Even a failed statement may have changed something (MySQL DDL is not atomic).

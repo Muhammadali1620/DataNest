@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
+import {
+  type ColumnDesign,
+  newTableDesign,
+  type TableDesign,
+} from '../../../../src/shared/table-design';
+
+function firstColumn(design: TableDesign): ColumnDesign {
+  const [column] = design.columns;
+  if (column === undefined) {
+    throw new Error('The design has no columns');
+  }
+  return column;
+}
 
 const { ddl } = sqliteDialect;
 
@@ -9,12 +22,6 @@ describe('sqlite ddl', () => {
     expect(ddl.dropDatabase).toBeUndefined();
     expect(ddl.createSchema).toBeUndefined();
     expect(ddl.dropSchema).toBeUndefined();
-  });
-
-  it('creates a table on the rowid', () => {
-    expect(ddl.createTableStub({ name: 'notes' })).toBe(
-      'CREATE TABLE "notes" (\n  "id" INTEGER PRIMARY KEY AUTOINCREMENT\n)',
-    );
   });
 
   it('renames tables but not views', () => {
@@ -40,5 +47,34 @@ describe('sqlite ddl', () => {
         expect.objectContaining({ code: 'unsupported' }),
       );
     }
+  });
+
+  describe('createTable', () => {
+    it('puts AUTOINCREMENT on the INTEGER PRIMARY KEY itself', () => {
+      expect(ddl.createTable({ name: 'x' }, newTableDesign('sqlite', 'notes'))).toEqual([
+        'CREATE TABLE "notes" (\n  "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL\n)',
+      ]);
+    });
+
+    it('writes a composite key at the end and has no comments', () => {
+      const base = newTableDesign('sqlite', 'pairs');
+      const key = { ...firstColumn(base), autoIncrement: false };
+      const [sql] = ddl.createTable(
+        { name: 'pairs' },
+        {
+          ...base,
+          comment: 'ignored',
+          columns: [
+            { ...key, name: 'a', comment: 'ignored' },
+            { ...key, id: 'b', name: 'b', defaultValue: '0' },
+          ],
+        },
+      );
+      expect(sql).toBe(
+        'CREATE TABLE "pairs" (\n  "a" integer NOT NULL,\n  "b" integer NOT NULL DEFAULT 0,\n  PRIMARY KEY ("a", "b")\n)',
+      );
+      expect(ddl.designer.columnComments).toBe(false);
+      expect(ddl.designer.tableComment).toBe(false);
+    });
   });
 });

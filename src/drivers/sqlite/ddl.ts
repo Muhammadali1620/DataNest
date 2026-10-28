@@ -4,11 +4,30 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
+import { columnSql, createTableSql, primaryKeySql } from '../common/design-sql';
 import { quoteIdentifier, quoteTable } from './quote';
 
+const TYPES = ['integer', 'real', 'text', 'blob', 'numeric'];
+
 export const sqliteDdl: SchemaDdl = {
-  createTableStub: (table) =>
-    `CREATE TABLE ${quoteTable(table)} (\n  ${quoteIdentifier('id')} INTEGER PRIMARY KEY AUTOINCREMENT\n)`,
+  designer: { columnComments: false, tableComment: false, types: TYPES },
+  createTable: (table, design) => {
+    // AUTOINCREMENT exists only as part of an inline INTEGER PRIMARY KEY.
+    const inlineKey = design.columns.some((column) => column.autoIncrement);
+    const columns = design.columns.map((column) =>
+      columnSql(column, {
+        quote: quoteIdentifier,
+        autoIncrement: () => 'PRIMARY KEY AUTOINCREMENT',
+        trailer: () => '',
+      }),
+    );
+    return [
+      createTableSql(quoteTable({ ...table, name: design.name.trim() }), [
+        ...columns,
+        ...(inlineKey ? [] : primaryKeySql(design, quoteIdentifier)),
+      ]),
+    ];
+  },
   dropRelation: (table, kind) => `DROP ${kind === 'table' ? 'TABLE' : 'VIEW'} ${quoteTable(table)}`,
   renameRelation: (table, kind, newName) => {
     if (kind !== 'table') {

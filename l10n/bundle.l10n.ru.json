@@ -99,7 +99,6 @@
   "This database has no schemas": "В этой базе нет схем",
   "Name of the new database": "Имя новой базы данных",
   "Name of the new schema": "Имя новой схемы",
-  "Name of the new table": "Имя новой таблицы",
   "New name for \"{0}\"": "Новое имя для «{0}»",
   "Type \"{0}\" to confirm": "Введите «{0}» для подтверждения",
   "Type the name exactly as shown": "Введите имя точно как показано",
@@ -121,5 +120,7 @@
   "Drop": "Удалить",
   "Rename": "Переименовать",
   "Empty Table": "Очистить таблицу",
-  "Done: {0}": "Готово: {0}"
+  "Done: {0}": "Готово: {0}",
+  "New Table": "Новая таблица",
+  "New Table in {0}": "Новая таблица в {0}"
 }

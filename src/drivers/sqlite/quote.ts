@@ -1,4 +1,4 @@
-// SQLite quoting: double quotes, doubled inside.
+// SQLite quoting: identifiers in double quotes, strings with ' doubled.
 
 import type { TableRef } from '../../core/model/objects';
 
@@ -20,4 +20,9 @@ export function quoteTable(table: TableRef): string {
   }
   parts.push(quoteIdentifier(table.name));
   return parts.join('.');
+}
+
+/** SQLite never interprets backslashes: doubling quotes is enough. */
+export function quoteString(text: string): string {
+  return `'${text.replaceAll("'", "''")}'`;
 }

@@ -1,4 +1,4 @@
-// MySQL quoting: backticks, doubled inside.
+// MySQL quoting: identifiers in backticks, strings with ' and \ escaped.
 
 import type { TableRef } from '../../core/model/objects';
 
@@ -19,4 +19,9 @@ export function quoteTable(table: TableRef): string {
   }
   parts.push(quoteIdentifier(table.name));
   return parts.join('.');
+}
+
+/** MySQL interprets backslashes in strings by default, so both ' and \ are escaped. */
+export function quoteString(text: string): string {
+  return `'${text.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`;
 }

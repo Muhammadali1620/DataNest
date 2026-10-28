@@ -1,7 +1,7 @@
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
-import { quoteIdentifier, quoteTable } from './quote';
+import { quoteIdentifier, quoteString, quoteTable } from './quote';
 import { sqliteDdl } from './ddl';
 
 export { quoteIdentifier, quoteTable };
@@ -39,11 +39,6 @@ export function literal(value: CellValue): string {
     }
   }
   return 'NULL';
-}
-
-/** SQLite never interprets backslashes: doubling quotes is enough. */
-function quoteString(text: string): string {
-  return `'${text.replaceAll("'", "''")}'`;
 }
 
 export function paginate(sql: string, limit: number, offset: number): string {

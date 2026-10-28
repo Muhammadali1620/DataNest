@@ -1,7 +1,7 @@
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
-import { quoteIdentifier, quoteTable } from './quote';
+import { quoteIdentifier, quoteString, quoteTable } from './quote';
 import { mysqlDdl } from './ddl';
 
 export { quoteIdentifier, quoteTable };
@@ -38,11 +38,6 @@ export function literal(value: CellValue): string {
     }
   }
   return 'NULL';
-}
-
-/** MySQL interprets backslashes in strings by default, so both ' and \ are escaped. */
-function quoteString(text: string): string {
-  return `'${text.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`;
 }
 
 export function paginate(sql: string, limit: number, offset: number): string {

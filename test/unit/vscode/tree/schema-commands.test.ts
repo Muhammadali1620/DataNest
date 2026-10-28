@@ -18,7 +18,6 @@ const TEXTS: SchemaTexts = {
   noSchemas: 'no schemas',
   newDatabaseName: 'database name',
   newSchemaName: 'schema name',
-  newTableName: 'table name',
   renameTo: (name) => `rename ${name}`,
   typeToConfirm: (name) => `type ${name}`,
   typeExactly: 'type exactly',
@@ -82,11 +81,11 @@ function setup(script: Script = {}) {
   const actions = {
     sqlOf: vi.fn((_id: string, action: SchemaAction) =>
       script.unsupported === undefined
-        ? Promise.resolve(`SQL ${action.kind}\nsecond line`)
+        ? Promise.resolve([`SQL ${action.kind}\nsecond line`])
         : Promise.reject(new DbError('unsupported', script.unsupported)),
     ),
-    run: vi.fn((connectionId: string, action: SchemaAction, sql: string) => {
-      ran.push({ connectionId, action, sql });
+    run: vi.fn((connectionId: string, action: SchemaAction, statements: readonly string[]) => {
+      ran.push({ connectionId, action, sql: statements.join('|') });
       return Promise.resolve();
     }),
   };
@@ -103,6 +102,7 @@ function setup(script: Script = {}) {
   } as unknown as Driver;
   const refresh = vi.fn();
   const opened: { binding: unknown; sql: string }[] = [];
+  const designers: { connectionId: string; scope: unknown }[] = [];
   const handlers = schemaCommandHandlers({
     actions,
     manager: { driverOf: () => Promise.resolve(driver) },
@@ -113,8 +113,12 @@ function setup(script: Script = {}) {
       opened.push({ binding, sql });
       return Promise.resolve();
     },
+    openDesigner: (connectionId, scope) => {
+      designers.push({ connectionId, scope });
+      return Promise.resolve();
+    },
   });
-  return { handlers, asked, confirmed, infos, ran, refresh, opened, actions };
+  return { handlers, asked, confirmed, infos, ran, refresh, opened, actions, designers };
 }
 
 const database: TreeNode = { kind: 'database', connectionId: 'c1', database: 'shop' };
@@ -132,7 +136,7 @@ describe('the shared flow', () => {
     const harness = setup({ confirm: 'run' });
     await harness.handlers.dropTable(table);
     expect(harness.confirmed).toEqual([
-      { title: 'drop orders?', sql: 'SQL dropTable\nsecond line', runLabel: 'Drop' },
+      { title: 'drop orders?', sql: 'SQL dropTable\nsecond line;', runLabel: 'Drop' },
     ]);
     expect(harness.ran).toEqual([
       {
@@ -154,7 +158,10 @@ describe('the shared flow', () => {
     await harness.handlers.truncateTable(table);
     expect(harness.ran).toEqual([]);
     expect(harness.opened).toEqual([
-      { binding: { connectionId: 'c1', database: 'shop' }, sql: 'SQL truncateTable\nsecond line' },
+      {
+        binding: { connectionId: 'c1', database: 'shop' },
+        sql: 'SQL truncateTable\nsecond line;',
+      },
     ]);
     expect(harness.refresh).not.toHaveBeenCalled();
   });
@@ -223,7 +230,7 @@ describe('names', () => {
 
   it('stops when the name prompt is cancelled', async () => {
     const harness = setup({ confirm: 'run', names: [undefined] });
-    await harness.handlers.createTable(database);
+    await harness.handlers.createDatabase(database);
     expect(harness.actions.sqlOf).not.toHaveBeenCalled();
   });
 
@@ -243,7 +250,7 @@ describe('names', () => {
 
   it('uses the byte limit of PostgreSQL', async () => {
     const harness = setup({ driver: 'postgres', names: [undefined] });
-    await harness.handlers.createTable(schema);
+    await harness.handlers.createSchema(database);
     expect(harness.asked[0]?.validate('я'.repeat(32))).toBe('max 63');
   });
 });
@@ -312,36 +319,40 @@ describe('databases and schemas', () => {
 });
 
 describe('tables and objects', () => {
-  it('creates a table in a MySQL database', async () => {
-    const harness = setup({ confirm: 'run', names: ['invoices'] });
+  it('opens the designer for a table in a MySQL database, asking nothing', async () => {
+    const harness = setup({ confirm: 'run' });
     await harness.handlers.createTable(database);
-    expect(harness.ran[0]?.action).toEqual({
-      kind: 'createTable',
-      table: { database: 'shop', name: 'invoices' },
-    });
+    expect(harness.designers).toEqual([{ connectionId: 'c1', scope: { database: 'shop' } }]);
+    expect(harness.asked).toEqual([]);
+    expect(harness.actions.sqlOf).not.toHaveBeenCalled();
   });
 
   it('puts a new table of a PostgreSQL database into public', async () => {
-    const harness = setup({ driver: 'postgres', confirm: 'run', names: ['invoices'] });
+    const harness = setup({ driver: 'postgres' });
     await harness.handlers.createTable(database);
-    expect(harness.ran[0]?.action).toEqual({
-      kind: 'createTable',
-      table: { database: 'shop', schema: 'public', name: 'invoices' },
-    });
+    expect(harness.designers[0]?.scope).toEqual({ database: 'shop', schema: 'public' });
   });
 
-  it('creates a table from the Tables folder of a schema', async () => {
-    const harness = setup({ driver: 'postgres', confirm: 'run', names: ['t'] });
+  it('opens the designer from the Tables folder of a schema', async () => {
+    const harness = setup({ driver: 'postgres' });
     await harness.handlers.createTable({
       kind: 'group',
       group: 'tables',
       connectionId: 'c1',
       scope: { database: 'shop', schema: 'sales' },
     });
-    expect(harness.ran[0]?.action).toEqual({
-      kind: 'createTable',
-      table: { database: 'shop', schema: 'sales', name: 't' },
+    expect(harness.designers[0]?.scope).toEqual({ database: 'shop', schema: 'sales' });
+  });
+
+  it('opens the designer of a SQLite file without a scope', async () => {
+    const harness = setup({ driver: 'sqlite' });
+    await harness.handlers.createTable({
+      kind: 'group',
+      group: 'tables',
+      connectionId: 'c1',
+      scope: {},
     });
+    expect(harness.designers[0]).toEqual({ connectionId: 'c1', scope: {} });
   });
 
   it('drops a materialized view as one', async () => {

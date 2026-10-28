@@ -1,4 +1,4 @@
-// PostgreSQL quoting: double quotes, doubled inside.
+// PostgreSQL quoting: identifiers in double quotes, strings with ' doubled.
 
 import type { TableRef } from '../../core/model/objects';
 
@@ -19,4 +19,9 @@ export function quoteTable(table: TableRef): string {
   }
   parts.push(quoteIdentifier(table.name));
   return parts.join('.');
+}
+
+/** standard_conforming_strings is on by default: doubling quotes is enough. */
+export function quoteString(text: string): string {
+  return `'${text.replaceAll("'", "''")}'`;
 }

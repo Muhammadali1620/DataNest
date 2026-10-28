@@ -6,7 +6,8 @@ import { isDbError } from '../../core/errors';
 import { identifierLimit, identifierProblem } from '../../core/sql/identifiers';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { SchemaAction, SchemaActions } from '../../services/schema-actions';
-import { actionDatabase } from '../../services/schema-actions';
+import { actionDatabase, actionScript } from '../../services/schema-actions';
+import type { ObjectScope } from '../../core/model/objects';
 import type { DriverId } from '../../shared/connection';
 import type { DocumentBinding } from '../editor/document-bindings';
 import { isTreeNode, relationKindOf, scopeOf, tableRefOf, type TreeNode } from './nodes';
@@ -40,7 +41,6 @@ export interface SchemaTexts {
   readonly noSchemas: string;
   readonly newDatabaseName: string;
   readonly newSchemaName: string;
-  readonly newTableName: string;
   renameTo(name: string): string;
   typeToConfirm(name: string): string;
   readonly typeExactly: string;
@@ -74,6 +74,8 @@ export interface SchemaCommandDeps {
   readonly tree: RefreshableTree;
   /** Opens SQL in a new editor bound to the connection, instead of running it. */
   readonly openEditor: (binding: DocumentBinding, sql: string) => Promise<unknown>;
+  /** Opens the table designer for a new table in this scope. */
+  readonly openDesigner: (connectionId: string, scope: ObjectScope) => Promise<unknown>;
 }
 
 export type SchemaCommandName =
@@ -86,6 +88,54 @@ export type SchemaCommandName =
   | 'renameTable'
   | 'truncateTable'
   | 'dropObject';
+
+/** What became of an action the user was shown. */
+export type PerformOutcome = 'ran' | 'opened' | 'cancelled' | 'unsupported';
+
+/**
+ * Shows the SQL of an action, then runs it or opens it in an editor; a database
+ * without the feature just says so. The table designer saves through it as well.
+ */
+export function schemaPerformer(
+  deps: Pick<SchemaCommandDeps, 'actions' | 'ui' | 'texts' | 'tree' | 'openEditor'>,
+): (
+  connectionId: string,
+  action: SchemaAction,
+  title: string,
+  runLabel: string,
+) => Promise<PerformOutcome> {
+  const { ui, texts } = deps;
+  return async (connectionId, action, title, runLabel) => {
+    let statements: string[];
+    try {
+      statements = await deps.actions.sqlOf(connectionId, action);
+    } catch (error) {
+      if (isDbError(error) && error.code === 'unsupported') {
+        ui.info(error.message);
+        return 'unsupported';
+      }
+      throw error;
+    }
+    const sql = actionScript(statements);
+    const choice = await ui.confirm({ title, sql, runLabel });
+    if (choice === 'edit') {
+      const database = actionDatabase(action);
+      await deps.openEditor(
+        database === undefined ? { connectionId } : { connectionId, database },
+        sql,
+      );
+      return 'opened';
+    }
+    if (choice !== 'run') {
+      return 'cancelled';
+    }
+    await deps.actions.run(connectionId, action, statements);
+    deps.tree.refresh();
+    const first = statements[0] ?? '';
+    ui.info(texts.done(first.split('\n')[0] ?? first));
+    return 'ran';
+  };
+}
 
 export function schemaCommandHandlers(
   deps: SchemaCommandDeps,
@@ -131,40 +181,7 @@ export function schemaCommandHandlers(
     return typed === name;
   };
 
-  /** Shows the SQL, then runs it or opens it; a database without the feature just says so. */
-  const perform = async (
-    connectionId: string,
-    action: SchemaAction,
-    title: string,
-    runLabel: string,
-  ): Promise<void> => {
-    let sql: string;
-    try {
-      sql = await deps.actions.sqlOf(connectionId, action);
-    } catch (error) {
-      if (isDbError(error) && error.code === 'unsupported') {
-        ui.info(error.message);
-        return;
-      }
-      throw error;
-    }
-    const choice = await ui.confirm({ title, sql, runLabel });
-    if (choice === 'edit') {
-      const database = actionDatabase(action);
-      await deps.openEditor(
-        database === undefined ? { connectionId } : { connectionId, database },
-        sql,
-      );
-      return;
-    }
-    if (choice !== 'run') {
-      return;
-    }
-    await deps.actions.run(connectionId, action, sql);
-    deps.tree.refresh();
-    ui.info(texts.done(sql.split('\n')[0] ?? sql));
-    return;
-  };
+  const perform = schemaPerformer(deps);
 
   const nodeOf = <K extends TreeNode['kind']>(
     target: CommandTarget,
@@ -269,16 +286,7 @@ export function schemaCommandHandlers(
         driver.capabilities.schemas && scope.schema === undefined
           ? { ...scope, schema: 'public' }
           : scope;
-      const name = await askName(connectionId, texts.newTableName);
-      if (name === undefined) {
-        return;
-      }
-      await perform(
-        connectionId,
-        { kind: 'createTable', table: { ...withSchema, name } },
-        texts.createTable(name),
-        texts.create,
-      );
+      await deps.openDesigner(connectionId, withSchema);
     },
 
     dropTable: async (target) => {

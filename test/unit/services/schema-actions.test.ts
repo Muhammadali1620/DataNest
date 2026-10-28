@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
+import { postgresDialect } from '../../../src/drivers/postgres/dialect';
+import { newTableDesign } from '../../../src/shared/table-design';
 import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import {
   actionDatabase,
+  actionScript,
   actionSql,
   SchemaActions,
   type SchemaAction,
@@ -32,9 +35,23 @@ describe('actionSql', () => {
       ],
     ];
     for (const [action, sql] of cases) {
-      expect(actionSql(action, ddl)).toBe(sql);
+      expect(actionSql(action, ddl)).toEqual([sql]);
     }
-    expect(actionSql({ kind: 'createTable', table }, ddl)).toMatch(/^CREATE TABLE `shop`/);
+  });
+
+  it('creates a table from a design, with every statement the dialect needs', () => {
+    const design = newTableDesign('postgres', 'invoices');
+    const statements = actionSql(
+      {
+        kind: 'createTable',
+        table: { schema: 'sales', name: 'invoices' },
+        design: { ...design, comment: 'bills' },
+      },
+      postgresDialect.ddl,
+    );
+    expect(statements).toHaveLength(2);
+    expect(statements[0]).toMatch(/^CREATE TABLE "sales"\."invoices"/);
+    expect(statements[1]).toBe(`COMMENT ON TABLE "sales"."invoices" IS 'bills'`);
   });
 
   it('says unsupported where the database has no such thing', () => {
@@ -49,6 +66,15 @@ describe('actionSql', () => {
     expect(() => actionSql({ kind: 'createSchema', name: 'x' }, mysqlDialect.ddl)).toThrow(
       'This database has no schemas',
     );
+  });
+});
+
+describe('actionScript', () => {
+  it('ends each statement with a semicolon and separates them by a blank line', () => {
+    expect(actionScript(['CREATE TABLE a (id int)', "COMMENT ON TABLE a IS 'x'"])).toBe(
+      "CREATE TABLE a (id int);\n\nCOMMENT ON TABLE a IS 'x';",
+    );
+    expect(actionScript([])).toBe('');
   });
 });
 
@@ -97,16 +123,32 @@ describe('SchemaActions', () => {
 
   it('shows the dialect SQL', async () => {
     const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
-    expect(await actions.sqlOf(config.id, { kind: 'truncateTable', table: { name: 't' } })).toBe(
-      'TRUNCATE "t"',
+    expect(await actions.sqlOf(config.id, { kind: 'truncateTable', table: { name: 't' } })).toEqual(
+      ['TRUNCATE "t"'],
     );
+  });
+
+  it('stops at the first failing statement', async () => {
+    const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
+    drivers.driver('mysql').failExecuteWhen = (sql) => sql === 'BAD';
+    await expect(
+      actions.run(config.id, { kind: 'truncateTable', table: { name: 't' } }, [
+        'GOOD',
+        'BAD',
+        'NEVER',
+      ]),
+    ).rejects.toThrow('Not allowed: BAD');
+    expect(drivers.driver('mysql').lastSession?.executed).toEqual(['GOOD', 'BAD']);
   });
 
   it('runs exactly the confirmed SQL on the browsing session and drops the cache', async () => {
     const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
-    await actions.run(config.id, { kind: 'truncateTable', table: { name: 't' } }, 'TRUNCATE x');
+    await actions.run(config.id, { kind: 'truncateTable', table: { name: 't' } }, [
+      'TRUNCATE x',
+      'SELECT 2',
+    ]);
     const session = drivers.driver('mysql').lastSession;
-    expect(session?.executed).toEqual(['TRUNCATE x']);
+    expect(session?.executed).toEqual(['TRUNCATE x', 'SELECT 2']);
     expect(manager.sessionOf(ConnectionManager.treeOwner(config.id))).toBeDefined();
     expect(invalidated).toEqual([config.id]);
   });
@@ -115,7 +157,7 @@ describe('SchemaActions', () => {
     const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
     drivers.driver('mysql').failExecuteWhen = () => true;
     await expect(
-      actions.run(config.id, { kind: 'dropDatabase', name: 'x' }, 'DROP DATABASE x'),
+      actions.run(config.id, { kind: 'dropDatabase', name: 'x' }, ['DROP DATABASE x']),
     ).rejects.toMatchObject({ code: 'permission-denied' });
     expect(invalidated).toEqual([config.id]);
   });
@@ -124,11 +166,9 @@ describe('SchemaActions', () => {
     const config = await store.add({ name: 'PG', driver: 'postgres', host: 'h' });
     const driver = drivers.driver('postgres');
     driver.capabilities = { ...driver.capabilities, schemas: true, databaseScopedSessions: true };
-    await actions.run(
-      config.id,
-      { kind: 'createSchema', database: 'shop', name: 's' },
+    await actions.run(config.id, { kind: 'createSchema', database: 'shop', name: 's' }, [
       'CREATE SCHEMA s',
-    );
+    ]);
     expect(manager.sessionOf(ConnectionManager.treeOwner(config.id, 'shop'))).toBeDefined();
     expect(driver.opened.at(-1)?.database).toBe('shop');
   });
@@ -142,7 +182,7 @@ describe('SchemaActions', () => {
       database: 'old',
     });
     const inside = driver.lastSession;
-    await actions.run(config.id, { kind: 'dropDatabase', name: 'old' }, 'DROP DATABASE old');
+    await actions.run(config.id, { kind: 'dropDatabase', name: 'old' }, ['DROP DATABASE old']);
     expect(inside?.isClosed).toBe(true);
     // The drop itself ran from the connection's own database.
     expect(driver.lastSession?.executed).toEqual(['DROP DATABASE old']);

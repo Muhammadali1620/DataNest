@@ -39,7 +39,6 @@ export function schemaTexts(): SchemaTexts {
     noSchemas: vscode.l10n.t('This database has no schemas'),
     newDatabaseName: vscode.l10n.t('Name of the new database'),
     newSchemaName: vscode.l10n.t('Name of the new schema'),
-    newTableName: vscode.l10n.t('Name of the new table'),
     renameTo: (name) => vscode.l10n.t('New name for "{0}"', name),
     typeToConfirm: (name) => vscode.l10n.t('Type "{0}" to confirm', name),
     typeExactly: vscode.l10n.t('Type the name exactly as shown'),

@@ -32,6 +32,7 @@ const BY_ERRNO: Readonly<Record<number, DbErrorCode>> = {
   3024: 'timeout', // ER_QUERY_TIMEOUT
   3819: 'constraint', // ER_CHECK_CONSTRAINT_VIOLATED
   4031: 'connection-failed', // ER_CLIENT_INTERACTION_TIMEOUT
+  4161: 'syntax', // ER_UNKNOWN_DATA_TYPE (MariaDB)
 };
 
 const NETWORK_CODES = new Set([

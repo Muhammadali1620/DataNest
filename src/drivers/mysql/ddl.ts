@@ -2,7 +2,39 @@
 
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
-import { quoteIdentifier, quoteTable } from './quote';
+import { columnSql, createTableSql, primaryKeySql } from '../common/design-sql';
+import { quoteIdentifier, quoteString, quoteTable } from './quote';
+
+const TYPES = [
+  'int',
+  'int unsigned',
+  'bigint',
+  'bigint unsigned',
+  'smallint',
+  'tinyint',
+  'decimal',
+  'float',
+  'double',
+  'boolean',
+  'bit',
+  'char',
+  'varchar',
+  'text',
+  'mediumtext',
+  'longtext',
+  'json',
+  'date',
+  'time',
+  'datetime',
+  'timestamp',
+  'year',
+  'binary',
+  'varbinary',
+  'blob',
+  'longblob',
+  'enum',
+  'set',
+];
 
 function qualified(object: { database?: string; name: string }): string {
   return quoteTable(
@@ -15,8 +47,24 @@ function qualified(object: { database?: string; name: string }): string {
 export const mysqlDdl: SchemaDdl = {
   createDatabase: (name) => `CREATE DATABASE ${quoteIdentifier(name)}`,
   dropDatabase: (name) => `DROP DATABASE ${quoteIdentifier(name)}`,
-  createTableStub: (table) =>
-    `CREATE TABLE ${quoteTable(table)} (\n  ${quoteIdentifier('id')} INT NOT NULL AUTO_INCREMENT PRIMARY KEY\n)`,
+  designer: { columnComments: true, tableComment: true, types: TYPES },
+  createTable: (table, design) => {
+    const columns = design.columns.map((column) =>
+      columnSql(column, {
+        quote: quoteIdentifier,
+        autoIncrement: () => 'AUTO_INCREMENT',
+        trailer: (c) => (c.comment === '' ? '' : `COMMENT ${quoteString(c.comment)}`),
+      }),
+    );
+    const comment = design.comment === '' ? '' : ` COMMENT = ${quoteString(design.comment)}`;
+    return [
+      createTableSql(
+        quoteTable({ ...table, name: design.name.trim() }),
+        [...columns, ...primaryKeySql(design, quoteIdentifier)],
+        comment,
+      ),
+    ];
+  },
   dropRelation: (table: TableRef, kind: RelationKind) =>
     `DROP ${kind === 'table' ? 'TABLE' : 'VIEW'} ${quoteTable(table)}`,
   renameRelation: (table, _kind, newName) =>

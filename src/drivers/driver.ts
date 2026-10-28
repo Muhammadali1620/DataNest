@@ -15,6 +15,7 @@ import type {
   TableRef,
 } from '../core/model/objects';
 import type { CellValue } from '../shared/cell-value';
+import type { DesignerFeatures, TableDesign } from '../shared/table-design';
 
 /** What the DBMS supports; the UI adapts instead of special-casing driver ids. */
 export interface DriverCapabilities {
@@ -48,8 +49,14 @@ export interface SchemaDdl {
   readonly dropDatabase?: (name: string) => string;
   readonly createSchema?: (name: string) => string;
   readonly dropSchema?: (name: string, cascade: boolean) => string;
-  /** A new table with an auto-numbered primary key `id`, to fill in later. */
-  createTableStub(table: TableRef): string;
+  /** What the table designer may offer for this database. */
+  readonly designer: DesignerFeatures;
+  /**
+   * The statements that create a table as designed: CREATE TABLE, then whatever
+   * the dialect keeps outside it (PostgreSQL comments). The design must be valid
+   * (`designProblems` is empty); `table` gives the scope and the final name.
+   */
+  createTable(table: TableRef, design: TableDesign): string[];
   dropRelation(table: TableRef, kind: RelationKind): string;
   /** Renames within the same database or schema; `newName` is a bare name. */
   renameRelation(table: TableRef, kind: RelationKind, newName: string): string;

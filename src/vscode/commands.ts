@@ -10,7 +10,9 @@ import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/r
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import { readDefinitionDocument } from '../services/object-definitions';
 import { SchemaActions } from '../services/schema-actions';
-import { schemaCommandHandlers } from './tree/schema-commands';
+import { schemaCommandHandlers, schemaPerformer } from './tree/schema-commands';
+import { TableDesignerPanel } from './panels/table-designer-panel';
+import type { DocumentBinding } from './editor/document-bindings';
 import { schemaTexts, schemaUi } from './tree/schema-ui';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
@@ -78,13 +80,31 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
   });
-  const schemaCommands = schemaCommandHandlers({
+  const schemaDeps = {
     actions: new SchemaActions({ manager: deps.manager, cache: deps.cache, logger: deps.logger }),
-    manager: deps.manager,
     ui: schemaUi(),
     texts: schemaTexts(),
     tree: deps.tree,
-    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
+    openEditor: async (binding: DocumentBinding, sql: string) =>
+      await deps.editors.newQuery(binding, sql),
+  };
+  const perform = schemaPerformer(schemaDeps);
+  const schemaCommands = schemaCommandHandlers({
+    ...schemaDeps,
+    manager: deps.manager,
+    openDesigner: async (connectionId, scope) =>
+      TableDesignerPanel.show({
+        extensionUri: deps.extensionUri,
+        logger: deps.logger,
+        connectionId,
+        scope,
+        driver: await deps.manager.driverOf(connectionId),
+        texts: {
+          createTable: (name) => schemaDeps.texts.createTable(name),
+          create: schemaDeps.texts.create,
+        },
+        perform,
+      }),
   });
   let pings: PingPanel[] = [];
   const handlers: Record<CommandId, (target?: CommandTarget) => unknown> = {
@@ -180,6 +200,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         }
         pings = [];
         ConnectionFormPanel.disposeAll();
+        TableDesignerPanel.disposeAll();
         ResultsPanel.disposeAll();
       },
     },

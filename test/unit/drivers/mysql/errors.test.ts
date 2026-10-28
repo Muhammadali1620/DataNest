@@ -39,6 +39,13 @@ describe('toMysqlDbError', () => {
     expect(toMysqlDbError(mysqlError({ errno: 1142 })).code).toBe('permission-denied');
   });
 
+  it('maps a missing routine, trigger or event to not-found and a MariaDB unknown type to syntax', () => {
+    for (const errno of [1305, 1360, 1539]) {
+      expect(toMysqlDbError(mysqlError({ errno })).code).toBe('not-found');
+    }
+    expect(toMysqlDbError(mysqlError({ errno: 4161 })).code).toBe('syntax');
+  });
+
   it('maps network failures to connection-failed', () => {
     expect(toMysqlDbError(mysqlError({ code: 'ECONNREFUSED' })).code).toBe('connection-failed');
     expect(toMysqlDbError(mysqlError({ code: 'PROTOCOL_CONNECTION_LOST' })).code).toBe(

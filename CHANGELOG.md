@@ -18,6 +18,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   views, and drop functions, procedures, triggers, sequences and events from the
   tree. Every action shows its SQL first, with “Run” and “Open in Editor”; dropping a
   database or a schema also asks for its name.
+- A table designer for new tables: columns with type, length, `NOT NULL`, default,
+  primary key, auto numbering and comment, in any order, with the SQL it will run
+  shown as you type.
 
 ### Fixed
 

@@ -41,7 +41,11 @@ export const fakeDialect: Dialect = {
     dropDatabase: (name) => `DROP DATABASE "${name}"`,
     createSchema: (name) => `CREATE SCHEMA "${name}"`,
     dropSchema: (name, cascade) => `DROP SCHEMA "${name}"${cascade ? ' CASCADE' : ''}`,
-    createTableStub: (table) => `CREATE TABLE "${table.name}" (id)`,
+    designer: { columnComments: true, tableComment: true, types: ['integer', 'text'] },
+    createTable: (table, design) => [
+      `CREATE TABLE "${design.name}" (${design.columns.map((c) => c.name).join(', ')})`,
+      ...(table.schema === undefined ? [] : [`-- in ${table.schema}`]),
+    ],
     dropRelation: (table, kind) => `DROP ${kind.toUpperCase()} "${table.name}"`,
     renameRelation: (table, _kind, newName) => `RENAME "${table.name}" TO "${newName}"`,
     truncateTable: (table) => `TRUNCATE "${table.name}"`,

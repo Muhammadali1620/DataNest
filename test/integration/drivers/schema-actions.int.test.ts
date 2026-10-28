@@ -14,6 +14,7 @@ import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import { MetadataCache } from '../../../src/services/metadata-cache';
 import { SchemaActions, type SchemaAction } from '../../../src/services/schema-actions';
+import { newTableDesign } from '../../../src/shared/table-design';
 import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { runAll } from '../../helpers/driver-run';
@@ -25,7 +26,7 @@ interface Harness {
   readonly actions: SchemaActions;
   readonly connectionId: string;
   /** Builds the SQL the user would see, then runs exactly that. */
-  perform(action: SchemaAction): Promise<string>;
+  perform(action: SchemaAction): Promise<string[]>;
   /** Runs SQL on the browsing session of a database. */
   sql(text: string, database?: string): Promise<unknown[][]>;
 }
@@ -53,9 +54,9 @@ async function harness(
     actions,
     connectionId,
     perform: async (action) => {
-      const sql = await actions.sqlOf(connectionId, action);
-      await actions.run(connectionId, action, sql);
-      return sql;
+      const statements = await actions.sqlOf(connectionId, action);
+      await actions.run(connectionId, action, statements);
+      return statements;
     },
     sql: async (text, database) => {
       const session = await browseSession(manager, connectionId, database);
@@ -116,7 +117,11 @@ describe.each(['mysql', 'mariadb'] as const)('schema actions on %s', (serverId) 
   });
 
   it('creates a table with an auto-increment key', async () => {
-    await h.perform({ kind: 'createTable', table: table('act_new') });
+    await h.perform({
+      kind: 'createTable',
+      table: table('act_new'),
+      design: newTableDesign('mysql', 'act_new'),
+    });
     await h.sql('INSERT INTO act_new () VALUES (), ()');
     expect(await h.sql('SELECT id FROM act_new ORDER BY id')).toEqual([[1], [2]]);
   });
@@ -170,9 +175,13 @@ describe.each(['mysql', 'mariadb'] as const)('schema actions on %s', (serverId) 
   });
 
   it('refuses a table that already exists, with the server message', async () => {
-    await expect(h.perform({ kind: 'createTable', table: table('act_renamed') })).rejects.toThrow(
-      /already exists/,
-    );
+    await expect(
+      h.perform({
+        kind: 'createTable',
+        table: table('act_renamed'),
+        design: newTableDesign('mysql', 'act_renamed'),
+      }),
+    ).rejects.toThrow(/already exists/);
   });
 });
 
@@ -211,6 +220,7 @@ describe('schema actions on postgres', () => {
     await h.perform({
       kind: 'createTable',
       table: { database: db.database, schema: 'act_schema', name: 'inside' },
+      design: newTableDesign('postgres', 'inside'),
     });
     await expect(
       h.perform({ kind: 'dropSchema', database: db.database, name: 'act_schema', cascade: false }),
@@ -226,7 +236,11 @@ describe('schema actions on postgres', () => {
 
   it('creates a table with an identity key, renames and empties it', async () => {
     const ref = { database: db.database, schema: 'public', name: 'act_new' };
-    await h.perform({ kind: 'createTable', table: ref });
+    await h.perform({
+      kind: 'createTable',
+      table: ref,
+      design: newTableDesign('postgres', 'act_new'),
+    });
     await h.sql('INSERT INTO act_new DEFAULT VALUES');
     await h.perform({ kind: 'renameTable', table: ref, relation: 'table', newName: 'act_renamed' });
     const renamed = { ...ref, name: 'act_renamed' };
@@ -297,7 +311,11 @@ describe('schema actions on sqlite', () => {
   });
 
   it('creates, renames, empties and drops a table', async () => {
-    await h.perform({ kind: 'createTable', table: { name: 'notes' } });
+    await h.perform({
+      kind: 'createTable',
+      table: { name: 'notes' },
+      design: newTableDesign('sqlite', 'notes'),
+    });
     await h.sql('INSERT INTO notes DEFAULT VALUES');
     await h.perform({
       kind: 'renameTable',

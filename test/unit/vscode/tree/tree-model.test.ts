@@ -110,6 +110,44 @@ describe('TreeModel', () => {
       ]);
     });
 
+    it('shows only what the filter lets through, then how many it hid (V4.10)', async () => {
+      drivers.driver('mysql').sessionMetadata.databases = ['app', 'app_test', 'shop', 'mysql'];
+      await store.setFilter(mysql.id, { databases: ['app*', '!app_test'] });
+      const withHidden = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => showSystemObjects },
+        logger,
+        texts: { ...TEXTS, hiddenByFilter: (count) => `${count} hidden` },
+      });
+      expect(await withHidden.children({ kind: 'connection', connectionId: mysql.id })).toEqual([
+        { kind: 'database', connectionId: mysql.id, database: 'app' },
+        // System databases are hidden by the setting, not counted as filtered.
+        { kind: 'message', text: '2 hidden', connectionId: mysql.id },
+      ]);
+    });
+
+    it('says only how many are hidden when the filter hides them all', async () => {
+      drivers.driver('mysql').sessionMetadata.databases = ['app', 'shop'];
+      await store.setFilter(mysql.id, { databases: ['nothing'] });
+      const withHidden = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => false },
+        logger,
+        texts: { ...TEXTS, hiddenByFilter: (count) => `${count} hidden` },
+      });
+      expect(await withHidden.children({ kind: 'connection', connectionId: mysql.id })).toEqual([
+        { kind: 'message', text: '2 hidden', connectionId: mysql.id },
+      ]);
+      // Without the text, the filtered list is just shorter.
+      expect(await model.children({ kind: 'connection', connectionId: mysql.id })).toEqual([
+        { kind: 'message', text: 'No databases', connectionId: mysql.id },
+      ]);
+    });
+
     it('connects on expansion', async () => {
       await model.children({ kind: 'connection', connectionId: mysql.id });
       expect(manager.getState(mysql.id).status).toBe('connected');
@@ -221,6 +259,33 @@ describe('TreeModel', () => {
         database: 'app',
       });
       expect(shown).toHaveLength(4);
+    });
+
+    it('filters schemas the same way in every database (V4.10)', async () => {
+      const pg = await store.add({
+        name: 'PG3',
+        driver: 'postgres',
+        host: 'h',
+        filter: { schemas: ['!audit'] },
+      });
+      const driver = drivers.driver('postgres');
+      driver.capabilities = {
+        databases: true,
+        schemas: true,
+        databaseScopedSessions: true,
+        cancel: true,
+        objectKinds: [],
+      };
+      driver.sessionMetadata.schemas = ['public', 'audit', 'sales'];
+      const children = await model.children({
+        kind: 'database',
+        connectionId: pg.id,
+        database: 'app',
+      });
+      expect(children.map((node) => (node.kind === 'schema' ? node.schema : node.kind))).toEqual([
+        'public',
+        'sales',
+      ]);
     });
 
     it('lists schemas when the driver has them', async () => {

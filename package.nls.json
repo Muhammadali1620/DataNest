@@ -86,5 +86,7 @@
   "commands.transaction.toggleMode.title": "Switch Auto-commit / Manual Commit",
   "configuration.transactionMode.description": "How a new SQL editor commits. `auto`: every statement is saved at once. `manual`: the first statement that changes data opens a transaction, which waits for **Commit** or **Rollback** in the status bar. Each editor can be switched there too.",
   "configuration.transactionMode.auto": "Every statement is saved at once",
-  "configuration.transactionMode.manual": "Changes wait for Commit or Rollback"
+  "configuration.transactionMode.manual": "Changes wait for Commit or Rollback",
+  "commands.connections.filterDatabases.title": "Filter Databases…",
+  "commands.connections.filterSchemas.title": "Filter Schemas…"
 }

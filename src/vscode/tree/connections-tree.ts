@@ -4,7 +4,7 @@ import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import { PROJECT_FILE_PATH } from '../../services/project-connections';
-import { describeTarget, describeTunnel } from '../../shared/connection';
+import { type ConnectionConfig, describeTarget, describeTunnel } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
 import { connectionUri, tagText } from './connection-decorations';
 import { tagsOf } from './connection-look';
@@ -69,6 +69,7 @@ export class ConnectionsTreeProvider
         noViews: vscode.l10n.t('No views'),
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
+        hiddenByFilter: (count) => vscode.l10n.t('{0} more hidden by the filter', count),
         emptyFolder: vscode.l10n.t('Empty: drag connections here'),
         empty: {
           functions: vscode.l10n.t('No functions'),
@@ -238,6 +239,7 @@ export class ConnectionsTreeProvider
         `**${config?.name ?? connectionId}**`,
         config === undefined ? '' : `\n\n${describeTarget(config)}`,
         tunnelLine(config),
+        filterLine(config),
         project === undefined
           ? ''
           : `\n\n${vscode.l10n.t('Shared with the project "{0}" through {1}', project.name, PROJECT_FILE_PATH)}`,
@@ -248,6 +250,22 @@ export class ConnectionsTreeProvider
     item.iconPath = connectionIcon(state.status);
     return item;
   }
+}
+
+/** The filter of a connection, so a missing database has an explanation at hand. */
+function filterLine(config: ConnectionConfig | undefined): string {
+  // As code, so `app_*` stays a pattern and does not turn into Markdown emphasis.
+  const code = (patterns: readonly string[]): string =>
+    patterns.map((pattern) => `\`${pattern.replaceAll('`', '')}\``).join(', ');
+  const lines = [
+    config?.filter?.databases === undefined
+      ? ''
+      : `\n\n${vscode.l10n.t('Databases: {0}', code(config.filter.databases))}`,
+    config?.filter?.schemas === undefined
+      ? ''
+      : `\n\n${vscode.l10n.t('Schemas: {0}', code(config.filter.schemas))}`,
+  ];
+  return lines.join('');
 }
 
 function tunnelLine(config: Parameters<typeof describeTunnel>[0] | undefined): string {

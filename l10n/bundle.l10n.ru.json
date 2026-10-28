@@ -255,5 +255,15 @@
   "This editor has an open transaction. Commit it before switching?": "В этом редакторе открыта транзакция. Зафиксировать её перед переключением?",
   "Undo every change of the open transaction": "Отменить все изменения открытой транзакции",
   "{0}\n\nThe changes made so far are saved for good and cannot be rolled back.": "{0}\n\nСделанные до сих пор изменения сохранятся насовсем, откатить их будет нельзя.",
-  "{0} editor(s) have an open transaction. Disconnect anyway?": "Открытых транзакций в редакторах: {0}. Всё равно отключить?"
+  "{0} editor(s) have an open transaction. Disconnect anyway?": "Открытых транзакций в редакторах: {0}. Всё равно отключить?",
+  "* stands for any characters, ? for one, !pattern hides; separate with commas. Empty shows all.": "* — любые символы, ? — один, !шаблон скрывает; через запятую. Пусто — показывать всё.",
+  "Databases \"{0}\" shows": "Какие базы показывает «{0}»",
+  "Databases: {0}": "Базы: {0}",
+  "Keep at least one ticked, or use patterns to hide them all": "Оставьте отмеченной хотя бы одну или скройте всё шаблонами",
+  "Schemas \"{0}\" shows, in every database": "Какие схемы показывает «{0}» (во всех базах)",
+  "Schemas: {0}": "Схемы: {0}",
+  "This connection opens a single database file: there is nothing to filter": "Это подключение открывает один файл базы: фильтровать нечего",
+  "Untick what to hide; tick everything to show all, new ones too": "Снимите отметку с того, что скрыть; отметьте всё — будут видны все, и новые тоже",
+  "Write patterns instead…": "Задать шаблонами…",
+  "{0} more hidden by the filter": "Ещё {0} скрыто фильтром"
 }

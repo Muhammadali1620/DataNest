@@ -178,6 +178,26 @@ describe('tree menus', () => {
     expect(on(COMMAND_IDS.openProjectFile)).toContain(`viewItem == ${TREE_CONTEXT.project}`);
   });
 
+  it('offers the database filter on every connection and database, schemas on schemas (V4.10)', () => {
+    const on = (id: string) =>
+      items
+        .filter((entry) => entry.command === id)
+        .map((entry) => entry.when)
+        .join(' ');
+    for (const context of [
+      TREE_CONTEXT.connection,
+      TREE_CONTEXT.connectionConnected,
+      TREE_CONTEXT.projectConnection,
+      TREE_CONTEXT.projectConnectionConnected,
+      TREE_CONTEXT.database,
+    ]) {
+      expect(on(COMMAND_IDS.filterDatabases)).toContain(`viewItem == ${context}`);
+    }
+    expect(on(COMMAND_IDS.filterSchemas)).toBe(
+      `view == datanest.connections && viewItem == ${TREE_CONTEXT.schema}`,
+    );
+  });
+
   it('wraps every list of context values in parentheses, so "||" binds inside the view', () => {
     for (const entry of items) {
       if (entry.when.includes('||')) {

@@ -909,4 +909,37 @@ describe('connection form App', () => {
       expect(save).not.toHaveBeenCalled();
     });
   });
+
+  describe('visibility filter (V4.10)', () => {
+    it('sends the typed patterns, schemas only for PostgreSQL', async () => {
+      const { host } = await withState(
+        newState({ input: { name: 'P', driver: 'postgres', host: 'h' } }),
+      );
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Databases'), { target: { value: 'app_*, !app_test' } });
+      await fireEvent.input(field('Schemas'), { target: { value: 'public' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.filter).toEqual({
+        databases: ['app_*', '!app_test'],
+        schemas: ['public'],
+      });
+    });
+
+    it('has no schemas for MySQL and no filter at all for SQLite', async () => {
+      await withState();
+      expect(screen.queryByLabelText('Databases')).not.toBeNull();
+      expect(screen.queryByLabelText('Schemas')).toBeNull();
+      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'sqlite' } });
+      await waitFor(() => {
+        expect(screen.queryByText('Visible databases and schemas')).toBeNull();
+      });
+    });
+  });
 });

@@ -17,7 +17,9 @@ import {
   type ConnectionColor,
   type ConnectionOptions,
   type DriverId,
+  filterSupport,
   optionSupport,
+  type VisibilityFilter,
   type SshTunnelConfig,
   type SslSettings,
 } from '../shared/connection';
@@ -235,6 +237,16 @@ export class ConnectionStore {
     rest.splice(index, 0, ...moved);
     await this.save(rest);
     this.notify();
+  }
+
+  /** Replaces the database and schema filter of a connection (V4.10). */
+  async setFilter(id: string, filter: VisibilityFilter | undefined): Promise<void> {
+    const current = this.get(id);
+    if (current === undefined) {
+      throw new DbError('not-found', `Connection "${id}" does not exist`);
+    }
+    const { id: _id, filter: _old, ...input } = current;
+    await this.update(id, filter === undefined ? input : { ...input, filter });
   }
 
   async setColor(id: string, color: ConnectionColor | undefined): Promise<void> {
@@ -570,12 +582,36 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     production: input.production === true ? true : undefined,
     readOnly: input.readOnly === true ? true : undefined,
     options: normalizeOptions(input.options, input.driver),
+    filter: normalizeFilter(input.filter, input.driver),
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
     throw new DbError('unsupported', `Invalid connection: ${problems.join(', ')}`);
   }
   return normalized;
+}
+
+/** Trimmed patterns without blanks and repeats; a list or filter left empty goes away. */
+function normalizeFilter(
+  filter: VisibilityFilter | undefined,
+  driver: DriverId,
+): VisibilityFilter | undefined {
+  const support = filterSupport(driver);
+  const clean = (patterns: readonly string[] | undefined): string[] | undefined => {
+    const kept = [...new Set((patterns ?? []).map((pattern) => pattern.trim()))].filter(
+      (pattern) => pattern !== '',
+    );
+    return kept.length === 0 ? undefined : kept;
+  };
+  const databases = support.databases ? clean(filter?.databases) : undefined;
+  const schemas = support.schemas ? clean(filter?.schemas) : undefined;
+  if (databases === undefined && schemas === undefined) {
+    return undefined;
+  }
+  return {
+    ...(databases === undefined ? {} : { databases }),
+    ...(schemas === undefined ? {} : { schemas }),
+  };
 }
 
 /**

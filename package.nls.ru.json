@@ -86,5 +86,7 @@
   "commands.transaction.toggleMode.title": "Переключить автофиксацию / ручную фиксацию",
   "configuration.transactionMode.description": "Как фиксирует изменения новый SQL-редактор. `auto`: каждый запрос сохраняется сразу. `manual`: первый изменяющий запрос открывает транзакцию, которая ждёт **Commit** или **Rollback** в строке состояния. Там же переключается каждый редактор.",
   "configuration.transactionMode.auto": "Каждый запрос сохраняется сразу",
-  "configuration.transactionMode.manual": "Изменения ждут Commit или Rollback"
+  "configuration.transactionMode.manual": "Изменения ждут Commit или Rollback",
+  "commands.connections.filterDatabases.title": "Фильтр баз данных…",
+  "commands.connections.filterSchemas.title": "Фильтр схем…"
 }

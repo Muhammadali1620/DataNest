@@ -62,6 +62,37 @@ describe('indexConnection', () => {
     expect(new Set(found.map((o) => o.database))).toEqual(new Set(['information_schema', 'shop']));
   });
 
+  it('searches only the databases and schemas the connection filter shows (V4.10)', async () => {
+    const mine = await store.add({
+      name: 'My',
+      driver: 'mysql',
+      host: 'h',
+      filter: { databases: ['!archive'] },
+    });
+    const driver = drivers.driver('mysql');
+    driver.sessionMetadata.databases = ['shop', 'archive'];
+    driver.sessionMetadata.tables = [{ name: 'orders', kind: 'table' }];
+    expect(new Set((await index(mine.id)).map((o) => o.database))).toEqual(new Set(['shop']));
+
+    const pg = await store.add({
+      name: 'PG',
+      driver: 'postgres',
+      host: 'h',
+      database: 'app',
+      filter: { schemas: ['sales'] },
+    });
+    const postgres = drivers.driver('postgres');
+    postgres.capabilities = {
+      ...postgres.capabilities,
+      schemas: true,
+      databaseScopedSessions: true,
+    };
+    postgres.sessionMetadata.databases = ['app'];
+    postgres.sessionMetadata.schemas = ['public', 'sales'];
+    postgres.sessionMetadata.tables = [{ name: 't', kind: 'table' }];
+    expect(new Set((await index(pg.id)).map((o) => o.schema))).toEqual(new Set(['sales']));
+  });
+
   it('searches the schemas of the connection database where sessions see one database', async () => {
     const config = await store.add({ name: 'PG', driver: 'postgres', host: 'h', database: 'app' });
     const driver = drivers.driver('postgres');

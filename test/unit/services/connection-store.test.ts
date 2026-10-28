@@ -872,3 +872,36 @@ describe('ConnectionStore session options (V4.9)', () => {
     );
   });
 });
+
+describe('ConnectionStore visibility filter (V4.10)', () => {
+  const make = () =>
+    new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+
+  it('keeps trimmed patterns without blanks or repeats, and only the lists the driver has', async () => {
+    const store = make();
+    const pg = await store.add({
+      name: 'Pg',
+      driver: 'postgres',
+      host: 'h',
+      filter: { databases: [' app_* ', 'app_*', ''], schemas: ['public'] },
+    });
+    expect(pg.filter).toEqual({ databases: ['app_*'], schemas: ['public'] });
+    const my = await store.add({ ...mysqlInput, filter: { schemas: ['public'] } });
+    expect(my.filter).toBeUndefined();
+  });
+
+  it('sets and clears the filter, keeping the rest of the connection and its password', async () => {
+    const store = make();
+    const config = await store.add(mysqlInput, 'pw');
+    await store.setFilter(config.id, { databases: ['shop'] });
+    expect(store.get(config.id)).toMatchObject({ ...mysqlInput, filter: { databases: ['shop'] } });
+    await store.setFilter(config.id, undefined);
+    expect(store.get(config.id)?.filter).toBeUndefined();
+    expect(await store.getPassword(config.id)).toBe('pw');
+    await expect(store.setFilter('nope', undefined)).rejects.toMatchObject({ code: 'not-found' });
+  });
+});

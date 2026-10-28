@@ -7,7 +7,9 @@ import {
   DRIVER_IDS,
   type ConnectionInput,
   type ConnectionOptions,
+  FILTER_LIMITS,
   OPTION_LIMITS,
+  type VisibilityFilter,
   SSH_AUTH_METHODS,
   type SshHop,
   type SshTunnelConfig,
@@ -56,6 +58,15 @@ export const optionsSchema: Schema<ConnectionOptions> = object({
   charset: optional(string({ maxLength: OPTION_LIMITS.charset })),
 });
 
+const patternsSchema = array(string({ minLength: 1, maxLength: FILTER_LIMITS.pattern }), {
+  maxLength: FILTER_LIMITS.patterns,
+});
+
+export const filterSchema: Schema<VisibilityFilter> = object({
+  databases: optional(patternsSchema),
+  schemas: optional(patternsSchema),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -72,6 +83,7 @@ export const connectionInputShape = {
   production: optional(boolean()),
   readOnly: optional(boolean()),
   options: optional(optionsSchema),
+  filter: optional(filterSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

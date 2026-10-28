@@ -43,6 +43,8 @@ describe('connections view', () => {
       'datanest.connections.disconnect',
       'datanest.connections.moveToFolder',
       'datanest.connections.setColor',
+      'datanest.connections.filterDatabases',
+      'datanest.connections.filterSchemas',
       'datanest.folders.create',
       'datanest.folders.rename',
       'datanest.folders.remove',

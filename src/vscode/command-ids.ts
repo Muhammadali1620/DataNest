@@ -21,6 +21,9 @@ export const COMMAND_IDS = {
   moveToUser: 'datanest.connections.moveToUser',
   /** Opens (creating it when missing) the project's `.vscode/datanest.json`. */
   openProjectFile: 'datanest.project.openFile',
+  /** Picks which databases, or which schemas, a connection shows (V4.10). */
+  filterDatabases: 'datanest.connections.filterDatabases',
+  filterSchemas: 'datanest.connections.filterSchemas',
   /** Gives a connection a color label. */
   setConnectionColor: 'datanest.connections.setColor',
   /** Opens the form for an existing connection. */

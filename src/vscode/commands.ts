@@ -26,6 +26,7 @@ import { connectionCommandHandlers } from './connection-commands';
 import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
 import { folderCommandHandlers } from './tree/folder-commands';
 import { projectCommandHandlers } from './project-commands';
+import { filterCommandHandlers } from './tree/filter-commands';
 import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
@@ -86,6 +87,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const connections = connectionCommandHandlers(importDeps);
   const folders = folderCommandHandlers({ store: deps.store });
   const projects = projectCommandHandlers(importDeps);
+  const filters = filterCommandHandlers({
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
+    settings: createSettings(),
+  });
   const runCommands = runCommandHandlers({
     runner: deps.runner,
     editors: deps.editors,
@@ -223,6 +230,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.moveToProject]: projects.moveToProject,
     [COMMAND_IDS.moveToUser]: projects.moveToUser,
     [COMMAND_IDS.openProjectFile]: projects.openFile,
+    [COMMAND_IDS.filterDatabases]: filters.filterDatabases,
+    [COMMAND_IDS.filterSchemas]: filters.filterSchemas,
     [COMMAND_IDS.addConnectionFromUrl]: (target) =>
       addConnectionFromUrl(importDeps, typeof target === 'string' ? target : undefined),
     [COMMAND_IDS.importEnvConnections]: () => importConnectionsFromEnv(importDeps),

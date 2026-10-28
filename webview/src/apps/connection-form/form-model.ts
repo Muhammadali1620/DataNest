@@ -11,8 +11,10 @@ import {
   isFileDriver,
   newHopId,
   type ConnectionOptions,
+  filterSupport,
   type OptionProblem,
   optionSupport,
+  type VisibilityFilter,
   type SshAuthMethod,
   type SshHop,
   type SshProblem,
@@ -24,6 +26,7 @@ import type {
   ConnectionFormState,
 } from '../../../../src/shared/protocols/connection-form';
 import type { ParsedConnectionUrl, UrlProblem } from '../../../../src/shared/connection-url';
+import { parsePatterns } from '../../../../src/shared/name-filter';
 import type { MessageKey } from '../../l10n/en';
 
 /** A secret box: what was typed, whether it was, and whether to erase the stored one. */
@@ -117,6 +120,9 @@ export interface FormFields {
   timeZone: string;
   charset: string;
   initSql: string;
+  /** Patterns of the visible databases and schemas (V4.10), comma separated. */
+  filterDatabases: string;
+  filterSchemas: string;
 }
 
 /** The option fields that hold seconds, with the problem a bad number gives. */
@@ -160,6 +166,22 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     timeZone: input.options?.timeZone ?? '',
     charset: input.options?.charset ?? '',
     initSql: input.options?.initSql ?? '',
+    filterDatabases: (input.filter?.databases ?? []).join(', '),
+    filterSchemas: (input.filter?.schemas ?? []).join(', '),
+  };
+}
+
+/** The lists the driver has, from the typed patterns; none at all is no filter. */
+export function toFilter(fields: FormFields): VisibilityFilter | undefined {
+  const support = filterSupport(fields.driver);
+  const databases = support.databases ? parsePatterns(fields.filterDatabases) : [];
+  const schemas = support.schemas ? parsePatterns(fields.filterSchemas) : [];
+  if (databases.length === 0 && schemas.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(databases.length === 0 ? {} : { databases }),
+    ...(schemas.length === 0 ? {} : { schemas }),
   };
 }
 
@@ -280,6 +302,7 @@ export function toHop(hop: HopFields): SshHop {
 export function toInput(fields: FormFields): ConnectionInput {
   const name = fields.name.trim();
   const options = toOptions(fields);
+  const filter = toFilter(fields);
   if (isFileDriver(fields.driver)) {
     const file = trim(fields.file);
     return {
@@ -313,6 +336,7 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(ssl === undefined ? {} : { ssl }),
     ...arrangement(fields),
     ...(options === undefined ? {} : { options }),
+    ...(filter === undefined ? {} : { filter }),
   };
 }
 
@@ -423,6 +447,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'time-zone-invalid': 'form.options.error.timeZone',
   'charset-invalid': 'form.options.error.charset',
   'init-sql-too-long': 'form.options.error.initSql',
+  'filter-too-long': 'form.filter.error.tooLong',
 };
 
 export { DEFAULT_SSH_PORT };

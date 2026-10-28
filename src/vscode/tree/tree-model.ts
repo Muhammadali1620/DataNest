@@ -5,13 +5,14 @@ import { DbError, errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
 import type { ListedObjectKind, ObjectScope, TableRef } from '../../core/model/objects';
 import { withoutSystemDatabases, withoutSystemSchemas } from '../../core/model/system-objects';
+import { filterNames } from '../../shared/name-filter';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
 import { browseSession } from '../../services/browse-session';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { ProjectView } from '../../services/project-connections';
-import type { DriverId } from '../../shared/connection';
+import type { ConnectionConfig, DriverId } from '../../shared/connection';
 import {
   GROUP_OF_KIND,
   KIND_OF_GROUP,
@@ -42,6 +43,8 @@ export interface TreeTexts {
   readonly noViews: string;
   readonly noDatabases: string;
   readonly noColumns: string;
+  /** The leaf after a list the connection's filter shortened (V4.10). */
+  readonly hiddenByFilter?: (count: number) => string;
   /** What an empty folder says, per folder. */
   readonly empty: Readonly<Record<ObjectFolder | TableFolder, string>>;
 }
@@ -205,13 +208,28 @@ export class TreeModel {
     const all = await metadata.listDatabases();
     // Filtering happens here, not in the cache: toggling the setting needs no
     // server round trip, and the cache keeps what the server actually said.
-    const databases = this.deps.settings.showSystemObjects()
+    const unfiltered = this.deps.settings.showSystemObjects()
       ? all
       : withoutSystemDatabases(this.driverIdOf(connectionId), all);
-    if (databases.length === 0) {
+    const databases = filterNames(unfiltered, this.configOf(connectionId).filter?.databases ?? []);
+    const nodes: TreeNode[] = databases.map((database) => ({
+      kind: 'database',
+      connectionId,
+      database,
+    }));
+    const hidden = this.hiddenLeaf(connectionId, unfiltered.length - databases.length);
+    if (nodes.length === 0 && hidden.length === 0) {
       return [{ kind: 'message', text: this.deps.texts.noDatabases, connectionId }];
     }
-    return databases.map((database) => ({ kind: 'database', connectionId, database }));
+    return [...nodes, ...hidden];
+  }
+
+  /** "N hidden by the filter", so a missing database does not look like a lost one. */
+  private hiddenLeaf(connectionId: string, count: number): TreeNode[] {
+    const text = this.deps.texts.hiddenByFilter;
+    return count > 0 && text !== undefined
+      ? [{ kind: 'message', text: text(count), connectionId }]
+      : [];
   }
 
   private async databaseChildren(connectionId: string, database: string): Promise<TreeNode[]> {
@@ -221,10 +239,14 @@ export class TreeModel {
     }
     const metadata = await this.metadataOf(connectionId, database);
     const all = await metadata.listSchemas(database);
-    const schemas = this.deps.settings.showSystemObjects()
+    const unfiltered = this.deps.settings.showSystemObjects()
       ? all
       : withoutSystemSchemas(this.driverIdOf(connectionId), all);
-    return schemas.map((schema) => ({ kind: 'schema', connectionId, database, schema }));
+    const schemas = filterNames(unfiltered, this.configOf(connectionId).filter?.schemas ?? []);
+    return [
+      ...schemas.map((schema): TreeNode => ({ kind: 'schema', connectionId, database, schema })),
+      ...this.hiddenLeaf(connectionId, unfiltered.length - schemas.length),
+    ];
   }
 
   /** Tables and views, then the folders of whatever else this database keeps. */
@@ -371,11 +393,15 @@ export class TreeModel {
 
   /** The driver of a saved connection; an unknown id cannot reach here. */
   private driverIdOf(connectionId: string): DriverId {
+    return this.configOf(connectionId).driver;
+  }
+
+  private configOf(connectionId: string): ConnectionConfig {
     const config = this.deps.store.get(connectionId);
     if (!config) {
       throw new DbError('not-found', `Connection "${connectionId}" does not exist`);
     }
-    return config.driver;
+    return config;
   }
 
   private async capabilitiesOf(connectionId: string): Promise<DriverCapabilities> {

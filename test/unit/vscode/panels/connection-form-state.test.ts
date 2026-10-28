@@ -121,6 +121,7 @@ describe('toInput', () => {
       production: true,
       readOnly: true,
       options: { keepAlive: 60, initSql: 'SET a = 1' },
+      filter: { databases: ['shop'], schemas: ['public'] },
     } as const;
     const input = toInput(full);
     const sent = connectionFormProtocol.host.requests.save.params.parse({

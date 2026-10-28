@@ -3,6 +3,7 @@
   import {
     CONNECTION_COLORS,
     CONNECTION_LIMITS,
+    filterSupport,
     isFileDriver,
     MAX_SSH_JUMPS,
   } from '../../../../src/shared/connection';
@@ -62,6 +63,9 @@
   const problems = $derived(fields === undefined ? [] : problemsOf(fields));
   /** The session section starts open when the connection already sets something there. */
   const hasOptions = $derived(formState?.input.options !== undefined);
+  const filters = $derived(
+    fields === undefined ? { databases: false, schemas: false } : filterSupport(fields.driver),
+  );
   const isFile = $derived(fields !== undefined && isFileDriver(fields.driver));
   const defaultPort = $derived(
     formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
@@ -531,6 +535,38 @@
         <summary>{t('form.options')}</summary>
         <OptionsEditor {fields} {t} {errorFor} />
       </details>
+
+      {#if filters.databases}
+        <details class="section options" open={formState?.input.filter !== undefined}>
+          <summary>{t('form.filter')}</summary>
+          <Field
+            label={t('form.filter.databases')}
+            error={errorFor('filter-too-long')}
+            hint={t('form.filter.hint')}
+          >
+            <input
+              class="control"
+              bind:value={fields.filterDatabases}
+              placeholder="app_*, !app_test"
+              aria-label={t('form.filter.databases')}
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </Field>
+          {#if filters.schemas}
+            <Field label={t('form.filter.schemas')} hint={t('form.filter.schemasHint')}>
+              <input
+                class="control"
+                bind:value={fields.filterSchemas}
+                placeholder="public, app_*"
+                aria-label={t('form.filter.schemas')}
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </Field>
+          {/if}
+        </details>
+      {/if}
 
       {#if notice}
         <p class="notice" class:error={notice.kind === 'error'} role="status" data-testid="notice">

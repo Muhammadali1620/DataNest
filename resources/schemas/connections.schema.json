@@ -223,6 +223,33 @@
               "description": "MySQL character set of the session; utf8mb4 when left out."
             }
           }
+        },
+        "filter": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Which databases and schemas the tree and the object search show. Patterns: * any characters, ? one, a leading ! hides.",
+          "properties": {
+            "databases": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "description": "For example [\"app_*\", \"!app_test\"]; left out: all."
+            },
+            "schemas": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "description": "Schemas of every database (PostgreSQL); left out: all."
+            }
+          }
         }
       }
     }

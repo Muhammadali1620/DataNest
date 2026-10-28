@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONNECTION_COLORS,
   DRIVER_IDS,
+  FILTER_LIMITS,
   MAX_SSH_JUMPS,
   OPTION_LIMITS,
   SSH_AUTH_METHODS,
@@ -14,6 +15,7 @@ import {
 } from '../../../src/shared/connection';
 import {
   connectionInputShape,
+  filterSchema,
   optionsSchema,
   sshHopShape,
 } from '../../../src/shared/connection-schema';
@@ -93,5 +95,14 @@ describe('connections JSON schema', () => {
       ]);
     }
     expect(props.options?.additionalProperties).toBe(false);
+  });
+
+  it('describes the visibility filter with the limits the code checks (V4.10)', () => {
+    const filter = props.filter?.properties ?? {};
+    expect(keys(filterSchema.parse({ databases: ['a'], schemas: ['b'] }))).toEqual(keys(filter));
+    for (const list of Object.values(filter)) {
+      expect(list.maxItems).toBe(FILTER_LIMITS.patterns);
+      expect((list.items as { maxLength?: number }).maxLength).toBe(FILTER_LIMITS.pattern);
+    }
   });
 });

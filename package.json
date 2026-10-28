@@ -126,6 +126,18 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "datanest.connections.filterDatabases",
+        "title": "%commands.connections.filterDatabases.title%",
+        "category": "DataNest",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "datanest.connections.filterSchemas",
+        "title": "%commands.connections.filterSchemas.title%",
+        "category": "DataNest",
+        "icon": "$(filter)"
+      },
+      {
         "command": "datanest.connections.edit",
         "title": "%commands.connections.edit.title%",
         "category": "DataNest",
@@ -431,6 +443,14 @@
         {
           "command": "datanest.table.generateDelete",
           "when": "false"
+        },
+        {
+          "command": "datanest.connections.filterSchemas",
+          "when": "false"
+        },
+        {
+          "command": "datanest.connections.filterDatabases",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -490,6 +510,16 @@
           "command": "datanest.connections.setColor",
           "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "3_arrange@3"
+        },
+        {
+          "command": "datanest.connections.filterDatabases",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database)",
+          "group": "1_state@3"
+        },
+        {
+          "command": "datanest.connections.filterSchemas",
+          "when": "view == datanest.connections && viewItem == datanest.schema",
+          "group": "1_state@3"
         },
         {
           "command": "datanest.connections.moveToProject",

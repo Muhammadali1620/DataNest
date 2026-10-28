@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   connectionProblems,
+  filterSupport,
   optionProblems,
   optionSupport,
   DEFAULT_PORTS,
@@ -316,5 +317,29 @@ describe('session options (V4.9)', () => {
       timeZone: false,
       charset: false,
     });
+  });
+});
+
+describe('visibility filter (V4.10)', () => {
+  it('accepts up to 100 patterns of 200 characters', () => {
+    const fine = { name: 'a', driver: 'postgres' as const, host: 'h' };
+    expect(
+      connectionProblems({ ...fine, filter: { databases: Array(100).fill('x'.repeat(200)) } }),
+    ).toEqual([]);
+    expect(connectionProblems({ ...fine, filter: { databases: Array(101).fill('x') } })).toEqual([
+      'filter-too-long',
+    ]);
+    expect(
+      connectionProblems({
+        ...fine,
+        filter: { schemas: ['x'.repeat(201)], databases: ['y'.repeat(201)] },
+      }),
+    ).toEqual(['filter-too-long']);
+  });
+
+  it('says which lists each driver has', () => {
+    expect(filterSupport('mysql')).toEqual({ databases: true, schemas: false });
+    expect(filterSupport('postgres')).toEqual({ databases: true, schemas: true });
+    expect(filterSupport('sqlite')).toEqual({ databases: false, schemas: false });
   });
 });

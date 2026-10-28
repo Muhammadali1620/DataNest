@@ -4,6 +4,7 @@
 
 import type { ObjectKind, ObjectScope } from '../core/model/objects';
 import { withoutSystemDatabases, withoutSystemSchemas } from '../core/model/system-objects';
+import { filterNames } from '../shared/name-filter';
 import type { MetadataReader } from '../drivers/driver';
 import { browseSession } from './browse-session';
 import type { ConnectionManager } from './connection-manager';
@@ -52,7 +53,11 @@ export async function indexConnection(
     scopes.push({});
   } else {
     const listed = await (await reader()).listDatabases();
-    const visible = system ? withoutSystemDatabases(config.driver, listed) : listed;
+    // The search shows what the tree shows: no system databases, and the filter (V4.10).
+    const visible = filterNames(
+      system ? withoutSystemDatabases(config.driver, listed) : listed,
+      config.filter?.databases ?? [],
+    );
     // A server whose sessions see one database each (PostgreSQL) is searched in the
     // database the connection opens, rather than connecting to every database.
     const databases =
@@ -65,7 +70,11 @@ export async function indexConnection(
         continue;
       }
       const schemas = await (await reader(database)).listSchemas(database);
-      for (const schema of system ? withoutSystemSchemas(config.driver, schemas) : schemas) {
+      const shown = filterNames(
+        system ? withoutSystemSchemas(config.driver, schemas) : schemas,
+        config.filter?.schemas ?? [],
+      );
+      for (const schema of shown) {
         scopes.push({ database, schema });
       }
     }

@@ -156,6 +156,30 @@ export function optionSupport(driver: DriverId): OptionSupport {
   }
 }
 
+/**
+ * Which databases and schemas the tree and the object search show (V4.10), as
+ * patterns: `app_*`, `billing`, and `!app_test` to hide one. None shows all.
+ */
+export interface VisibilityFilter {
+  readonly databases?: readonly string[];
+  /** Applies to the schemas of every database of the connection. */
+  readonly schemas?: readonly string[];
+}
+
+export const FILTER_LIMITS = { patterns: 100, pattern: 200 } as const;
+
+/** Which lists a driver has to filter: MySQL has no schemas, a SQLite file neither. */
+export function filterSupport(driver: DriverId): { databases: boolean; schemas: boolean } {
+  switch (driver) {
+    case 'mysql':
+      return { databases: true, schemas: false };
+    case 'postgres':
+      return { databases: true, schemas: true };
+    case 'sqlite':
+      return { databases: false, schemas: false };
+  }
+}
+
 /** Everything the user edits in the connection form; `id` is assigned by the store. */
 export interface ConnectionInput {
   readonly name: string;
@@ -183,6 +207,8 @@ export interface ConnectionInput {
   readonly readOnly?: boolean;
   /** Timeouts, keep-alive, init SQL, time zone and character set (V4.9). */
   readonly options?: ConnectionOptions;
+  /** Databases and schemas to show (V4.10). */
+  readonly filter?: VisibilityFilter;
 }
 
 export interface ConnectionConfig extends ConnectionInput {
@@ -235,6 +261,7 @@ export type ConnectionProblem =
   | 'ssl-cert-without-key'
   | 'ssl-key-without-cert'
   | OptionProblem
+  | 'filter-too-long'
   | SshProblem;
 
 /** What is wrong with the session options. */
@@ -322,6 +349,16 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     problems.push('name-empty');
   }
   problems.push(...optionProblems(input.options));
+  for (const patterns of [input.filter?.databases ?? [], input.filter?.schemas ?? []]) {
+    if (
+      patterns.length > FILTER_LIMITS.patterns ||
+      patterns.some((pattern) => pattern.length > FILTER_LIMITS.pattern)
+    ) {
+      if (!problems.includes('filter-too-long')) {
+        problems.push('filter-too-long');
+      }
+    }
+  }
   if (isFileDriver(input.driver)) {
     if (input.file === undefined || input.file.trim() === '') {
       problems.push('file-empty');

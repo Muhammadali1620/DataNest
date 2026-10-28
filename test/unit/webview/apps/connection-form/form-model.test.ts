@@ -20,6 +20,7 @@ import {
   applyUrl,
   URL_PROBLEM_MESSAGES,
   toOptions,
+  toFilter,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { en } from '../../../../../webview/src/l10n/en';
 
@@ -53,6 +54,8 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     timeZone: '',
     charset: '',
     initSql: '',
+    filterDatabases: '',
+    filterSchemas: '',
     ...overrides,
   };
 }
@@ -102,6 +105,8 @@ describe('fieldsFrom', () => {
       timeZone: '',
       charset: '',
       initSql: '',
+      filterDatabases: '',
+      filterSchemas: '',
     });
   });
 
@@ -707,5 +712,46 @@ describe('session options (V4.9)', () => {
     ] as const) {
       expect(en[PROBLEM_MESSAGES[problem]]).toBeTruthy();
     }
+  });
+});
+
+describe('visibility filter (V4.10)', () => {
+  it('shows the patterns as one line each', () => {
+    expect(
+      fieldsFrom({
+        input: {
+          name: 'n',
+          driver: 'postgres',
+          host: 'h',
+          filter: { databases: ['a*', '!a_t'], schemas: ['public'] },
+        },
+        hasStoredPassword: false,
+        storedSsh: [],
+        drivers: [],
+      }),
+    ).toMatchObject({ filterDatabases: 'a*, !a_t', filterSchemas: 'public' });
+  });
+
+  it('sends the lists the driver has, split on commas and lines', () => {
+    expect(
+      toFilter(
+        fields({
+          driver: 'postgres',
+          filterDatabases: 'app_*,\n!app_test',
+          filterSchemas: ' public ',
+        }),
+      ),
+    ).toEqual({ databases: ['app_*', '!app_test'], schemas: ['public'] });
+    expect(toFilter(fields({ filterDatabases: 'shop', filterSchemas: 'public' }))).toEqual({
+      databases: ['shop'],
+    });
+    expect(toFilter(fields({ driver: 'sqlite', filterDatabases: 'x' }))).toBeUndefined();
+    expect(toInput(fields())).not.toHaveProperty('filter');
+  });
+
+  it('flags a filter that is too long', () => {
+    const many = Array.from({ length: 101 }, (_, index) => `db${index}`).join(',');
+    expect(problemsOf(fields({ filterDatabases: many }))).toContain('filter-too-long');
+    expect(en[PROBLEM_MESSAGES['filter-too-long']]).toBeTruthy();
   });
 });

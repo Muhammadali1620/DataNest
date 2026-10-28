@@ -9,6 +9,7 @@ import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
+import type { ObjectRef } from '../core/model/objects';
 import { objectEditHandlers, type ObjectEditRegistry } from './editor/object-edit';
 import type { ErrorDiagnostics } from './editor/error-diagnostics';
 import { SchemaActions } from '../services/schema-actions';
@@ -25,6 +26,8 @@ import { connectionCommandHandlers } from './connection-commands';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
+import { showObjectSearch } from './search/object-search';
+import { createSettings } from './settings';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 
@@ -71,20 +74,22 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     showResults: deps.showResults,
     diagnostics: deps.diagnostics,
   });
+  /** Opens the DDL of an object in a new SQL editor on its connection and database. */
+  const showDefinition = async (connectionId: string, object: ObjectRef): Promise<void> => {
+    const text = await readDefinitionDocument(deps.manager, connectionId, object);
+    await deps.editors.newQuery(
+      object.database === undefined
+        ? { connectionId }
+        : { connectionId, database: object.database },
+      text,
+    );
+  };
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
     tree: deps.tree,
     cache: deps.cache,
     openTable: deps.openTable,
-    showDefinition: async (connectionId, object) => {
-      const text = await readDefinitionDocument(deps.manager, connectionId, object);
-      await deps.editors.newQuery(
-        object.database === undefined
-          ? { connectionId }
-          : { connectionId, database: object.database },
-        text,
-      );
-    },
+    showDefinition,
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
   });
@@ -204,6 +209,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
     [COMMAND_IDS.showHistory]: () => {
       showHistory({ history: deps.history, store: deps.store, editors: deps.editors });
+    },
+    [COMMAND_IDS.searchObjects]: () => {
+      const settings = createSettings();
+      showObjectSearch({
+        manager: deps.manager,
+        store: deps.store,
+        cache: deps.cache,
+        showSystemObjects: () => settings.showSystemObjects(),
+        openTable: deps.openTable,
+        showDefinition,
+        logger: deps.logger,
+      });
     },
     [COMMAND_IDS.newQuery]: async (target?: CommandTarget) => {
       // From the tree the query starts on the clicked connection and database.

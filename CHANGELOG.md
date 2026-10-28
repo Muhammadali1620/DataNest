@@ -48,6 +48,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   the word the server complained about. MySQL and SQLite positions are now read from
   their messages, so “jump to the error” is exact there too.
 
+- “Find Database Object…” searches the tables, views, routines, sequences and
+  events of every connected connection in one list; choosing one opens its data or
+  its DDL, and a not-yet-connected connection can be searched with one more click.
+
 ### Fixed (completion)
 
 - After a `;` completion treats the cursor as the start of a new statement.

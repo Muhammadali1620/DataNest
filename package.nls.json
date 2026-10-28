@@ -65,5 +65,6 @@
   "configuration.format.logicalOperatorNewline.before": "At the start of the next line.",
   "configuration.format.logicalOperatorNewline.after": "At the end of the line.",
   "configuration.format.expressionWidth.description": "A parenthesized expression shorter than this many characters stays on one line.",
-  "configuration.format.denseOperators.description": "Write operators without spaces around them: `a+b` instead of `a + b`."
+  "configuration.format.denseOperators.description": "Write operators without spaces around them: `a+b` instead of `a + b`.",
+  "commands.objects.search.title": "Find Database Object…"
 }

@@ -138,5 +138,10 @@
   "NULL allowed": "допускает NULL",
   "default {0}": "по умолчанию {0}",
   "auto-numbered": "автонумерация",
-  "…and {0} more columns": "…и ещё колонок: {0}"
+  "…and {0} more columns": "…и ещё колонок: {0}",
+  "Show DDL": "Показать DDL",
+  "Copy Name": "Копировать имя",
+  "Find Database Object": "Найти объект базы",
+  "Type a name: tables, views, functions… of connected databases": "Введите имя: таблицы, представления, функции… подключённых баз",
+  "$(plug) Connect to {0} and search it": "$(plug) Подключиться к {0} и искать там"
 }

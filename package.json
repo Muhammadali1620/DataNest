@@ -250,6 +250,12 @@
         "icon": "$(check)"
       },
       {
+        "command": "datanest.objects.search",
+        "title": "%commands.objects.search.title%",
+        "category": "DataNest",
+        "icon": "$(search)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -337,6 +343,11 @@
           "command": "datanest.query.new",
           "when": "view == datanest.connections",
           "group": "navigation@3"
+        },
+        {
+          "command": "datanest.objects.search",
+          "when": "view == datanest.connections",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [

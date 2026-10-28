@@ -51,6 +51,8 @@ export const COMMAND_IDS = {
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */
   showHistory: 'datanest.history.show',
+  /** Finds a table, view or routine in every connected connection. */
+  searchObjects: 'datanest.objects.search',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

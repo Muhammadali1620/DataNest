@@ -118,6 +118,13 @@ describe('running queries', () => {
     assert.deepEqual(config.inspect('safeMode')?.defaultValue, 'confirm');
   });
 
+  it('opens the object search with nothing connected, and closes it again', async () => {
+    const shown = vscode.commands.executeCommand('datanest.objects.search');
+    await sleep(200);
+    await vscode.commands.executeCommand('workbench.action.closeQuickOpen');
+    await shown;
+  });
+
   it('opens the query history even when it is empty, and closes it again', async () => {
     assert.ok((await vscode.commands.getCommands(true)).includes('datanest.history.show'));
     await vscode.commands.executeCommand('datanest.history.show');

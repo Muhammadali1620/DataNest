@@ -114,6 +114,21 @@ describe('SSH in the draft', () => {
     expect(save.params.parse(draft)).toEqual(draft);
   });
 
+  it('accepts jump hosts and refuses nested ones', () => {
+    const jump = { id: 'j', host: 'edge', user: 'u', auth: 'agent' };
+    const draft = {
+      input: { ...input, ssh: { ...input.ssh, jumps: [jump] } },
+      password: { kind: 'keep' },
+    };
+    expect(save.params.parse(draft)).toEqual(draft);
+    expect(() =>
+      save.params.parse({
+        input: { ...input, ssh: { ...input.ssh, jumps: [{ ...jump, jumps: [] }] } },
+        password: { kind: 'keep' },
+      }),
+    ).toThrow('unexpected field');
+  });
+
   it('rejects unknown auth methods and stray hop fields', () => {
     expect(() =>
       save.params.parse({

@@ -368,5 +368,42 @@ describe('ConnectionStore', () => {
       );
       expect(new ConnectionStore({ state: bad, secrets, logger }).list()).toEqual([]);
     });
+
+    it('stores jumps normalized, with secrets per jump, and erases those of a removed jump', async () => {
+      const main = { id: 'main', host: 'bastion', user: 'deploy', auth: 'password' as const };
+      const jumpB = { id: 'b', host: 'b.example', user: 'j', auth: 'key' as const, keyFile: '/k' };
+      const jumps = [
+        { id: 'a', host: ' a.example ', user: 'j', auth: 'password' as const, keyFile: '/x' },
+        jumpB,
+      ];
+      const config = await store.add({ ...viaSsh, ssh: { ...main, jumps } }, undefined, {
+        a: { password: 'pa' },
+        b: { passphrase: 'pb' },
+        main: { password: 'pm' },
+      });
+      expect(config.ssh?.jumps).toEqual([
+        { id: 'a', host: 'a.example', user: 'j', auth: 'password' },
+        { id: 'b', host: 'b.example', user: 'j', auth: 'key', keyFile: '/k' },
+      ]);
+      expect(await store.getSshSecrets(config.id)).toEqual({
+        a: { password: 'pa' },
+        b: { passphrase: 'pb' },
+        main: { password: 'pm' },
+      });
+      await store.update(config.id, { ...viaSsh, ssh: { ...main, jumps: [jumpB] } });
+      expect(secrets.data.has(sshSecretKey(config.id, 'a', 'password'))).toBe(false);
+      expect(await store.getSshSecrets(config.id)).toEqual({
+        b: { passphrase: 'pb' },
+        main: { password: 'pm' },
+      });
+    });
+
+    it('drops an empty jump list', async () => {
+      const config = await store.add({
+        ...viaSsh,
+        ssh: { id: 'main', host: 'bastion', user: 'deploy', auth: 'password', jumps: [] },
+      });
+      expect(config.ssh).not.toHaveProperty('jumps');
+    });
   });
 });

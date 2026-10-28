@@ -61,8 +61,17 @@ export interface SshHop {
   readonly agentSocket?: string;
 }
 
+/** Most jump hosts a tunnel may pass through before its SSH server. */
+export const MAX_SSH_JUMPS = 5;
+
 /** The SSH server the database is reached through. */
-export type SshTunnelConfig = SshHop;
+export interface SshTunnelConfig extends SshHop {
+  /**
+   * Servers to pass through first, in order (OpenSSH's ProxyJump): DataNest logs in
+   * to the first, reaches the next one through it, and so on up to this server.
+   */
+  readonly jumps?: readonly SshHop[];
+}
 
 /** A new hop id; unique enough within one connection. */
 export function newHopId(): string {
@@ -104,9 +113,13 @@ export interface SshHopSecrets {
   readonly passphrase?: string;
 }
 
-/** The SSH hops of a config, in the order they are connected. */
+/** The SSH hops of a config, in the order they are connected: jumps, then the server. */
 export function sshHopsOf(config: ConnectionInput): readonly SshHop[] {
-  return config.ssh === undefined ? [] : [config.ssh];
+  if (config.ssh === undefined) {
+    return [];
+  }
+  const { jumps = [], ...server } = config.ssh;
+  return [...jumps, server];
 }
 
 export function effectiveSshPort(hop: SshHop): number {
@@ -127,7 +140,12 @@ export type ConnectionProblem =
 
 /** What is wrong with one SSH hop. */
 export type SshProblem =
-  'ssh-host-empty' | 'ssh-port-invalid' | 'ssh-user-empty' | 'ssh-key-empty' | 'ssh-id-invalid';
+  | 'ssh-host-empty'
+  | 'ssh-port-invalid'
+  | 'ssh-user-empty'
+  | 'ssh-key-empty'
+  | 'ssh-id-invalid'
+  | 'ssh-too-many-jumps';
 
 function isPortValid(port: number | undefined): boolean {
   return port === undefined || (Number.isInteger(port) && port >= 1 && port <= 65_535);
@@ -181,6 +199,9 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
         problems.push('ssh-id-invalid');
       }
       ids.add(hop.id);
+    }
+    if ((input.ssh?.jumps?.length ?? 0) > MAX_SSH_JUMPS) {
+      problems.push('ssh-too-many-jumps');
     }
   }
   return problems;

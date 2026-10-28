@@ -77,6 +77,8 @@ export interface TestSshServer {
   readonly passphrase: string;
   /** How the databases are named inside the compose network, as the server sees them. */
   readonly targets: Readonly<Record<TestDatabaseId, { host: string; port: number }>>;
+  /** A second server with the same users, reachable only through this one. */
+  readonly inner: { readonly host: string; readonly port: number };
 }
 
 export const SSH_PORT_ENV = 'DATANEST_SSH_PORT';
@@ -102,5 +104,6 @@ export function testSshServer(
       mariadb: { host: 'mariadb', port: 3306 },
       postgres: { host: 'postgres', port: 5432 },
     },
+    inner: { host: 'ssh-inner', port: 22 },
   };
 }

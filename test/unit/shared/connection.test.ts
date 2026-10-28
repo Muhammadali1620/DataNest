@@ -6,6 +6,7 @@ import {
   DEFAULT_SSH_PORT,
   effectiveSshPort,
   HOP_ID_PATTERN,
+  MAX_SSH_JUMPS,
   newHopId,
   type SshHop,
   sshHopProblems,
@@ -188,5 +189,51 @@ describe('describeTunnel', () => {
       }),
     ).toBe('deploy@bastion:22');
     expect(describeTunnel({ name: 'a', driver: 'mysql', host: 'db' })).toBeUndefined();
+  });
+});
+
+describe('jump hosts', () => {
+  const jump = (id: string): SshHop => ({ id, host: `${id}.example`, user: 'j', auth: 'agent' });
+  const server: SshHop = { id: 'main', host: 'inner', user: 'deploy', auth: 'password' };
+
+  it('connects the jumps first, then the server', () => {
+    const hops = sshHopsOf({
+      name: 'a',
+      driver: 'mysql',
+      host: 'db',
+      ssh: { ...server, jumps: [jump('a'), jump('b')] },
+    });
+    expect(hops.map((hop) => hop.id)).toEqual(['a', 'b', 'main']);
+    expect(hops[2]).not.toHaveProperty('jumps');
+  });
+
+  it('describes the whole route', () => {
+    expect(
+      describeTunnel({
+        name: 'a',
+        driver: 'mysql',
+        host: 'db',
+        ssh: { ...server, jumps: [jump('a')] },
+      }),
+    ).toBe('j@a.example:22 → deploy@inner:22');
+  });
+
+  it('checks every jump and refuses ids used twice', () => {
+    const input = { name: 'a', driver: 'mysql' as const, host: 'db' };
+    expect(
+      connectionProblems({ ...input, ssh: { ...server, jumps: [{ ...jump('a'), host: '' }] } }),
+    ).toEqual(['ssh-host-empty']);
+    expect(connectionProblems({ ...input, ssh: { ...server, jumps: [jump('main')] } })).toEqual([
+      'ssh-id-invalid',
+    ]);
+  });
+
+  it(`allows at most ${MAX_SSH_JUMPS} jumps`, () => {
+    const input = { name: 'a', driver: 'mysql' as const, host: 'db' };
+    const jumps = Array.from({ length: MAX_SSH_JUMPS + 1 }, (_, i) => jump(`j${i}`));
+    expect(connectionProblems({ ...input, ssh: { ...server, jumps: jumps.slice(1) } })).toEqual([]);
+    expect(connectionProblems({ ...input, ssh: { ...server, jumps } })).toEqual([
+      'ssh-too-many-jumps',
+    ]);
   });
 });

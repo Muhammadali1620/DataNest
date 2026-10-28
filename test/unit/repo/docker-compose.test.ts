@@ -15,7 +15,7 @@ interface Service {
   image: string;
   build?: string;
   container_name: string;
-  ports: string[];
+  ports?: string[];
   volumes?: string[];
   tmpfs?: string[];
   healthcheck?: { test: string[] };
@@ -42,17 +42,23 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL and an SSH server', () => {
-    expect(Object.keys(compose.services).sort()).toEqual(['mariadb', 'mysql', 'postgres', 'ssh']);
+  it('provides MySQL, MariaDB, PostgreSQL and two SSH servers', () => {
+    expect(Object.keys(compose.services).sort()).toEqual([
+      'mariadb',
+      'mysql',
+      'postgres',
+      'ssh',
+      'ssh-inner',
+    ]);
   });
 
   it.each(all)('names the %s container with the datanest- prefix', (id, service) => {
     expect(service.container_name).toBe(`datanest-${id}`);
   });
 
-  it.each(all)('publishes %s only on 127.0.0.1 within ports 7000-7999', (_id, service) => {
-    expect(service.ports.length).toBeGreaterThan(0);
-    for (const mapping of service.ports) {
+  it.each(all)('publishes %s only on 127.0.0.1 within ports 7000-7999', (id, service) => {
+    expect(service.ports?.length ?? 0).toBe(id === 'ssh-inner' ? 0 : 1);
+    for (const mapping of service.ports ?? []) {
       const { host, hostPort } = parsePort(mapping);
       expect(host).toBe('127.0.0.1');
       expect(hostPort).toBeGreaterThanOrEqual(7000);
@@ -62,13 +68,13 @@ describe('docker/compose.yml (D17)', () => {
 
   it('publishes the ports the tests connect to', () => {
     for (const [id, service] of services) {
-      const [first] = service.ports;
+      const [first] = service.ports ?? [];
       expect(parsePort(first ?? '').hostPort).toBe(DEFAULT_PORTS[id as TestDatabaseId]);
     }
   });
 
   it('never publishes the same host port twice', () => {
-    const ports = all.flatMap(([, s]) => s.ports.map((p) => parsePort(p).hostPort));
+    const ports = all.flatMap(([, s]) => (s.ports ?? []).map((p) => parsePort(p).hostPort));
     expect(new Set(ports).size).toBe(ports.length);
   });
 
@@ -103,11 +109,17 @@ describe('docker/compose.yml (D17)', () => {
     });
 
     it('publishes the port the tunnel tests use', () => {
-      expect(parsePort(ssh?.ports[0] ?? '')).toEqual({
+      expect(parsePort(ssh?.ports?.[0] ?? '')).toEqual({
         host: '127.0.0.1',
         hostPort: DEFAULT_SSH_PORT,
         containerPort: 22,
       });
+    });
+
+    it('runs the inner server from the same image, without a host port', () => {
+      const inner = compose.services['ssh-inner'];
+      expect(inner?.image).toBe(ssh?.image);
+      expect(inner?.ports).toBeUndefined();
     });
 
     it('pins the base image and allows TCP forwarding', () => {

@@ -190,6 +190,84 @@ describe('SSH tunnel to real databases', () => {
     });
   });
 
+  describe('through a jump host', () => {
+    function deep(id: TestDatabaseId, driver: DriverId, jumps: SshHop[]): ConnectionInput {
+      const base = input(id, driver);
+      return {
+        ...base,
+        ssh: {
+          id: 'main',
+          host: server.inner.host,
+          port: server.inner.port,
+          user: server.user,
+          auth: 'key',
+          keyFile: server.keyFile,
+          jumps,
+        },
+      };
+    }
+
+    const edge: SshHop = {
+      id: 'edge',
+      host: server.host,
+      port: server.port,
+      user: server.user,
+      auth: 'password',
+    };
+
+    it.each(TARGETS)('queries $id through two SSH servers', async ({ id, driver }) => {
+      const config = await store.add(deep(id, driver, [edge]), 'datanest', {
+        edge: { password: server.password },
+        main: { passphrase: server.passphrase },
+      });
+      expect(await rows(manager, 'editor:a', config.id, 'SELECT 5')).toEqual([[5]]);
+      // The inner server has no port on this machine: only the jump host could reach it.
+      expect(seenKeys.some((key) => key.host === server.inner.host)).toBe(true);
+    });
+
+    it('passes through the same jump host twice when asked to', async () => {
+      const again: SshHop = { ...edge, id: 'again', host: 'ssh', port: 22 };
+      const config = await store.add(deep('postgres', 'postgres', [edge, again]), 'datanest', {
+        edge: { password: server.password },
+        again: { password: server.password },
+        main: { passphrase: server.passphrase },
+      });
+      expect(await rows(manager, 'editor:a', config.id, 'SELECT 6')).toEqual([[6]]);
+    });
+
+    it('says which server could not reach the next one', async () => {
+      const config = await store.add(
+        {
+          ...deep('postgres', 'postgres', [edge]),
+          ssh: {
+            id: 'main',
+            host: 'no-such-ssh',
+            user: server.user,
+            auth: 'password',
+            jumps: [edge],
+          },
+        },
+        'datanest',
+        { edge: { password: server.password } },
+      );
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toMatchObject({
+        code: 'connection-failed',
+        message: expect.stringContaining('cannot reach no-such-ssh:22') as unknown,
+      });
+    });
+
+    it('reports a failed login on the inner server', async () => {
+      const config = await store.add(deep('postgres', 'postgres', [edge]), 'datanest', {
+        edge: { password: server.password },
+        main: { passphrase: 'wrong' },
+      });
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toMatchObject({
+        code: 'auth-failed',
+        message: expect.stringContaining('Wrong passphrase') as unknown,
+      });
+    });
+  });
+
   it('tests unsaved settings through a private tunnel', async () => {
     await manager.test(input('postgres', 'postgres'), 'datanest', {
       main: { password: server.password },

@@ -485,5 +485,77 @@ describe('connection form App', () => {
       expect(drafts[0]?.input.ssh).toBeUndefined();
       expect(drafts[0]?.ssh).toBeUndefined();
     });
+
+    it('adds, orders and removes jump hosts, and sends them in order', async () => {
+      const { host } = await withState();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Deep' } });
+      await enableSsh();
+      await fireEvent.input(field('SSH host'), { target: { value: 'inner' } });
+      await fireEvent.input(field('SSH user'), { target: { value: 'deploy' } });
+      const add = screen.getByRole('button', { name: 'Add jump host' });
+      await fireEvent.click(add);
+      await fireEvent.click(add);
+      await fireEvent.click(add);
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Jump 3: SSH host')).not.toBeNull();
+      });
+      for (const n of [1, 2, 3]) {
+        await fireEvent.input(field(`Jump ${n}: SSH host`), { target: { value: `j${n}` } });
+        await fireEvent.input(field(`Jump ${n}: SSH user`), { target: { value: 'u' } });
+      }
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Jump 1: Move up' }).disabled,
+      ).toBe(true);
+      await fireEvent.click(screen.getByRole('button', { name: 'Jump 1: Move down' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Jump 3: Remove' }));
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Jump 3: SSH host')).toBeNull();
+      });
+      expect(field('Jump 1: SSH host').value).toBe('j2');
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      const ssh = drafts[0]?.input.ssh;
+      expect(ssh?.host).toBe('inner');
+      expect(ssh?.jumps?.map((hop) => hop.host)).toEqual(['j2', 'j1']);
+      expect(drafts[0]?.ssh?.map((change) => change.hopId)).toEqual([
+        ...(ssh?.jumps ?? []).map((hop) => hop.id),
+        ssh?.id,
+      ]);
+    });
+
+    it('stops offering jump hosts at the limit', async () => {
+      await withState();
+      await enableSsh();
+      for (let i = 0; i < 5; i++) {
+        await fireEvent.click(screen.getByRole('button', { name: 'Add jump host' }));
+      }
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Add jump host' })).toBeNull();
+      });
+    });
+
+    it('marks a missing field of a jump host', async () => {
+      const { host } = await withState();
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.input(field('Name'), { target: { value: 'Deep' } });
+      await enableSsh();
+      await fireEvent.input(field('SSH host'), { target: { value: 'inner' } });
+      await fireEvent.input(field('SSH user'), { target: { value: 'deploy' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Add jump host' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(field('Jump 1: SSH host').getAttribute('aria-invalid')).toBe('true');
+      });
+      expect(field('SSH host').getAttribute('aria-invalid')).toBe('false');
+      expect(save).not.toHaveBeenCalled();
+    });
   });
 });

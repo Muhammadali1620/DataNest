@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { CONNECTION_LIMITS, isFileDriver } from '../../../../src/shared/connection';
+  import {
+    CONNECTION_LIMITS,
+    isFileDriver,
+    MAX_SSH_JUMPS,
+  } from '../../../../src/shared/connection';
   import type {
     ConnectionFormProtocol,
     ConnectionFormState,
@@ -14,6 +18,8 @@
   import {
     fieldsFrom,
     type FormFields,
+    moveJump,
+    newHopFields,
     problemMessage,
     problemsOf,
     toDraft,
@@ -118,6 +124,20 @@
   function storedFor(hopId: string): { password: boolean; passphrase: boolean } {
     const found = formState?.storedSsh.find((entry) => entry.hopId === hopId);
     return { password: found?.password ?? false, passphrase: found?.passphrase ?? false };
+  }
+
+  function addJump(): void {
+    fields?.jumps.push(newHopFields());
+  }
+
+  function removeJump(index: number): void {
+    fields?.jumps.splice(index, 1);
+  }
+
+  function move(index: number, by: -1 | 1): void {
+    if (fields) {
+      moveJump(fields.jumps, index, by);
+    }
   }
 
   async function browseKey(hop: { keyFile: string }): Promise<void> {
@@ -301,6 +321,66 @@
                 }
               }}
             />
+
+            <div class="jumps">
+              <span class="label">{t('form.ssh.jumps')}</span>
+              <span class="hint">{t('form.ssh.jumpsHint')}</span>
+              {#each fields.jumps as jump, index (jump.id)}
+                {@const name = t('form.ssh.jump', index + 1)}
+                <fieldset class="section jump">
+                  <legend>{name}</legend>
+                  <SshHopEditor
+                    hop={jump}
+                    stored={storedFor(jump.id)}
+                    {showProblems}
+                    label={name}
+                    {t}
+                    onBrowseKey={() => void browseKey(jump)}
+                  />
+                  <div class="row">
+                    <button
+                      type="button"
+                      class="button secondary"
+                      disabled={index === 0}
+                      aria-label={`${name}: ${t('form.ssh.moveUp')}`}
+                      onclick={() => {
+                        move(index, -1);
+                      }}
+                    >
+                      {t('form.ssh.moveUp')}
+                    </button>
+                    <button
+                      type="button"
+                      class="button secondary"
+                      disabled={index === fields.jumps.length - 1}
+                      aria-label={`${name}: ${t('form.ssh.moveDown')}`}
+                      onclick={() => {
+                        move(index, 1);
+                      }}
+                    >
+                      {t('form.ssh.moveDown')}
+                    </button>
+                    <button
+                      type="button"
+                      class="button secondary"
+                      aria-label={`${name}: ${t('form.ssh.removeJump')}`}
+                      onclick={() => {
+                        removeJump(index);
+                      }}
+                    >
+                      {t('form.ssh.removeJump')}
+                    </button>
+                  </div>
+                </fieldset>
+              {/each}
+              {#if fields.jumps.length < MAX_SSH_JUMPS}
+                <span>
+                  <button type="button" class="button secondary" onclick={addJump}>
+                    {t('form.ssh.addJump')}
+                  </button>
+                </span>
+              {/if}
+            </div>
           {/if}
         </fieldset>
       {/if}
@@ -389,6 +469,17 @@
 
   .section legend {
     padding: 0 4px;
+  }
+
+  .jumps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .jumps .hint {
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
   }
 
   .actions {

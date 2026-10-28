@@ -91,6 +91,8 @@ export interface FormFields {
   useSsh: boolean;
   /** Kept while SSH is off, so turning it back on restores what was typed. */
   ssh: HopFields;
+  /** Servers to pass through before `ssh`, in order. */
+  jumps: HopFields[];
 }
 
 export function fieldsFrom(state: ConnectionFormState): FormFields {
@@ -108,7 +110,20 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     erasePassword: false,
     useSsh: input.ssh !== undefined,
     ssh: input.ssh === undefined ? newHopFields() : hopFieldsFrom(input.ssh),
+    jumps: (input.ssh?.jumps ?? []).map(hopFieldsFrom),
   };
+}
+
+/** Moves the jump at `index` one place up (-1) or down (+1); out of range does nothing. */
+export function moveJump(jumps: HopFields[], index: number, by: -1 | 1): void {
+  const target = index + by;
+  const moved = jumps[index];
+  const other = jumps[target];
+  if (moved === undefined || other === undefined) {
+    return;
+  }
+  jumps[target] = moved;
+  jumps[index] = other;
 }
 
 /** A port is kept only when it is written as a plain number. */
@@ -156,7 +171,14 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(port === undefined ? {} : { port }),
     ...(user === undefined ? {} : { user }),
     ...(database === undefined ? {} : { database }),
-    ...(fields.useSsh ? { ssh: toHop(fields.ssh) } : {}),
+    ...(fields.useSsh
+      ? {
+          ssh: {
+            ...toHop(fields.ssh),
+            ...(fields.jumps.length === 0 ? {} : { jumps: fields.jumps.map(toHop) }),
+          },
+        }
+      : {}),
   };
 }
 
@@ -198,7 +220,9 @@ export function toDraft(fields: FormFields): ConnectionDraft {
   return {
     input,
     password: passwordChange(fields),
-    ...(input.ssh === undefined ? {} : { ssh: [hopSecretChanges(fields.ssh)] }),
+    ...(input.ssh === undefined
+      ? {}
+      : { ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)) }),
   };
 }
 
@@ -226,9 +250,11 @@ export function problemsOf(fields: FormFields): ConnectionProblem[] {
     problems.push('port-invalid');
   }
   if (!isFileDriver(fields.driver) && fields.useSsh) {
-    for (const problem of hopProblemsOf(fields.ssh)) {
-      if (!problems.includes(problem)) {
-        problems.push(problem);
+    for (const hop of [...fields.jumps, fields.ssh]) {
+      for (const problem of hopProblemsOf(hop)) {
+        if (!problems.includes(problem)) {
+          problems.push(problem);
+        }
       }
     }
   }
@@ -246,6 +272,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'ssh-user-empty': 'form.ssh.error.userEmpty',
   'ssh-key-empty': 'form.ssh.error.keyEmpty',
   'ssh-id-invalid': 'form.unknownError',
+  'ssh-too-many-jumps': 'form.ssh.error.tooManyJumps',
 };
 
 export { DEFAULT_SSH_PORT };

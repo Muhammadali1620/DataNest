@@ -14,6 +14,7 @@ import {
   type SshHop,
   type SshHopSecrets,
   sshHopsOf,
+  type SshTunnelConfig,
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
 import { array, literal, object, type Schema, string } from '../shared/schema';
@@ -302,13 +303,18 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     user: file ? undefined : trim(input.user),
     database: file ? undefined : trim(input.database),
     file: file ? trim(input.file) : undefined,
-    ssh: file || input.ssh === undefined ? undefined : normalizeHop(input.ssh),
+    ssh: file || input.ssh === undefined ? undefined : normalizeTunnel(input.ssh),
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
     throw new DbError('unsupported', `Invalid connection: ${problems.join(', ')}`);
   }
   return normalized;
+}
+
+function normalizeTunnel(ssh: SshTunnelConfig): SshTunnelConfig {
+  const jumps = (ssh.jumps ?? []).map(normalizeHop);
+  return { ...normalizeHop(ssh), ...(jumps.length === 0 ? {} : { jumps }) };
 }
 
 /** Only the fields of the hop's auth method are kept: a key path is not stored for `agent`. */

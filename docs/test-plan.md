@@ -179,7 +179,8 @@ npm run package        # соберёт datanest-<версия>.vsix
 2. Тот же сервер с входом по ключу (файл через «Обзор…», passphrase `datanest-key`); без passphrase — понятная ошибка «ключ защищён паролем».
 3. Сохранить, открыть заново: SSH-пароль не показан, есть подсказка «сохранён». Раскрыть подключение, выполнить запрос, отменить долгий `SELECT pg_sleep(30)`.
 4. Хост БД `no-such-db` → ошибка «SSH-сервер … не может достучаться до no-such-db:3306».
-5. `docker compose -f docker/compose.yml build --no-cache ssh && docker compose -f docker/compose.yml up -d --force-recreate ssh` (у сервера новый ключ) → при подключении красное предупреждение о сменившемся ключе; «Отмена» — не подключается.
+5. Jump host: SSH-сервер `ssh-inner`, порт `22`, вход ключом (passphrase `datanest-key`), «Добавить промежуточный хост» → `127.0.0.1`, `7022`, `datanest`/`datanest` → «Проверить» спрашивает про ключи обоих серверов и подключается; в подсказке подключения в дереве весь маршрут. Без jump-хоста `ssh-inner` недоступен.
+6. `docker compose -f docker/compose.yml build --no-cache ssh && docker compose -f docker/compose.yml up -d --force-recreate ssh` (у сервера новый ключ) → при подключении красное предупреждение о сменившемся ключе; «Отмена» — не подключается.
 
 ## 16. Темы, язык, доступность
 

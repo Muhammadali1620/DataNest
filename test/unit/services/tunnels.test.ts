@@ -62,12 +62,49 @@ describe('tunnelSpecOf', () => {
   });
 });
 
+describe('tunnelSpecOf with jump hosts', () => {
+  it('lists the jumps before the server, each with its own secrets', () => {
+    const spec = tunnelSpecOf(
+      {
+        ...base,
+        ssh: {
+          id: 'main',
+          host: 'inner',
+          user: 'deploy',
+          auth: 'password',
+          jumps: [{ id: 'j', host: 'edge', port: 2200, user: 'jump', auth: 'password' }],
+        },
+      },
+      { j: { password: 'jp' }, main: { password: 'mp' } },
+      check,
+    );
+    expect(spec?.hops).toEqual([
+      { host: 'edge', port: 2200, user: 'jump', auth: 'password', password: 'jp' },
+      { host: 'inner', port: 22, user: 'deploy', auth: 'password', password: 'mp' },
+    ]);
+    expect(spec?.target).toEqual({ host: 'db.internal', port: 5432 });
+  });
+});
+
 describe('tunnelKeyOf', () => {
   it('changes with the target and the SSH settings, not with the name', () => {
     const key = tunnelKeyOf('c1', base);
     expect(tunnelKeyOf('c1', { ...base, name: 'Renamed' })).toBe(key);
     expect(tunnelKeyOf('c2', base)).not.toBe(key);
     expect(tunnelKeyOf('c1', { ...base, port: 6543 })).not.toBe(key);
+    expect(
+      tunnelKeyOf('c1', {
+        ...base,
+        ssh: {
+          id: 'main',
+          host: 'bastion',
+          port: 2222,
+          user: 'deploy',
+          auth: 'password',
+          jumps: [{ id: 'j', host: 'edge', user: 'u', auth: 'agent' }],
+        },
+      }),
+    ).not.toBe(key);
     expect(
       tunnelKeyOf('c1', {
         ...base,

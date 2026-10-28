@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   passphrase) or an SSH agent. Secrets stay in the editor's secret storage. The first
   connection to a server shows its key fingerprint to trust, and a changed key is
   refused.
+- Jump hosts: pass through up to five SSH servers on the way, each with its own login.
 
 ## [0.3.0] - 2026-10-28
 

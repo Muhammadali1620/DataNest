@@ -113,3 +113,12 @@ services:
     healthcheck:
       <<: *healthcheck
       test: ['CMD', 'nc', '-z', '127.0.0.1', '22']
+
+  # A second SSH server with no port on the host: reached only through `ssh` (jump host).
+  ssh-inner:
+    build: ./ssh
+    image: datanest-ssh:1
+    container_name: datanest-ssh-inner
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '22']

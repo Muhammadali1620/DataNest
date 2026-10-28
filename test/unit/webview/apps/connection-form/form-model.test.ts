@@ -15,6 +15,7 @@ import {
   hopSecretChanges,
   secretChange,
   toHop,
+  moveJump,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { en } from '../../../../../webview/src/l10n/en';
 
@@ -32,6 +33,7 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     erasePassword: false,
     useSsh: false,
     ssh: newHopFields('hop1'),
+    jumps: [],
     ...overrides,
   };
 }
@@ -65,6 +67,7 @@ describe('fieldsFrom', () => {
       erasePassword: false,
       useSsh: false,
       ssh: expect.objectContaining({ host: '', auth: 'password' }) as unknown,
+      jumps: [],
     });
   });
 
@@ -328,5 +331,66 @@ describe('SSH fields', () => {
     ] as const) {
       expect(en[PROBLEM_MESSAGES[problem]]).toBeTruthy();
     }
+  });
+});
+
+describe('jump hosts', () => {
+  const server = { ...newHopFields('main'), host: 'inner', user: 'deploy' };
+  const jump = (id: string) => ({ ...newHopFields(id), host: `${id}.example`, user: 'j' });
+
+  it('reads the jumps of a saved tunnel in order', () => {
+    const result = fieldsFrom({
+      input: {
+        name: 'p',
+        driver: 'mysql',
+        host: 'db',
+        ssh: {
+          id: 'main',
+          host: 'inner',
+          user: 'u',
+          auth: 'agent',
+          jumps: [
+            { id: 'a', host: 'a.example', user: 'j', auth: 'password' },
+            { id: 'b', host: 'b.example', port: 2200, user: 'j', auth: 'key', keyFile: '/k' },
+          ],
+        },
+      },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect(result.jumps.map((hop) => [hop.id, hop.host, hop.port])).toEqual([
+      ['a', 'a.example', ''],
+      ['b', 'b.example', '2200'],
+    ]);
+  });
+
+  it('sends the jumps inside the tunnel, and none when the list is empty', () => {
+    const withJumps = toInput(fields({ useSsh: true, ssh: server, jumps: [jump('a'), jump('b')] }));
+    expect(withJumps.ssh?.jumps?.map((hop) => hop.id)).toEqual(['a', 'b']);
+    expect(toInput(fields({ useSsh: true, ssh: server })).ssh).not.toHaveProperty('jumps');
+  });
+
+  it('sends secret decisions for every hop, jumps first', () => {
+    const draft = toDraft(fields({ useSsh: true, ssh: server, jumps: [jump('a'), jump('b')] }));
+    expect(draft.ssh?.map((change) => change.hopId)).toEqual(['a', 'b', 'main']);
+  });
+
+  it('blocks saving while a jump is incomplete', () => {
+    const broken = { ...jump('a'), user: '' };
+    expect(problemsOf(fields({ useSsh: true, ssh: server, jumps: [broken] }))).toEqual([
+      'ssh-user-empty',
+    ]);
+  });
+
+  it('moves a jump up and down within the list only', () => {
+    const list = [jump('a'), jump('b'), jump('c')];
+    moveJump(list, 0, 1);
+    expect(list.map((hop) => hop.id)).toEqual(['b', 'a', 'c']);
+    moveJump(list, 2, -1);
+    expect(list.map((hop) => hop.id)).toEqual(['b', 'c', 'a']);
+    moveJump(list, 0, -1);
+    moveJump(list, 2, 1);
+    expect(list.map((hop) => hop.id)).toEqual(['b', 'c', 'a']);
   });
 });

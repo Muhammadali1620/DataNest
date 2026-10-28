@@ -3,7 +3,7 @@
   "extension.description": "Free and open-source database client: MySQL, MariaDB, PostgreSQL, SQLite and more.",
   "viewsContainers.datanest.title": "DataNest",
   "views.connections.name": "Connections",
-  "viewsWelcome.connections.empty": "No connections yet.\n[New Connection](command:datanest.connections.add)\n[Add from URL](command:datanest.connections.addFromUrl) · [Import from .env](command:datanest.connections.importEnv)",
+  "viewsWelcome.connections.empty": "No connections yet.\n[New Connection](command:datanest.connections.add)\n[Add from URL](command:datanest.connections.addFromUrl) · [Import from .env](command:datanest.connections.importEnv) · [Import a list](command:datanest.connections.import)",
   "commands.logs.show.title": "Show Logs",
   "configuration.logLevel.description": "How much DataNest writes to its output channel. Passwords and tokens are never logged.",
   "configuration.logLevel.error": "Only errors.",
@@ -88,5 +88,7 @@
   "configuration.transactionMode.auto": "Every statement is saved at once",
   "configuration.transactionMode.manual": "Changes wait for Commit or Rollback",
   "commands.connections.filterDatabases.title": "Filter Databases…",
-  "commands.connections.filterSchemas.title": "Filter Schemas…"
+  "commands.connections.filterSchemas.title": "Filter Schemas…",
+  "commands.connections.import.title": "Import Connections…",
+  "commands.connections.export.title": "Export Connections…"
 }

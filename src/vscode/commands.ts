@@ -27,6 +27,7 @@ import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-imp
 import { folderCommandHandlers } from './tree/folder-commands';
 import { projectCommandHandlers } from './project-commands';
 import { filterCommandHandlers } from './tree/filter-commands';
+import { transferCommandHandlers } from './connection-transfer-commands';
 import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
@@ -87,6 +88,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const connections = connectionCommandHandlers(importDeps);
   const folders = folderCommandHandlers({ store: deps.store });
   const projects = projectCommandHandlers(importDeps);
+  const transfer = transferCommandHandlers({ store: deps.store, logger: deps.logger });
   const filters = filterCommandHandlers({
     store: deps.store,
     manager: deps.manager,
@@ -235,6 +237,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.addConnectionFromUrl]: (target) =>
       addConnectionFromUrl(importDeps, typeof target === 'string' ? target : undefined),
     [COMMAND_IDS.importEnvConnections]: () => importConnectionsFromEnv(importDeps),
+    [COMMAND_IDS.exportConnections]: () => transfer.exportConnections(),
+    [COMMAND_IDS.importConnections]: (target) => transfer.importConnections(target),
     [COMMAND_IDS.editConnection]: connections.edit,
     [COMMAND_IDS.duplicateConnection]: connections.duplicate,
     [COMMAND_IDS.removeConnection]: connections.remove,

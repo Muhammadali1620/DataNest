@@ -98,7 +98,8 @@ describe('project connections', () => {
 
   it('creates the project file when it is missing', async () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-    rmSync(join(root, '.vscode'), { recursive: true, force: true });
+    // The file, not the folder: on Windows the editor's watcher keeps `.vscode` open.
+    rmSync(join(root, '.vscode', 'datanest.json'), { force: true });
     await vscode.commands.executeCommand('datanest.project.openFile');
     // The editor may still show the closed document's old text for a moment; the
     // file on disk is what the command wrote.

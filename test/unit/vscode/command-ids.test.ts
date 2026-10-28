@@ -138,6 +138,8 @@ describe('tree menus', () => {
       COMMAND_IDS.addConnectionFromUrl,
       COMMAND_IDS.importEnvConnections,
       COMMAND_IDS.openProjectFile,
+      COMMAND_IDS.importConnections,
+      COMMAND_IDS.exportConnections,
       COMMAND_IDS.createFolder,
     ]);
   });
@@ -225,7 +227,12 @@ describe('tree menus', () => {
   });
 
   it('keeps the import commands in the view title menu, not as icons', () => {
-    for (const id of [COMMAND_IDS.addConnectionFromUrl, COMMAND_IDS.importEnvConnections]) {
+    for (const id of [
+      COMMAND_IDS.addConnectionFromUrl,
+      COMMAND_IDS.importEnvConnections,
+      COMMAND_IDS.importConnections,
+      COMMAND_IDS.exportConnections,
+    ]) {
       expect(title.find((entry) => entry.command === id)?.group).toMatch(/^1_add@\d$/);
     }
   });
@@ -237,6 +244,7 @@ describe('tree menus', () => {
       COMMAND_IDS.addConnection,
       COMMAND_IDS.addConnectionFromUrl,
       COMMAND_IDS.importEnvConnections,
+      COMMAND_IDS.importConnections,
     ]) {
       expect(welcome).toContain(`command:${id}`);
     }

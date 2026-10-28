@@ -84,6 +84,16 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.connections.import",
+        "title": "%commands.connections.import.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.export",
+        "title": "%commands.connections.export.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.folders.create",
         "title": "%commands.folders.create.title%",
         "category": "DataNest",
@@ -488,6 +498,16 @@
           "command": "datanest.project.openFile",
           "when": "view == datanest.connections",
           "group": "1_add@3"
+        },
+        {
+          "command": "datanest.connections.import",
+          "when": "view == datanest.connections",
+          "group": "1_add@4"
+        },
+        {
+          "command": "datanest.connections.export",
+          "when": "view == datanest.connections",
+          "group": "1_add@5"
         },
         {
           "command": "datanest.folders.create",

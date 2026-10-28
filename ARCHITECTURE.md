@@ -120,6 +120,7 @@ webview/ ───────────────────────�
 │  │  ├─ history.ts
 │  │  ├─ project-connections.ts # подключения проекта из .vscode/datanest.json (V4.7)
 │  │  ├─ session-setup.ts     # часовой пояс и init SQL новой сессии (V4.9)
+│  │  ├─ connection-transfer.ts # экспорт и импорт списка подключений (V4.11)
 │  │  ├─ tunnels.ts           # SSH: что видит остальной код, общий туннель на подключение
 │  │  ├─ known-hosts.ts       # доверенные ключи SSH-серверов
 │  │  └─ ssh/                 # ssh2 — отдельный ленивый бандл dist/ssh.js

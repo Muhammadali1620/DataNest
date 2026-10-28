@@ -19,7 +19,9 @@ export async function forgetProject(
   for (const id of connectionIds) {
     await vscode.commands.executeCommand('datanest.connections.disconnect', id);
   }
-  rmSync(join(root, '.vscode'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  // The file, not the folder: on Windows the editor's file watcher keeps `.vscode` open,
+  // and an empty folder means no project anyway.
+  rmSync(join(root, '.vscode', 'datanest.json'), { force: true, maxRetries: 10, retryDelay: 100 });
   for (const database of databases) {
     try {
       rmSync(join(root, database), { force: true, maxRetries: 10, retryDelay: 100 });

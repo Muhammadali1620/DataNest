@@ -265,5 +265,16 @@
   "This connection opens a single database file: there is nothing to filter": "Это подключение открывает один файл базы: фильтровать нечего",
   "Untick what to hide; tick everything to show all, new ones too": "Снимите отметку с того, что скрыть; отметьте всё — будут видны все, и новые тоже",
   "Write patterns instead…": "Задать шаблонами…",
-  "{0} more hidden by the filter": "Ещё {0} скрыто фильтром"
+  "{0} more hidden by the filter": "Ещё {0} скрыто фильтром",
+  "Export Connections": "Экспорт подключений",
+  "Exported {0} connection(s). Passwords are not in the file: each person sets their own.": "Экспортировано подключений: {0}. Паролей в файле нет: каждый задаёт свои.",
+  "Import Connections": "Импорт подключений",
+  "Imported {0} connection(s). Set their passwords with Edit Connection.": "Импортировано подключений: {0}. Пароли задайте в «Изменить подключение».",
+  "None of the {0} connection(s) in the file could be read": "Ни одно из подключений файла ({0}) не удалось прочитать",
+  "Pick the connections to add to yours": "Выберите подключения, которые добавить к вашим",
+  "Pick the connections to export; passwords are never exported": "Выберите подключения для экспорта; пароли не экспортируются никогда",
+  "Project \"{0}\"": "Проект «{0}»",
+  "The file lists no connections": "В файле нет подключений",
+  "This is not a DataNest connection file: {0}": "Это не файл подключений DataNest: {0}",
+  "{0} entr(ies) of the file could not be read.": "Не удалось прочитать записей файла: {0}."
 }

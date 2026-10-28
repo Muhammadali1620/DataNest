@@ -9,6 +9,10 @@ export const COMMAND_IDS = {
   addConnectionFromUrl: 'datanest.connections.addFromUrl',
   /** Adds connections found in the workspace's .env files. */
   importEnvConnections: 'datanest.connections.importEnv',
+  /** Writes chosen connections, without secrets, to a file (V4.11). */
+  exportConnections: 'datanest.connections.export',
+  /** Adds connections from such a file. */
+  importConnections: 'datanest.connections.import',
   /** Folders of connections in the tree. */
   createFolder: 'datanest.folders.create',
   renameFolder: 'datanest.folders.rename',

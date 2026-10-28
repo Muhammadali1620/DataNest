@@ -38,21 +38,18 @@ export function driverOptions(): ConnectionFormState['drivers'] {
   });
 }
 
-/** Drops `id`: the editable fields travel on their own, and the schema rejects extras. */
+/**
+ * Drops `id`: the editable fields travel on their own, and the schema rejects extras.
+ * Every other field is copied as is — a list of fields here lost TLS (V4.5) and the
+ * production flags (V4.6) when they were added, and saving the form erased them.
+ */
 export function toInput(config: ConnectionConfig): ConnectionInput {
-  return {
-    name: config.name,
-    driver: config.driver,
-    ...(config.host === undefined ? {} : { host: config.host }),
-    ...(config.port === undefined ? {} : { port: config.port }),
-    ...(config.user === undefined ? {} : { user: config.user }),
-    ...(config.database === undefined ? {} : { database: config.database }),
-    ...(config.file === undefined ? {} : { file: config.file }),
-    ...(config.ssh === undefined ? {} : { ssh: config.ssh }),
-    ...(config.ssl === undefined ? {} : { ssl: config.ssl }),
-    ...(config.folder === undefined ? {} : { folder: config.folder }),
-    ...(config.color === undefined ? {} : { color: config.color }),
-  };
+  const { id: _id, ...input } = config;
+  // The store keeps cleared optional fields as `undefined` keys, which the page's
+  // schema would see as present; the types do not show them.
+  const entries: [string, unknown][] = Object.entries(input);
+  const kept = entries.filter(([, value]) => value !== undefined);
+  return Object.fromEntries(kept) as unknown as ConnectionInput;
 }
 
 function toChange(message: PasswordChangeMessage): PasswordChange {

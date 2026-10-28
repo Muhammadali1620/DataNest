@@ -11,6 +11,7 @@ import {
 import type { ConnectionDraft } from '../../../../src/shared/protocols/connection-form';
 import { DRIVER_IDS, isFileDriver } from '../../../../src/shared/connection';
 import { connectionFormProtocol } from '../../../../src/shared/protocols/connection-form';
+import { connectionInputShape } from '../../../../src/shared/connection-schema';
 
 describe('NEW_CONNECTION', () => {
   it('starts on MySQL with its default port', () => {
@@ -88,6 +89,52 @@ describe('toInput', () => {
 
   it('produces no id field that would be rejected as unexpected', () => {
     expect(toInput({ id: 'c1', name: 'x', driver: 'mysql', host: 'h' })).not.toHaveProperty('id');
+  });
+
+  it('keeps the production and read-only flags, so saving the form does not drop them', () => {
+    expect(
+      toInput({
+        id: 'c1',
+        name: 'x',
+        driver: 'mysql',
+        host: 'h',
+        production: true,
+        readOnly: true,
+      }),
+    ).toMatchObject({ production: true, readOnly: true });
+  });
+
+  it('carries every field the form edits, so none is lost on save', () => {
+    const full = {
+      id: 'c1',
+      name: 'Full',
+      driver: 'postgres',
+      host: 'db',
+      port: 7432,
+      user: 'app',
+      database: 'shop',
+      file: '/tmp/x.db',
+      ssh: { id: 'main', host: 'b', user: 'u', auth: 'agent' },
+      ssl: { mode: 'verify-full', ca: '/ca.pem' },
+      folder: 'Work',
+      color: 'red',
+      production: true,
+      readOnly: true,
+    } as const;
+    const input = toInput(full);
+    const sent = connectionFormProtocol.host.requests.save.params.parse({
+      input,
+      password: { kind: 'keep' },
+    }).input;
+    expect(sent).toEqual(input);
+    // A field added to the form later must be listed above and travel too.
+    expect(Object.keys(input).sort()).toEqual(Object.keys(connectionInputShape).sort());
+  });
+
+  it('leaves out fields that hold undefined', () => {
+    expect(
+      Object.keys(toInput({ id: 'c', name: 'n', driver: 'sqlite', file: 'a.db', host: undefined })),
+    ).toEqual(['name', 'driver', 'file']);
   });
 });
 

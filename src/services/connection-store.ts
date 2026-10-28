@@ -15,6 +15,9 @@ import {
   type SshHopSecrets,
   sshHopsOf,
   type ConnectionColor,
+  type ConnectionOptions,
+  type DriverId,
+  optionSupport,
   type SshTunnelConfig,
   type SslSettings,
 } from '../shared/connection';
@@ -566,12 +569,48 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     // Only a set flag is stored, so configs stay the same as before for everyone else.
     production: input.production === true ? true : undefined,
     readOnly: input.readOnly === true ? true : undefined,
+    options: normalizeOptions(input.options, input.driver),
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
     throw new DbError('unsupported', `Invalid connection: ${problems.join(', ')}`);
   }
   return normalized;
+}
+
+/**
+ * Options the driver honours, with text trimmed; empty ones are dropped, and no
+ * options at all is `undefined`, so plain connections are stored as before.
+ */
+function normalizeOptions(
+  options: ConnectionOptions | undefined,
+  driver: DriverId,
+): ConnectionOptions | undefined {
+  if (options === undefined) {
+    return undefined;
+  }
+  const support = optionSupport(driver);
+  const text = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+  const initSql = text(options.initSql);
+  const timeZone = support.timeZone ? text(options.timeZone) : undefined;
+  const charset = support.charset ? text(options.charset) : undefined;
+  const kept: ConnectionOptions = {
+    ...(support.connectTimeout && options.connectTimeout !== undefined
+      ? { connectTimeout: options.connectTimeout }
+      : {}),
+    ...(options.queryTimeout === undefined ? {} : { queryTimeout: options.queryTimeout }),
+    // 0 is "never", the same as leaving it out.
+    ...(support.keepAlive && options.keepAlive !== undefined && options.keepAlive > 0
+      ? { keepAlive: options.keepAlive }
+      : {}),
+    ...(initSql === undefined ? {} : { initSql }),
+    ...(timeZone === undefined ? {} : { timeZone }),
+    ...(charset === undefined ? {} : { charset }),
+  };
+  return Object.keys(kept).length === 0 ? undefined : kept;
 }
 
 function normalizeSsl(ssl: SslSettings): SslSettings {

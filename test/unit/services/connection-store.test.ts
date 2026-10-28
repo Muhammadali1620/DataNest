@@ -807,3 +807,68 @@ describe('ConnectionStore project connections', () => {
     );
   });
 });
+
+describe('ConnectionStore session options (V4.9)', () => {
+  const make = () =>
+    new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+
+  it('keeps the options the driver honours, trimmed', async () => {
+    const config = await make().add({
+      ...mysqlInput,
+      options: {
+        connectTimeout: 5,
+        queryTimeout: 0,
+        keepAlive: 30,
+        timeZone: ' UTC ',
+        charset: ' latin1 ',
+        initSql: '  SET a = 1;  ',
+      },
+    });
+    expect(config.options).toEqual({
+      connectTimeout: 5,
+      queryTimeout: 0,
+      keepAlive: 30,
+      timeZone: 'UTC',
+      charset: 'latin1',
+      initSql: 'SET a = 1;',
+    });
+  });
+
+  it('drops empty options, a keep-alive of 0, and what the driver does not use', async () => {
+    const store = make();
+    expect(
+      (await store.add({ ...mysqlInput, options: { keepAlive: 0, timeZone: ' ', initSql: '' } }))
+        .options,
+    ).toBeUndefined();
+    const lite = await store.add({
+      name: 'Lite',
+      driver: 'sqlite',
+      file: '/a.db',
+      options: {
+        connectTimeout: 5,
+        keepAlive: 30,
+        timeZone: 'UTC',
+        charset: 'x',
+        initSql: 'PRAGMA foreign_keys = ON',
+      },
+    });
+    expect(lite.options).toEqual({ initSql: 'PRAGMA foreign_keys = ON' });
+    const pg = await store.add({
+      name: 'Pg',
+      driver: 'postgres',
+      host: 'h',
+      options: { charset: 'latin1', timeZone: 'UTC' },
+    });
+    expect(pg.options).toEqual({ timeZone: 'UTC' });
+  });
+
+  it('refuses options that are out of range', async () => {
+    await expect(make().add({ ...mysqlInput, options: { connectTimeout: 0 } })).rejects.toThrow(
+      'connect-timeout-invalid',
+    );
+  });
+});

@@ -99,7 +99,7 @@ export function tunnelSpecOf(
     }),
     target: { host: config.host, port },
     checkHostKey,
-    timeoutMs: SSH_TIMEOUT_MS,
+    timeoutMs: (config.options?.connectTimeout ?? SSH_TIMEOUT_MS / 1000) * 1000,
   };
 }
 

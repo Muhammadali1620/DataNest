@@ -67,3 +67,23 @@ describe('connectionOptions', () => {
     expect(options.ssl).toMatchObject({ verifyIdentity: true });
   });
 });
+
+describe('connectionOptions: session options (V4.9)', () => {
+  it('waits 10 s by default, keeps TCP alive, and talks utf8mb4', () => {
+    expect(connectionOptions(config, undefined)).toMatchObject({
+      connectTimeout: 10_000,
+      charset: 'utf8mb4',
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 30_000,
+    });
+  });
+
+  it('takes the connect timeout and the character set from the connection', () => {
+    expect(
+      connectionOptions(
+        { ...config, options: { connectTimeout: 3, charset: 'latin1' } },
+        undefined,
+      ),
+    ).toMatchObject({ connectTimeout: 3000, charset: 'latin1' });
+  });
+});

@@ -10,7 +10,8 @@ import type {
   ResolvedConnectionConfig,
   SshHopSecrets,
 } from '../shared/connection';
-import type { DriverId } from '../shared/connection';
+import { type DriverId, optionSupport } from '../shared/connection';
+import { setUpSession } from './session-setup';
 import type { Driver, Session, TransactionState } from '../drivers/driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
@@ -259,6 +260,8 @@ export class ConnectionManager implements Disposable {
         throw tunnel?.forwardError() ?? error;
       }
       try {
+        // The time zone and init SQL are part of what "Test" checks.
+        await setUpSession(session, input, driver.dialect);
         // Opening alone can succeed lazily; one statement proves the link works.
         await drain(session.execute('SELECT 1', { rowLimit: 1 }));
       } finally {
@@ -311,6 +314,13 @@ export class ConnectionManager implements Disposable {
         // "Connection reset" says little; the SSH server's reason says what is wrong.
         throw lease?.forwardError() ?? error;
       }
+      try {
+        await setUpSession(opened, config, driver.dialect);
+      } catch (error) {
+        await opened.close().catch(() => undefined);
+        await lease?.release();
+        throw error;
+      }
       if (this.disposed) {
         await opened.close().catch(() => undefined);
         await lease?.release();
@@ -326,7 +336,11 @@ export class ConnectionManager implements Disposable {
         onTransaction: (state) => {
           this.notifyTransaction({ owner, connectionId, state });
         },
+        keepAliveMs: optionSupport(config.driver).keepAlive
+          ? (config.options?.keepAlive ?? 0) * 1000
+          : 0,
       });
+      session.scheduleKeepAlive();
       this.holders.set(owner, { target, session });
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);

@@ -3,7 +3,11 @@ import { checkServerIdentity, type TLSSocket } from 'node:tls';
 import * as mysql from 'mysql2';
 import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
-import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
+import {
+  DEFAULT_CONNECT_TIMEOUT_SECONDS,
+  effectivePort,
+  type ResolvedConnectionConfig,
+} from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import { sniName, tlsFailure, type TlsMaterial, tlsMaterial } from '../common/tls';
 import type {
@@ -20,7 +24,8 @@ import { mysqlTypeName, toCellValue } from './values';
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
 
-export const CONNECT_TIMEOUT_MS = 10_000;
+/** TCP keep-alive probes start after this much quiet, so NAT and firewalls keep the link. */
+export const TCP_KEEPALIVE_DELAY_MS = 30_000;
 
 const QUERY_INTERRUPTED = 1317; // ER_QUERY_INTERRUPTED
 const LOCK_DEADLOCK = 1213; // ER_LOCK_DEADLOCK: InnoDB rolled the whole transaction back
@@ -57,8 +62,12 @@ export function connectionOptions(
     user: config.user,
     password: config.password,
     database: config.database,
-    connectTimeout: CONNECT_TIMEOUT_MS,
-    charset: 'utf8mb4',
+    connectTimeout: (config.options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_SECONDS) * 1000,
+    // Set at the handshake: mysql2 encodes the query text in this character set too,
+    // which a later SET NAMES would not change.
+    charset: config.options?.charset ?? 'utf8mb4',
+    enableKeepAlive: true,
+    keepAliveInitialDelay: TCP_KEEPALIVE_DELAY_MS,
     // Values that cannot survive a JS number arrive as text (ARCHITECTURE.md §5):
     dateStrings: true,
     supportBigNumbers: true,
@@ -70,7 +79,16 @@ export function connectionOptions(
 
 export async function openMysqlSession(config: ResolvedConnectionConfig): Promise<Session> {
   const tls = await tlsMaterial(config);
-  const raw = mysql.createConnection(connectionOptions(config, tls));
+  let raw: mysql.Connection;
+  try {
+    raw = mysql.createConnection(connectionOptions(config, tls));
+  } catch (error) {
+    // mysql2 rejects a character set it does not know before it connects.
+    throw new DbError(
+      'unsupported',
+      `Unknown character set "${config.options?.charset ?? ''}": ${String(error)}`,
+    );
+  }
   // Fatal errors between queries (e.g. a dropped socket) must not crash the host;
   // the next statement surfaces them as a normal failure.
   raw.on('error', () => undefined);

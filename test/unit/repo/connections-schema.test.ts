@@ -8,10 +8,15 @@ import {
   CONNECTION_COLORS,
   DRIVER_IDS,
   MAX_SSH_JUMPS,
+  OPTION_LIMITS,
   SSH_AUTH_METHODS,
   SSL_MODES,
 } from '../../../src/shared/connection';
-import { connectionInputShape, sshHopShape } from '../../../src/shared/connection-schema';
+import {
+  connectionInputShape,
+  optionsSchema,
+  sshHopShape,
+} from '../../../src/shared/connection-schema';
 import { PROJECT_FILE_PATH } from '../../../src/services/project-connections';
 import { readJson, ROOT } from '../../helpers/repo';
 
@@ -66,5 +71,27 @@ describe('connections JSON schema', () => {
     expect(keys(props.ssh?.properties)).toEqual([...Object.keys(sshHopShape), 'jumps'].sort());
     expect(props.ssh?.properties?.jumps?.maxItems).toBe(MAX_SSH_JUMPS);
     expect(hop.required).toEqual(['host', 'user', 'auth']);
+  });
+
+  it('describes the session options with the limits the code checks (V4.9)', () => {
+    const options = props.options?.properties ?? {};
+    const all = {
+      connectTimeout: 1,
+      queryTimeout: 0,
+      keepAlive: 0,
+      initSql: '',
+      timeZone: '',
+      charset: '',
+    };
+    // Every key the schema lists is one the code reads, and the other way round.
+    expect(keys(optionsSchema.parse(all))).toEqual(keys(options));
+    for (const name of ['connectTimeout', 'queryTimeout', 'keepAlive'] as const) {
+      const limits = options[name] as { minimum?: number; maximum?: number };
+      expect([limits.minimum, limits.maximum], name).toEqual([
+        OPTION_LIMITS[name].min,
+        OPTION_LIMITS[name].max,
+      ]);
+    }
+    expect(props.options?.additionalProperties).toBe(false);
   });
 });

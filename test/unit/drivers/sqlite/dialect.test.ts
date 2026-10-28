@@ -81,3 +81,9 @@ describe('sqliteDialect.estimateRowsSql', () => {
     expect('estimateRowsSql' in sqliteDialect).toBe(false);
   });
 });
+
+describe('sqliteDialect.setTimeZone (V4.9)', () => {
+  it('is absent: SQLite sessions have no time zone', () => {
+    expect(sqliteDialect.setTimeZone).toBeUndefined();
+  });
+});

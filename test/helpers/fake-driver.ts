@@ -241,7 +241,8 @@ export class FakeSession implements Session {
 }
 
 export class FakeDriver implements Driver {
-  readonly dialect = fakeDialect;
+  /** Replaceable, for tests that need what a real dialect builds. */
+  dialect: Dialect = fakeDialect;
   capabilities: DriverCapabilities = {
     databases: true,
     schemas: false,

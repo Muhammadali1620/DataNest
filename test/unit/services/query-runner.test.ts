@@ -61,7 +61,10 @@ describe('QueryRunner', () => {
       manager,
       results,
       cache,
-      limits: { rowLimit: () => rowLimit, timeoutMs: () => timeoutMs },
+      limits: {
+        rowLimit: () => rowLimit,
+        timeoutMs: (connectionId) => (connectionId === connection.id ? timeoutMs : -1),
+      },
       logger,
     });
     connection = await store.add({ name: 'Local', driver: 'mysql', host: 'h' });

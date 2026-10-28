@@ -1,7 +1,11 @@
 import pg from 'pg';
 import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
-import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
+import {
+  DEFAULT_CONNECT_TIMEOUT_SECONDS,
+  effectivePort,
+  type ResolvedConnectionConfig,
+} from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import { identityCheck, sniName, tlsFailure, type TlsMaterial, tlsMaterial } from '../common/tls';
 import type {
@@ -18,7 +22,8 @@ import { pgTypeName, pgTypeParser, toCellValue } from './values';
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
 
-export const CONNECT_TIMEOUT_MS = 10_000;
+/** TCP keep-alive probes start after this much quiet, so NAT and firewalls keep the link. */
+export const TCP_KEEPALIVE_DELAY_MS = 30_000;
 
 const QUERY_CANCELLED = '57014';
 
@@ -51,7 +56,10 @@ export function clientConfig(
     // Unlike MySQL, a PostgreSQL session always needs a database; `postgres`
     // exists on practically every server and is the common default.
     database: config.database ?? 'postgres',
-    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    connectionTimeoutMillis:
+      (config.options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_SECONDS) * 1000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: TCP_KEEPALIVE_DELAY_MS,
   };
 }
 

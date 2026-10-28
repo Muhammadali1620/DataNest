@@ -834,4 +834,79 @@ describe('connection form App', () => {
       expect(screen.queryByLabelText('Folder')).toBeNull();
     });
   });
+
+  describe('session options (V4.9)', () => {
+    it('keeps the section closed for a plain connection and sends nothing from it', async () => {
+      const { host } = await withState();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      const section = screen
+        .getByText('Session: timeouts, keep-alive, init SQL')
+        .closest('details');
+      expect(section?.open).toBe(false);
+      await fireEvent.input(field('Name'), { target: { value: 'Local' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input).not.toHaveProperty('options');
+    });
+
+    it('opens on a connection that sets options and sends what was typed', async () => {
+      const { host } = await withState(
+        newState({
+          connectionId: 'c1',
+          input: { name: 'L', driver: 'mysql', host: 'h', options: { timeZone: 'UTC' } },
+        }),
+      );
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      const section = screen
+        .getByText('Session: timeouts, keep-alive, init SQL')
+        .closest('details');
+      expect(section?.open).toBe(true);
+      expect(field('Time zone').value).toBe('UTC');
+      await fireEvent.input(field('Keep-alive, s'), { target: { value: '45' } });
+      await fireEvent.input(screen.getByLabelText('Init SQL'), {
+        target: { value: "SET SESSION sql_mode = 'ANSI'" },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.options).toEqual({
+        keepAlive: 45,
+        timeZone: 'UTC',
+        initSql: "SET SESSION sql_mode = 'ANSI'",
+      });
+    });
+
+    it('shows only what the driver uses', async () => {
+      await withState(newState({ input: { name: '', driver: 'sqlite', file: '/a.db' } }));
+      expect(screen.queryByLabelText('Query timeout, s')).not.toBeNull();
+      expect(screen.queryByLabelText('Init SQL')).not.toBeNull();
+      for (const label of ['Connect timeout, s', 'Keep-alive, s', 'Time zone', 'Character set']) {
+        expect(screen.queryByLabelText(label), label).toBeNull();
+      }
+    });
+
+    it('marks a bad number after a save attempt and does not send it', async () => {
+      const { host } = await withState();
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.input(field('Name'), { target: { value: 'L' } });
+      await fireEvent.input(field('Connect timeout, s'), { target: { value: '0' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByText('From 1 to 300 seconds')).toBeTruthy();
+      });
+      expect(save).not.toHaveBeenCalled();
+    });
+  });
 });

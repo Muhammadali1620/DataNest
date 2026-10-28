@@ -104,6 +104,58 @@ export function newHopId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/**
+ * How sessions of a connection are opened and kept (V4.9). Each field left out keeps
+ * DataNest's default; a driver ignores what it has no use for (`optionSupport`).
+ */
+export interface ConnectionOptions {
+  /** Seconds to wait for the server (and each SSH hop) when connecting. */
+  readonly connectTimeout?: number;
+  /** Seconds a statement may run; overrides `datanest.queryTimeout`, 0 means no limit. */
+  readonly queryTimeout?: number;
+  /** Seconds of quiet after which an idle session sends `SELECT 1`; absent or 0: never. */
+  readonly keepAlive?: number;
+  /** Statements every new session runs first, e.g. `SET search_path = app`. */
+  readonly initSql?: string;
+  /** Session time zone: `UTC`, `+03:00`, `Europe/Berlin`. */
+  readonly timeZone?: string;
+  /** MySQL character set of the session, e.g. `latin1`; `utf8mb4` when absent. */
+  readonly charset?: string;
+}
+
+export const OPTION_LIMITS = {
+  connectTimeout: { min: 1, max: 300 },
+  queryTimeout: { min: 0, max: 86_400 },
+  keepAlive: { min: 0, max: 3600 },
+  initSql: 20_000,
+  timeZone: 64,
+  charset: 32,
+} as const;
+
+/** Seconds to connect when the connection does not say. */
+export const DEFAULT_CONNECT_TIMEOUT_SECONDS = 10;
+
+/** Which options a driver honours; the form shows only those. */
+export interface OptionSupport {
+  readonly connectTimeout: boolean;
+  readonly keepAlive: boolean;
+  readonly timeZone: boolean;
+  readonly charset: boolean;
+}
+
+export function optionSupport(driver: DriverId): OptionSupport {
+  switch (driver) {
+    case 'mysql':
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: true };
+    // pg decodes every result as UTF-8, so another client encoding would garble text.
+    case 'postgres':
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false };
+    // A file has no network to wait for or keep alive, and no session time zone.
+    case 'sqlite':
+      return { connectTimeout: false, keepAlive: false, timeZone: false, charset: false };
+  }
+}
+
 /** Everything the user edits in the connection form; `id` is assigned by the store. */
 export interface ConnectionInput {
   readonly name: string;
@@ -129,6 +181,8 @@ export interface ConnectionInput {
    * session itself is opened read-only, so the server refuses what slips through.
    */
   readonly readOnly?: boolean;
+  /** Timeouts, keep-alive, init SQL, time zone and character set (V4.9). */
+  readonly options?: ConnectionOptions;
 }
 
 export interface ConnectionConfig extends ConnectionInput {
@@ -180,7 +234,17 @@ export type ConnectionProblem =
   | 'file-empty'
   | 'ssl-cert-without-key'
   | 'ssl-key-without-cert'
+  | OptionProblem
   | SshProblem;
+
+/** What is wrong with the session options. */
+export type OptionProblem =
+  | 'connect-timeout-invalid'
+  | 'query-timeout-invalid'
+  | 'keep-alive-invalid'
+  | 'time-zone-invalid'
+  | 'charset-invalid'
+  | 'init-sql-too-long';
 
 /** What is wrong with one SSH hop. */
 export type SshProblem =
@@ -215,11 +279,49 @@ export function sshHopProblems(hop: SshHop): SshProblem[] {
   return problems;
 }
 
+function inRange(value: number | undefined, range: { min: number; max: number }): boolean {
+  return (
+    value === undefined || (Number.isInteger(value) && value >= range.min && value <= range.max)
+  );
+}
+
+/** Problems of the session options; empty strings count as left out. */
+export function optionProblems(options: ConnectionOptions | undefined): OptionProblem[] {
+  if (options === undefined) {
+    return [];
+  }
+  const problems: OptionProblem[] = [];
+  if (!inRange(options.connectTimeout, OPTION_LIMITS.connectTimeout)) {
+    problems.push('connect-timeout-invalid');
+  }
+  if (!inRange(options.queryTimeout, OPTION_LIMITS.queryTimeout)) {
+    problems.push('query-timeout-invalid');
+  }
+  if (!inRange(options.keepAlive, OPTION_LIMITS.keepAlive)) {
+    problems.push('keep-alive-invalid');
+  }
+  const zone = options.timeZone ?? '';
+  // A zone becomes a quoted literal, so only control characters could hurt; the
+  // server says whether it knows the name.
+  if (zone.length > OPTION_LIMITS.timeZone || /\p{Cc}/u.test(zone)) {
+    problems.push('time-zone-invalid');
+  }
+  const charset = options.charset ?? '';
+  if (charset !== '' && !/^[A-Za-z0-9_]{1,32}$/.test(charset)) {
+    problems.push('charset-invalid');
+  }
+  if ((options.initSql ?? '').length > OPTION_LIMITS.initSql) {
+    problems.push('init-sql-too-long');
+  }
+  return problems;
+}
+
 export function connectionProblems(input: ConnectionInput): ConnectionProblem[] {
   const problems: ConnectionProblem[] = [];
   if (input.name.trim() === '') {
     problems.push('name-empty');
   }
+  problems.push(...optionProblems(input.options));
   if (isFileDriver(input.driver)) {
     if (input.file === undefined || input.file.trim() === '') {
       problems.push('file-empty');

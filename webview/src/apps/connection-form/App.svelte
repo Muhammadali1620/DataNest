@@ -15,6 +15,7 @@
   import Field from '../../components/Field.svelte';
   import SshHopEditor from './SshHopEditor.svelte';
   import TlsEditor from './TlsEditor.svelte';
+  import OptionsEditor from './OptionsEditor.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import { parseConnectionUrl } from '../../../../src/shared/connection-url';
@@ -59,6 +60,8 @@
   };
 
   const problems = $derived(fields === undefined ? [] : problemsOf(fields));
+  /** The session section starts open when the connection already sets something there. */
+  const hasOptions = $derived(formState?.input.options !== undefined);
   const isFile = $derived(fields !== undefined && isFileDriver(fields.driver));
   const defaultPort = $derived(
     formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
@@ -524,6 +527,11 @@
         </fieldset>
       {/if}
 
+      <details class="section options" open={hasOptions}>
+        <summary>{t('form.options')}</summary>
+        <OptionsEditor {fields} {t} {errorFor} />
+      </details>
+
       {#if notice}
         <p class="notice" class:error={notice.kind === 'error'} role="status" data-testid="notice">
           {notice.text}
@@ -621,6 +629,14 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+
+  .options summary {
+    cursor: pointer;
+  }
+
+  .options[open] summary {
+    margin-bottom: 4px;
   }
 
   .flags .hint {

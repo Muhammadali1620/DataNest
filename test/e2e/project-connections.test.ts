@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import { projectConnectionId } from '../../src/services/project-connections';
+import { forgetProject } from './project-workspace';
 
 const EXTENSION_ID = 'datanest.datanest';
 
@@ -40,12 +41,7 @@ describe('project connections', () => {
   });
 
   after(async () => {
-    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-    rmSync(join(root, '.vscode'), { recursive: true, force: true });
-    rmSync(join(root, 'project.db'), { force: true });
-    // Later tests expect no saved connections: forget the project now, not whenever
-    // the file watcher notices.
-    await vscode.commands.executeCommand('datanest.tree.refresh');
+    await forgetProject(root, [projectConnectionId(folder.uri.toString(), 'e2e')], ['project.db']);
   });
 
   it('registers the project commands', async () => {
@@ -66,7 +62,16 @@ describe('project connections', () => {
       JSON.stringify({
         version: 1,
         // A comment-free file is plain JSON; the reader accepts JSONC too.
-        connections: [{ id: 'e2e', name: 'E2E project', driver: 'sqlite', file: 'project.db' }],
+        connections: [
+          {
+            id: 'e2e',
+            name: 'E2E project',
+            driver: 'sqlite',
+            file: 'project.db',
+            // Every session runs it first (V4.9); the statement below sees its effect.
+            options: { initSql: 'PRAGMA user_version = 7' },
+          },
+        ],
       }),
     );
     const id = projectConnectionId(folder.uri.toString(), 'e2e');
@@ -78,6 +83,11 @@ describe('project connections', () => {
     assert.equal(outcome?.results[0]?.rowCount, 1);
     // The relative file path starts at the workspace folder.
     assert.ok(existsSync(join(root, 'project.db')), 'the database file is in the folder');
+    const init = await runOn(
+      id,
+      'SELECT 1 WHERE (SELECT user_version FROM pragma_user_version) = 7',
+    );
+    assert.equal(init?.results[0]?.rowCount, 1, 'the init SQL ran on the session');
   });
 
   it('opens the project file from the command', async () => {

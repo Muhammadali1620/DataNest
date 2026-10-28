@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   connectionProblems,
+  optionProblems,
+  optionSupport,
   DEFAULT_PORTS,
   describeTunnel,
   DEFAULT_SSH_PORT,
@@ -255,5 +257,64 @@ describe('SSL settings', () => {
     expect(
       connectionProblems({ ...input, ssl: { mode: 'require', key: '/k', cert: ' ' } }),
     ).toEqual(['ssl-key-without-cert']);
+  });
+});
+
+describe('session options (V4.9)', () => {
+  it('accepts no options and every value in range', () => {
+    expect(optionProblems(undefined)).toEqual([]);
+    expect(
+      optionProblems({
+        connectTimeout: 1,
+        queryTimeout: 0,
+        keepAlive: 3600,
+        timeZone: 'Europe/Berlin',
+        charset: 'utf8mb4',
+        initSql: 'SET a = 1',
+      }),
+    ).toEqual([]);
+  });
+
+  it('flags numbers out of range or not whole', () => {
+    expect(optionProblems({ connectTimeout: 0 })).toEqual(['connect-timeout-invalid']);
+    expect(optionProblems({ connectTimeout: 301 })).toEqual(['connect-timeout-invalid']);
+    expect(optionProblems({ queryTimeout: -1 })).toEqual(['query-timeout-invalid']);
+    expect(optionProblems({ queryTimeout: 1.5 })).toEqual(['query-timeout-invalid']);
+    expect(optionProblems({ keepAlive: 3601 })).toEqual(['keep-alive-invalid']);
+  });
+
+  it('flags a time zone with control characters, a bad charset and long init SQL', () => {
+    expect(optionProblems({ timeZone: 'UTC\n' })).toEqual(['time-zone-invalid']);
+    expect(optionProblems({ timeZone: 'x'.repeat(65) })).toEqual(['time-zone-invalid']);
+    expect(optionProblems({ charset: 'utf-8' })).toEqual(['charset-invalid']);
+    expect(optionProblems({ charset: "latin1'" })).toEqual(['charset-invalid']);
+    expect(optionProblems({ initSql: 'x'.repeat(20_001) })).toEqual(['init-sql-too-long']);
+  });
+
+  it('is part of the problems of a connection', () => {
+    expect(
+      connectionProblems({
+        name: 'a',
+        driver: 'sqlite',
+        file: 'a.db',
+        options: { queryTimeout: -5 },
+      }),
+    ).toEqual(['query-timeout-invalid']);
+  });
+
+  it('says which options each driver honours', () => {
+    expect(optionSupport('mysql')).toEqual({
+      connectTimeout: true,
+      keepAlive: true,
+      timeZone: true,
+      charset: true,
+    });
+    expect(optionSupport('postgres').charset).toBe(false);
+    expect(optionSupport('sqlite')).toEqual({
+      connectTimeout: false,
+      keepAlive: false,
+      timeZone: false,
+      charset: false,
+    });
   });
 });

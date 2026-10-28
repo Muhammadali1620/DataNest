@@ -105,7 +105,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     manager,
     results,
     cache,
-    limits: { rowLimit: () => readRowLimit(), timeoutMs: () => readQueryTimeoutMs() },
+    limits: {
+      rowLimit: () => readRowLimit(),
+      // A connection's own timeout (V4.9) wins over the setting; 0 there means none.
+      timeoutMs: (connectionId) => {
+        const own = store.get(connectionId)?.options?.queryTimeout;
+        return own === undefined ? readQueryTimeoutMs() : own * 1000;
+      },
+    },
     logger,
   });
   const transactionModes = new TransactionModes(() => readTransactionMode());

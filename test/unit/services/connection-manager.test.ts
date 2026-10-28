@@ -7,6 +7,7 @@ import { FakeDriverProvider, linkLostError } from '../../helpers/fake-driver';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { FakeTunnels, unreachable } from '../../helpers/fake-tunnels';
 import type { HostKeyCheck } from '../../../src/services/tunnels';
+import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
 
 async function drain(events: AsyncIterable<unknown>): Promise<void> {
   for await (const _event of events) {
@@ -568,6 +569,74 @@ describe('ConnectionManager', () => {
       const session = await manager.acquire('editor:b', { connectionId: mysql.id });
       await drain(session.execute('BEGIN'));
       expect(seen).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('session setup (V4.9)', () => {
+    beforeEach(() => {
+      drivers.driver('mysql').dialect = mysqlDialect;
+    });
+
+    async function withOptions(options: object, extra: object = {}) {
+      return await store.add({
+        name: 'Opt',
+        driver: 'mysql',
+        host: 'h',
+        ...extra,
+        options,
+      });
+    }
+
+    it('runs the time zone and init SQL on every new session before handing it out', async () => {
+      const config = await withOptions({ timeZone: 'UTC', initSql: 'SET a = 1; SET b = 2' });
+      await manager.acquire('editor:a', { connectionId: config.id });
+      await manager.acquire('editor:b', { connectionId: config.id });
+      for (const session of drivers.driver('mysql').sessions) {
+        expect(session.executed).toEqual(["SET time_zone = 'UTC'", 'SET a = 1', 'SET b = 2']);
+      }
+    });
+
+    it('fails the connect, closes the session and says which statement failed', async () => {
+      const config = await withOptions({ initSql: 'SET broken = 1' });
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql.includes('broken');
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toThrow(
+        'Init SQL failed at "SET broken = 1"',
+      );
+      expect(drivers.driver('mysql').lastSession?.isClosed).toBe(true);
+      expect(manager.getState(config.id).status).toBe('error');
+      expect(manager.sessionOf('editor:a')).toBeUndefined();
+    });
+
+    it('refuses init SQL that would lift read-only', async () => {
+      const config = await withOptions(
+        { initSql: 'SET SESSION TRANSACTION READ WRITE' },
+        { readOnly: true },
+      );
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toThrow(
+        'may not change anything',
+      );
+    });
+
+    it('checks the setup in Test too', async () => {
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql.startsWith('SET time_zone');
+      await expect(
+        manager.test({ name: 't', driver: 'mysql', host: 'h', options: { timeZone: 'Mars' } }),
+      ).rejects.toThrow('refused the time zone "Mars"');
+    });
+
+    it('keeps idle sessions alive when the connection asks', async () => {
+      vi.useFakeTimers();
+      try {
+        const config = await withOptions({ keepAlive: 30 });
+        await manager.acquire('editor:a', { connectionId: config.id });
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(drivers.driver('mysql').lastSession?.executed).toEqual(['SELECT 1']);
+        await manager.release('editor:a');
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(drivers.driver('mysql').lastSession?.executed).toEqual(['SELECT 1']);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

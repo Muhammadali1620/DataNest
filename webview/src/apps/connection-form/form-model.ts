@@ -10,6 +10,9 @@ import {
   type DriverId,
   isFileDriver,
   newHopId,
+  type ConnectionOptions,
+  type OptionProblem,
+  optionSupport,
   type SshAuthMethod,
   type SshHop,
   type SshProblem,
@@ -107,7 +110,24 @@ export interface FormFields {
   readOnly: boolean;
   /** Key of the project whose file keeps the connection; empty for the user's own list. */
   project: string;
+  /** Session options (V4.9), as typed; seconds stay text until they are checked. */
+  connectTimeout: string;
+  queryTimeout: string;
+  keepAlive: string;
+  timeZone: string;
+  charset: string;
+  initSql: string;
 }
+
+/** The option fields that hold seconds, with the problem a bad number gives. */
+const SECOND_FIELDS = [
+  ['connectTimeout', 'connect-timeout-invalid'],
+  ['queryTimeout', 'query-timeout-invalid'],
+  ['keepAlive', 'keep-alive-invalid'],
+] as const satisfies readonly (readonly [
+  keyof ConnectionOptions & keyof FormFields,
+  OptionProblem,
+])[];
 
 export function fieldsFrom(state: ConnectionFormState): FormFields {
   const { input } = state;
@@ -134,7 +154,50 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     production: input.production === true,
     readOnly: input.readOnly === true,
     project: state.project?.key ?? '',
+    connectTimeout: secondsText(input.options?.connectTimeout),
+    queryTimeout: secondsText(input.options?.queryTimeout),
+    keepAlive: secondsText(input.options?.keepAlive),
+    timeZone: input.options?.timeZone ?? '',
+    charset: input.options?.charset ?? '',
+    initSql: input.options?.initSql ?? '',
   };
+}
+
+function secondsText(value: number | undefined): string {
+  return value === undefined ? '' : String(value);
+}
+
+/**
+ * The options the chosen driver honours; blanks are left out, and so is the whole
+ * object when nothing is set. A number that is not one is left out (and flagged).
+ */
+export function toOptions(fields: FormFields): ConnectionOptions | undefined {
+  const support = optionSupport(fields.driver);
+  const offered: Record<(typeof SECOND_FIELDS)[number][0], boolean> = {
+    connectTimeout: support.connectTimeout,
+    queryTimeout: true,
+    keepAlive: support.keepAlive,
+  };
+  const options: Record<string, string | number> = {};
+  for (const [field] of SECOND_FIELDS) {
+    const value = parseSeconds(fields[field]);
+    if (offered[field] && value !== undefined) {
+      options[field] = value;
+    }
+  }
+  const initSql = fields.initSql.trim() === '' ? undefined : fields.initSql;
+  const timeZone = support.timeZone ? trim(fields.timeZone) : undefined;
+  const charset = support.charset ? trim(fields.charset) : undefined;
+  if (initSql !== undefined) {
+    options.initSql = initSql;
+  }
+  if (timeZone !== undefined) {
+    options.timeZone = timeZone;
+  }
+  if (charset !== undefined) {
+    options.charset = charset;
+  }
+  return Object.keys(options).length === 0 ? undefined : options;
 }
 
 /**
@@ -187,6 +250,11 @@ export function parsePort(text: string): number | undefined {
   return /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
 }
 
+/** Seconds are whole numbers written in digits, as ports are. */
+export function parseSeconds(text: string): number | undefined {
+  return parsePort(text);
+}
+
 function trim(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed === '' ? undefined : trimmed;
@@ -211,6 +279,7 @@ export function toHop(hop: HopFields): SshHop {
 /** Only the fields that apply to the chosen driver are sent; blanks are dropped. */
 export function toInput(fields: FormFields): ConnectionInput {
   const name = fields.name.trim();
+  const options = toOptions(fields);
   if (isFileDriver(fields.driver)) {
     const file = trim(fields.file);
     return {
@@ -218,6 +287,7 @@ export function toInput(fields: FormFields): ConnectionInput {
       driver: fields.driver,
       ...(file === undefined ? {} : { file }),
       ...arrangement(fields),
+      ...(options === undefined ? {} : { options }),
     };
   }
   const host = trim(fields.host);
@@ -242,6 +312,7 @@ export function toInput(fields: FormFields): ConnectionInput {
       : {}),
     ...(ssl === undefined ? {} : { ssl }),
     ...arrangement(fields),
+    ...(options === undefined ? {} : { options }),
   };
 }
 
@@ -313,6 +384,13 @@ export function problemsOf(fields: FormFields): ConnectionProblem[] {
   ) {
     problems.push('port-invalid');
   }
+  // Seconds that are not a plain number never reach the model either.
+  for (const [field, problem] of SECOND_FIELDS) {
+    const text = fields[field].trim();
+    if (text !== '' && parseSeconds(text) === undefined && !problems.includes(problem)) {
+      problems.push(problem);
+    }
+  }
   if (!isFileDriver(fields.driver) && fields.useSsh) {
     for (const hop of [...fields.jumps, fields.ssh]) {
       for (const problem of hopProblemsOf(hop)) {
@@ -339,6 +417,12 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'ssh-too-many-jumps': 'form.ssh.error.tooManyJumps',
   'ssl-cert-without-key': 'form.ssl.error.keyMissing',
   'ssl-key-without-cert': 'form.ssl.error.certMissing',
+  'connect-timeout-invalid': 'form.options.error.connectTimeout',
+  'query-timeout-invalid': 'form.options.error.queryTimeout',
+  'keep-alive-invalid': 'form.options.error.keepAlive',
+  'time-zone-invalid': 'form.options.error.timeZone',
+  'charset-invalid': 'form.options.error.charset',
+  'init-sql-too-long': 'form.options.error.initSql',
 };
 
 export { DEFAULT_SSH_PORT };

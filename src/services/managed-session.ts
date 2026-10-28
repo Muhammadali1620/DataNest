@@ -35,7 +35,16 @@ export interface ManagedSessionHooks {
   readonly onClosed?: () => Promise<void>;
   /** Called when a statement left the transaction in another state (V4.8). */
   readonly onTransaction?: (state: TransactionState) => void;
+  /**
+   * After this many quiet milliseconds the session sends `SELECT 1` (V4.9), so a
+   * server or firewall that drops idle links keeps it, and a dead link is noticed
+   * before the user's next statement rather than by it.
+   */
+  readonly keepAliveMs?: number;
 }
+
+/** What the keep-alive sends; every supported database answers it. */
+export const KEEP_ALIVE_STATEMENT = 'SELECT 1';
 
 export class ManagedSession implements Session {
   readonly metadata: MetadataReader;
@@ -43,6 +52,11 @@ export class ManagedSession implements Session {
   private readonly onClosed: () => Promise<void>;
   private readonly onTransaction: (state: TransactionState) => void;
   private lastTransaction: TransactionState = 'idle';
+  private readonly keepAliveMs: number;
+  private keepAliveTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Statements in flight; the keep-alive waits for quiet. */
+  private busy = 0;
+  private closed = false;
 
   constructor(
     private readonly inner: Session,
@@ -51,6 +65,7 @@ export class ManagedSession implements Session {
     this.onLinkLost = hooks.onLinkLost;
     this.onClosed = hooks.onClosed ?? (() => Promise.resolve());
     this.onTransaction = hooks.onTransaction ?? (() => undefined);
+    this.keepAliveMs = hooks.keepAliveMs ?? 0;
     this.metadata = new ManagedMetadata(inner.metadata, (error) => {
       this.report(error);
     });
@@ -75,6 +90,8 @@ export class ManagedSession implements Session {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
+    this.stopKeepAlive();
     try {
       await this.inner.close();
     } finally {
@@ -83,6 +100,8 @@ export class ManagedSession implements Session {
   }
 
   private async *watch(events: AsyncIterable<ExecuteEvent>): AsyncGenerator<ExecuteEvent> {
+    this.busy += 1;
+    this.stopKeepAlive();
     try {
       for await (const event of events) {
         yield event;
@@ -91,8 +110,48 @@ export class ManagedSession implements Session {
       this.report(error);
       throw toDbError(error);
     } finally {
+      this.busy -= 1;
       this.checkTransaction();
+      this.scheduleKeepAlive();
     }
+  }
+
+  /** Arms the keep-alive for the next stretch of quiet; the session starts quiet. */
+  scheduleKeepAlive(): void {
+    this.stopKeepAlive();
+    if (this.keepAliveMs <= 0 || this.closed || this.busy > 0) {
+      return;
+    }
+    this.keepAliveTimer = setTimeout(() => {
+      void this.ping();
+    }, this.keepAliveMs);
+    // A pending ping must not keep the extension host alive on shutdown.
+    this.keepAliveTimer.unref();
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer !== undefined) {
+      clearTimeout(this.keepAliveTimer);
+      this.keepAliveTimer = undefined;
+    }
+  }
+
+  private async ping(): Promise<void> {
+    this.keepAliveTimer = undefined;
+    if (this.closed || this.busy > 0) {
+      return;
+    }
+    try {
+      for await (const _event of this.inner.execute(KEEP_ALIVE_STATEMENT, { rowLimit: 1 })) {
+        // The answer does not matter, only that there is one.
+      }
+    } catch (error) {
+      // A dead link is reported and the session dropped; other errors (a failed
+      // PostgreSQL transaction refuses even SELECT 1) leave it be.
+      this.report(error);
+    }
+    // A session the report closed stays quiet: scheduling checks for that.
+    this.scheduleKeepAlive();
   }
 
   /** Tells the owner when a statement opened, ended or spoiled a transaction. */

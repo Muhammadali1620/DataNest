@@ -141,6 +141,11 @@ export interface Dialect {
    * number may be off, or absent (NULL, -1) for a table never analyzed.
    */
   readonly estimateRowsSql?: (table: TableRef) => string;
+  /**
+   * The statement that sets the session time zone (V4.9), e.g. `UTC` or `+03:00`;
+   * absent where sessions have none (SQLite). The server judges the name.
+   */
+  readonly setTimeZone?: (zone: string) => string;
   /** True where `UPDATE … SET column = DEFAULT` works; SQLite has no such keyword. */
   readonly defaultKeyword: boolean;
   /** An INSERT that fills every column with its default; the table is already quoted. */

@@ -19,6 +19,7 @@ import {
   toSsl,
   applyUrl,
   URL_PROBLEM_MESSAGES,
+  toOptions,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { en } from '../../../../../webview/src/l10n/en';
 
@@ -46,6 +47,12 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     production: false,
     readOnly: false,
     project: '',
+    connectTimeout: '',
+    queryTimeout: '',
+    keepAlive: '',
+    timeZone: '',
+    charset: '',
+    initSql: '',
     ...overrides,
   };
 }
@@ -89,6 +96,12 @@ describe('fieldsFrom', () => {
       production: false,
       readOnly: false,
       project: '',
+      connectTimeout: '',
+      queryTimeout: '',
+      keepAlive: '',
+      timeZone: '',
+      charset: '',
+      initSql: '',
     });
   });
 
@@ -596,5 +609,103 @@ describe('project connections (V4.7)', () => {
     const draft = toDraft(fields({ folder: 'Work' }));
     expect(draft).not.toHaveProperty('project');
     expect(draft.input.folder).toBe('Work');
+  });
+});
+
+describe('session options (V4.9)', () => {
+  it('fills the option fields from the host state', () => {
+    const result = fieldsFrom({
+      input: {
+        name: 'n',
+        driver: 'mysql',
+        host: 'h',
+        options: {
+          connectTimeout: 20,
+          queryTimeout: 0,
+          keepAlive: 60,
+          timeZone: 'UTC',
+          charset: 'latin1',
+          initSql: 'SET a = 1',
+        },
+      },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect(result).toMatchObject({
+      connectTimeout: '20',
+      queryTimeout: '0',
+      keepAlive: '60',
+      timeZone: 'UTC',
+      charset: 'latin1',
+      initSql: 'SET a = 1',
+    });
+  });
+
+  it('sends the options the driver honours, numbers as numbers, blanks left out', () => {
+    expect(
+      toOptions(
+        fields({
+          connectTimeout: '20',
+          queryTimeout: '0',
+          keepAlive: '',
+          timeZone: ' +03:00 ',
+          charset: 'latin1',
+          initSql: 'SET a = 1;\nSET b = 2;',
+        }),
+      ),
+    ).toEqual({
+      connectTimeout: 20,
+      queryTimeout: 0,
+      timeZone: '+03:00',
+      charset: 'latin1',
+      initSql: 'SET a = 1;\nSET b = 2;',
+    });
+    expect(toOptions(fields())).toBeUndefined();
+    expect(toInput(fields())).not.toHaveProperty('options');
+  });
+
+  it('keeps only what PostgreSQL and SQLite use', () => {
+    const all = {
+      connectTimeout: '5',
+      queryTimeout: '9',
+      keepAlive: '30',
+      timeZone: 'UTC',
+      charset: 'latin1',
+      initSql: 'SELECT 1',
+    };
+    expect(toOptions(fields({ ...all, driver: 'postgres' }))).toEqual({
+      connectTimeout: 5,
+      queryTimeout: 9,
+      keepAlive: 30,
+      timeZone: 'UTC',
+      initSql: 'SELECT 1',
+    });
+    expect(toInput(fields({ ...all, driver: 'sqlite', file: '/a.db' })).options).toEqual({
+      queryTimeout: 9,
+      initSql: 'SELECT 1',
+    });
+  });
+
+  it('flags seconds that are not whole numbers or out of range, and a bad charset', () => {
+    expect(problemsOf(fields({ connectTimeout: 'ten' }))).toContain('connect-timeout-invalid');
+    expect(problemsOf(fields({ connectTimeout: '0' }))).toContain('connect-timeout-invalid');
+    expect(problemsOf(fields({ queryTimeout: '1.5' }))).toContain('query-timeout-invalid');
+    expect(problemsOf(fields({ keepAlive: '99999' }))).toContain('keep-alive-invalid');
+    expect(problemsOf(fields({ charset: 'utf-8' }))).toContain('charset-invalid');
+    expect(problemsOf(fields({ connectTimeout: '30', keepAlive: '0' }))).toEqual([]);
+  });
+
+  it('has a message for every option problem', () => {
+    for (const problem of [
+      'connect-timeout-invalid',
+      'query-timeout-invalid',
+      'keep-alive-invalid',
+      'time-zone-invalid',
+      'charset-invalid',
+      'init-sql-too-long',
+    ] as const) {
+      expect(en[PROBLEM_MESSAGES[problem]]).toBeTruthy();
+    }
   });
 });

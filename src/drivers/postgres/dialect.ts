@@ -55,6 +55,7 @@ export const postgresDialect: Dialect = {
   literal,
   paginate,
   // reltuples is -1 until the table is first analyzed; the caller treats that as unknown.
+  setTimeZone: (zone) => `SET TIME ZONE ${literal(zone)}`,
   estimateRowsSql: (table) =>
     `SELECT reltuples::bigint FROM pg_class WHERE oid = ${literal(quoteTable(table))}::regclass`,
   likeText: (quotedColumn, quotedPattern) =>

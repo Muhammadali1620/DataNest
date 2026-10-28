@@ -58,6 +58,8 @@ export const mysqlDialect: Dialect = {
     `SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${
       table.database === undefined ? 'DATABASE()' : quoteString(table.database)
     } AND TABLE_NAME = ${quoteString(table.name)}`,
+  // A named zone needs the server's time zone tables; an offset always works.
+  setTimeZone: (zone) => `SET time_zone = ${quoteString(zone)}`,
   likeText: (quotedColumn, quotedPattern) =>
     `CAST(${quotedColumn} AS CHAR) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,

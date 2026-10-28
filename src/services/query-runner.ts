@@ -21,7 +21,7 @@ export interface QueryLimits {
   /** Largest number of rows one statement may bring back. */
   rowLimit(): number;
   /** Milliseconds a statement may run before it is cancelled; 0 means no limit. */
-  timeoutMs?(): number;
+  timeoutMs?(connectionId: string): number;
 }
 
 export interface QueryRunnerDeps {
@@ -224,7 +224,10 @@ export class QueryRunner {
     const rows: ResultRow[] = [];
     let affectedRows: number | undefined;
     let truncated = false;
-    const timeoutMs = Math.max(0, Math.trunc(this.deps.limits.timeoutMs?.() ?? 0));
+    const timeoutMs = Math.max(
+      0,
+      Math.trunc(this.deps.limits.timeoutMs?.(request.target.connectionId) ?? 0),
+    );
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const session = await this.deps.manager.acquire(run.owner, request.target);
@@ -309,7 +312,7 @@ export class QueryRunner {
         error: {
           code: timedOut ? 'timeout' : dbError.code,
           message: timedOut
-            ? `Cancelled after ${Math.round(timeoutMs / 1000)} s (datanest.queryTimeout)`
+            ? `Cancelled after ${Math.round(timeoutMs / 1000)} s (the query timeout of the connection or datanest.queryTimeout)`
             : dbError.message,
           ...(position === undefined ? {} : { position }),
         },

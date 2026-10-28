@@ -7,6 +7,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import { projectConnectionId } from '../../src/services/project-connections';
+import { forgetProject } from './project-workspace';
 
 const EXTENSION_ID = 'datanest.datanest';
 
@@ -33,6 +34,7 @@ async function runAll(editor: vscode.TextEditor, sql: string): Promise<RunOutcom
 
 describe('manual commit', () => {
   let root: string;
+  let connectionId: string;
   let editor: vscode.TextEditor;
 
   before(async () => {
@@ -50,20 +52,16 @@ describe('manual commit', () => {
       }),
     );
     await vscode.commands.executeCommand('datanest.tree.refresh');
+    connectionId = projectConnectionId(folder.uri.toString(), 'tx');
     const document = await vscode.commands.executeCommand<vscode.TextDocument>(
       'datanest.query.new',
-      projectConnectionId(folder.uri.toString(), 'tx'),
+      connectionId,
     );
     editor = await vscode.window.showTextDocument(document);
   });
 
   after(async () => {
-    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-    rmSync(join(root, '.vscode'), { recursive: true, force: true });
-    rmSync(join(root, 'tx.db'), { force: true });
-    // Later tests expect no saved connections: forget the project now, not whenever
-    // the file watcher notices.
-    await vscode.commands.executeCommand('datanest.tree.refresh');
+    await forgetProject(root, [connectionId], ['tx.db']);
   });
 
   it('registers the transaction commands', async () => {

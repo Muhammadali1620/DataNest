@@ -117,3 +117,12 @@ describe('mysqlDialect.estimateRowsSql', () => {
     expect(mysqlDialect.estimateRowsSql?.({ name: "o'brien" })).toContain("'o''brien'");
   });
 });
+
+describe('mysqlDialect.setTimeZone (V4.9)', () => {
+  it('sets the session time zone with the name quoted', () => {
+    expect(mysqlDialect.setTimeZone?.('+03:00')).toBe("SET time_zone = '+03:00'");
+    expect(mysqlDialect.setTimeZone?.("x'; DROP TABLE t; --")).toBe(
+      "SET time_zone = 'x''; DROP TABLE t; --'",
+    );
+  });
+});

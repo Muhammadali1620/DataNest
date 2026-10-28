@@ -60,3 +60,20 @@ describe('clientConfig', () => {
     });
   });
 });
+
+describe('clientConfig: session options (V4.9)', () => {
+  it('waits 10 s by default and keeps TCP alive', () => {
+    expect(clientConfig(config, undefined)).toMatchObject({
+      connectionTimeoutMillis: 10_000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 30_000,
+    });
+  });
+
+  it('takes the connect timeout from the connection', () => {
+    expect(
+      clientConfig({ ...config, options: { connectTimeout: 45 } }, undefined)
+        .connectionTimeoutMillis,
+    ).toBe(45_000);
+  });
+});

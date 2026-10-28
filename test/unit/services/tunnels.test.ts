@@ -24,6 +24,12 @@ const base: ConnectionInput = {
 };
 
 describe('tunnelSpecOf', () => {
+  it('waits for each SSH hop as long as the connection says (V4.9)', () => {
+    expect(tunnelSpecOf({ ...base, options: { connectTimeout: 25 } }, {}, check)?.timeoutMs).toBe(
+      25_000,
+    );
+  });
+
   it('is undefined for a direct connection', () => {
     expect(tunnelSpecOf({ ...base, ssh: undefined }, {}, check)).toBeUndefined();
     expect(tunnelSpecOf({ ...base, host: undefined }, {}, check)).toBeUndefined();

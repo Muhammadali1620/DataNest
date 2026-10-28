@@ -88,3 +88,10 @@ describe('postgresDialect.estimateRowsSql', () => {
     expect(postgresDialect.estimateRowsSql?.({ name: "o'x" })).toContain(`'"o''x"'::regclass`);
   });
 });
+
+describe('postgresDialect.setTimeZone (V4.9)', () => {
+  it('sets the session time zone with the name quoted', () => {
+    expect(postgresDialect.setTimeZone?.('Europe/Berlin')).toBe("SET TIME ZONE 'Europe/Berlin'");
+    expect(postgresDialect.setTimeZone?.("x'y")).toBe("SET TIME ZONE 'x''y'");
+  });
+});

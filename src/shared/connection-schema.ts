@@ -6,6 +6,8 @@ import {
   CONNECTION_LIMITS,
   DRIVER_IDS,
   type ConnectionInput,
+  type ConnectionOptions,
+  OPTION_LIMITS,
   SSH_AUTH_METHODS,
   type SshHop,
   type SshTunnelConfig,
@@ -42,6 +44,18 @@ export const sslSchema: Schema<SslSettings> = object({
   key: optional(string({ maxLength: CONNECTION_LIMITS.file })),
 });
 
+const seconds = (range: { min: number; max: number }): Schema<number> =>
+  number({ integer: true, ...range });
+
+export const optionsSchema: Schema<ConnectionOptions> = object({
+  connectTimeout: optional(seconds(OPTION_LIMITS.connectTimeout)),
+  queryTimeout: optional(seconds(OPTION_LIMITS.queryTimeout)),
+  keepAlive: optional(seconds(OPTION_LIMITS.keepAlive)),
+  initSql: optional(string({ maxLength: OPTION_LIMITS.initSql })),
+  timeZone: optional(string({ maxLength: OPTION_LIMITS.timeZone })),
+  charset: optional(string({ maxLength: OPTION_LIMITS.charset })),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -57,6 +71,7 @@ export const connectionInputShape = {
   color: optional(literal(...CONNECTION_COLORS)),
   production: optional(boolean()),
   readOnly: optional(boolean()),
+  options: optional(optionsSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

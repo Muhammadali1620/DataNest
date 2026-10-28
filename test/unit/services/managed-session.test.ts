@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import type { ExecuteEvent } from '../../../src/drivers/driver';
-import { ManagedSession } from '../../../src/services/managed-session';
+import { KEEP_ALIVE_STATEMENT, ManagedSession } from '../../../src/services/managed-session';
 import { FakeSession, linkLostError } from '../../helpers/fake-driver';
 
 function managed(session: FakeSession) {
@@ -174,6 +174,83 @@ describe('ManagedSession', () => {
       await collect(session.execute('BEGIN'));
       expect(session.transactionState()).toBeUndefined();
       expect(onTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('keep-alive (V4.9)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function keeping(inner: FakeSession, ms = 1000) {
+      const lost = vi.fn();
+      const session = new ManagedSession(inner, { onLinkLost: lost, keepAliveMs: ms });
+      session.scheduleKeepAlive();
+      return { session, lost };
+    }
+
+    it('sends SELECT 1 after each stretch of quiet', async () => {
+      const inner = fake();
+      keeping(inner);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(inner.executed).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(inner.executed).toEqual([KEEP_ALIVE_STATEMENT]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(inner.executed).toEqual([KEEP_ALIVE_STATEMENT, KEEP_ALIVE_STATEMENT]);
+    });
+
+    it('counts quiet from the end of the last statement, and never pings during one', async () => {
+      const inner = fake();
+      let release: () => void = () => undefined;
+      inner.gate = () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      const { session } = keeping(inner);
+      const running = collect(session.execute('SELECT sleep(5)'));
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(inner.executed).toEqual(['SELECT sleep(5)']);
+      inner.gate = undefined;
+      release();
+      await running;
+      await vi.advanceTimersByTimeAsync(999);
+      expect(inner.executed).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(inner.executed.at(-1)).toBe(KEEP_ALIVE_STATEMENT);
+    });
+
+    it('reports a dead link it finds and stops', async () => {
+      const inner = fake();
+      inner.executeError = linkLostError();
+      const { lost } = keeping(inner);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(lost).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets other errors pass and keeps pinging', async () => {
+      const inner = fake();
+      inner.failExecuteWhen = () => true;
+      const { lost } = keeping(inner);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(lost).not.toHaveBeenCalled();
+      expect(inner.executed).toHaveLength(2);
+    });
+
+    it('stops when closed, and does nothing without an interval', async () => {
+      const inner = fake();
+      const { session } = keeping(inner);
+      await session.close();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(inner.executed).toEqual([]);
+      const quiet = fake();
+      new ManagedSession(quiet, { onLinkLost: () => undefined }).scheduleKeepAlive();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(quiet.executed).toEqual([]);
     });
   });
 });

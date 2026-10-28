@@ -735,4 +735,42 @@ describe('connection form App', () => {
       expect(screen.getByLabelText<HTMLSelectElement>('Color').value).toBe('green');
     });
   });
+
+  describe('production and read-only', () => {
+    it('sends the flags and explains them', async () => {
+      const { host } = await withState();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Live' } });
+      const production = screen.getByRole<HTMLInputElement>('checkbox', {
+        name: 'Production database',
+      });
+      expect(production.getAttribute('aria-describedby')).toBe('production-hint');
+      await fireEvent.click(production);
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Read-only' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input).toMatchObject({ production: true, readOnly: true });
+    });
+
+    it('shows the saved flags', async () => {
+      await withState(
+        newState({
+          connectionId: 'c1',
+          input: { name: 'L', driver: 'mysql', host: 'h', production: true },
+        }),
+      );
+      expect(
+        screen.getByRole<HTMLInputElement>('checkbox', { name: 'Production database' }).checked,
+      ).toBe(true);
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Read-only' }).checked).toBe(
+        false,
+      );
+    });
+  });
 });

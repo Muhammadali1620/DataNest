@@ -9,7 +9,7 @@ import type { WireError } from './errors';
 export type SqliteParam = null | string | number;
 
 export type HostToWorker =
-  | { readonly t: 'open'; readonly file: string }
+  | { readonly t: 'open'; readonly file: string; readonly readOnly?: boolean }
   | {
       readonly t: 'exec';
       readonly id: number;

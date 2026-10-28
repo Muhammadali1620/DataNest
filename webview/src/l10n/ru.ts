@@ -29,6 +29,10 @@ export const ru: Record<MessageKey, string> = {
   'form.color.green': 'Зелёный',
   'form.color.blue': 'Синий',
   'form.color.purple': 'Фиолетовый',
+  'form.production': 'Рабочая (production) база',
+  'form.productionHint': 'Выделяется красным; перед любым изменением спрашивается подтверждение',
+  'form.readOnly': 'Только чтение',
+  'form.readOnlyHint': 'Изменяющие запросы отклоняются, а сессия на сервере тоже только для чтения',
   'form.driver': 'База данных',
   'form.driver.mysql': 'MySQL / MariaDB',
   'form.driver.postgres': 'PostgreSQL',
@@ -237,6 +241,7 @@ export const ru: Record<MessageKey, string> = {
     'выберите и колонки ключа, чтобы каждую строку можно было определить',
   'grid.readOnly.columns-mismatch': 'колонки результата не совпадают с колонками таблицы',
   'grid.readOnly.failed': 'не удалось прочитать структуру таблицы',
+  'grid.readOnly.connection-read-only': 'подключение только для чтения',
   'grid.editHint':
     'Двойной щелчок или Enter — правка · Delete — NULL · Ctrl+Delete — удалить строки',
   'grid.setNull': 'Поставить NULL',

@@ -229,6 +229,11 @@ export class ConnectionManager implements Disposable {
     }
   }
 
+  /** True when the saved connection refuses every change (V4.6). */
+  isReadOnly(connectionId: string): boolean {
+    return this.store.get(connectionId)?.readOnly === true;
+  }
+
   /** The driver of a saved connection, for its dialect and capabilities. */
   async driverOf(connectionId: string): Promise<Driver> {
     return await this.drivers.get(this.configOf(connectionId).driver);

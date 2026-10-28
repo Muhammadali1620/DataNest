@@ -5,6 +5,7 @@ import type { QueryRunner, RunOutcome } from '../../services/query-runner';
 import type { ConnectionStore } from '../../services/connection-store';
 import { type Danger } from '../../core/sql/danger';
 import { riskyStatements, type RiskyStatement } from '../../services/safe-mode';
+import { policyOf, runVerdict, type WritePolicy } from '../../services/write-policy';
 import { summaryLine } from '../../services/history-format';
 import { readSafeMode } from '../settings';
 import { COMMAND_IDS } from '../command-ids';
@@ -55,7 +56,8 @@ export function runCommandHandlers(
     if (target === undefined) {
       return undefined;
     }
-    if (!(await allowed(statements, driverOf(deps, documentUri)))) {
+    const policy = policyOf(deps.store.get(target.connectionId));
+    if (!(await allowed(statements, driverOf(deps, documentUri), policy))) {
       return undefined;
     }
     // The panel opens before the run, so a slow query shows "Running…" at once.
@@ -166,16 +168,55 @@ function riskLines(risky: readonly RiskyStatement[]): string {
   return shown.join('\n');
 }
 
+/** The changing statements as lines for the dialog, with what safe mode thinks of them. */
+function changeLines(changes: readonly SqlStatement[], risky: readonly RiskyStatement[]): string {
+  const shown = changes.slice(0, 5).map((statement) => {
+    const dangers = risky.find((entry) => entry.statement.start === statement.start)?.dangers;
+    const marks = dangers === undefined ? '' : `${dangers.map(dangerLabel).join(', ')}: `;
+    return `• ${marks}${summaryLine(statement.text, 70)}`;
+  });
+  if (changes.length > shown.length) {
+    shown.push(vscode.l10n.t('…and {0} more', changes.length - shown.length));
+  }
+  return shown.join('\n');
+}
+
 /**
- * Safe mode: asks before statements that can destroy data run, or refuses them.
- * Returns false when the run must not happen.
+ * Asks before a run that changes production, and refuses one that would change a
+ * read-only connection; then safe mode asks before statements that can destroy data,
+ * or refuses them. A production question already covers safe mode's one, so the
+ * user is asked once. Returns false when the run must not happen.
  */
 async function allowed(
   statements: readonly SqlStatement[],
   driver: DriverId | undefined,
+  policy: WritePolicy,
 ): Promise<boolean> {
   const mode = readSafeMode();
   const risky = riskyStatements(statements, driver, mode);
+  const verdict = runVerdict(policy, statements, driver);
+  if (verdict.kind === 'refuse') {
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t('"{0}" is read-only, so this run was stopped.', policy.name),
+      {
+        modal: true,
+        detail: vscode.l10n.t(
+          'These statements would change it:\n{0}',
+          changeLines(verdict.changes, risky),
+        ),
+      },
+    );
+    return false;
+  }
+  if (verdict.kind === 'confirm' && !(mode === 'block' && risky.length > 0)) {
+    const run = vscode.l10n.t('Run on Production');
+    const choice = await vscode.window.showWarningMessage(
+      vscode.l10n.t('This changes the production database "{0}". Run it?', policy.name),
+      { modal: true, detail: changeLines(verdict.changes, risky) },
+      run,
+    );
+    return choice === run;
+  }
   if (risky.length === 0) {
     return true;
   }

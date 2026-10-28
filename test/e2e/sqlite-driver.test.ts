@@ -13,7 +13,13 @@ const EXTENSION_ID = 'datanest.datanest';
 interface SqliteDriverModule {
   driver: {
     id: string;
-    openSession(config: { id: string; name: string; driver: string; file: string }): Promise<{
+    openSession(config: {
+      id: string;
+      name: string;
+      driver: string;
+      file: string;
+      readOnly?: boolean;
+    }): Promise<{
       execute(
         sql: string,
       ): AsyncIterable<
@@ -76,6 +82,40 @@ describe('sqlite driver in the real editor', () => {
       }
       assert.deepEqual(columns, ['id']);
       assert.deepEqual(rows, [[1], [2]]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('opens a read-only session that the Node of the editor keeps read-only', async function () {
+    this.timeout(30_000);
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { driver } = require(
+      join(extension.extensionPath, 'dist', 'drivers', 'sqlite.js'),
+    ) as SqliteDriverModule;
+    const file = join(dir, 'e2e.db');
+    const session = await driver.openSession({
+      id: 'e2e-ro',
+      name: 'e2e-ro',
+      driver: 'sqlite',
+      file,
+      readOnly: true,
+    });
+    try {
+      const rows: unknown[][] = [];
+      for await (const event of session.execute('SELECT count(*) FROM t')) {
+        if (event.kind === 'rows') {
+          rows.push(...event.rows);
+        }
+      }
+      assert.deepEqual(rows, [[2]]);
+      await assert.rejects(async () => {
+        for await (const _event of session.execute('INSERT INTO t VALUES (3)')) {
+          // The write must fail.
+        }
+      }, /readonly|read-only/i);
     } finally {
       await session.close();
     }

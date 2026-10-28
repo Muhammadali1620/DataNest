@@ -33,6 +33,22 @@ describe('analyzeEditability', () => {
     return { metadata, analyze };
   }
 
+  it('keeps every result of a read-only connection read-only, without asking the server', async () => {
+    const metadata = new FakeMetadata();
+    const result = await analyzeEditability(
+      {
+        metadata,
+        syntax: syntaxOf('mysql'),
+        schemas: false,
+        logger: new RecordingLogger(),
+        readOnly: true,
+      },
+      'SELECT * FROM users',
+      ['id'],
+    );
+    expect(result).toMatchObject({ editable: false, reason: 'connection-read-only' });
+  });
+
   it('says a plain select of a keyed table is editable, with the server spelling of the name', async () => {
     const { analyze } = setup();
     expect(await analyze('SELECT * FROM users', ['id', 'name'])).toMatchObject({

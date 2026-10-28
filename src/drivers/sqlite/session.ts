@@ -26,7 +26,11 @@ export async function openSqliteSession(
   if (file === undefined || file === '') {
     throw new DbError('unsupported', 'A SQLite connection needs a database file path');
   }
-  const session = new SqliteSession(options.workerPath ?? defaultWorkerPath(), file);
+  const session = new SqliteSession(
+    options.workerPath ?? defaultWorkerPath(),
+    file,
+    config.readOnly === true,
+  );
   await session.open();
   return session;
 }
@@ -43,6 +47,7 @@ class SqliteSession implements Session {
   readonly metadata: SqliteMetadata;
   private readonly workerPath: string;
   private readonly file: string;
+  private readonly readOnly: boolean;
   private readonly queues = new Map<number, AsyncQueue<ExecuteEvent>>();
   private ready: Promise<Worker>;
   private nextId = 1;
@@ -51,9 +56,10 @@ class SqliteSession implements Session {
   /** Incremented on every (re)spawn; events of an older worker are ignored. */
   private generation = 0;
 
-  constructor(workerPath: string, file: string) {
+  constructor(workerPath: string, file: string, readOnly: boolean) {
     this.workerPath = workerPath;
     this.file = file;
+    this.readOnly = readOnly;
     this.metadata = new SqliteMetadata(this);
     this.ready = Promise.reject(new DbError('internal', 'The session is not open yet'));
     this.ready.catch(() => undefined);
@@ -210,7 +216,11 @@ class SqliteSession implements Session {
           this.failAll(new DbError('internal', 'The SQLite worker stopped unexpectedly'));
         }
       });
-      worker.postMessage({ t: 'open', file: this.file });
+      worker.postMessage({
+        t: 'open',
+        file: this.file,
+        ...(this.readOnly ? { readOnly: true } : {}),
+      });
     });
   }
 

@@ -160,6 +160,7 @@ export class QueryRunner {
         syntax: syntaxOf(driver.id),
         schemas: driver.capabilities.schemas,
         logger: this.logger,
+        readOnly: this.deps.manager.isReadOnly(request.target.connectionId),
       },
       sql,
       columns.map((column) => column.name),

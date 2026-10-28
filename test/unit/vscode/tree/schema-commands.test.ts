@@ -1,3 +1,4 @@
+import { NO_POLICY, type WritePolicy } from '../../../../src/services/write-policy';
 import { describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import type { Driver } from '../../../../src/drivers/driver';
@@ -43,6 +44,8 @@ const TEXTS: SchemaTexts = {
   renameLabel: 'Rename',
   truncateLabel: 'Empty',
   done: (summary) => `done ${summary}`,
+  readOnlyRefused: (connection) => `read-only ${connection}`,
+  onProduction: (connection, title) => `PROD ${connection}: ${title}`,
 };
 
 const DIALECTS = { mysql: mysqlDialect, postgres: postgresDialect, sqlite: sqliteDialect };
@@ -55,6 +58,7 @@ interface Script {
   driver?: DriverId;
   /** Makes sqlOf fail as unsupported. */
   unsupported?: string;
+  policy?: WritePolicy;
 }
 
 function setup(script: Script = {}) {
@@ -110,6 +114,7 @@ function setup(script: Script = {}) {
     manager: { driverOf: () => Promise.resolve(driver) },
     ui,
     texts: TEXTS,
+    ...(script.policy === undefined ? {} : { policy: () => script.policy ?? NO_POLICY }),
     tree: { refresh },
     openEditor: (binding, sql) => {
       opened.push({ binding, sql });
@@ -132,6 +137,42 @@ const table: TreeNode = {
   name: 'orders',
   tableKind: 'table',
 };
+
+describe('production and read-only connections', () => {
+  it('refuses any structure change on a read-only connection before building SQL', async () => {
+    const { handlers, confirmed, infos, ran, actions } = setup({
+      names: ['new_db'],
+      confirm: 'run',
+      policy: { name: 'Prod', production: true, readOnly: true },
+    });
+    await handlers.createDatabase(database);
+    expect(infos).toEqual(['read-only Prod']);
+    expect(confirmed).toEqual([]);
+    expect(ran).toEqual([]);
+    expect(actions.sqlOf).not.toHaveBeenCalled();
+  });
+
+  it('marks the SQL dialog of a production connection and still runs on yes', async () => {
+    const { handlers, confirmed, ran } = setup({
+      names: ['new_db'],
+      confirm: 'run',
+      policy: { name: 'Prod', production: true, readOnly: false },
+    });
+    await handlers.createDatabase(database);
+    expect(confirmed[0]?.title).toMatch(/^PROD Prod: /);
+    expect(ran).toHaveLength(1);
+  });
+
+  it('leaves the dialog alone for other connections', async () => {
+    const { handlers, confirmed } = setup({
+      names: ['new_db'],
+      confirm: 'run',
+      policy: { name: 'Dev', production: false, readOnly: false },
+    });
+    await handlers.createDatabase(database);
+    expect(confirmed[0]?.title).not.toContain('PROD');
+  });
+});
 
 describe('the shared flow', () => {
   it('shows the SQL, runs it, refreshes the tree and reports the first line', async () => {

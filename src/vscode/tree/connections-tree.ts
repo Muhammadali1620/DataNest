@@ -5,7 +5,8 @@ import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import { describeTarget, describeTunnel } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
-import { connectionUri } from './connection-decorations';
+import { connectionUri, tagText } from './connection-decorations';
+import { tagsOf } from './connection-look';
 import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
   CONNECTIONS_VIEW_ID,
@@ -191,7 +192,10 @@ export class ConnectionsTreeProvider
     item.id = nodeId({ kind: 'connection', connectionId });
     // Carries the color label (ConnectionDecorations); the icon stays the status.
     item.resourceUri = connectionUri(connectionId);
-    item.description = config === undefined ? '' : describeTarget(config);
+    const tags = tagsOf(config).map(tagText);
+    const target = config === undefined ? '' : describeTarget(config);
+    // The marks come first, so they stay visible when the description is cut.
+    item.description = tags.length === 0 ? target : `${tags.join(' · ')} · ${target}`;
     item.contextValue =
       state.status === 'connected' ? TREE_CONTEXT.connectionConnected : TREE_CONTEXT.connection;
     item.tooltip = new vscode.MarkdownString(

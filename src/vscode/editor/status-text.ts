@@ -13,6 +13,9 @@ export interface StatusTexts {
   readonly connecting: string;
   readonly failed: string;
   readonly notConnected: string;
+  /** Prefixes of a production and of a read-only connection. */
+  readonly production: string;
+  readonly readOnly: string;
 }
 
 export interface StatusView {
@@ -20,6 +23,8 @@ export interface StatusView {
   readonly tooltip: string;
   /** True while the connection is in trouble, so the item can stand out. */
   readonly warning: boolean;
+  /** True for a production connection: the item is shown in the error color. */
+  readonly production?: boolean;
 }
 
 /**
@@ -42,10 +47,16 @@ export function statusView(
   const target =
     binding.database === undefined ? config.name : `${config.name} · ${binding.database}`;
   const status = statusSuffix(state, texts);
+  const marks = [
+    ...(config.production === true ? [texts.production] : []),
+    ...(config.readOnly === true ? [texts.readOnly] : []),
+  ].join(' ');
+  const label = status === undefined ? target : `${target} (${status})`;
   return {
-    text: status === undefined ? target : `${target} (${status})`,
+    text: marks === '' ? label : `${marks} ${label}`,
     tooltip: `${target}\n${texts.tooltip}`,
     warning: state.status === 'error',
+    ...(config.production === true ? { production: true } : {}),
   };
 }
 

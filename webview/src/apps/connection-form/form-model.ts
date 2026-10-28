@@ -103,6 +103,8 @@ export interface FormFields {
   sslKey: string;
   folder: string;
   color: ConnectionColor | '';
+  production: boolean;
+  readOnly: boolean;
 }
 
 export function fieldsFrom(state: ConnectionFormState): FormFields {
@@ -127,15 +129,21 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     sslKey: input.ssl?.key ?? '',
     folder: input.folder ?? '',
     color: input.color ?? '',
+    production: input.production === true,
+    readOnly: input.readOnly === true,
   };
 }
 
-/** Folder and color apply to every driver; blanks are left out. */
-function arrangement(fields: FormFields): Pick<ConnectionInput, 'folder' | 'color'> {
+/** Folder, color and the production and read-only flags apply to every driver. */
+function arrangement(
+  fields: FormFields,
+): Pick<ConnectionInput, 'folder' | 'color' | 'production' | 'readOnly'> {
   const folder = trim(fields.folder);
   return {
     ...(folder === undefined ? {} : { folder }),
     ...(fields.color === '' ? {} : { color: fields.color }),
+    ...(fields.production ? { production: true } : {}),
+    ...(fields.readOnly ? { readOnly: true } : {}),
   };
 }
 

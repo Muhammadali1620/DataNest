@@ -61,6 +61,15 @@ export async function openPostgresSession(config: ResolvedConnectionConfig): Pro
   // Fatal errors between queries (e.g. a dropped socket) must not crash the host;
   // the next statement surfaces them as a normal failure.
   client.on('error', () => undefined);
+  if (config.readOnly === true) {
+    try {
+      // Every later transaction of the session is read-only; the server refuses writes.
+      await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+    } catch (error) {
+      await client.end().catch(() => undefined);
+      throw toPgDbError(error);
+    }
+  }
   return new PostgresSession(client, config, tls);
 }
 

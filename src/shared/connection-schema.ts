@@ -12,7 +12,7 @@ import {
   SSL_MODES,
   type SslSettings,
 } from './connection';
-import { array, literal, number, object, optional, type Schema, string } from './schema';
+import { array, boolean, literal, number, object, optional, type Schema, string } from './schema';
 
 const port = (): Schema<number> => number({ integer: true, min: 1, max: 65_535 });
 
@@ -54,6 +54,8 @@ export const connectionInputShape = {
   ssl: optional(sslSchema),
   folder: optional(string({ maxLength: CONNECTION_LIMITS.folder })),
   color: optional(literal(...CONNECTION_COLORS)),
+  production: optional(boolean()),
+  readOnly: optional(boolean()),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

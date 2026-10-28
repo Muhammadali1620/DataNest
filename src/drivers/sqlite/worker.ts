@@ -30,9 +30,10 @@ function post(message: WorkerToHost): void {
   parentPort?.postMessage(message);
 }
 
-function open(file: string): void {
+function open(file: string, readOnly: boolean): void {
   try {
-    db = new DatabaseSync(file);
+    // A read-only handle cannot be turned writable from SQL, unlike PRAGMA query_only.
+    db = new DatabaseSync(file, { readOnly });
     post({ t: 'opened' });
   } catch (error) {
     post({ t: 'open-error', error: toWireError(error) });
@@ -111,7 +112,7 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
 port.on('message', (raw: HostToWorker) => {
   switch (raw.t) {
     case 'open':
-      open(raw.file);
+      open(raw.file, raw.readOnly === true);
       return;
     case 'exec':
       exec(raw);

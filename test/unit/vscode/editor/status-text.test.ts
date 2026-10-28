@@ -9,6 +9,8 @@ const TEXTS: StatusTexts = {
   connecting: 'connecting…',
   failed: 'failed',
   notConnected: 'not connected',
+  production: 'PROD',
+  readOnly: 'RO',
 };
 
 const config: ConnectionConfig = {
@@ -79,5 +81,39 @@ describe('statusView', () => {
         'Choose the connection',
       );
     }
+  });
+});
+
+describe('statusView of guarded connections', () => {
+  const binding = { connectionId: 'c1' };
+  const connected = { status: 'connected' as const };
+
+  it('marks a production connection and asks for the error color', () => {
+    const view = statusView(
+      binding,
+      { id: 'c1', name: 'Live', driver: 'mysql', production: true },
+      connected,
+      TEXTS,
+    );
+    expect(view.text).toBe('PROD Live');
+    expect(view.production).toBe(true);
+  });
+
+  it('marks a read-only connection without the error color', () => {
+    const view = statusView(
+      binding,
+      { id: 'c1', name: 'Replica', driver: 'mysql', readOnly: true, production: true },
+      { status: 'disconnected' },
+      TEXTS,
+    );
+    expect(view.text).toBe('PROD RO Replica (not connected)');
+    const plain = statusView(
+      binding,
+      { id: 'c1', name: 'R', driver: 'mysql', readOnly: true },
+      connected,
+      TEXTS,
+    );
+    expect(plain.text).toBe('RO R');
+    expect(plain).not.toHaveProperty('production');
   });
 });

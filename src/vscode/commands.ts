@@ -25,6 +25,7 @@ import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
 import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
 import { folderCommandHandlers } from './tree/folder-commands';
+import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
@@ -110,6 +111,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     tree: deps.tree,
     openEditor: async (binding: DocumentBinding, sql: string) =>
       await deps.editors.newQuery(binding, sql),
+    policy: (connectionId: string) => policyOf(deps.store.get(connectionId)),
   };
   const perform = schemaPerformer(schemaDeps);
   const schemaCommands = schemaCommandHandlers({

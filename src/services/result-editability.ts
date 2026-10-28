@@ -21,6 +21,8 @@ export interface EditabilityContext {
   /** Names are `schema.table` (PostgreSQL) rather than `database.table`. */
   readonly schemas: boolean;
   readonly logger: Logger;
+  /** The connection refuses every change, so nothing is editable whatever the query. */
+  readonly readOnly?: boolean;
 }
 
 /** The scope and name a table reference points at; parts are outermost first. */
@@ -45,6 +47,9 @@ export async function analyzeEditability(
   sql: string,
   resultColumns: readonly string[],
 ): Promise<ResultEdit> {
+  if (context.readOnly === true) {
+    return readOnlyResult('connection-read-only');
+  }
   const parsed = parseSelectSource(sql, context.syntax);
   if (!parsed.ok) {
     return readOnlyResult(parsed.refusal);

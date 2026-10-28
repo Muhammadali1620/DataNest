@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import type { ConnectionStore } from '../../services/connection-store';
-import { lookOf } from './connection-look';
+import { type ConnectionTag, lookOf } from './connection-look';
+
+export function tagText(tag: ConnectionTag): string {
+  return tag === 'production' ? vscode.l10n.t('Production') : vscode.l10n.t('Read-only');
+}
 
 /** Tree items of connections carry this URI, so decorations can find them. */
 export const CONNECTION_URI_SCHEME = 'datanest-connection';
@@ -25,11 +29,11 @@ export class ConnectionDecorations implements vscode.FileDecorationProvider, vsc
     if (uri.scheme !== CONNECTION_URI_SCHEME) {
       return undefined;
     }
-    const look = lookOf(this.store.get(uri.path.slice(1)));
+    const look = lookOf(this.store.get(uri.path.slice(1)), tagText);
     if (look === undefined) {
       return undefined;
     }
-    const decoration = new vscode.FileDecoration(look.badge);
+    const decoration = new vscode.FileDecoration(look.badge, look.tooltip);
     if (look.color !== undefined) {
       decoration.color = new vscode.ThemeColor(look.color);
     }

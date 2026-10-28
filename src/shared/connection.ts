@@ -122,6 +122,13 @@ export interface ConnectionInput {
   /** The folder the tree shows it in; absent means the top level. */
   readonly folder?: string;
   readonly color?: ConnectionColor;
+  /** A production database: it stands out, and every change is confirmed first. */
+  readonly production?: boolean;
+  /**
+   * Nothing may change it: changing statements are refused before they run, and the
+   * session itself is opened read-only, so the server refuses what slips through.
+   */
+  readonly readOnly?: boolean;
 }
 
 export interface ConnectionConfig extends ConnectionInput {

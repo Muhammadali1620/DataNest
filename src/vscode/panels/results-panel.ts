@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { changeVerdict, NO_POLICY, type WritePolicy } from '../../services/write-policy';
 import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
 import type { ExportFormat } from '../../services/result-export';
@@ -43,6 +44,8 @@ export interface ResultsPanelDeps {
   readonly copier: ResultCopier;
   /** Writes a result to a file the user picks. */
   readonly exportResult?: (resultId: string, format: ExportFormat) => Promise<void>;
+  /** Production and read-only flags of a connection, checked before saving edits. */
+  readonly policy?: (connectionId: string) => WritePolicy;
   readonly logger: Logger;
 }
 
@@ -135,6 +138,10 @@ export class ResultsPanel implements vscode.Disposable {
         : { size: cell.size, data: Buffer.from(bytes).toString('base64') };
     });
     this.rpc.handle('saveChanges', async ({ resultId }) => {
+      const refusal = await this.guardSave(resultId);
+      if (refusal !== undefined) {
+        return { ok: false, message: refusal };
+      }
       const outcome = await this.deps.saver.save(resultId);
       if (outcome.ok) {
         if (!outcome.refreshed) {
@@ -348,6 +355,35 @@ export class ResultsPanel implements vscode.Disposable {
       new vscode.Range(position, position),
       vscode.TextEditorRevealType.InCenterIfOutsideViewport,
     );
+  }
+
+  /**
+   * A read-only connection refuses the save; on production the user confirms it.
+   * Returns why nothing was saved, or undefined to go ahead.
+   */
+  private async guardSave(resultId: string): Promise<string | undefined> {
+    const summary = this.deps.results.get(resultId);
+    const connectionId = summary?.origin?.target.connectionId;
+    const policy =
+      connectionId === undefined ? NO_POLICY : (this.deps.policy?.(connectionId) ?? NO_POLICY);
+    const verdict = changeVerdict(policy);
+    if (verdict === 'refuse') {
+      return vscode.l10n.t('"{0}" is read-only: changes cannot be saved.', policy.name);
+    }
+    if (verdict === 'confirm') {
+      const count =
+        (summary?.changedCells ?? 0) + (summary?.insertedRows ?? 0) + (summary?.deletedRows ?? 0);
+      const save = vscode.l10n.t('Save to Production');
+      const choice = await vscode.window.showWarningMessage(
+        vscode.l10n.t('Save {0} changes to the production database "{1}"?', count, policy.name),
+        { modal: true },
+        save,
+      );
+      if (choice !== save) {
+        return vscode.l10n.t('Not saved: the changes are still pending.');
+      }
+    }
+    return undefined;
   }
 
   dispose(): void {

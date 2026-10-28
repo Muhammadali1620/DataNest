@@ -43,6 +43,8 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     sslKey: '',
     folder: '',
     color: '',
+    production: false,
+    readOnly: false,
     ...overrides,
   };
 }
@@ -83,6 +85,8 @@ describe('fieldsFrom', () => {
       sslKey: '',
       folder: '',
       color: '',
+      production: false,
+      readOnly: false,
     });
   });
 
@@ -547,5 +551,21 @@ describe('folder and color', () => {
     const input = toInput(fields({ folder: '  ', color: '' }));
     expect(input).not.toHaveProperty('folder');
     expect(input).not.toHaveProperty('color');
+  });
+});
+
+describe('production and read-only', () => {
+  it('reads and sends the flags only when set, for every driver', () => {
+    const read = fieldsFrom({
+      input: { name: 'a', driver: 'sqlite', file: '/f', production: true, readOnly: true },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect([read.production, read.readOnly]).toEqual([true, true]);
+    expect(toInput(read)).toMatchObject({ production: true, readOnly: true });
+    const plain = toInput(fields());
+    expect(plain).not.toHaveProperty('production');
+    expect(plain).not.toHaveProperty('readOnly');
   });
 });

@@ -58,6 +58,9 @@ export function schemaTexts(): SchemaTexts {
     dropRelation: (name) => vscode.l10n.t('Drop "{0}"?', name),
     rename: (from, to) => vscode.l10n.t('Rename "{0}" to "{1}"?', from, to),
     truncate: (name) => vscode.l10n.t('Delete every row of "{0}"?', name),
+    readOnlyRefused: (connection) =>
+      vscode.l10n.t('"{0}" is read-only: structure changes are not allowed.', connection),
+    onProduction: (connection, title) => vscode.l10n.t('PRODUCTION "{0}": {1}', connection, title),
     dropObject: (name) => vscode.l10n.t('Drop "{0}"?', name),
     create: vscode.l10n.t('Create'),
     drop: vscode.l10n.t('Drop'),

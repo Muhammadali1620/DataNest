@@ -276,6 +276,27 @@
         </Field>
       </div>
 
+      <div class="flags">
+        <div>
+          <label class="check">
+            <input
+              type="checkbox"
+              bind:checked={fields.production}
+              aria-describedby="production-hint"
+            />
+            {t('form.production')}
+          </label>
+          <span class="hint" id="production-hint">{t('form.productionHint')}</span>
+        </div>
+        <div>
+          <label class="check">
+            <input type="checkbox" bind:checked={fields.readOnly} aria-describedby="read-only-hint" />
+            {t('form.readOnly')}
+          </label>
+          <span class="hint" id="read-only-hint">{t('form.readOnlyHint')}</span>
+        </div>
+      </div>
+
       <Field label={t('form.driver')}>
         <select
           class="control"
@@ -568,6 +589,19 @@
 
   .section legend {
     padding: 0 4px;
+  }
+
+  .flags {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .flags .hint {
+    display: block;
+    margin-left: 22px;
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
   }
 
   .jumps {

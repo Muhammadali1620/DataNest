@@ -17,6 +17,8 @@ function texts(): StatusTexts {
     connecting: vscode.l10n.t('connecting…'),
     failed: vscode.l10n.t('failed'),
     notConnected: vscode.l10n.t('not connected'),
+    production: vscode.l10n.t('$(warning) PROD'),
+    readOnly: vscode.l10n.t('$(lock)'),
   };
 }
 
@@ -177,9 +179,13 @@ export class QueryEditors implements vscode.Disposable {
     const view = statusView(binding, config, state, texts());
     this.status.text = view.text;
     this.status.tooltip = view.tooltip;
-    this.status.backgroundColor = view.warning
-      ? new vscode.ThemeColor('statusBarItem.warningBackground')
-      : undefined;
+    // Production stands out in red, louder than a connection in trouble.
+    this.status.backgroundColor =
+      view.production === true
+        ? new vscode.ThemeColor('statusBarItem.errorBackground')
+        : view.warning
+          ? new vscode.ThemeColor('statusBarItem.warningBackground')
+          : undefined;
     this.status.show();
   }
 }

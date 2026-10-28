@@ -611,3 +611,18 @@ describe('ConnectionStore folders', () => {
     expect(store.folders()).toEqual(['New one']);
   });
 });
+
+describe('ConnectionStore production and read-only', () => {
+  it('stores the flags only when they are set', async () => {
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+    const guarded = await store.add({ ...mysqlInput, production: true, readOnly: true });
+    expect(guarded).toMatchObject({ production: true, readOnly: true });
+    const plain = await store.add({ ...mysqlInput, production: false, readOnly: false });
+    expect(JSON.parse(JSON.stringify(plain))).not.toHaveProperty('production');
+    expect(JSON.parse(JSON.stringify(plain))).not.toHaveProperty('readOnly');
+  });
+});

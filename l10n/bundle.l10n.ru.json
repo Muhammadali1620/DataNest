@@ -192,5 +192,19 @@
   "No color": "Без цвета",
   "Connection Color": "Цвет подключения",
   "There are no folders yet": "Папок пока нет",
-  "Pick a folder": "Выберите папку"
+  "Pick a folder": "Выберите папку",
+  "$(warning) PROD": "$(warning) PROD",
+  "$(lock)": "$(lock)",
+  "\"{0}\" is read-only, so this run was stopped.": "«{0}» только для чтения, поэтому запуск остановлен.",
+  "These statements would change it:\n{0}": "Эти операторы изменили бы её:\n{0}",
+  "Run on Production": "Выполнить на production",
+  "This changes the production database \"{0}\". Run it?": "Это изменит рабочую (production) базу «{0}». Выполнить?",
+  "\"{0}\" is read-only: changes cannot be saved.": "«{0}» только для чтения: изменения нельзя сохранить.",
+  "Save to Production": "Сохранить в production",
+  "Save {0} changes to the production database \"{1}\"?": "Сохранить изменения ({0}) в рабочую (production) базу «{1}»?",
+  "Not saved: the changes are still pending.": "Не сохранено: изменения остались несохранёнными.",
+  "Production": "Production",
+  "Read-only": "Только чтение",
+  "\"{0}\" is read-only: structure changes are not allowed.": "«{0}» только для чтения: менять структуру нельзя.",
+  "PRODUCTION \"{0}\": {1}": "PRODUCTION «{0}»: {1}"
 }

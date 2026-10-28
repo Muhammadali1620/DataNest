@@ -9,6 +9,7 @@ import type { SchemaAction, SchemaActions } from '../../services/schema-actions'
 import { actionDatabase, actionScript } from '../../services/schema-actions';
 import type { ObjectScope } from '../../core/model/objects';
 import type { DriverId } from '../../shared/connection';
+import { changeVerdict, NO_POLICY, type WritePolicy } from '../../services/write-policy';
 import type { DocumentBinding } from '../editor/document-bindings';
 import { isTreeNode, relationKindOf, scopeOf, tableRefOf, type TreeNode } from './nodes';
 import type { CommandTarget, RefreshableTree } from './tree-commands';
@@ -66,6 +67,10 @@ export interface SchemaTexts {
   readonly renameLabel: string;
   readonly truncateLabel: string;
   done(summary: string): string;
+  /** Said instead of running anything on a read-only connection. */
+  readOnlyRefused(connection: string): string;
+  /** The title of the SQL dialog when it changes a production database. */
+  onProduction(connection: string, title: string): string;
 }
 
 export interface SchemaCommandDeps {
@@ -76,6 +81,8 @@ export interface SchemaCommandDeps {
   readonly tree: RefreshableTree;
   /** Opens SQL in a new editor bound to the connection, instead of running it. */
   readonly openEditor: (binding: DocumentBinding, sql: string) => Promise<unknown>;
+  /** Production and read-only flags of a connection; without it nothing is guarded. */
+  readonly policy?: (connectionId: string) => WritePolicy;
   /** Opens the table designer: for a new table in this scope, or for an existing one. */
   readonly openDesigner: (
     connectionId: string,
@@ -97,14 +104,14 @@ export type SchemaCommandName =
   | 'dropObject';
 
 /** What became of an action the user was shown. */
-export type PerformOutcome = 'ran' | 'opened' | 'cancelled' | 'unsupported';
+export type PerformOutcome = 'ran' | 'opened' | 'cancelled' | 'unsupported' | 'refused';
 
 /**
  * Shows the SQL of an action, then runs it or opens it in an editor; a database
  * without the feature just says so. The table designer saves through it as well.
  */
 export function schemaPerformer(
-  deps: Pick<SchemaCommandDeps, 'actions' | 'ui' | 'texts' | 'tree' | 'openEditor'>,
+  deps: Pick<SchemaCommandDeps, 'actions' | 'ui' | 'texts' | 'tree' | 'openEditor' | 'policy'>,
 ): (
   connectionId: string,
   action: SchemaAction,
@@ -113,6 +120,12 @@ export function schemaPerformer(
 ) => Promise<PerformOutcome> {
   const { ui, texts } = deps;
   return async (connectionId, action, title, runLabel) => {
+    const policy = deps.policy?.(connectionId) ?? NO_POLICY;
+    const verdict = changeVerdict(policy);
+    if (verdict === 'refuse') {
+      ui.info(texts.readOnlyRefused(policy.name));
+      return 'refused';
+    }
     let statements: string[];
     try {
       statements = await deps.actions.sqlOf(connectionId, action);
@@ -124,7 +137,11 @@ export function schemaPerformer(
       throw error;
     }
     const sql = actionScript(statements);
-    const choice = await ui.confirm({ title, sql, runLabel });
+    const choice = await ui.confirm({
+      title: verdict === 'confirm' ? texts.onProduction(policy.name, title) : title,
+      sql,
+      runLabel,
+    });
     if (choice === 'edit') {
       const database = actionDatabase(action);
       await deps.openEditor(

@@ -438,6 +438,21 @@ describe('ConnectionManager', () => {
     });
   });
 
+  describe('isReadOnly', () => {
+    it('follows the saved flag', async () => {
+      expect(manager.isReadOnly(mysql.id)).toBe(false);
+      await store.update(mysql.id, { ...mysql, readOnly: true });
+      expect(manager.isReadOnly(mysql.id)).toBe(true);
+      expect(manager.isReadOnly('missing')).toBe(false);
+    });
+
+    it('passes the flag to the driver, which opens the session read-only', async () => {
+      await store.update(mysql.id, { ...mysql, readOnly: true });
+      await manager.acquire('editor:a', { connectionId: mysql.id });
+      expect(drivers.driver('mysql').opened[0]?.readOnly).toBe(true);
+    });
+  });
+
   describe('driverOf', () => {
     it('returns the driver of a saved connection', async () => {
       const driver = await manager.driverOf(mysql.id);

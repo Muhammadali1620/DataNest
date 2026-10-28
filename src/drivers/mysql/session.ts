@@ -67,6 +67,10 @@ export async function openMysqlSession(config: ResolvedConnectionConfig): Promis
   try {
     await raw.promise().connect();
     verifyIpIdentity(raw, tls);
+    if (config.readOnly === true) {
+      // Every later transaction, autocommitted statements included, is read-only.
+      await raw.promise().query('SET SESSION TRANSACTION READ ONLY');
+    }
   } catch (error) {
     raw.destroy();
     throw tlsFailure(error, tls?.serverName ?? '') ?? toMysqlDbError(error);

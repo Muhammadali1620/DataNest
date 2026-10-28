@@ -11,6 +11,7 @@ import { CONFIG_KEYS, CONFIG_SECTION, CONTEXT_KEYS } from './vscode/command-ids'
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
+import { policyOf } from './services/write-policy';
 import {
   type ExportError,
   type ExportFormat,
@@ -212,6 +213,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         openRelated,
         reloadTable: (resultId, change) => tables.reload(resultId, change),
         exportResult,
+        policy: (connectionId) => policyOf(store.get(connectionId)),
         logger,
       },
       documentUri,

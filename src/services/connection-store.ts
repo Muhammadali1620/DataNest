@@ -465,6 +465,9 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     ssl: file || input.ssl === undefined ? undefined : normalizeSsl(input.ssl),
     folder: trim(input.folder),
     color: input.color,
+    // Only a set flag is stored, so configs stay the same as before for everyone else.
+    production: input.production === true ? true : undefined,
+    readOnly: input.readOnly === true ? true : undefined,
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {

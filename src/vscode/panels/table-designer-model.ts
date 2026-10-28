@@ -151,7 +151,8 @@ export class TableDesignerModel {
       this.table = name;
       this.loaded = undefined;
     }
-    return { outcome };
+    // A read-only connection already said why; for the page nothing happened.
+    return { outcome: outcome === 'refused' ? 'cancelled' : outcome };
   }
 
   private plan(design: TableDesign): {

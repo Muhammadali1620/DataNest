@@ -16,6 +16,8 @@ export const READ_ONLY_REASONS = [
   'key-not-selected',
   'columns-mismatch',
   'failed',
+  /** The connection is marked read-only (V4.6). */
+  'connection-read-only',
 ] as const;
 
 export type ReadOnlyReason = (typeof READ_ONLY_REASONS)[number];

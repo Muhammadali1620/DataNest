@@ -5,6 +5,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
+Working with data: edit rows in place, filter and page tables on the server, copy
+and export in many formats, and keep a history of what ran.
+
+### Added
+
+**Editing**
+
+- A result from one table with a primary key (or a unique key over `NOT NULL`
+  columns) can be edited in place; anything else is read-only, and the panel says why.
+- Type-aware cell editors: text, numbers without precision loss, booleans, dates,
+  times, timestamps, JSON and enums, plus “Set NULL” and “Set DEFAULT”.
+- Add, duplicate and delete rows, several at once (`Insert`, `Ctrl+Delete`).
+- A queue of pending changes with highlighting, undo, “Preview SQL”, and saving in
+  one transaction (`Ctrl+S`). Every row must change exactly one record, otherwise
+  everything is rolled back and the queue stays.
+- A record card (`Shift+F4`): one row as a vertical form, with the same editors.
+- A value panel (`F4`): long text, formatted JSON that keeps every digit, a hex
+  dump of binary data and images stored in BLOBs.
+
+**Tables**
+
+- A server-side filter builder (equals, contains, starts with, NULL, …) plus a
+  hand-written `WHERE`; clicking a header sorts on the server.
+- Paging: page size, go to page, “Load all” with a warning, and a fast estimated
+  row count for big tables, with an exact `COUNT(*)` on demand.
+- Following a foreign key from a cell (`Ctrl+click` or `F12`) opens the referenced
+  table filtered to that row.
+- Hide and pin columns, and fit column widths to their content.
+
+**Copy and export**
+
+- “Copy as” TSV, CSV, JSON, Markdown, SQL `INSERT`, SQL `UPDATE` and an `IN (…)` list.
+- Export to SQL `INSERT`, Markdown and Excel (`.xlsx`), next to CSV and JSON.
+  Long numbers and leading zeros stay text in Excel, so nothing is rounded.
+
+**Queries**
+
+- Query history: search, rerun, copy, delete, filter by connection
+  (`datanest.historyLimit`). Passwords in statements are masked before saving.
+- Safe mode asks before `DELETE`/`UPDATE` without `WHERE`, `DROP` and `TRUNCATE`
+  (`datanest.safeMode`: `confirm`, `block` or `off`).
+
 ## [0.1.2] - 2026-10-24
 
 ### Fixed

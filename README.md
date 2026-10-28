@@ -43,9 +43,25 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - A virtualized grid: a hundred thousand rows cost the same as a hundred.
 - Sorting by clicking a header, and a search that looks through the whole result.
 - Select cells with the mouse or the keyboard and copy them as TSV, ready for a spreadsheet.
-- Export the whole result to CSV or JSON.
+- “Copy as” CSV, JSON, Markdown, SQL `INSERT`/`UPDATE` or an `IN (…)` list, and export
+  the whole result to CSV, JSON, SQL, Markdown or Excel.
+- Hide and pin columns, fit widths to the content, and look at long text, JSON,
+  hex dumps and BLOB images in a value panel.
 - Values keep their precision: a `BIGINT` or a `DECIMAL` is never rounded on the way
   to the screen, to the clipboard or into a file.
+
+**Editing data**
+
+- Edit cells in place with editors that know the column type, set `NULL` or `DEFAULT`,
+  add, duplicate and delete rows.
+- Changes wait in a queue: preview the SQL, undo, and save them in one transaction.
+- A record card shows one row as a form; a foreign key cell opens the row it points at.
+- Tables filter, sort and page on the server, with a fast estimated row count.
+
+**Safety and history**
+
+- Safe mode asks before `DELETE` or `UPDATE` without `WHERE`, `DROP` and `TRUNCATE`.
+- Every statement goes to a searchable history, with passwords masked, ready to rerun.
 
 ## Getting started
 
@@ -61,6 +77,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 | `datanest.pageSize` | `200` | Rows on one page when a table is opened from the tree. |
 | `datanest.queryTimeout` | `0` | Seconds before a statement is cancelled; `0` means no limit. |
 | `datanest.showSystemObjects` | `false` | Show the server's own databases and schemas. |
+| `datanest.historyLimit` | `500` | Statements kept in the query history; `0` turns it off. |
+| `datanest.safeMode` | `confirm` | Before a destructive statement: `confirm`, `block` or `off`. |
 | `datanest.logLevel` | `info` | How much goes to the DataNest output channel. |
 
 ## Privacy

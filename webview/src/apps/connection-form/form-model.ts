@@ -19,6 +19,7 @@ import type {
   ConnectionDraft,
   ConnectionFormState,
 } from '../../../../src/shared/protocols/connection-form';
+import type { ParsedConnectionUrl, UrlProblem } from '../../../../src/shared/connection-url';
 import type { MessageKey } from '../../l10n/en';
 
 /** A secret box: what was typed, whether it was, and whether to erase the stored one. */
@@ -313,3 +314,37 @@ export function problemMessage(
 ): MessageKey | undefined {
   return problems.includes(problem) ? PROBLEM_MESSAGES[problem] : undefined;
 }
+
+/**
+ * Fills the fields from a parsed URL. The URL describes the whole target, so fields it
+ * leaves out are cleared; the name is kept when the user already gave one, and SSH
+ * settings are left alone (a URL cannot carry them).
+ */
+export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void {
+  const { input, password } = parsed;
+  fields.driver = input.driver;
+  fields.host = input.host ?? '';
+  fields.port = input.port === undefined ? '' : String(input.port);
+  fields.user = input.user ?? '';
+  fields.database = input.database ?? '';
+  fields.file = input.file ?? '';
+  if (fields.name.trim() === '') {
+    fields.name = input.name;
+  }
+  fields.sslMode = input.ssl?.mode ?? 'off';
+  fields.sslCa = input.ssl?.ca ?? '';
+  fields.sslCert = input.ssl?.cert ?? '';
+  fields.sslKey = input.ssl?.key ?? '';
+  if (password !== undefined) {
+    fields.password = password;
+    fields.passwordTouched = true;
+    fields.erasePassword = false;
+  }
+}
+
+export const URL_PROBLEM_MESSAGES: Readonly<Record<UrlProblem, MessageKey>> = {
+  'not-a-url': 'form.url.error.notUrl',
+  'unknown-scheme': 'form.url.error.scheme',
+  'no-host': 'form.error.hostEmpty',
+  'no-file': 'form.error.fileEmpty',
+};

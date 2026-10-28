@@ -15,6 +15,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - SSL/TLS for MySQL, MariaDB and PostgreSQL: encrypt only, check the issuer, or check the
   issuer and the host name; your own CA certificate and a client certificate with its key.
   The host name is checked against the real server even through an SSH tunnel.
+- Connection URLs: paste `postgres://…`, `mysql://…` or `sqlite:///…` into the form, or use
+  “Add Connection from URL…”. TLS parameters such as `sslmode` are understood.
+- “Import Connections from .env…” finds database URLs and `DB_HOST`/`PGHOST`-style
+  variables in the workspace's `.env` files and adds the ones you pick.
 
 ## [0.3.0] - 2026-10-28
 

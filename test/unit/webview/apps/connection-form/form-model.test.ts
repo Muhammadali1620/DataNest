@@ -17,6 +17,8 @@ import {
   toHop,
   moveJump,
   toSsl,
+  applyUrl,
+  URL_PROBLEM_MESSAGES,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { en } from '../../../../../webview/src/l10n/en';
 
@@ -450,5 +452,73 @@ describe('SSL fields', () => {
     ]);
     expect(en[PROBLEM_MESSAGES['ssl-cert-without-key']]).toBeTruthy();
     expect(en[PROBLEM_MESSAGES['ssl-key-without-cert']]).toBeTruthy();
+  });
+});
+
+describe('applyUrl', () => {
+  it('fills the target, TLS and password, and names a nameless connection', () => {
+    const form = fields({
+      name: '',
+      user: 'old',
+      database: 'old',
+      sslMode: 'require',
+      sslCa: '/x',
+    });
+    applyUrl(form, {
+      input: {
+        name: 'shop',
+        driver: 'postgres',
+        host: 'db',
+        port: 6543,
+        database: 'shop',
+        ssl: { mode: 'verify-ca', ca: '/ca' },
+      },
+      password: 'pw',
+    });
+    expect(form).toMatchObject({
+      name: 'shop',
+      driver: 'postgres',
+      host: 'db',
+      port: '6543',
+      user: '',
+      database: 'shop',
+      sslMode: 'verify-ca',
+      sslCa: '/ca',
+      password: 'pw',
+      passwordTouched: true,
+    });
+  });
+
+  it('keeps a name the user gave, the password without one in the URL, and SSH', () => {
+    const ssh = { ...newHopFields('h'), host: 'bastion' };
+    const form = fields({
+      name: 'Mine',
+      password: 'typed',
+      passwordTouched: true,
+      useSsh: true,
+      ssh,
+    });
+    applyUrl(form, { input: { name: 'x', driver: 'mysql', host: 'h2' } });
+    expect(form).toMatchObject({
+      name: 'Mine',
+      host: 'h2',
+      port: '',
+      sslMode: 'off',
+      password: 'typed',
+      useSsh: true,
+    });
+    expect(form.ssh.host).toBe('bastion');
+  });
+
+  it('switches to a file database', () => {
+    const form = fields();
+    applyUrl(form, { input: { name: 'a.db', driver: 'sqlite', file: '/a.db' } });
+    expect(form).toMatchObject({ driver: 'sqlite', file: '/a.db', host: '' });
+  });
+
+  it('has a message for every URL problem', () => {
+    for (const key of Object.values(URL_PROBLEM_MESSAGES)) {
+      expect(en[key]).toBeTruthy();
+    }
   });
 });

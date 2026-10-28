@@ -9,6 +9,7 @@ import {
 import { RpcPeer } from '../../shared/rpc';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
+import type { ConnectionInput } from '../../shared/connection';
 import {
   driverOptions,
   NEW_CONNECTION,
@@ -19,6 +20,13 @@ import {
   toSshChanges,
 } from './connection-form-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
+
+/** What a new form starts with instead of the defaults, e.g. a parsed URL. */
+export interface ConnectionPrefill {
+  readonly input: ConnectionInput;
+  /** Stays in the host; the page only learns that there is one. */
+  readonly password?: string;
+}
 
 export interface ConnectionFormDeps {
   readonly extensionUri: vscode.Uri;
@@ -38,17 +46,30 @@ export class ConnectionFormPanel implements vscode.Disposable {
   private readonly rpc: RpcPeer<ConnectionFormProtocol['host'], ConnectionFormProtocol['webview']>;
   private readonly log: Logger;
   private connectionId: string | undefined;
+  private prefill: ConnectionPrefill | undefined;
   private disposed = false;
 
-  /** Opens the form for a saved connection, or for a new one when `connectionId` is absent. */
-  static show(deps: ConnectionFormDeps, connectionId?: string): ConnectionFormPanel {
+  /**
+   * Opens the form for a saved connection, or for a new one when `connectionId` is
+   * absent; a new one may start from `prefill` (an open new form takes it over).
+   */
+  static show(
+    deps: ConnectionFormDeps,
+    connectionId?: string,
+    prefill?: ConnectionPrefill,
+  ): ConnectionFormPanel {
     const key = connectionId ?? '';
     const existing = ConnectionFormPanel.open.get(key);
     if (existing && !existing.disposed) {
+      if (prefill !== undefined && existing.connectionId === undefined) {
+        existing.prefill = prefill;
+        existing.sendState();
+      }
       existing.panel.reveal();
       return existing;
     }
     const panel = new ConnectionFormPanel(deps, connectionId);
+    panel.prefill = connectionId === undefined ? prefill : undefined;
     ConnectionFormPanel.open.set(key, panel);
     return panel;
   }
@@ -132,8 +153,11 @@ export class ConnectionFormPanel implements vscode.Disposable {
     if (draft.password.kind === 'set') {
       return draft.password.value;
     }
-    if (draft.password.kind === 'clear' || this.connectionId === undefined) {
+    if (draft.password.kind === 'clear') {
       return undefined;
+    }
+    if (this.connectionId === undefined) {
+      return this.prefill?.password;
     }
     return await this.deps.store.getPassword(this.connectionId);
   }
@@ -143,10 +167,15 @@ export class ConnectionFormPanel implements vscode.Disposable {
     if (this.connectionId === undefined) {
       const created = await this.deps.store.add(
         draft.input,
-        change.kind === 'set' ? change.value : undefined,
+        change.kind === 'set'
+          ? change.value
+          : change.kind === 'keep'
+            ? this.prefill?.password
+            : undefined,
         testSshSecrets(draft, {}),
       );
       this.connectionId = created.id;
+      this.prefill = undefined;
       this.retitle(created.name);
       this.sendState();
       return created.id;
@@ -185,8 +214,9 @@ export class ConnectionFormPanel implements vscode.Disposable {
     }
     this.rpc.emit('state', {
       ...(connectionId === undefined ? {} : { connectionId }),
-      input: config === undefined ? NEW_CONNECTION : toInput(config),
+      input: config === undefined ? (this.prefill?.input ?? NEW_CONNECTION) : toInput(config),
       hasStoredPassword,
+      ...(this.prefill?.password === undefined ? {} : { importedPassword: true }),
       storedSsh: storedSshFlags(storedSsh),
       drivers: driverOptions(),
     });

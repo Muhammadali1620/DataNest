@@ -23,6 +23,7 @@ import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, type CommandId } from './command-ids';
 import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
+import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
@@ -61,12 +62,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     showError: (message: string) =>
       vscode.window.showErrorMessage(vscode.l10n.t('DataNest: {0}', message)),
   };
-  const connections = connectionCommandHandlers({
+  const importDeps = {
     extensionUri: deps.extensionUri,
     store: deps.store,
     manager: deps.manager,
     logger: deps.logger,
-  });
+  };
+  const connections = connectionCommandHandlers(importDeps);
   const runCommands = runCommandHandlers({
     runner: deps.runner,
     editors: deps.editors,
@@ -174,6 +176,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       deps.channel.show(true);
     },
     [COMMAND_IDS.addConnection]: connections.add,
+    [COMMAND_IDS.addConnectionFromUrl]: (target) =>
+      addConnectionFromUrl(importDeps, typeof target === 'string' ? target : undefined),
+    [COMMAND_IDS.importEnvConnections]: () => importConnectionsFromEnv(importDeps),
     [COMMAND_IDS.editConnection]: connections.edit,
     [COMMAND_IDS.duplicateConnection]: connections.duplicate,
     [COMMAND_IDS.removeConnection]: connections.remove,

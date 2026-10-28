@@ -42,6 +42,11 @@ const formStateSchema = object({
   input: connectionInputSchema,
   /** True when a password is stored for this connection. The value never travels. */
   hasStoredPassword: boolean(),
+  /**
+   * True when the form was opened from a URL or a .env file that had a password: the
+   * host keeps it and saves it unless the user types another. The value never travels.
+   */
+  importedPassword: optional(boolean()),
   /** Which SSH hops have a stored password or passphrase; values never travel. */
   storedSsh: array(
     object({

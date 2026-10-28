@@ -183,7 +183,9 @@ npm run package        # соберёт datanest-<версия>.vsix
 6. SSL/TLS (сертификаты — в `docker/tls`): PostgreSQL `127.0.0.1:7432`, «Шифровать, проверять издателя и имя хоста», CA `docker/tls/ca.crt` → «Подключение работает», `SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()` → `true`. С `other-ca.crt` — ошибка «не доверен». Без CA — тоже «не доверен» (тестовый CA не системный).
 7. Клиентский сертификат: пользователь `datanest_cert` (MySQL — пароль `datanest`, PostgreSQL — без пароля), сертификат `client.crt`, ключ `client.key` → подключается; без них — отказ. Только сертификат без ключа — форма не сохраняет.
 8. TLS через SSH: хост `postgres-alias` через туннель с `verify-full` → «сертификат не выдан для "postgres-alias"», с `verify-ca` — подключается; хост `postgres` с `verify-full` — подключается.
-9. `docker compose -f docker/compose.yml build --no-cache ssh && docker compose -f docker/compose.yml up -d --force-recreate ssh` (у сервера новый ключ) → при подключении красное предупреждение о сменившемся ключе; «Отмена» — не подключается.
+9. URL: в форме вставить `postgres://datanest:datanest@127.0.0.1:7432/datanest_test?sslmode=require` → «Заполнить» → поля, пароль и TLS заполнены, «Проверить» работает. Команда «Добавить подключение по URL…» с тем же URL → форма заполнена, под паролем «пароль из URL будет сохранён»; после сохранения и повторного открытия пароль сохранён.
+10. `.env`: в папке проекта файл `.env` с `DATABASE_URL=mysql://datanest:datanest@127.0.0.1:7306/datanest_test` и `PGHOST=127.0.0.1`, `PGPORT=7432`, `PGUSER=datanest`, `PGPASSWORD=datanest`, `PGDATABASE=datanest_test`, рядом `.env.example` → «Импортировать подключения из .env…» показывает два подключения (из `.env.example` — нет), после добавления оба подключаются; повторный импорт помечает их «уже сохранено».
+11. `docker compose -f docker/compose.yml build --no-cache ssh && docker compose -f docker/compose.yml up -d --force-recreate ssh` (у сервера новый ключ) → при подключении красное предупреждение о сменившемся ключе; «Отмена» — не подключается.
 
 ## 16. Темы, язык, доступность
 

@@ -5,6 +5,10 @@ export const COMMAND_IDS = {
   showLogs: 'datanest.logs.show',
   /** Opens the form for a new connection. */
   addConnection: 'datanest.connections.add',
+  /** Opens the form filled from a connection URL. */
+  addConnectionFromUrl: 'datanest.connections.addFromUrl',
+  /** Adds connections found in the workspace's .env files. */
+  importEnvConnections: 'datanest.connections.importEnv',
   /** Opens the form for an existing connection. */
   editConnection: 'datanest.connections.edit',
   duplicateConnection: 'datanest.connections.duplicate',

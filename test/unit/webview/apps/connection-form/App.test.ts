@@ -627,4 +627,78 @@ describe('connection form App', () => {
       expect(field('CA certificate').value).toBe('/ca');
     });
   });
+
+  describe('connection URL', () => {
+    it('fills the form from a pasted URL', async () => {
+      const { host } = await withState();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Connection URL'), {
+        target: { value: 'postgres://app:pw@db.example:6543/shop?sslmode=require' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Fill' }));
+      await waitFor(() => {
+        expect(field('Host').value).toBe('db.example');
+      });
+      expect(field('Port').value).toBe('6543');
+      expect(field('Name').value).toBe('shop');
+      expect(field('Password').value).toBe('pw');
+      expect(field('Connection URL').value).toBe('');
+      expect(notice()).toBe('Filled from the URL; check the fields and save');
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]).toEqual({
+        input: {
+          name: 'shop',
+          driver: 'postgres',
+          host: 'db.example',
+          port: 6543,
+          user: 'app',
+          database: 'shop',
+          ssl: { mode: 'require' },
+        },
+        password: { kind: 'set', value: 'pw' },
+      });
+    });
+
+    it('fills on Enter and explains a URL it cannot read', async () => {
+      await withState();
+      await fireEvent.input(field('Connection URL'), { target: { value: 'redis://cache' } });
+      await fireEvent.keyDown(field('Connection URL'), { key: 'Enter' });
+      await waitFor(() => {
+        expect(
+          screen.getByText('Only mysql://, mariadb://, postgres:// and sqlite:// are supported'),
+        ).toBeTruthy();
+      });
+      expect(field('Connection URL').getAttribute('aria-invalid')).toBe('true');
+      expect(field('Host').value).toBe('127.0.0.1');
+    });
+
+    it('says when the password came from an imported URL', async () => {
+      const { host } = await withState(
+        newState({
+          input: { name: 'shop', driver: 'postgres', host: 'db' },
+          importedPassword: true,
+        }),
+      );
+      expect(
+        screen.getByText('The password from the URL will be saved; type another to replace it'),
+      ).toBeTruthy();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.password).toEqual({ kind: 'keep' });
+    });
+  });
 });

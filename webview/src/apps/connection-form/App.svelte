@@ -16,7 +16,9 @@
   import TlsEditor from './TlsEditor.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
+  import { parseConnectionUrl } from '../../../../src/shared/connection-url';
   import {
+    applyUrl,
     fieldsFrom,
     type FormFields,
     moveJump,
@@ -24,6 +26,7 @@
     problemMessage,
     problemsOf,
     toDraft,
+    URL_PROBLEM_MESSAGES,
   } from './form-model';
 
   interface Props {
@@ -45,6 +48,8 @@
   let notice = $state<Notice | undefined>(undefined);
   /** Problems are shown only after the first attempt, so a new form is not all red. */
   let showProblems = $state(false);
+  let urlText = $state('');
+  let urlError = $state<string | undefined>(undefined);
 
   const DRIVER_LABELS: Readonly<Record<string, MessageKey>> = {
     mysql: 'form.driver.mysql',
@@ -127,6 +132,21 @@
     return { password: found?.password ?? false, passphrase: found?.passphrase ?? false };
   }
 
+  function fillFromUrl(): void {
+    if (!fields || urlText.trim() === '') {
+      return;
+    }
+    const parsed = parseConnectionUrl(urlText);
+    if (!parsed.ok) {
+      urlError = t(URL_PROBLEM_MESSAGES[parsed.problem]);
+      return;
+    }
+    applyUrl(fields, parsed.value);
+    urlError = undefined;
+    urlText = '';
+    notice = { kind: 'ok', text: t('form.url.filled') };
+  }
+
   function addJump(): void {
     fields?.jumps.push(newHopFields());
   }
@@ -195,6 +215,29 @@
         void run('save');
       }}
     >
+      <Field label={t('form.url')} error={urlError} hint={t('form.url.hint')}>
+        <span class="row">
+          <input
+            class="control grow"
+            bind:value={urlText}
+            aria-invalid={urlError !== undefined}
+            aria-label={t('form.url')}
+            placeholder="postgres://user@host:5432/db"
+            autocomplete="off"
+            spellcheck="false"
+            onkeydown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                fillFromUrl();
+              }
+            }}
+          />
+          <button type="button" class="button secondary" onclick={fillFromUrl}>
+            {t('form.url.fill')}
+          </button>
+        </span>
+      </Field>
+
       <Field label={t('form.name')} error={errorFor('name-empty')}>
         <input
           class="control"
@@ -279,9 +322,13 @@
           </Field>
           <Field
             label={t('form.password')}
-            hint={formState?.hasStoredPassword && !fields.passwordTouched
-              ? t('form.passwordStored')
-              : undefined}
+            hint={fields.passwordTouched
+              ? undefined
+              : formState?.hasStoredPassword
+                ? t('form.passwordStored')
+                : formState?.importedPassword === true
+                  ? t('form.passwordImported')
+                  : undefined}
           >
             <input
               class="control"

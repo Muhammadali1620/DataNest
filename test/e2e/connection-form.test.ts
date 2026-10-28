@@ -73,6 +73,8 @@ describe('connection form panel', () => {
     const all = await vscode.commands.getCommands(true);
     for (const id of [
       'datanest.connections.add',
+      'datanest.connections.addFromUrl',
+      'datanest.connections.importEnv',
       'datanest.connections.edit',
       'datanest.connections.duplicate',
       'datanest.connections.remove',
@@ -124,5 +126,27 @@ describe('saved connections in the real editor', () => {
     } finally {
       await session.close();
     }
+  });
+
+  it('opens the new-connection form filled from a URL argument', async () => {
+    await closeFormTabs();
+    await vscode.commands.executeCommand(
+      'datanest.connections.addFromUrl',
+      'postgres://app:secret@db.example:6543/shop?sslmode=require',
+    );
+    await waitForFormTabs(1);
+    assert.equal(formTabs()[0]?.label, 'New Connection');
+    await closeFormTabs();
+  });
+
+  it('opens no form for a URL it cannot read', async () => {
+    await closeFormTabs();
+    await vscode.commands.executeCommand('datanest.connections.addFromUrl', 'redis://cache:6379');
+    await sleep(300);
+    assert.equal(formTabs().length, 0);
+  });
+
+  it('finishes the .env import quietly when there is nothing to import', async () => {
+    await vscode.commands.executeCommand('datanest.connections.importEnv');
   });
 });

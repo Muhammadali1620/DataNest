@@ -74,6 +74,16 @@
         "icon": "$(add)"
       },
       {
+        "command": "datanest.connections.addFromUrl",
+        "title": "%commands.connections.addFromUrl.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.importEnv",
+        "title": "%commands.connections.importEnv.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.connections.edit",
         "title": "%commands.connections.edit.title%",
         "category": "DataNest",
@@ -384,6 +394,16 @@
           "command": "datanest.objects.search",
           "when": "view == datanest.connections",
           "group": "navigation@4"
+        },
+        {
+          "command": "datanest.connections.addFromUrl",
+          "when": "view == datanest.connections",
+          "group": "1_add@1"
+        },
+        {
+          "command": "datanest.connections.importEnv",
+          "when": "view == datanest.connections",
+          "group": "1_add@2"
         }
       ],
       "view/item/context": [

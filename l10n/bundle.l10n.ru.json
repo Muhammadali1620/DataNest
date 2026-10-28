@@ -154,5 +154,18 @@
   "Through SSH: {0}": "Через SSH: {0}",
   "Certificate or Key": "Сертификат или ключ",
   "Certificates and keys": "Сертификаты и ключи",
-  "All files": "Все файлы"
+  "All files": "Все файлы",
+  "This is not a connection URL, e.g. postgres://user@host:5432/db": "Это не URL подключения; пример: postgres://user@host:5432/db",
+  "DataNest supports mysql://, mariadb://, postgres:// and sqlite:// URLs": "DataNest понимает URL mysql://, mariadb://, postgres:// и sqlite://",
+  "The URL names no host": "В URL нет хоста",
+  "The URL names no database file": "В URL нет файла базы",
+  "Add Connection from URL": "Добавить подключение по URL",
+  "The password in the URL is kept in the secret storage, not in settings": "Пароль из URL хранится в защищённом хранилище, а не в настройках",
+  "A part of this URL is too long": "Часть этого URL слишком длинная",
+  "There are no .env files in this workspace": "В рабочей области нет файлов .env",
+  "No database settings were found in the .env files": "В файлах .env не найдено настроек баз данных",
+  "{0} — already saved as \"{1}\"": "{0} — уже сохранено как «{1}»",
+  "Import Connections from .env": "Импорт подключений из .env",
+  "Pick the connections to add; passwords go to the secret storage": "Выберите подключения для добавления; пароли попадут в защищённое хранилище",
+  "Added {0} connection(s) from .env files": "Добавлено подключений из .env: {0}"
 }

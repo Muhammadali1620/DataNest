@@ -135,7 +135,27 @@ describe('tree menus', () => {
       COMMAND_IDS.refreshTree,
       COMMAND_IDS.newQuery,
       COMMAND_IDS.searchObjects,
+      COMMAND_IDS.addConnectionFromUrl,
+      COMMAND_IDS.importEnvConnections,
     ]);
+  });
+
+  it('keeps the import commands in the view title menu, not as icons', () => {
+    for (const id of [COMMAND_IDS.addConnectionFromUrl, COMMAND_IDS.importEnvConnections]) {
+      expect(title.find((entry) => entry.command === id)?.group).toMatch(/^1_add@\d$/);
+    }
+  });
+
+  it('links the empty view to every way of adding a connection', () => {
+    const nls = readJson('package.nls.json') as Record<string, string>;
+    const welcome = nls['viewsWelcome.connections.empty'] ?? '';
+    for (const id of [
+      COMMAND_IDS.addConnection,
+      COMMAND_IDS.addConnectionFromUrl,
+      COMMAND_IDS.importEnvConnections,
+    ]) {
+      expect(welcome).toContain(`command:${id}`);
+    }
   });
 
   it('offers a new query only where a connection is live', () => {

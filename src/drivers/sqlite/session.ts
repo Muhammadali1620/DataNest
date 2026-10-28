@@ -5,6 +5,7 @@ import { DbError } from '../../core/errors';
 import type { ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
 import type { ExecuteEvent, ExecuteOptions, Session } from '../driver';
+import { attachBlobs } from './blobs';
 import { fromWireError, toSqliteDbError } from './errors';
 import { SqliteMetadata } from './metadata';
 import type { SqliteParam, WorkerToHost } from './protocol';
@@ -226,6 +227,7 @@ class SqliteSession implements Session {
         queue.push({ kind: 'columns', columns: message.columns });
         return;
       case 'rows':
+        attachBlobs(message.rows, message.blobs);
         queue.push({ kind: 'rows', rows: message.rows });
         return;
       case 'done':

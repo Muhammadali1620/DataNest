@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { parentPort } from 'node:worker_threads';
 import type { ResultColumn } from '../driver';
 import { toWireError } from './errors';
+import { blobsOf } from './blobs';
 import type { HostToWorker, WorkerToHost } from './protocol';
 import { toCellValue } from './values';
 import type { CellValue } from '../../shared/cell-value';
@@ -18,6 +19,11 @@ if (!port) {
 }
 
 let db: DatabaseSync | undefined;
+
+function postRows(id: number, rows: CellValue[][]): void {
+  const blobs = blobsOf(rows);
+  post(blobs.length === 0 ? { t: 'rows', id, rows } : { t: 'rows', id, rows, blobs });
+}
 
 function post(message: WorkerToHost): void {
   // port is checked above; narrow again for the closure.
@@ -78,12 +84,12 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
       const record = row as Record<string, unknown>;
       batch.push(names.map((name) => toCellValue(record[name])));
       if (batch.length >= ROW_BATCH_SIZE) {
-        post({ t: 'rows', id, rows: batch });
+        postRows(id, batch);
         batch = [];
       }
     }
     if (batch.length > 0) {
-      post({ t: 'rows', id, rows: batch });
+      postRows(id, batch);
     }
     post({ t: 'done', id });
   } catch (error) {

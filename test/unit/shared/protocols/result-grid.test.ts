@@ -136,6 +136,7 @@ describe('state event', () => {
 describe('protocol shape', () => {
   it('lets the host answer rows, paging, sorting and searching', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
+      'binaryBytes',
       'discardChanges',
       'editCell',
       'pageTo',

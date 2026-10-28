@@ -18,6 +18,13 @@ export type HostToWorker =
       readonly rowLimit?: number;
     };
 
+/** Bytes of the binary cell at `[row][column]` of a rows message. */
+export interface WireBlob {
+  readonly row: number;
+  readonly column: number;
+  readonly bytes: Uint8Array;
+}
+
 export type WorkerToHost =
   | { readonly t: 'opened' }
   | { readonly t: 'open-error'; readonly error: WireError }
@@ -26,6 +33,11 @@ export type WorkerToHost =
       readonly t: 'rows';
       readonly id: number;
       readonly rows: readonly (readonly CellValue[])[];
+      /**
+       * Full bytes of binary cells, which cross the thread boundary as copies, so the
+       * host can attach them to its own cell objects (shared/binary-bytes.ts).
+       */
+      readonly blobs?: readonly WireBlob[];
     }
   | { readonly t: 'done'; readonly id: number; readonly affectedRows?: number }
   | { readonly t: 'error'; readonly id: number; readonly error: WireError };

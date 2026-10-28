@@ -1,6 +1,7 @@
 // The result panel. Rows stay in the host and the page asks for the range it can
 // show (ARCHITECTURE.md D6), so a million-row result costs the webview nothing.
 
+import { MAX_BINARY_VIEW_BYTES } from '../binary-bytes';
 import { resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
@@ -246,6 +247,21 @@ export const resultGridProtocol = defineProtocol({
       discardChanges: {
         params: object({ resultId }),
         result: object({ ok: boolean() }),
+      },
+      /**
+       * Page → host: the whole bytes of a binary cell, for the value panel. `data` is
+       * base64 and absent when the value was too large to keep or is no longer there.
+       */
+      binaryBytes: {
+        params: object({
+          resultId,
+          row: number({ integer: true, min: 0 }),
+          column: number({ integer: true, min: 0 }),
+        }),
+        result: object({
+          size: number({ integer: true, min: 0 }),
+          data: optional(string({ maxLength: Math.ceil(MAX_BINARY_VIEW_BYTES / 3) * 4 })),
+        }),
       },
       /** Page → host: the rows of a visible range. */
       rows: {

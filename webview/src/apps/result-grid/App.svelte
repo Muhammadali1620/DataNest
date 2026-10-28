@@ -14,8 +14,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import { toTsv } from '../../../../src/shared/tsv';
   import { keepWidths } from './columns';
   import Grid from './Grid.svelte';
+  import ValuePanel from './ValuePanel.svelte';
   import { RowCache, windowFor } from './rows';
-  import { selectionBox, type Selection } from './selection';
+  import { type CellRef, selectionBox, type Selection } from './selection';
 
   interface Props {
     rpc: RpcPeer<ResultGridProtocol['webview'], ResultGridProtocol['host']>;
@@ -32,6 +33,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let hitTotal = $state(0);
   let hitIndex = $state(0);
   let revealRow = $state<number | undefined>(undefined);
+  /** The value panel beside the grid, and the cell it follows. */
+  let valueOpen = $state(false);
+  let focused = $state<CellRef | undefined>(undefined);
   /** Bumped when rows arrive, so the grid re-reads the cache. */
   let loaded = $state(0);
 
@@ -47,6 +51,22 @@ import type { RowAction } from '../../../../src/shared/row-action';
   function rowAt(index: number): readonly CellValue[] | undefined {
     // Reading `loaded` ties the grid's cells to the rows that have arrived.
     return loaded >= 0 ? cache.get(index) : undefined;
+  }
+
+  const focusedCell = $derived<CellValue | undefined>(
+    focused === undefined ? undefined : rowAt(focused.row)?.[focused.column],
+  );
+
+  async function loadBytes(): Promise<{ size: number; data?: string | undefined }> {
+    const tab = activeTab;
+    if (tab === undefined || focused === undefined) {
+      return { size: 0 };
+    }
+    return rpc.request('binaryBytes', {
+      resultId: tab.id,
+      row: focused.row,
+      column: focused.column,
+    });
   }
 
   function stateAt(row: number): 'inserted' | 'deleted' | undefined {
@@ -397,6 +417,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </button>
       {/each}
       <span class="spacer"></span>
+      {#if activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
+        <button
+          type="button"
+          class="cancel"
+          aria-pressed={valueOpen}
+          title={t('value.toggleHint')}
+          data-testid="value-toggle"
+          onclick={() => {
+            valueOpen = !valueOpen;
+          }}
+        >
+          {t('value.title')}
+        </button>
+      {/if}
       {#if gridState.running}
         <button
           type="button"
@@ -575,6 +609,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
             {/if}
           </div>
         {/if}
+        <div class="body">
+          <div class="grid-area">
         <Grid
           resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}`}
           sort={activeTab.sort}
@@ -593,8 +629,32 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {onEdit}
           {onRowAction}
           {onSave}
+          onFocusChange={(cell: CellRef | undefined) => {
+            focused = cell;
+          }}
+          onToggleValue={() => {
+            valueOpen = !valueOpen;
+          }}
           {t}
         />
+          </div>
+          {#if valueOpen}
+            <ValuePanel
+              cell={focusedCell}
+              cellKey={`${activeTab.id}:${activeTab.revision}:${activeTab.sort?.column ?? ''}${activeTab.sort?.direction ?? ''}:${focused?.row ?? ''}:${focused?.column ?? ''}`}
+              columnName={focused === undefined ? undefined : activeTab.columns[focused.column]?.name}
+              dataType={focused === undefined ? undefined : activeTab.columns[focused.column]?.dataType}
+              {loadBytes}
+              onCopy={(text: string) => {
+                rpc.emit('copyText', { text });
+              }}
+              onClose={() => {
+                valueOpen = false;
+              }}
+              {t}
+            />
+          {/if}
+        </div>
       {/if}
       {#if activeTab.page !== undefined}
         {@const page = activeTab.page}
@@ -643,6 +703,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
     flex-direction: column;
     height: 100vh;
     padding: 0;
+  }
+
+  .body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .grid-area {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
 
   .tabs {

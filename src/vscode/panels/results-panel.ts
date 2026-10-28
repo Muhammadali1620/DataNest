@@ -5,6 +5,7 @@ import type { ExportFormat } from '../../services/result-export';
 import type { ResultEditor } from '../../services/result-editor';
 import type { ResultSaver } from '../../services/result-saver';
 import type { ResultStore } from '../../services/result-store';
+import { retainedBytes } from '../../shared/binary-bytes';
 import {
   MAX_SEARCH_HITS,
   resultGridProtocol,
@@ -104,6 +105,16 @@ export class ResultsPanel implements vscode.Disposable {
         changes: window.changes,
         states: window.states,
       };
+    });
+    this.rpc.handle('binaryBytes', ({ resultId, row, column }) => {
+      const cell = this.deps.results.window(resultId, row, 1)?.rows[0]?.[column];
+      if (typeof cell !== 'object' || cell?.kind !== 'binary') {
+        return { size: 0 };
+      }
+      const bytes = retainedBytes(cell);
+      return bytes === undefined
+        ? { size: cell.size }
+        : { size: cell.size, data: Buffer.from(bytes).toString('base64') };
     });
     this.rpc.handle('saveChanges', async ({ resultId }) => {
       const outcome = await this.deps.saver.save(resultId);

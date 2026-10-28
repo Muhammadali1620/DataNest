@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { EditInput } from '../../../../src/shared/cell-input';
   import type { RowAction } from '../../../../src/shared/row-action';
   import type { CellValue } from '../../../../src/shared/cell-value';
@@ -58,6 +59,10 @@
     onSave: () => Promise<void>;
     /** Sends an edit to the host; resolves to the reason it was refused, if it was. */
     onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
+    /** Called when the focused cell changes, e.g. so the value panel can follow it. */
+    onFocusChange?: ((cell: CellRef | undefined) => void) | undefined;
+    /** Called for F4, which opens or closes the value panel. */
+    onToggleValue?: (() => void) | undefined;
     t: Translate;
   }
 
@@ -79,6 +84,8 @@
     onEdit,
     onRowAction,
     onSave,
+    onFocusChange,
+    onToggleValue,
     t,
   }: Props = $props();
 
@@ -213,6 +220,14 @@
   }
 
   const focusCell = $derived(selection?.focus);
+  // The callback only writes the parent's state, so this effect never reads what it sets.
+  $effect(() => {
+    const cell = focusCell;
+    untrack(() => {
+      onFocusChange?.(cell);
+    });
+  });
+
   const focusColumn = $derived(focusCell === undefined ? undefined : editColumn(focusCell.column));
   const canSetNull = $derived(focusColumn?.nullable === true);
   const canSetDefault = $derived(focusColumn !== undefined);
@@ -335,6 +350,11 @@
 
   function onKeyDown(event: KeyboardEvent): void {
     const modifier = event.ctrlKey || event.metaKey;
+    if (event.key === 'F4' && onToggleValue !== undefined) {
+      event.preventDefault();
+      onToggleValue();
+      return;
+    }
     if (modifier && (event.key === 'c' || event.key === 'C')) {
       if (selection !== undefined) {
         event.preventDefault();

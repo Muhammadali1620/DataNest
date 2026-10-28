@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { retainedBytes } from '../../../src/shared/binary-bytes';
 import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
 import type { Driver, Session } from '../../../src/drivers/driver';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
@@ -97,6 +98,26 @@ describe('sqlite driver', () => {
     expect(row?.[1]).toBe(1.5);
     expect(row?.[2]).toEqual({ kind: 'binary', size: 4, preview: 'deadbeef' });
     expect(row?.[3]).toBeNull();
+  });
+
+  it('keeps the whole bytes of a blob that is longer than the preview', async () => {
+    const result = await runAll(session, "SELECT randomblob(2000) AS data, x'0102' AS tiny");
+    const [data, tiny] = result.rows[0] ?? [];
+    expect(data).toMatchObject({ kind: 'binary', size: 2000 });
+    expect(typeof data === 'object' && data !== null && data.kind === 'binary').toBe(true);
+    if (typeof data === 'object' && data !== null && data.kind === 'binary') {
+      const bytes = retainedBytes(data);
+      expect(bytes?.byteLength).toBe(2000);
+      // The preview is the start of exactly these bytes.
+      expect(
+        Buffer.from(bytes ?? [])
+          .toString('hex')
+          .startsWith(data.preview),
+      ).toBe(true);
+    }
+    if (typeof tiny === 'object' && tiny !== null && tiny.kind === 'binary') {
+      expect(Array.from(retainedBytes(tiny) ?? [])).toEqual([1, 2]);
+    }
   });
 
   it('reports affected rows for writes', async () => {

@@ -24,6 +24,13 @@ describe('completionContextAt', () => {
       expect(at('INSERT INTO |').kind).toBe('table');
     });
 
+    it('starts afresh after the terminator of the previous statement', () => {
+      expect(at('SELECT * FROM t; |')).toMatchObject({ kind: 'any', tables: [], prefix: '' });
+      expect(at('SELECT * FROM t;\nsel|')).toMatchObject({ kind: 'any', prefix: 'sel' });
+      // A comment after the statement is not a terminator.
+      expect(at('SELECT * FROM t -- x\n|').kind).not.toBe('any');
+    });
+
     it('expects a column after SELECT, WHERE, ON, SET, HAVING and BY', () => {
       expect(at('SELECT |').kind).toBe('column');
       expect(at('SELECT * FROM t WHERE |').kind).toBe('column');

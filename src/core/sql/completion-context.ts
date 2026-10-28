@@ -110,6 +110,17 @@ export function completionContextAt(
   if (statement === undefined || offset < statement.start) {
     return { kind: 'any', prefix: '', start: offset, tables: [], inText: false };
   }
+  // Past the terminator of the statement, the next one begins: `SELECT 1; |`.
+  if (afterTerminator(all, statement.end, offset)) {
+    const word = wordAt(all, offset);
+    return {
+      kind: 'any',
+      prefix: word === undefined ? '' : sql.slice(word.start, offset),
+      start: word?.start ?? offset,
+      tables: [],
+      inText: false,
+    };
+  }
   const tokens = all.filter((token) => token.end > statement.start);
 
   const word = wordAt(tokens, offset);
@@ -161,6 +172,17 @@ function isTypingInside(sql: string, token: Token, offset: number): boolean {
   const text = textOf(sql, token);
   const openEnded = token.unterminated === true || text.startsWith('--') || text.startsWith('#');
   return openEnded && offset === token.end;
+}
+
+/** True when something other than spaces and comments lies between a statement and the cursor. */
+export function afterTerminator(
+  tokens: readonly Token[],
+  statementEnd: number,
+  offset: number,
+): boolean {
+  return tokens.some(
+    (token) => token.start >= statementEnd && token.end <= offset && !isTrivia(token),
+  );
 }
 
 /** The word token the cursor is in or right after. */

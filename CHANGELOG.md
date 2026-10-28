@@ -35,6 +35,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   connection, with `datanest.format.*` settings for keyword, type and function case,
   indentation style, `AND`/`OR` placement, expression width and dense operators.
   `DELIMITER` commands and statements the formatter cannot read stay as they are.
+- Smarter completion: columns of every joined table labelled with their alias,
+  aliases themselves, CTEs and subqueries in `FROM` with the columns of their select
+  list (`*` included), dialect functions inserted as calls with argument
+  placeholders, and statement snippets (`sel`, `join`, `ins`, `upd`, `cte`, `upsert`…).
+
+### Fixed (completion)
+
+- After a `;` completion treats the cursor as the start of a new statement.
+- `FROM schema.` offers the tables of that schema.
 
 ### Fixed
 

@@ -69,6 +69,28 @@ describe('completion', () => {
     );
   });
 
+  it('offers functions as calls and statement snippets where a statement begins', async () => {
+    const document = await openSql('');
+    const list = await completeAt(document, 0);
+    const coalesce = list.items.find((item) => item.label === 'COALESCE');
+    assert.ok(coalesce, 'COALESCE is not offered');
+    assert.equal(coalesce.kind, vscode.CompletionItemKind.Function);
+    assert.ok(coalesce.insertText instanceof vscode.SnippetString);
+    assert.ok(labels(list).includes('sel'), 'the SELECT snippet is not offered');
+  });
+
+  it('knows the columns of a CTE without a connection', async () => {
+    const text = 'WITH big AS (SELECT id, total FROM orders) SELECT big. FROM big';
+    const document = await openSql(text);
+    const list = await completeAt(document, text.indexOf('big. ') + 4);
+    assert.deepEqual(
+      list.items
+        .filter((item) => item.kind === vscode.CompletionItemKind.Field)
+        .map((item) => (typeof item.label === 'string' ? item.label : item.label.label)),
+      ['id', 'total'],
+    );
+  });
+
   it('does not answer for documents that are not SQL', async () => {
     const document = await vscode.workspace.openTextDocument({
       language: 'plaintext',

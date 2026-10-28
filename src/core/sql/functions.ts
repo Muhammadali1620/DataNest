@@ -1,0 +1,97 @@
+// Functions completion offers, with their arguments as snippet placeholders. A short
+// list of what people type every day per dialect, not the whole manual.
+
+import type { DriverId } from '../../shared/connection';
+
+export interface SqlFunction {
+  readonly name: string;
+  /** Argument names, shown as placeholders: `COALESCE(value, fallback)`. */
+  readonly args: readonly string[];
+}
+
+function fn(name: string, ...args: string[]): SqlFunction {
+  return { name, args };
+}
+
+const COMMON: readonly SqlFunction[] = [
+  fn('COUNT', 'expression'),
+  fn('SUM', 'expression'),
+  fn('AVG', 'expression'),
+  fn('MIN', 'expression'),
+  fn('MAX', 'expression'),
+  fn('COALESCE', 'value', 'fallback'),
+  fn('NULLIF', 'value', 'other'),
+  fn('CAST', 'value AS type'),
+  fn('LOWER', 'text'),
+  fn('UPPER', 'text'),
+  fn('TRIM', 'text'),
+  fn('LENGTH', 'text'),
+  fn('SUBSTR', 'text', 'start', 'length'),
+  fn('REPLACE', 'text', 'from', 'to'),
+  fn('ABS', 'number'),
+  fn('ROUND', 'number', 'digits'),
+  fn('ROW_NUMBER'),
+  fn('RANK'),
+  fn('LAG', 'expression'),
+  fn('LEAD', 'expression'),
+];
+
+const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
+  mysql: [
+    fn('NOW'),
+    fn('CURDATE'),
+    fn('DATE_FORMAT', 'date', 'format'),
+    fn('DATE_ADD', 'date', 'INTERVAL 1 DAY'),
+    fn('DATEDIFF', 'end', 'start'),
+    fn('CONCAT', 'a', 'b'),
+    fn('CONCAT_WS', 'separator', 'a', 'b'),
+    fn('GROUP_CONCAT', 'expression'),
+    fn('IFNULL', 'value', 'fallback'),
+    fn('IF', 'condition', 'then', 'else'),
+    fn('JSON_EXTRACT', 'document', 'path'),
+    fn('JSON_OBJECT', 'key', 'value'),
+    fn('UUID'),
+    fn('LAST_INSERT_ID'),
+  ],
+  postgres: [
+    fn('NOW'),
+    fn('CURRENT_DATE'),
+    fn('DATE_TRUNC', 'unit', 'timestamp'),
+    fn('EXTRACT', 'field FROM source'),
+    fn('TO_CHAR', 'value', 'format'),
+    fn('AGE', 'end', 'start'),
+    fn('CONCAT', 'a', 'b'),
+    fn('STRING_AGG', 'expression', 'separator'),
+    fn('ARRAY_AGG', 'expression'),
+    fn('JSONB_BUILD_OBJECT', 'key', 'value'),
+    fn('JSONB_AGG', 'expression'),
+    fn('GEN_RANDOM_UUID'),
+    fn('GENERATE_SERIES', 'start', 'stop'),
+    fn('REGEXP_REPLACE', 'text', 'pattern', 'replacement'),
+  ],
+  sqlite: [
+    fn('DATETIME', 'value'),
+    fn('DATE', 'value'),
+    fn('STRFTIME', 'format', 'value'),
+    fn('IFNULL', 'value', 'fallback'),
+    fn('IIF', 'condition', 'then', 'else'),
+    fn('GROUP_CONCAT', 'expression', 'separator'),
+    fn('JSON_EXTRACT', 'document', 'path'),
+    fn('JSON_OBJECT', 'key', 'value'),
+    fn('INSTR', 'text', 'part'),
+    fn('PRINTF', 'format', 'value'),
+    fn('RANDOM'),
+    fn('TYPEOF', 'value'),
+  ],
+};
+
+/** The functions of a dialect, common ones first; standard SQL when none is known. */
+export function functionsOf(driver?: DriverId): readonly SqlFunction[] {
+  return driver === undefined ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
+}
+
+/** `COALESCE(${1:value}, ${2:fallback})`: a call with tab stops for its arguments. */
+export function callSnippet(fn: SqlFunction): string {
+  const args = fn.args.map((arg, index) => `\${${index + 1}:${arg}}`).join(', ');
+  return `${fn.name}(${args})`;
+}

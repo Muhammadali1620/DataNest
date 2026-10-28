@@ -108,6 +108,12 @@ export const en = {
   'grid.deleteRows': 'Delete',
   'grid.restoreRows': 'Restore',
   'grid.editError.row-deleted': 'The row is marked for deletion; restore it first',
+  'grid.save': 'Save {0} changes',
+  'grid.saving': 'Saving…',
+  'grid.previewSql': 'Preview SQL',
+  'grid.discard': 'Discard all',
+  'grid.revertRows': 'Revert rows',
+  'grid.saveFailed': 'Could not save the changes',
 } as const;
 
 export type MessageKey = keyof typeof en;

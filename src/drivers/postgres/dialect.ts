@@ -75,4 +75,6 @@ export const postgresDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  defaultKeyword: true,
+  insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
 };

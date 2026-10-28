@@ -17,6 +17,8 @@ export interface EditableColumn {
   readonly kind: InputKind;
   /** Allowed values of an enum column. */
   readonly options?: readonly string[];
+  /** The column's default expression as the server reports it. */
+  readonly defaultValue?: string;
 }
 
 export interface EditableResult {
@@ -142,6 +144,10 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
     }
     keyIndexes.push(index);
   }
+  // A binary key cannot be written back exactly (only a preview of it is held).
+  if (key.some((name) => inputKindOf(findByName(input.columns, name)?.dataType) === 'binary')) {
+    return readOnly('no-key');
+  }
   const columns = columnMap.map((name): EditableColumn | null => {
     const info = name === null ? undefined : findByName(input.columns, name);
     if (info === undefined) {
@@ -154,6 +160,7 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
       nullable: info.nullable,
       kind: inputKindOf(info.dataType),
       ...(options === undefined ? {} : { options }),
+      ...(info.defaultValue === undefined ? {} : { defaultValue: info.defaultValue }),
     };
   });
   return { editable: true, table: input.table, columnMap, columns, keyColumns: key, keyIndexes };

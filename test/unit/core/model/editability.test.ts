@@ -152,6 +152,26 @@ describe('resolveEditability', () => {
     expect(result).toEqual(readOnlyResult('no-key'));
   });
 
+  it('is read-only when the key is binary, since it cannot be written back exactly', () => {
+    const columns = [column('id', { primaryKey: true, dataType: 'binary(16)' }), column('v')];
+    const result = resolveEditability(
+      input({ columns, items: [{ kind: 'star' }], resultColumns: ['id', 'v'] }),
+    );
+    expect(result).toEqual(readOnlyResult('no-key'));
+  });
+
+  it('carries the default of a column to the editor', () => {
+    const columns = [
+      column('id', { primaryKey: true }),
+      column('created', { defaultValue: 'CURRENT_TIMESTAMP', nullable: true }),
+    ];
+    const result = resolveEditability(input({ columns, resultColumns: ['id', 'created'] }));
+    expect(result).toMatchObject({
+      editable: true,
+      columns: [{ name: 'id' }, { name: 'created', defaultValue: 'CURRENT_TIMESTAMP' }],
+    });
+  });
+
   it('edits by a unique key when there is no primary key', () => {
     const columns = [column('code'), column('label', { nullable: true })];
     const result = resolveEditability(

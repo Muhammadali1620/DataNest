@@ -33,6 +33,10 @@ export interface Dialect {
   literal(value: CellValue): string;
   /** Wraps or extends a SELECT so it returns `limit` rows starting at `offset`. */
   paginate(sql: string, limit: number, offset: number): string;
+  /** True where `UPDATE … SET column = DEFAULT` works; SQLite has no such keyword. */
+  readonly defaultKeyword: boolean;
+  /** An INSERT that fills every column with its default; the table is already quoted. */
+  insertDefaultRow(quotedTable: string): string;
 }
 
 export interface ResultColumn {

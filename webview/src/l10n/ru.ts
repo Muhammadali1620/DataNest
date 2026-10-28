@@ -111,4 +111,10 @@ export const ru: Record<MessageKey, string> = {
   'grid.deleteRows': 'Удалить',
   'grid.restoreRows': 'Вернуть',
   'grid.editError.row-deleted': 'Строка помечена на удаление — сначала верните её',
+  'grid.save': 'Сохранить изменений: {0}',
+  'grid.saving': 'Сохранение…',
+  'grid.previewSql': 'Предпросмотр SQL',
+  'grid.discard': 'Отменить все',
+  'grid.revertRows': 'Откатить строки',
+  'grid.saveFailed': 'Не удалось сохранить изменения',
 };

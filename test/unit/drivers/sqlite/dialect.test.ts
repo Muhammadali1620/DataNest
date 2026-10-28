@@ -58,3 +58,13 @@ describe('sqliteDialect.keywords', () => {
     expect(sqliteDialect.keywords.every((k) => k === k.toUpperCase())).toBe(true);
   });
 });
+
+describe('sqliteDialect default handling', () => {
+  it('says whether SET column = DEFAULT is available', () => {
+    expect(sqliteDialect.defaultKeyword).toBe(false);
+  });
+
+  it('inserts a row of defaults', () => {
+    expect(sqliteDialect.insertDefaultRow('"t"')).toBe('INSERT INTO "t" DEFAULT VALUES');
+  });
+});

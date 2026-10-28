@@ -85,3 +85,13 @@ describe('mysqlDialect.keywords', () => {
     expect(mysqlDialect.keywords.every((k) => k === k.toUpperCase())).toBe(true);
   });
 });
+
+describe('mysqlDialect default handling', () => {
+  it('says whether SET column = DEFAULT is available', () => {
+    expect(mysqlDialect.defaultKeyword).toBe(true);
+  });
+
+  it('inserts a row of defaults', () => {
+    expect(mysqlDialect.insertDefaultRow('`t`')).toBe('INSERT INTO `t` () VALUES ()');
+  });
+});

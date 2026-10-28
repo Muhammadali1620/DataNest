@@ -77,4 +77,6 @@ export const sqliteDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  defaultKeyword: false,
+  insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
 };

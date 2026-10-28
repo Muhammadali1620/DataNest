@@ -42,5 +42,8 @@
   "Exported {0} rows": "Экспортировано строк: {0}",
   "This result is no longer available": "Этого результата больше нет",
   "Run a query first: there is no result to export": "Сначала выполните запрос: экспортировать нечего",
-  "Pick a format": "Выберите формат"
+  "Pick a format": "Выберите формат",
+  "Changes were saved, but the rows could not be read again. Run the query again.": "Изменения сохранены, но строки не удалось перечитать. Выполните запрос заново.",
+  "Discard": "Отменить",
+  "Discard {0} unsaved changes?": "Отменить несохранённые изменения: {0}?"
 }

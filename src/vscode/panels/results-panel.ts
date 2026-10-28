@@ -3,6 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
 import type { ExportFormat } from '../../services/result-export';
 import type { ResultEditor } from '../../services/result-editor';
+import type { ResultSaver } from '../../services/result-saver';
 import type { ResultStore } from '../../services/result-store';
 import {
   MAX_SEARCH_HITS,
@@ -18,6 +19,7 @@ export interface ResultsPanelDeps {
   readonly results: ResultStore;
   readonly runner: QueryRunner;
   readonly editor: ResultEditor;
+  readonly saver: ResultSaver;
   /** Shows another page of a table view; absent where paging makes no sense. */
   readonly pageTo?: (resultId: string, offset: number) => Promise<boolean>;
   /** Writes a result to a file the user picks. */
@@ -102,6 +104,49 @@ export class ResultsPanel implements vscode.Disposable {
         changes: window.changes,
         states: window.states,
       };
+    });
+    this.rpc.handle('saveChanges', async ({ resultId }) => {
+      const outcome = await this.deps.saver.save(resultId);
+      if (outcome.ok) {
+        if (!outcome.refreshed) {
+          void vscode.window.showWarningMessage(
+            vscode.l10n.t(
+              'Changes were saved, but the rows could not be read again. Run the query again.',
+            ),
+          );
+        }
+        return { ok: true, statements: outcome.statements, refreshed: outcome.refreshed };
+      }
+      return {
+        ok: false,
+        message: outcome.message,
+        ...(outcome.statement === undefined ? {} : { statement: outcome.statement }),
+      };
+    });
+    this.rpc.handle('previewChanges', async ({ resultId }) => {
+      const outcome = await this.deps.saver.preview(resultId);
+      if (!outcome.ok) {
+        return { ok: false, message: outcome.message };
+      }
+      const document = await vscode.workspace.openTextDocument({
+        language: 'sql',
+        content: outcome.sql,
+      });
+      await vscode.window.showTextDocument(document, { preview: true });
+      return { ok: true };
+    });
+    this.rpc.handle('discardChanges', async ({ resultId }) => {
+      const summary = this.deps.results.get(resultId);
+      const count =
+        (summary?.changedCells ?? 0) + (summary?.insertedRows ?? 0) + (summary?.deletedRows ?? 0);
+      // A webview cannot ask for confirmation itself, and this cannot be undone.
+      const discard = vscode.l10n.t('Discard');
+      const choice = await vscode.window.showWarningMessage(
+        vscode.l10n.t('Discard {0} unsaved changes?', count),
+        { modal: true },
+        discard,
+      );
+      return { ok: choice === discard && this.deps.results.discardPending(resultId) };
     });
     this.rpc.handle('rowAction', ({ resultId, action, rows }) =>
       this.deps.editor.rowAction(resultId, action, rows),

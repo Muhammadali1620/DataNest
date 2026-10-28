@@ -223,6 +223,7 @@ export class QueryRunner {
         documentUri: request.documentUri,
         statement: statement.text,
         statementStart: statement.start,
+        origin: { target: request.target, owner: run.owner },
         columns,
         rows,
         truncated,

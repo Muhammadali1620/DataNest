@@ -59,3 +59,13 @@ describe('postgresDialect.keywords', () => {
     expect(postgresDialect.keywords.every((k) => k === k.toUpperCase())).toBe(true);
   });
 });
+
+describe('postgresDialect default handling', () => {
+  it('says whether SET column = DEFAULT is available', () => {
+    expect(postgresDialect.defaultKeyword).toBe(true);
+  });
+
+  it('inserts a row of defaults', () => {
+    expect(postgresDialect.insertDefaultRow('"t"')).toBe('INSERT INTO "t" DEFAULT VALUES');
+  });
+});

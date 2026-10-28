@@ -94,6 +94,7 @@ export class TableViewer {
         documentUri,
         statement: sql,
         statementStart: 0,
+        origin: { target: request.target, owner: TableViewer.owner(documentUri) },
         columns,
         rows,
         truncated: false,

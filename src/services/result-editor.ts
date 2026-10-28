@@ -121,6 +121,8 @@ export class ResultEditor {
         }
         return { ok: true };
       }
+      case 'revert':
+        return this.results.revertRows(resultId, rows) ? { ok: true } : fail('no-such-row');
       case 'restore': {
         for (const index of new Set(rows)) {
           if (!this.results.restoreRow(resultId, index)) {

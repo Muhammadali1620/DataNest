@@ -21,6 +21,8 @@ export const fakeDialect: Dialect = {
   quoteTable: (table) => `"${table.name}"`,
   literal: () => 'NULL',
   paginate: (sql, limit, offset) => `${sql} LIMIT ${limit} OFFSET ${offset}`,
+  defaultKeyword: true,
+  insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
 };
 
 export class FakeMetadata implements MetadataReader {

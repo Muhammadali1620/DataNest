@@ -13,6 +13,8 @@ function fakeDriver(id: DriverId): Driver {
       quoteTable: (table) => table.name,
       literal: () => 'NULL',
       paginate: (sql) => sql,
+      defaultKeyword: true,
+      insertDefaultRow: () => '',
     },
     capabilities: { databases: true, schemas: false, databaseScopedSessions: false, cancel: true },
     openSession: () => Promise.reject(new Error('not implemented')),

@@ -140,13 +140,23 @@ describe('ResultEditor rows', () => {
     expect(editor.editCell(id, 0, 1, { kind: 'text', text: 'x' })).toEqual({ ok: true });
   });
 
+  it('reverts rows: edits, deletion marks and new rows', () => {
+    const { store, id, editor } = setup();
+    editor.editCell(id, 0, 1, { kind: 'text', text: 'x' });
+    editor.rowAction(id, 'delete', [1]);
+    editor.rowAction(id, 'add', []);
+    expect(editor.rowAction(id, 'revert', [0, 1, 2])).toEqual({ ok: true });
+    expect(store.get(id)).toMatchObject({ changedCells: 0, insertedRows: 0, deletedRows: 0 });
+    expect(editor.rowAction(id, 'revert', [99])).toEqual({ ok: false, error: 'no-such-row' });
+  });
+
   it('refuses rows that are not there and read-only results', () => {
     const { id, editor } = setup();
     expect(editor.rowAction(id, 'delete', [99])).toEqual({ ok: false, error: 'no-such-row' });
     expect(editor.rowAction(id, 'duplicate', [99])).toEqual({ ok: false, error: 'no-such-row' });
     expect(editor.rowAction(id, 'restore', [99])).toEqual({ ok: false, error: 'no-such-row' });
     const readOnly = setup({ edit: { editable: false, reason: 'no-key' } });
-    for (const action of ['add', 'duplicate', 'delete', 'restore'] as const) {
+    for (const action of ['add', 'duplicate', 'delete', 'restore', 'revert'] as const) {
       expect(readOnly.editor.rowAction(readOnly.id, action, [0])).toEqual({
         ok: false,
         error: 'not-editable',

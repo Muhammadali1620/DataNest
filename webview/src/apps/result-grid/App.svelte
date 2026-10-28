@@ -79,6 +79,67 @@ import type { RowAction } from '../../../../src/shared/row-action';
     }
   }
 
+  /** The failure of the last save, with the statement that caused it. */
+  let saveProblem = $state<{ message: string; statement?: string | undefined } | undefined>(
+    undefined,
+  );
+  let saving = $state(false);
+
+  function pendingCount(tab: ResultTab | undefined): number {
+    return tab === undefined ? 0 : tab.changedCells + tab.insertedRows + tab.deletedRows;
+  }
+
+  async function onSave(): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined || saving || pendingCount(tab) === 0) {
+      return;
+    }
+    saving = true;
+    saveProblem = undefined;
+    try {
+      const answer = await rpc.request('saveChanges', { resultId: tab.id });
+      if (!answer.ok) {
+        saveProblem = {
+          message: answer.message ?? t('grid.saveFailed'),
+          statement: answer.statement,
+        };
+      }
+    } catch (error) {
+      saveProblem = { message: error instanceof Error ? error.message : t('grid.saveFailed') };
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function onPreview(): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return;
+    }
+    saveProblem = undefined;
+    try {
+      const answer = await rpc.request('previewChanges', { resultId: tab.id });
+      if (!answer.ok) {
+        saveProblem = { message: answer.message ?? t('grid.saveFailed') };
+      }
+    } catch (error) {
+      saveProblem = { message: error instanceof Error ? error.message : t('grid.saveFailed') };
+    }
+  }
+
+  async function onDiscard(): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return;
+    }
+    saveProblem = undefined;
+    try {
+      await rpc.request('discardChanges', { resultId: tab.id });
+    } catch (error) {
+      saveProblem = { message: error instanceof Error ? error.message : t('grid.saveFailed') };
+    }
+  }
+
   function changeAt(row: number, column: number): 'value' | 'default' | undefined {
     return loaded >= 0 ? cache.changeAt(row, column) : undefined;
   }
@@ -148,6 +209,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   function resetFor(tab: ResultTab | undefined): void {
+    saveProblem = undefined;
     cache = new RowCache();
     cache.reset(displayCount(tab));
     pending = undefined;
@@ -471,6 +533,48 @@ import type { RowAction } from '../../../../src/shared/row-action';
             </button>
           {/if}
         </div>
+        {#if pendingCount(activeTab) > 0}
+          <div class="changes" data-testid="changes-bar">
+            <button
+              type="button"
+              class="primary"
+              disabled={saving}
+              onclick={() => {
+                void onSave();
+              }}
+            >
+              {saving ? t('grid.saving') : t('grid.save', pendingCount(activeTab))}
+            </button>
+            <button
+              type="button"
+              class="cancel"
+              disabled={saving}
+              onclick={() => {
+                void onPreview();
+              }}
+            >
+              {t('grid.previewSql')}
+            </button>
+            <button
+              type="button"
+              class="cancel"
+              disabled={saving}
+              onclick={() => {
+                void onDiscard();
+              }}
+            >
+              {t('grid.discard')}
+            </button>
+          </div>
+        {/if}
+        {#if saveProblem !== undefined}
+          <div class="save-problem" role="alert" data-testid="save-error">
+            <p>{saveProblem.message}</p>
+            {#if saveProblem.statement !== undefined}
+              <p class="statement"><code>{saveProblem.statement}</code></p>
+            {/if}
+          </div>
+        {/if}
         <Grid
           resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}`}
           sort={activeTab.sort}
@@ -488,6 +592,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {stateAt}
           {onEdit}
           {onRowAction}
+          {onSave}
           {t}
         />
       {/if}
@@ -580,6 +685,48 @@ import type { RowAction } from '../../../../src/shared/row-action';
     border: none;
     border-radius: 2px;
     cursor: pointer;
+  }
+
+  .changes {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    align-items: center;
+    padding: 2px 8px;
+  }
+
+  .primary {
+    padding: 2px 10px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .primary:disabled,
+  .cancel:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .save-problem {
+    flex: none;
+    margin: 2px 8px;
+    padding: 4px 8px;
+    color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
+    background: var(--vscode-inputValidation-errorBackground);
+    border: 1px solid var(--vscode-inputValidation-errorBorder);
+  }
+
+  .save-problem p {
+    margin: 0;
+  }
+
+  .statement {
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+    font-family: var(--vscode-editor-font-family);
   }
 
   .find {

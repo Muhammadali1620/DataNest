@@ -81,13 +81,21 @@ async function open(tab: ResultTab = EDITABLE_TAB, answer: EditAnswer = { ok: tr
   host.handle('rows', rowsHandler);
   host.handle('editCell', edits);
   host.handle('rowAction', rowActions);
+  const saves = vi.fn((_: unknown): { ok: boolean; message?: string; statement?: string } => ({
+    ok: true,
+  }));
+  const previews = vi.fn((_: unknown): { ok: boolean; message?: string } => ({ ok: true }));
+  const discards = vi.fn((_: unknown) => ({ ok: true }));
+  host.handle('saveChanges', saves);
+  host.handle('previewChanges', previews);
+  host.handle('discardChanges', discards);
   render(App, { props: { rpc, t: createTranslator('en') } });
   await flush();
   host.emit('state', { tabs: [tab], activeId: tab.id, running: false });
   await waitFor(() => {
     expect(cells().length).toBeGreaterThan(0);
   });
-  return { host, served, edits, rowActions, rowsHandler, tab };
+  return { host, served, edits, rowActions, rowsHandler, tab, saves, previews, discards };
 }
 
 function cells(): HTMLElement[] {
@@ -445,6 +453,124 @@ describe('result grid editing', () => {
       await flush();
       expect(screen.queryByRole('button', { name: 'Add row' })).toBeNull();
       expect(rowActions).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saving', () => {
+    async function withPending() {
+      const harness = await open();
+      harness.host.emit('state', {
+        tabs: [{ ...harness.tab, revision: 1, changedCells: 2, insertedRows: 1 }],
+        activeId: harness.tab.id,
+        running: false,
+      });
+      await screen.findByTestId('changes-bar');
+      // The rows are read again after the state moved.
+      await waitFor(() => {
+        expect(cells().length).toBeGreaterThan(1);
+      });
+      return harness;
+    }
+
+    it('shows no changes bar while nothing is pending', async () => {
+      await open();
+      expect(screen.queryByTestId('changes-bar')).toBeNull();
+    });
+
+    it('counts every kind of pending change on the Save button', async () => {
+      await withPending();
+      expect(screen.getByRole('button', { name: 'Save 3 changes' })).toBeTruthy();
+    });
+
+    it('saves and asks the host for nothing else', async () => {
+      const { saves } = await withPending();
+      await fireEvent.click(screen.getByRole('button', { name: 'Save 3 changes' }));
+      await waitFor(() => {
+        expect(saves).toHaveBeenCalledWith({ resultId: 'result-1' });
+      });
+      expect(screen.queryByTestId('save-error')).toBeNull();
+    });
+
+    it('saves with Ctrl+S', async () => {
+      const { saves } = await withPending();
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 's', ctrlKey: true });
+      await waitFor(() => {
+        expect(saves).toHaveBeenCalledOnce();
+      });
+    });
+
+    it('shows why a save failed and the statement that failed', async () => {
+      const { saves } = await withPending();
+      saves.mockReturnValueOnce({
+        ok: false,
+        message: 'Duplicate entry',
+        statement: 'UPDATE users SET id = 1',
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save 3 changes' }));
+      const problem = await screen.findByTestId('save-error');
+      expect(problem.textContent).toContain('Duplicate entry');
+      expect(problem.textContent).toContain('UPDATE users SET id = 1');
+    });
+
+    it('clears the failure on the next try', async () => {
+      const { saves } = await withPending();
+      saves.mockReturnValueOnce({ ok: false, message: 'Nope' });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save 3 changes' }));
+      await screen.findByTestId('save-error');
+      await fireEvent.click(screen.getByRole('button', { name: 'Save 3 changes' }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('save-error')).toBeNull();
+      });
+    });
+
+    it('previews the SQL and shows a refusal', async () => {
+      const { previews } = await withPending();
+      previews.mockReturnValueOnce({ ok: false, message: 'There are no changes to save' });
+      await fireEvent.click(screen.getByRole('button', { name: 'Preview SQL' }));
+      await waitFor(() => {
+        expect(previews).toHaveBeenCalledWith({ resultId: 'result-1' });
+      });
+      expect((await screen.findByTestId('save-error')).textContent).toContain('no changes');
+    });
+
+    it('discards through the host, which asks the user first', async () => {
+      const { discards } = await withPending();
+      await fireEvent.click(screen.getByRole('button', { name: 'Discard all' }));
+      await waitFor(() => {
+        expect(discards).toHaveBeenCalledWith({ resultId: 'result-1' });
+      });
+    });
+
+    it('reverts the selected rows', async () => {
+      const { rowActions } = await withPending();
+      await fireEvent.pointerDown(cell(1, 0), { button: 0 });
+      await fireEvent.click(screen.getByRole('button', { name: 'Revert rows' }));
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({
+          resultId: 'result-1',
+          action: 'revert',
+          rows: [1],
+        });
+      });
+    });
+
+    it('does not save with Ctrl+S when there is nothing pending', async () => {
+      const { saves } = await open();
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 's', ctrlKey: true });
+      await flush();
+      expect(saves).not.toHaveBeenCalled();
+    });
+
+    it('does not save with Ctrl+S on a read-only result', async () => {
+      const { edit: _edit, ...rest } = EDITABLE_TAB;
+      const { saves } = await open({
+        ...rest,
+        changedCells: 1,
+        edit: { editable: false, reason: 'view' },
+      });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 's', ctrlKey: true });
+      await flush();
+      expect(saves).not.toHaveBeenCalled();
     });
   });
 });

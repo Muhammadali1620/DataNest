@@ -15,6 +15,7 @@ import {
   suggestedFileName,
 } from './services/result-export';
 import { ResultEditor } from './services/result-editor';
+import { ResultSaver } from './services/result-saver';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
@@ -116,10 +117,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   const editor = new ResultEditor(results);
+  const saver = new ResultSaver({
+    manager,
+    results,
+    isBusy: (documentUri) => runner.isRunning(documentUri),
+    rowLimit: (summary) => (summary.page === undefined ? readRowLimit() : readPageSize()),
+    logger,
+  });
 
   const showResults = (documentUri: string): void => {
     ResultsPanel.show(
-      { extensionUri: context.extensionUri, results, runner, editor, pageTo, exportResult, logger },
+      {
+        extensionUri: context.extensionUri,
+        results,
+        runner,
+        editor,
+        saver,
+        pageTo,
+        exportResult,
+        logger,
+      },
       documentUri,
     );
   };

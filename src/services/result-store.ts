@@ -4,7 +4,9 @@
 
 import { type Disposable, toDisposable } from '../core/disposable';
 import type { ResultEdit } from '../core/model/editability';
+import type { SessionTarget } from './connection-manager';
 import type { ResultColumn } from '../drivers/driver';
+import type { ChangePlan } from './change-sql';
 import { type SortDirection, sortRows } from '../shared/cell-compare';
 import { findRows, type SearchHits } from '../shared/cell-search';
 import {
@@ -57,6 +59,8 @@ export interface ResultSummary {
   readonly page?: ResultPage;
   /** Whether rows can be edited in place; absent for statements that return no rows. */
   readonly edit?: ResultEdit;
+  /** Where the rows came from, so edits can be saved through the same session. */
+  readonly origin?: ResultOrigin;
   /** Cells changed in rows that exist on the server; zero when nothing waits to be saved. */
   readonly changedCells: number;
   /** New rows waiting to be inserted; the grid shows them after the server's rows. */
@@ -74,15 +78,32 @@ export interface ResultError {
   readonly position?: number;
 }
 
+/** The connection and session owner that produced a result. */
+export interface ResultOrigin {
+  readonly target: SessionTarget;
+  /** The `ConnectionManager` owner key of the session that ran the statement. */
+  readonly owner: string;
+}
+
 /** A result with its rows; only the store sees this whole object. */
 interface StoredResult extends Omit<
   ResultSummary,
-  'changedCells' | 'insertedRows' | 'deletedRows' | 'revision'
+  | 'changedCells'
+  | 'insertedRows'
+  | 'deletedRows'
+  | 'revision'
+  | 'columns'
+  | 'rowCount'
+  | 'truncated'
 > {
+  // These change when saved edits are re-read from the server.
+  columns: readonly ResultColumn[];
+  rowCount: number;
+  truncated: boolean;
   /** Rows in the order they are shown. */
   rows: ResultRow[];
   /** The order the server returned, so sorting can be undone. */
-  readonly original: readonly ResultRow[];
+  original: readonly ResultRow[];
   sort?: ResultSort;
   /** Pending changes, keyed by the row object so sorting cannot move them. */
   readonly pending: PendingEdits;
@@ -111,6 +132,7 @@ export interface NewResult {
   readonly error?: ResultError;
   readonly page?: ResultPage;
   readonly edit?: ResultEdit;
+  readonly origin?: ResultOrigin;
 }
 
 /** How many results of one document are kept; older ones are dropped. */
@@ -149,6 +171,7 @@ export class ResultStore {
       ...(result.error === undefined ? {} : { error: result.error }),
       ...(result.page === undefined ? {} : { page: result.page }),
       ...(result.edit === undefined ? {} : { edit: result.edit }),
+      ...(result.origin === undefined ? {} : { origin: result.origin }),
     };
     this.results.set(id, stored);
     const ids = this.byDocument.get(result.documentUri) ?? [];
@@ -298,6 +321,90 @@ export class ResultStore {
       this.notify(stored.documentUri);
     }
     return done;
+  }
+
+  /** Everything waiting to be saved, in the shape the SQL builder takes. */
+  pendingPlan(id: string): Pick<ChangePlan, 'updates' | 'deletions' | 'insertions'> | undefined {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return undefined;
+    }
+    return {
+      updates: stored.pending.updates(stored.rows),
+      deletions: stored.pending.deletions(stored.rows),
+      insertions: stored.pending.insertions(),
+    };
+  }
+
+  /** Throws away every pending change of a result. */
+  discardPending(id: string): boolean {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return false;
+    }
+    stored.pending.clear();
+    this.notify(stored.documentUri);
+    return true;
+  }
+
+  /**
+   * Withdraws the pending changes of some rows: cell edits go, a deletion mark is
+   * lifted and a new row is dropped. The rows are named as the grid shows them.
+   */
+  revertRows(id: string, indexes: readonly number[]): boolean {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return false;
+    }
+    const total = stored.rows.length + stored.pending.insertedRows;
+    // Check them all first: a bad index must not leave the others half reverted.
+    if (indexes.some((index) => index < 0 || index >= total)) {
+      return false;
+    }
+    // Highest first, because dropping a new row moves the ones after it.
+    for (const index of [...new Set(indexes)].sort((a, b) => b - a)) {
+      if (index >= stored.rows.length) {
+        stored.pending.removeInserted(index - stored.rows.length);
+        continue;
+      }
+      const row = stored.rows[index];
+      if (row === undefined) {
+        continue;
+      }
+      stored.pending.setDeleted(row, false);
+      for (let column = 0; column < row.length; column++) {
+        if (stored.pending.changeOf(row, column) !== undefined) {
+          stored.pending.setChange(row, column, undefined);
+        }
+      }
+    }
+    this.notify(stored.documentUri);
+    return true;
+  }
+
+  /**
+   * Swaps in freshly read rows after the changes were saved, dropping every pending
+   * change. A sort the user had chosen is applied again to the new rows.
+   */
+  replaceRows(
+    id: string,
+    columns: readonly ResultColumn[],
+    rows: ResultRow[],
+    truncated: boolean,
+  ): boolean {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return false;
+    }
+    stored.columns = columns;
+    stored.original = [...rows];
+    stored.rows =
+      stored.sort === undefined ? rows : sortRows(rows, stored.sort.column, stored.sort.direction);
+    stored.rowCount = rows.length;
+    stored.truncated = truncated;
+    stored.pending.clear();
+    this.notify(stored.documentUri);
+    return true;
   }
 
   /** Takes the deletion mark off a server row. */

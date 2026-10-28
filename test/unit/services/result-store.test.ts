@@ -375,6 +375,120 @@ describe('ResultStore', () => {
     });
   });
 
+  describe('saving support', () => {
+    const rows = [
+      [1, 'a'],
+      [2, 'b'],
+      [3, 'c'],
+    ];
+    function add() {
+      const store = new ResultStore();
+      const { id } = store.add(
+        result({
+          rows,
+          columns: [{ name: 'id' }, { name: 'v' }],
+          origin: { target: { connectionId: 'c1', database: 'app' }, owner: 'editor:x' },
+        }),
+      );
+      return { store, id };
+    }
+
+    it('remembers where the rows came from', () => {
+      const { store, id } = add();
+      expect(store.get(id)?.origin).toEqual({
+        target: { connectionId: 'c1', database: 'app' },
+        owner: 'editor:x',
+      });
+    });
+
+    it('hands over the pending changes as a plan', () => {
+      const { store, id } = add();
+      store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
+      store.deleteRow(id, 2);
+      store.addRow(id, new Map([[1, { kind: 'value', value: 'n' }]]));
+      const plan = store.pendingPlan(id);
+      expect(plan?.updates).toEqual([
+        { row: rows[0], cells: new Map([[1, { kind: 'value', value: 'z' }]]) },
+      ]);
+      expect(plan?.deletions).toEqual([rows[2]]);
+      expect(plan?.insertions).toHaveLength(1);
+      expect(store.pendingPlan('result-404')).toBeUndefined();
+    });
+
+    it('throws every pending change away', () => {
+      const { store, id } = add();
+      store.setChange(id, 0, 1, { kind: 'default' });
+      store.deleteRow(id, 1);
+      store.addRow(id);
+      expect(store.discardPending(id)).toBe(true);
+      expect(store.get(id)).toMatchObject({ changedCells: 0, insertedRows: 0, deletedRows: 0 });
+      expect(store.discardPending('result-404')).toBe(false);
+    });
+
+    it('reverts the chosen rows only: cell edits, deletion marks and new rows', () => {
+      const { store, id } = add();
+      store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
+      store.setChange(id, 1, 1, { kind: 'value', value: 'y' });
+      store.deleteRow(id, 2);
+      store.addRow(id);
+      store.addRow(id);
+      expect(store.revertRows(id, [0, 2, 3])).toBe(true);
+      expect(store.get(id)).toMatchObject({ changedCells: 1, insertedRows: 1, deletedRows: 0 });
+      expect(store.changeAt(id, 1, 1)).toEqual({ kind: 'value', value: 'y' });
+      expect(store.revertRows(id, [99])).toBe(false);
+      // A bad index among good ones reverts nothing.
+      expect(store.revertRows(id, [1, 99])).toBe(false);
+      expect(store.changeAt(id, 1, 1)).toEqual({ kind: 'value', value: 'y' });
+      expect(store.revertRows('result-404', [0])).toBe(false);
+    });
+
+    it('swaps in fresh rows, dropping pending changes and keeping the sort', () => {
+      const { store, id } = add();
+      store.sort(id, 0, 'desc');
+      store.setChange(id, 0, 1, { kind: 'default' });
+      expect(
+        store.replaceRows(
+          id,
+          [{ name: 'id' }, { name: 'v' }],
+          [
+            [10, 'x'],
+            [11, 'y'],
+          ],
+          true,
+        ),
+      ).toBe(true);
+      expect(store.get(id)).toMatchObject({
+        rowCount: 2,
+        truncated: true,
+        changedCells: 0,
+        sort: { column: 0, direction: 'desc' },
+      });
+      expect(store.window(id, 0, 5)?.rows).toEqual([
+        [11, 'y'],
+        [10, 'x'],
+      ]);
+      // Clearing the sort goes back to the server's order of the fresh rows.
+      store.sort(id, 0);
+      expect(store.window(id, 0, 5)?.rows.map((row) => row[0])).toEqual([10, 11]);
+    });
+
+    it('notifies when pending changes are discarded, reverted or replaced', () => {
+      const { store, id } = add();
+      let count = 0;
+      store.onDidChange(() => {
+        count += 1;
+      });
+      store.discardPending(id);
+      store.revertRows(id, [0]);
+      store.replaceRows(id, [], [], false);
+      expect(count).toBe(3);
+    });
+
+    it('refuses to replace the rows of an unknown result', () => {
+      expect(new ResultStore().replaceRows('result-404', [], [], false)).toBe(false);
+    });
+  });
+
   describe('clearing', () => {
     it('clearDocument removes only that document', () => {
       const store = new ResultStore();

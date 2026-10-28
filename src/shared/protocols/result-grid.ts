@@ -209,7 +209,7 @@ export const resultGridProtocol = defineProtocol({
       rowAction: {
         params: object({
           resultId,
-          action: literal('add', 'duplicate', 'delete', 'restore'),
+          action: literal('add', 'duplicate', 'delete', 'restore', 'revert'),
           rows: array(number({ integer: true, min: 0 }), { maxLength: MAX_ACTION_ROWS }),
         }),
         result: object({
@@ -218,6 +218,34 @@ export const resultGridProtocol = defineProtocol({
           /** Where the first new row is shown, so the page can scroll to it. */
           row: optional(number({ integer: true, min: 0 })),
         }),
+      },
+      /**
+       * Page → host: write the pending changes to the database in one transaction.
+       * On failure nothing is saved and the changes stay queued.
+       */
+      saveChanges: {
+        params: object({ resultId }),
+        result: object({
+          ok: boolean(),
+          /** Why it failed, in the user's words. */
+          message: optional(string({ maxLength: 10_000 })),
+          /** The statement that failed, when one did. */
+          statement: optional(string({ maxLength: 100_000 })),
+          /** Statements that ran. */
+          statements: optional(number({ integer: true, min: 0 })),
+          /** False when saved but the rows could not be read again. */
+          refreshed: optional(boolean()),
+        }),
+      },
+      /** Page → host: open the SQL a save would run, in a new editor. */
+      previewChanges: {
+        params: object({ resultId }),
+        result: object({ ok: boolean(), message: optional(string({ maxLength: 10_000 })) }),
+      },
+      /** Page → host: throw every pending change away. */
+      discardChanges: {
+        params: object({ resultId }),
+        result: object({ ok: boolean() }),
       },
       /** Page → host: the rows of a visible range. */
       rows: {

@@ -136,10 +136,13 @@ describe('state event', () => {
 describe('protocol shape', () => {
   it('lets the host answer rows, paging, sorting and searching', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
+      'discardChanges',
       'editCell',
       'pageTo',
+      'previewChanges',
       'rowAction',
       'rows',
+      'saveChanges',
       'search',
       'sort',
     ]);
@@ -227,6 +230,43 @@ describe('rowAction request', () => {
       ok: false,
       error: 'row-deleted',
     });
+  });
+});
+
+describe('saving requests', () => {
+  const { saveChanges, previewChanges, discardChanges, rowAction } =
+    resultGridProtocol.host.requests;
+
+  it('names a result and nothing else', () => {
+    for (const request of [saveChanges, previewChanges, discardChanges]) {
+      expect(request.params.parse({ resultId: 'result-1' })).toEqual({ resultId: 'result-1' });
+      expect(() => request.params.parse({ resultId: '' })).toThrow();
+      expect(() => request.params.parse({ resultId: 'r', sql: 'DROP TABLE t' })).toThrow();
+    }
+  });
+
+  it('answers a save with what ran, or with why it failed and which statement', () => {
+    expect(saveChanges.result.parse({ ok: true, statements: 3, refreshed: true })).toEqual({
+      ok: true,
+      statements: 3,
+      refreshed: true,
+    });
+    const failed = { ok: false, message: 'Duplicate entry', statement: 'UPDATE t SET a = 1' };
+    expect(saveChanges.result.parse(failed)).toEqual(failed);
+  });
+
+  it('answers previews and discards with a flag', () => {
+    expect(previewChanges.result.parse({ ok: false, message: 'nothing' })).toEqual({
+      ok: false,
+      message: 'nothing',
+    });
+    expect(discardChanges.result.parse({ ok: true })).toEqual({ ok: true });
+  });
+
+  it('lets a row action be a revert', () => {
+    expect(rowAction.params.parse({ resultId: 'r', action: 'revert', rows: [0] }).action).toBe(
+      'revert',
+    );
   });
 });
 

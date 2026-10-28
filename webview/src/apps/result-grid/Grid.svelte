@@ -54,6 +54,8 @@
     stateAt: (row: number) => 'inserted' | 'deleted' | undefined;
     /** Asks the host to add, duplicate, delete or restore rows. */
     onRowAction: (action: RowAction, rows: number[]) => Promise<void>;
+    /** Saves the pending changes; bound to Ctrl+S. */
+    onSave: () => Promise<void>;
     /** Sends an edit to the host; resolves to the reason it was refused, if it was. */
     onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
     t: Translate;
@@ -76,6 +78,7 @@
     stateAt,
     onEdit,
     onRowAction,
+    onSave,
     t,
   }: Props = $props();
 
@@ -227,7 +230,9 @@
 
   function rowAction(action: RowAction): void {
     const rows =
-      action === 'restore'
+      action === 'revert'
+        ? selectedRows
+        : action === 'restore'
         ? selectedRows.filter((row) => stateAt(row) === 'deleted')
         : action === 'delete'
           ? selectedRows.filter((row) => stateAt(row) !== 'deleted')
@@ -335,6 +340,11 @@
         event.preventDefault();
         onCopy(selection);
       }
+      return;
+    }
+    if (modifier && (event.key === 's' || event.key === 'S') && editColumns !== undefined) {
+      event.preventDefault();
+      void onSave();
       return;
     }
     if (modifier && (event.key === 'a' || event.key === 'A')) {
@@ -632,6 +642,16 @@
     </button>
     <button type="button" class="action" disabled={!canRestore} onclick={() => { rowAction('restore'); }}>
       {t('grid.restoreRows')}
+    </button>
+    <button
+      type="button"
+      class="action"
+      disabled={selectedRows.length === 0}
+      onclick={() => {
+        rowAction('revert');
+      }}
+    >
+      {t('grid.revertRows')}
     </button>
     <span class="hint">{t('grid.editHint')}</span>
     {#if actionError !== undefined}

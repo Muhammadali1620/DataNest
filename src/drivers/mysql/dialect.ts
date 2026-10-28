@@ -75,4 +75,6 @@ export const mysqlDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  defaultKeyword: true,
+  insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} () VALUES ()`,
 };

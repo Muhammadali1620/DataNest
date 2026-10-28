@@ -5,6 +5,11 @@ import { ConnectionStore } from '../../../../src/services/connection-store';
 import { MetadataCache } from '../../../../src/services/metadata-cache';
 import type { ConnectionConfig } from '../../../../src/shared/connection';
 import { TreeModel, type TreeTexts } from '../../../../src/vscode/tree/tree-model';
+import {
+  type ProjectFolder,
+  ProjectConnections,
+  projectConnectionId,
+} from '../../../../src/services/project-connections';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
 import { FakeDriverProvider, linkLostError } from '../../../helpers/fake-driver';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helpers/fakes';
@@ -604,5 +609,99 @@ describe('TreeModel', () => {
       const children = await model.children({ kind: 'connection', connectionId: 'missing' });
       expect(children[0]).toMatchObject({ kind: 'message', failed: true });
     });
+  });
+});
+
+describe('TreeModel project connections (V4.7)', () => {
+  const SHOP: ProjectFolder = { key: 'file:///shop', name: 'shop', root: '/shop' };
+  const BLOG: ProjectFolder = { key: 'file:///blog', name: 'blog', root: '/blog' };
+  const texts: TreeTexts = {
+    ...TEXTS,
+    project: {
+      untrusted: (count) => `untrusted ${count}`,
+      broken: (error) => `broken: ${error}`,
+      skipped: (position, problem) => `#${position}: ${problem}`,
+      empty: 'none yet',
+    },
+  };
+
+  async function setup(files: Record<string, string>, trusted = true) {
+    const logger = new RecordingLogger();
+    const projects = new ProjectConnections({
+      files: {
+        read: (folder) => Promise.resolve(files[folder.key]),
+        write: () => Promise.resolve(),
+      },
+      logger,
+    });
+    await projects.load([SHOP, BLOG], trusted);
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+      projects,
+    });
+    const manager = new ConnectionManager({ store, drivers: new FakeDriverProvider(), logger });
+    const model = new TreeModel({
+      store,
+      projects,
+      manager,
+      cache: new MetadataCache({ logger }),
+      settings: { showSystemObjects: () => false },
+      logger,
+      texts,
+    });
+    return { model, store };
+  }
+
+  const list = (...connections: unknown[]) => JSON.stringify({ connections });
+
+  it('shows projects with a file first, then the user folders and connections', async () => {
+    const { model, store } = await setup({
+      [SHOP.key]: list({ id: 'dev', name: 'Dev', driver: 'mysql', host: 'h' }),
+    });
+    await store.createFolder('Work');
+    const own = await store.add({ name: 'Mine', driver: 'sqlite', file: '/db' });
+    expect(model.roots()).toEqual([
+      { kind: 'project', key: SHOP.key, name: 'shop' },
+      { kind: 'connectionFolder', folder: 'Work' },
+      { kind: 'connection', connectionId: own.id },
+    ]);
+  });
+
+  it('lists the connections of a project under it, then the skipped entries', async () => {
+    const { model } = await setup({
+      [SHOP.key]: list(
+        { id: 'dev', name: 'Dev', driver: 'mysql', host: 'h' },
+        { name: 'Broken', driver: 'mysql' },
+      ),
+    });
+    expect(await model.children({ kind: 'project', key: SHOP.key, name: 'shop' })).toEqual([
+      { kind: 'connection', connectionId: projectConnectionId(SHOP.key, 'dev') },
+      { kind: 'message', text: '#2: host-empty', failed: true },
+    ]);
+  });
+
+  it('says so when the file lists nothing, is broken or the workspace is untrusted', async () => {
+    const node = { kind: 'project', key: SHOP.key, name: 'shop' } as const;
+    expect(await (await setup({ [SHOP.key]: list() })).model.children(node)).toEqual([
+      { kind: 'message', text: 'none yet' },
+    ]);
+    const broken = await (await setup({ [SHOP.key]: '{' })).model.children(node);
+    expect(broken).toMatchObject([{ kind: 'message', failed: true }]);
+    expect((broken[0] as { text: string }).text).toMatch(/^broken: /);
+    const untrusted = await setup(
+      { [SHOP.key]: list({ name: 'A', driver: 'mysql', host: 'h' }) },
+      false,
+    );
+    expect(untrusted.model.roots()).toEqual([node]);
+    expect(await untrusted.model.children(node)).toEqual([
+      { kind: 'message', text: 'untrusted 1' },
+    ]);
+  });
+
+  it('lists nothing for a project that is gone', async () => {
+    const { model } = await setup({});
+    expect(await model.children({ kind: 'project', key: SHOP.key, name: 'shop' })).toEqual([]);
   });
 });

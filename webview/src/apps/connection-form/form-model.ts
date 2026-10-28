@@ -105,6 +105,8 @@ export interface FormFields {
   color: ConnectionColor | '';
   production: boolean;
   readOnly: boolean;
+  /** Key of the project whose file keeps the connection; empty for the user's own list. */
+  project: string;
 }
 
 export function fieldsFrom(state: ConnectionFormState): FormFields {
@@ -131,14 +133,18 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     color: input.color ?? '',
     production: input.production === true,
     readOnly: input.readOnly === true,
+    project: state.project?.key ?? '',
   };
 }
 
-/** Folder, color and the production and read-only flags apply to every driver. */
+/**
+ * Folder, color and the production and read-only flags apply to every driver. A project
+ * connection has no folder: the project is its folder in the tree.
+ */
 function arrangement(
   fields: FormFields,
 ): Pick<ConnectionInput, 'folder' | 'color' | 'production' | 'readOnly'> {
-  const folder = trim(fields.folder);
+  const folder = fields.project === '' ? trim(fields.folder) : undefined;
   return {
     ...(folder === undefined ? {} : { folder }),
     ...(fields.color === '' ? {} : { color: fields.color }),
@@ -277,6 +283,7 @@ export function toDraft(fields: FormFields): ConnectionDraft {
   return {
     input,
     password: passwordChange(fields),
+    ...(fields.project === '' ? {} : { project: fields.project }),
     ...(input.ssh === undefined
       ? {}
       : { ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)) }),

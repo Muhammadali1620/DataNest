@@ -19,6 +19,13 @@ export const ru: Record<MessageKey, string> = {
   'form.url.error.scheme': 'Поддерживаются только mysql://, mariadb://, postgres:// и sqlite://',
   'form.passwordImported': 'Пароль из URL будет сохранён; введите другой, чтобы заменить',
   'form.name': 'Название',
+  'form.place': 'Где хранить',
+  'form.place.mine': 'Мои подключения (только на этом компьютере)',
+  'form.place.project': 'Проект «{0}» (.vscode/datanest.json, общий)',
+  'form.place.hint':
+    'Файл проекта можно закоммитить для команды: паролей в нём нет, они остаются на этом компьютере',
+  'form.place.inProject':
+    'Хранится в .vscode/datanest.json проекта «{0}»: его видят все, кто открывает проект. Пароль остаётся на этом компьютере.',
   'form.folder': 'Папка',
   'form.folderHint': 'Необязательно: папка в дереве; новое имя создаёт папку',
   'form.color': 'Цвет',

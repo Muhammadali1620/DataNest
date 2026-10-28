@@ -3,6 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
+import { PROJECT_FILE_PATH } from '../../services/project-connections';
 import { describeTarget, describeTunnel } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
 import { connectionUri, tagText } from './connection-decorations';
@@ -17,7 +18,7 @@ import {
   type TableFolder,
   type TreeNode,
 } from './nodes';
-import { TreeModel, type TreeSettings } from './tree-model';
+import { type ProjectSource, TreeModel, type TreeSettings } from './tree-model';
 
 export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
@@ -27,6 +28,7 @@ export interface ConnectionsTreeDeps {
   readonly cache: MetadataCache;
   readonly settings: TreeSettings;
   readonly logger: Logger;
+  readonly projects?: ProjectSource;
 }
 
 /** The Connections view: connections → databases/schemas → tables/views → columns. */
@@ -44,11 +46,23 @@ export class ConnectionsTreeProvider
     this.deps = deps;
     this.model = new TreeModel({
       store: deps.store,
+      ...(deps.projects === undefined ? {} : { projects: deps.projects }),
       manager: deps.manager,
       cache: deps.cache,
       settings: deps.settings,
       logger: deps.logger,
       texts: {
+        project: {
+          untrusted: (count) =>
+            vscode.l10n.t(
+              'Restricted Mode: trust this workspace to use its {0} connection(s)',
+              count,
+            ),
+          broken: (error) => vscode.l10n.t('{0} cannot be read: {1}', PROJECT_FILE_PATH, error),
+          skipped: (position, problem) =>
+            vscode.l10n.t('Connection {0} of the file is skipped: {1}', position, problem),
+          empty: vscode.l10n.t('No connections in the project file yet'),
+        },
         tables: vscode.l10n.t('Tables'),
         views: vscode.l10n.t('Views'),
         noTables: vscode.l10n.t('No tables'),
@@ -94,6 +108,19 @@ export class ConnectionsTreeProvider
 
   getTreeItem(node: TreeNode): vscode.TreeItem {
     switch (node.kind) {
+      case 'project': {
+        const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.Expanded);
+        item.id = nodeId(node);
+        item.iconPath = new vscode.ThemeIcon('repo');
+        item.description = PROJECT_FILE_PATH;
+        item.tooltip = vscode.l10n.t(
+          'Connections of the project "{0}" from {1}. The file can be committed: it holds no passwords, each person keeps theirs on their own computer.',
+          node.name,
+          PROJECT_FILE_PATH,
+        );
+        item.contextValue = TREE_CONTEXT.project;
+        return item;
+      }
       case 'connectionFolder': {
         const item = new vscode.TreeItem(node.folder, vscode.TreeItemCollapsibleState.Expanded);
         item.id = nodeId(node);
@@ -196,13 +223,24 @@ export class ConnectionsTreeProvider
     const target = config === undefined ? '' : describeTarget(config);
     // The marks come first, so they stay visible when the description is cut.
     item.description = tags.length === 0 ? target : `${tags.join(' · ')} · ${target}`;
+    const project = this.deps.store.projectOf(connectionId);
+    const connected = state.status === 'connected';
     item.contextValue =
-      state.status === 'connected' ? TREE_CONTEXT.connectionConnected : TREE_CONTEXT.connection;
+      project === undefined
+        ? connected
+          ? TREE_CONTEXT.connectionConnected
+          : TREE_CONTEXT.connection
+        : connected
+          ? TREE_CONTEXT.projectConnectionConnected
+          : TREE_CONTEXT.projectConnection;
     item.tooltip = new vscode.MarkdownString(
       [
         `**${config?.name ?? connectionId}**`,
         config === undefined ? '' : `\n\n${describeTarget(config)}`,
         tunnelLine(config),
+        project === undefined
+          ? ''
+          : `\n\n${vscode.l10n.t('Shared with the project "{0}" through {1}', project.name, PROJECT_FILE_PATH)}`,
         `\n\n${statusText(state.status)}`,
         state.error === undefined ? '' : `\n\n${state.error}`,
       ].join(''),

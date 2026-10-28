@@ -163,6 +163,12 @@ export function findWebviewApps(rootDir) {
 export const E2E_OUT_DIR = 'out/test/e2e';
 
 /**
+ * The folder the e2e editor opens, made empty before every run: tests that need a
+ * workspace (project connections, V4.7) write their files there.
+ */
+export const E2E_WORKSPACE_DIR = 'out/e2e-workspace';
+
+/**
  * @param {string} dir
  * @param {string} prefix
  * @returns {string[]} files relative to `dir`, POSIX separators

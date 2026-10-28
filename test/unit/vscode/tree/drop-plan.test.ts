@@ -96,4 +96,28 @@ describe('planDrop', () => {
     expect(planDrop([folder('Prod')], folder('Prod'), folderOf)).toBeUndefined();
     expect(planDrop([folder('Prod')], conn('a'), folderOf)).toBeUndefined();
   });
+
+  it('leaves project connections where the file keeps them (V4.7)', () => {
+    const inProject = (id: string) => id.startsWith('p-');
+    const project: TreeNode = { kind: 'project', key: 'file:///shop', name: 'shop' };
+    // Dragging one does nothing; with others, only the others move.
+    expect(planDrop([conn('p-1')], folder('Dev'), folderOf, inProject)).toBeUndefined();
+    expect(planDrop([conn('p-1'), conn('c')], folder('Dev'), folderOf, inProject)).toEqual({
+      kind: 'connections',
+      ids: ['c'],
+      destination: { folder: 'Dev' },
+    });
+    // Nothing lands on a project or among its connections.
+    expect(planDrop([conn('c')], project, folderOf, inProject)).toBeUndefined();
+    expect(planDrop([conn('c')], conn('p-1'), folderOf, inProject)).toBeUndefined();
+    expect(planDrop([folder('Prod')], conn('p-1'), folderOf, inProject)).toBeUndefined();
+    expect(
+      planDrop(
+        [conn('c')],
+        { kind: 'database', connectionId: 'p-1', database: 'app' },
+        folderOf,
+        inProject,
+      ),
+    ).toBeUndefined();
+  });
 });

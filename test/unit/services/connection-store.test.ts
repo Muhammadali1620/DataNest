@@ -7,6 +7,12 @@ import {
   passwordSecretKey,
   sshSecretKey,
 } from '../../../src/services/connection-store';
+import {
+  type ProjectFiles,
+  type ProjectFolder,
+  ProjectConnections,
+  projectConnectionId,
+} from '../../../src/services/project-connections';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 
 const mysqlInput: ConnectionInput = {
@@ -624,5 +630,180 @@ describe('ConnectionStore production and read-only', () => {
     const plain = await store.add({ ...mysqlInput, production: false, readOnly: false });
     expect(JSON.parse(JSON.stringify(plain))).not.toHaveProperty('production');
     expect(JSON.parse(JSON.stringify(plain))).not.toHaveProperty('readOnly');
+  });
+});
+
+describe('ConnectionStore project connections', () => {
+  const SHOP: ProjectFolder = { key: 'file:///shop', name: 'shop', root: '/shop' };
+
+  class MemoryFiles implements ProjectFiles {
+    readonly texts = new Map<string, string>();
+
+    read(folder: ProjectFolder): Promise<string | undefined> {
+      return Promise.resolve(this.texts.get(folder.key));
+    }
+
+    write(folder: ProjectFolder, text: string): Promise<void> {
+      this.texts.set(folder.key, text);
+      return Promise.resolve();
+    }
+  }
+
+  async function setup(text?: string) {
+    const files = new MemoryFiles();
+    if (text !== undefined) {
+      files.texts.set(SHOP.key, text);
+    }
+    const logger = new RecordingLogger();
+    const projects = new ProjectConnections({ files, logger });
+    await projects.load([SHOP], true);
+    const secrets = new FakeSecretStorage();
+    const state = new FakeMemento();
+    const store = new ConnectionStore({ state, secrets, logger, projects });
+    return { files, projects, secrets, state, store };
+  }
+
+  const shared = JSON.stringify({
+    connections: [
+      {
+        id: 'dev',
+        name: 'Dev',
+        driver: 'postgres',
+        host: 'db',
+        ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'password' },
+      },
+    ],
+  });
+  const devId = projectConnectionId(SHOP.key, 'dev');
+
+  it('lists the user connections first, then the project ones, and finds both', async () => {
+    const { store } = await setup(shared);
+    const own = await store.add(mysqlInput);
+    expect(store.list().map((config) => config.id)).toEqual([own.id, devId]);
+    expect(store.get(devId)?.name).toBe('Dev');
+    expect(store.projectOf(devId)).toEqual(SHOP);
+    expect(store.projectOf(own.id)).toBeUndefined();
+    expect(store.projectFolders()).toEqual([SHOP]);
+  });
+
+  it('never writes project connections into the user state', async () => {
+    const { state, store } = await setup(shared);
+    await store.add(mysqlInput);
+    expect(JSON.stringify(state.data.get(CONNECTIONS_STATE_KEY))).not.toContain('Dev');
+  });
+
+  it('adds a new connection to the project file, its password to the secrets only', async () => {
+    const { files, secrets, store } = await setup();
+    const added = await store.add(mysqlInput, 'hunter2', {}, { project: SHOP.key });
+    expect(store.projectOf(added.id)).toEqual(SHOP);
+    expect(files.texts.get(SHOP.key)).toContain('"local-mysql"');
+    expect(files.texts.get(SHOP.key)).not.toContain('hunter2');
+    expect(secrets.data.get(passwordSecretKey(added.id))).toBe('hunter2');
+  });
+
+  it('updates a project connection in its file and keeps or replaces its secrets', async () => {
+    const { files, secrets, store } = await setup(shared);
+    await secrets.store(sshSecretKey(devId, 'b', 'password'), 'ssh-pw');
+    const updated = await store.update(
+      devId,
+      { name: 'Dev', driver: 'postgres', host: 'db2', ssh: store.get(devId)?.ssh },
+      { kind: 'set', value: 'db-pw' },
+    );
+    expect(updated.host).toBe('db2');
+    expect(files.texts.get(SHOP.key)).toContain('db2');
+    expect(await store.getPassword(devId)).toBe('db-pw');
+    expect(secrets.data.get(sshSecretKey(devId, 'b', 'password'))).toBe('ssh-pw');
+  });
+
+  it('removes a project connection from its file together with its secrets', async () => {
+    const { files, secrets, store } = await setup(shared);
+    await secrets.store(passwordSecretKey(devId), 'pw');
+    await secrets.store(sshSecretKey(devId, 'b', 'password'), 'ssh-pw');
+    await store.remove(devId);
+    expect(store.get(devId)).toBeUndefined();
+    expect(JSON.parse(files.texts.get(SHOP.key) ?? '{}')).toMatchObject({ connections: [] });
+    expect(secrets.data.size).toBe(0);
+  });
+
+  it('sets and clears the color of a project connection in the file', async () => {
+    const { files, store } = await setup(shared);
+    await store.setColor(devId, 'red');
+    expect(store.get(devId)?.color).toBe('red');
+    await store.setColor(devId, undefined);
+    expect(store.get(devId)).not.toHaveProperty('color');
+    expect(files.texts.get(SHOP.key)).not.toContain('color');
+  });
+
+  it('duplicates a project connection into the user list, with its secrets', async () => {
+    const { secrets, store } = await setup(shared);
+    await secrets.store(passwordSecretKey(devId), 'pw');
+    const copy = await store.duplicate(devId);
+    expect(store.projectOf(copy.id)).toBeUndefined();
+    expect(copy.name).toBe('Dev (copy)');
+    expect(await store.getPassword(copy.id)).toBe('pw');
+  });
+
+  it('moves a user connection into the project with its secrets, dropping its folder', async () => {
+    const { files, secrets, store } = await setup();
+    await store.createFolder('Work');
+    const own = await store.add(
+      {
+        ...mysqlInput,
+        folder: 'Work',
+        ssh: { id: 'h', host: 'b', user: 'u', auth: 'key', keyFile: '/k' },
+      },
+      'pw',
+      { h: { passphrase: 'phrase' } },
+    );
+    const moved = await store.moveToProject(own.id, SHOP.key);
+    expect(store.get(own.id)).toBeUndefined();
+    expect(store.projectOf(moved.id)).toEqual(SHOP);
+    expect(moved).not.toHaveProperty('folder');
+    expect(await store.getPassword(moved.id)).toBe('pw');
+    expect(secrets.data.get(sshSecretKey(moved.id, 'h', 'passphrase'))).toBe('phrase');
+    expect(secrets.data.has(passwordSecretKey(own.id))).toBe(false);
+    expect(files.texts.get(SHOP.key)).not.toContain('pw"');
+  });
+
+  it('moves a project connection to the user list with its secrets', async () => {
+    const { files, secrets, store } = await setup(shared);
+    await secrets.store(passwordSecretKey(devId), 'pw');
+    const moved = await store.moveToUser(devId);
+    expect(store.projectOf(moved.id)).toBeUndefined();
+    expect(store.get(devId)).toBeUndefined();
+    expect(await store.getPassword(moved.id)).toBe('pw');
+    expect(secrets.data.has(passwordSecretKey(devId))).toBe(false);
+    expect(JSON.parse(files.texts.get(SHOP.key) ?? '{}')).toMatchObject({ connections: [] });
+  });
+
+  it('refuses to move the wrong kind of connection', async () => {
+    const { store } = await setup(shared);
+    const own = await store.add(mysqlInput);
+    await expect(store.moveToProject(devId, SHOP.key)).rejects.toMatchObject({ code: 'not-found' });
+    await expect(store.moveToUser(own.id)).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('tells listeners when the project file changes', async () => {
+    const { files, projects, store } = await setup(shared);
+    let calls = 0;
+    store.onDidChange(() => {
+      calls++;
+    });
+    files.texts.set(SHOP.key, JSON.stringify({ connections: [] }));
+    await projects.reload(SHOP.key);
+    expect(calls).toBe(1);
+    expect(store.list()).toEqual([]);
+  });
+
+  it('works without project support: adding to a project is refused', async () => {
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+    expect(store.projectFolders()).toEqual([]);
+    await expect(store.add(mysqlInput, undefined, {}, { project: SHOP.key })).rejects.toMatchObject(
+      { code: 'unsupported' },
+    );
   });
 });

@@ -25,6 +25,7 @@ import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
 import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
 import { folderCommandHandlers } from './tree/folder-commands';
+import { projectCommandHandlers } from './project-commands';
 import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
@@ -55,6 +56,8 @@ export interface CommandDeps {
   readonly objectEdits: ObjectEditRegistry;
   /** Writes a result to a file the user picks. */
   readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
+  /** Reads the project connection files again. */
+  readonly reloadProjects?: () => Promise<void>;
 }
 
 /** The items selected in the tree, which VS Code passes after the clicked one. */
@@ -77,6 +80,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   };
   const connections = connectionCommandHandlers(importDeps);
   const folders = folderCommandHandlers({ store: deps.store });
+  const projects = projectCommandHandlers(importDeps);
   const runCommands = runCommandHandlers({
     runner: deps.runner,
     editors: deps.editors,
@@ -103,6 +107,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     showDefinition,
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
+    reloadProjects: deps.reloadProjects,
   });
   const schemaDeps = {
     actions: new SchemaActions({ manager: deps.manager, cache: deps.cache, logger: deps.logger }),
@@ -191,6 +196,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.moveToFolder]: (target, ...rest: unknown[]) =>
       folders.moveToFolder(target, selectionOf(rest[0])),
     [COMMAND_IDS.setConnectionColor]: folders.setColor,
+    [COMMAND_IDS.moveToProject]: projects.moveToProject,
+    [COMMAND_IDS.moveToUser]: projects.moveToUser,
+    [COMMAND_IDS.openProjectFile]: projects.openFile,
     [COMMAND_IDS.addConnectionFromUrl]: (target) =>
       addConnectionFromUrl(importDeps, typeof target === 'string' ? target : undefined),
     [COMMAND_IDS.importEnvConnections]: () => importConnectionsFromEnv(importDeps),

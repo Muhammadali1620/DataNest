@@ -773,4 +773,65 @@ describe('connection form App', () => {
       );
     });
   });
+
+  describe('project connections (V4.7)', () => {
+    const projects = [{ key: 'file:///shop', name: 'shop' }];
+
+    it('offers to keep a new connection in the project file and sends that choice', async () => {
+      const { host } = await withState(newState({ projects }));
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'p-1' };
+      });
+      const place = screen.getByLabelText<HTMLSelectElement>('Keep in');
+      expect([...place.options].map((option) => option.textContent.trim())).toEqual([
+        'My connections (this computer only)',
+        'Project "shop" (.vscode/datanest.json, shared)',
+      ]);
+      expect(screen.queryByLabelText('Folder')).not.toBeNull();
+      await fireEvent.change(place, { target: { value: 'file:///shop' } });
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Folder')).toBeNull();
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Dev' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.project).toBe('file:///shop');
+    });
+
+    it('has no choice outside a project', async () => {
+      await withState();
+      expect(screen.queryByLabelText('Keep in')).toBeNull();
+    });
+
+    it('has no choice when editing a connection of the user', async () => {
+      await withState(
+        newState({
+          projects,
+          connectionId: 'c1',
+          input: { name: 'L', driver: 'mysql', host: 'h' },
+        }),
+      );
+      expect(screen.queryByLabelText('Keep in')).toBeNull();
+      expect(screen.queryByLabelText('Folder')).not.toBeNull();
+    });
+
+    it('says where an edited project connection lives and hides the folder', async () => {
+      await withState(
+        newState({
+          projects,
+          connectionId: 'p-1',
+          project: projects[0],
+          input: { name: 'Dev', driver: 'mysql', host: 'h' },
+        }),
+      );
+      expect(screen.getByTestId('project-note').textContent).toContain(
+        'Kept in .vscode/datanest.json of the project "shop"',
+      );
+      expect(screen.queryByLabelText('Folder')).toBeNull();
+    });
+  });
 });

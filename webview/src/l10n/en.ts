@@ -18,6 +18,13 @@ export const en = {
   'form.url.error.scheme': 'Only mysql://, mariadb://, postgres:// and sqlite:// are supported',
   'form.passwordImported': 'The password from the URL will be saved; type another to replace it',
   'form.name': 'Name',
+  'form.place': 'Keep in',
+  'form.place.mine': 'My connections (this computer only)',
+  'form.place.project': 'Project "{0}" (.vscode/datanest.json, shared)',
+  'form.place.hint':
+    'The project file can be committed for the team: it never holds passwords, they stay on this computer',
+  'form.place.inProject':
+    'Kept in .vscode/datanest.json of the project "{0}": everyone who opens the project sees it. The password stays on this computer.',
   'form.folder': 'Folder',
   'form.folderHint': 'Optional: a folder in the tree; a new name creates it',
   'form.color': 'Color',

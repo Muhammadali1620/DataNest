@@ -1,0 +1,189 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DataNest connections",
+  "description": "Connections shared through a project's .vscode/datanest.json, or a list exported from DataNest. It never holds passwords: each person keeps theirs in the editor's secret storage.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "folders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Folder order of an exported list."
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/connection"
+      }
+    }
+  },
+  "definitions": {
+    "hop": {
+      "type": "object",
+      "required": ["host", "user", "auth"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "Names this server's password or passphrase on each computer. Filled in by position when left out."
+        },
+        "host": {
+          "type": "string",
+          "description": "SSH server name or address."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 22
+        },
+        "user": {
+          "type": "string"
+        },
+        "auth": {
+          "enum": ["password", "key", "agent"],
+          "description": "How to log in. Passwords and passphrases are never kept in this file."
+        },
+        "keyFile": {
+          "type": "string",
+          "description": "Private key file, for \"key\". `~` is your home folder."
+        },
+        "agentSocket": {
+          "type": "string",
+          "description": "SSH agent socket, Windows pipe or `pageant`, for \"agent\". Empty means the usual place."
+        }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": ["name", "driver"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "A short id that stays when the name changes: each person's password for this connection is found by it. Made from the name when left out."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "driver": {
+          "enum": ["mysql", "postgres", "sqlite"],
+          "description": "mysql also covers MariaDB."
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "user": {
+          "type": "string"
+        },
+        "database": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string",
+          "description": "SQLite database file. A relative path starts at the workspace folder."
+        },
+        "ssh": {
+          "type": "object",
+          "required": ["host", "user", "auth"],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "Names this server's password or passphrase on each computer. Filled in by position when left out."
+            },
+            "host": {
+              "type": "string",
+              "description": "SSH server name or address."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 22
+            },
+            "user": {
+              "type": "string"
+            },
+            "auth": {
+              "enum": ["password", "key", "agent"],
+              "description": "How to log in. Passwords and passphrases are never kept in this file."
+            },
+            "keyFile": {
+              "type": "string",
+              "description": "Private key file, for \"key\". `~` is your home folder."
+            },
+            "agentSocket": {
+              "type": "string",
+              "description": "SSH agent socket, Windows pipe or `pageant`, for \"agent\". Empty means the usual place."
+            },
+            "jumps": {
+              "type": "array",
+              "maxItems": 5,
+              "items": {
+                "$ref": "#/definitions/hop"
+              },
+              "description": "Servers to pass through first, in order (like ProxyJump)."
+            }
+          },
+          "description": "Reach the database through an SSH tunnel."
+        },
+        "ssl": {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": ["require", "verify-ca", "verify-full"]
+            },
+            "ca": {
+              "type": "string",
+              "description": "CA certificate file; relative paths start at the workspace folder."
+            },
+            "cert": {
+              "type": "string",
+              "description": "Client certificate file."
+            },
+            "key": {
+              "type": "string",
+              "description": "Client key file."
+            }
+          }
+        },
+        "folder": {
+          "type": "string",
+          "description": "Folder in the tree (exported lists only; a project is a folder of its own)."
+        },
+        "color": {
+          "enum": ["red", "orange", "yellow", "green", "blue", "purple"]
+        },
+        "production": {
+          "type": "boolean",
+          "description": "Stands out, and every change is confirmed first."
+        },
+        "readOnly": {
+          "type": "boolean",
+          "description": "Changes are refused, and the session itself is opened read-only."
+        }
+      }
+    }
+  }
+}

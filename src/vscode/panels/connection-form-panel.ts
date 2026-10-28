@@ -173,6 +173,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
             ? this.prefill?.password
             : undefined,
         testSshSecrets(draft, {}),
+        draft.project === undefined ? {} : { project: draft.project },
       );
       this.connectionId = created.id;
       this.prefill = undefined;
@@ -208,6 +209,8 @@ export class ConnectionFormPanel implements vscode.Disposable {
         : (await this.deps.store.getPassword(connectionId)) !== undefined;
     const storedSsh =
       connectionId === undefined ? {} : await this.deps.store.getSshSecrets(connectionId);
+    const project =
+      connectionId === undefined ? undefined : this.deps.store.projectOf(connectionId);
     // The panel may have been closed while the secret was read; stay silent then.
     if (this.disposed) {
       return;
@@ -218,6 +221,8 @@ export class ConnectionFormPanel implements vscode.Disposable {
       hasStoredPassword,
       ...(this.prefill?.password === undefined ? {} : { importedPassword: true }),
       storedSsh: storedSshFlags(storedSsh),
+      projects: this.deps.store.projectFolders().map(({ key, name }) => ({ key, name })),
+      ...(project === undefined ? {} : { project: { key: project.key, name: project.name } }),
       folders: this.deps.store.folders(),
       drivers: driverOptions(),
     });

@@ -16,7 +16,8 @@ import { array, boolean, literal, number, object, optional, type Schema, string 
 
 const port = (): Schema<number> => number({ integer: true, min: 1, max: 65_535 });
 
-const sshHopShape = {
+/** The fields of `SshHop`, to be reused by shapes that change one of them. */
+export const sshHopShape = {
   id: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
   host: string({ maxLength: CONNECTION_LIMITS.field }),
   port: optional(port()),

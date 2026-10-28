@@ -239,6 +239,21 @@
         </span>
       </Field>
 
+      {#if formState?.project !== undefined}
+        <p class="place" data-testid="project-note">
+          {t('form.place.inProject', formState.project.name)}
+        </p>
+      {:else if formState?.connectionId === undefined && (formState?.projects ?? []).length > 0}
+        <Field label={t('form.place')} hint={t('form.place.hint')}>
+          <select class="control" bind:value={fields.project} aria-label={t('form.place')}>
+            <option value="">{t('form.place.mine')}</option>
+            {#each formState?.projects ?? [] as project (project.key)}
+              <option value={project.key}>{t('form.place.project', project.name)}</option>
+            {/each}
+          </select>
+        </Field>
+      {/if}
+
       <Field label={t('form.name')} error={errorFor('name-empty')}>
         <input
           class="control"
@@ -251,21 +266,25 @@
       </Field>
 
       <div class="pair">
-        <Field label={t('form.folder')} hint={t('form.folderHint')}>
-          <input
-            class="control"
-            bind:value={fields.folder}
-            list="datanest-folders"
-            maxlength={CONNECTION_LIMITS.folder}
-            aria-label={t('form.folder')}
-            autocomplete="off"
-          />
-          <datalist id="datanest-folders">
-            {#each formState?.folders ?? [] as folder (folder)}
-              <option value={folder}></option>
-            {/each}
-          </datalist>
-        </Field>
+        {#if fields.project === ''}
+          <Field label={t('form.folder')} hint={t('form.folderHint')}>
+            <input
+              class="control"
+              bind:value={fields.folder}
+              list="datanest-folders"
+              maxlength={CONNECTION_LIMITS.folder}
+              aria-label={t('form.folder')}
+              autocomplete="off"
+            />
+            <datalist id="datanest-folders">
+              {#each formState?.folders ?? [] as folder (folder)}
+                <option value={folder}></option>
+              {/each}
+            </datalist>
+          </Field>
+        {:else}
+          <span></span>
+        {/if}
         <Field label={t('form.color')}>
           <select class="control" bind:value={fields.color} aria-label={t('form.color')}>
             <option value="">{t('form.color.none')}</option>
@@ -589,6 +608,13 @@
 
   .section legend {
     padding: 0 4px;
+  }
+
+  .place {
+    margin: 0;
+    padding: 6px 8px;
+    border-left: 2px solid var(--vscode-focusBorder);
+    background: var(--vscode-textBlockQuote-background, transparent);
   }
 
   .flags {

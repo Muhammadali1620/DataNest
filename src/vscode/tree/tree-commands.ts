@@ -39,6 +39,8 @@ export interface TreeCommandDeps {
   readonly clipboard: Clipboard;
   /** Shown when a command that needs a connection is run from the palette. */
   readonly noTargetMessage: string;
+  /** Reads the project files again (V4.7), for a refresh of the whole tree. */
+  readonly reloadProjects?: () => Promise<void>;
 }
 
 export type TreeCommandName =
@@ -73,11 +75,16 @@ export function treeCommandHandlers(
 
     /**
      * Refreshes the clicked subtree, or everything when run from the view title.
-     * The cached structure is dropped first: Refresh means "ask the server again".
+     * The cached structure is dropped first: Refresh means "ask the server again";
+     * the whole tree also reads the project files again, should a change on disk
+     * have gone unnoticed.
      */
-    refresh: (target?: CommandTarget) => {
+    refresh: async (target?: CommandTarget) => {
       const node = isTreeNode(target) ? target : undefined;
       deps.cache.invalidate(node === undefined ? undefined : connectionIdOf(node));
+      if (node === undefined) {
+        await deps.reloadProjects?.();
+      }
       deps.tree.refresh(node);
       return undefined;
     },

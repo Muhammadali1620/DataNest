@@ -25,6 +25,11 @@ export const TREE_CONTEXT = {
   connectionFolder: 'datanest.connectionFolder',
   connection: 'datanest.connection',
   connectionConnected: 'datanest.connection.connected',
+  /** The connections of a workspace folder's `.vscode/datanest.json` (V4.7). */
+  project: 'datanest.project',
+  /** A connection from a project file: no user folders, other menus. */
+  projectConnection: 'datanest.projectConnection',
+  projectConnectionConnected: 'datanest.projectConnection.connected',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -74,6 +79,14 @@ export type TableFolder = 'indexes' | 'foreignKeys' | 'triggers';
 export interface ConnectionFolderNode {
   readonly kind: 'connectionFolder';
   readonly folder: string;
+}
+
+/** The project file of one workspace folder, holding the connections it shares. */
+export interface ProjectNode {
+  readonly kind: 'project';
+  /** The folder's key (`ProjectFolder.key`). */
+  readonly key: string;
+  readonly name: string;
 }
 
 export interface ConnectionNode {
@@ -161,6 +174,7 @@ export interface MessageNode {
 }
 
 export type TreeNode =
+  | ProjectNode
   | ConnectionFolderNode
   | ConnectionNode
   | DatabaseNode
@@ -194,6 +208,7 @@ export function scopeOf(node: TreeNode): ObjectScope {
       return scopeOfRef(node.table);
     case 'object':
       return scopeOfRef(node.object);
+    case 'project':
     case 'connectionFolder':
     case 'connection':
     case 'message':
@@ -218,6 +233,8 @@ function scopeKey(scope: ObjectScope): string {
  */
 export function nodeId(node: TreeNode): string {
   switch (node.kind) {
+    case 'project':
+      return join(['project', node.key]);
     case 'connectionFolder':
       return join(['connectionFolder', node.folder]);
     case 'connection':
@@ -304,6 +321,7 @@ export function isTreeNode(value: unknown): value is TreeNode {
   }
   const { kind } = value as { kind?: unknown };
   return (
+    kind === 'project' ||
     kind === 'connectionFolder' ||
     kind === 'connection' ||
     kind === 'database' ||
@@ -338,6 +356,7 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.key.name;
     case 'connectionFolder':
       return node.folder;
+    case 'project':
     case 'connection':
     case 'group':
     case 'folder':
@@ -371,6 +390,7 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
       };
     case 'object':
       return node.object;
+    case 'project':
     case 'connectionFolder':
     case 'connection':
     case 'database':

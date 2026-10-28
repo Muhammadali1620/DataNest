@@ -20,6 +20,7 @@ import {
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
 import { array, literal, object, type Schema, string, union } from '../shared/schema';
+import type { ProjectConnections, ProjectFolder } from './project-connections';
 
 /** The slice of `vscode.Memento` the store needs. */
 export interface KeyValueState {
@@ -98,16 +99,26 @@ export interface ConnectionStoreDeps {
   readonly state: KeyValueState;
   readonly secrets: SecretState;
   readonly logger: Logger;
+  /** Connections shared through the workspace's `.vscode/datanest.json` (V4.7). */
+  readonly projects?: ProjectConnections;
+}
+
+/** Where a new connection is saved: the user's own list, or a project file. */
+export interface AddOptions {
+  /** Key of the workspace folder whose project file gets the connection. */
+  readonly project?: string;
 }
 
 /**
- * Saved connections in the order the user keeps them. All writes go through this
- * class, so `onDidChange` fires for every mutation after it is persisted.
+ * Saved connections in the order the user keeps them, plus the connections of the
+ * open project (V4.7). All writes go through this class, so `onDidChange` fires for
+ * every mutation after it is persisted. Secrets of both kinds live in SecretStorage.
  */
 export class ConnectionStore {
   private readonly state: KeyValueState;
   private readonly secrets: SecretState;
   private readonly logger: Logger;
+  private readonly projects: ProjectConnections | undefined;
   private readonly listeners = new Set<() => void>();
   private items: ConnectionConfig[];
   private folderList: string[];
@@ -116,9 +127,24 @@ export class ConnectionStore {
     this.state = deps.state;
     this.secrets = deps.secrets;
     this.logger = deps.logger.child('connections');
+    this.projects = deps.projects;
     const loaded = this.load();
     this.items = loaded.items;
     this.folderList = withReferenced(loaded.folders, loaded.items);
+    // Lives as long as the store: both are made once in activate().
+    this.projects?.onDidChange(() => {
+      this.notify();
+    });
+  }
+
+  /** Workspace folders whose project file may take a connection (V4.7). */
+  projectFolders(): ProjectFolder[] {
+    return this.projects?.writableFolders() ?? [];
+  }
+
+  /** The project folder whose file holds the connection; undefined for the user's own. */
+  projectOf(id: string): ProjectFolder | undefined {
+    return this.projects?.folderOf(id);
   }
 
   /** Folder names in the order the tree shows them. */
@@ -209,6 +235,12 @@ export class ConnectionStore {
   }
 
   async setColor(id: string, color: ConnectionColor | undefined): Promise<void> {
+    const project = this.projects?.get(id);
+    if (project !== undefined) {
+      const { color: _old, id: _id, ...rest } = project;
+      await this.projects?.update(id, color === undefined ? rest : { ...rest, color });
+      return;
+    }
     const index = this.items.findIndex((item) => item.id === id);
     const current = this.items[index];
     if (current === undefined) {
@@ -227,12 +259,13 @@ export class ConnectionStore {
     }
   }
 
+  /** The user's connections, then those of the open project. */
   list(): ConnectionConfig[] {
-    return [...this.items];
+    return [...this.items, ...(this.projects?.list() ?? [])];
   }
 
   get(id: string): ConnectionConfig | undefined {
-    return this.items.find((item) => item.id === id);
+    return this.items.find((item) => item.id === id) ?? this.projects?.get(id);
   }
 
   /** Fires after any change is persisted. */
@@ -245,9 +278,15 @@ export class ConnectionStore {
     input: ConnectionInput,
     password?: string,
     ssh: SshSecretValues = {},
+    options: AddOptions = {},
   ): Promise<ConnectionConfig> {
-    const config: ConnectionConfig = { ...normalizeInput(input), id: crypto.randomUUID() };
-    await this.save([...this.items, config]);
+    let config: ConnectionConfig;
+    if (options.project === undefined) {
+      config = { ...normalizeInput(input), id: crypto.randomUUID() };
+      await this.save([...this.items, config]);
+    } else {
+      config = await this.projectsOrThrow().add(options.project, normalizeInput(input));
+    }
     if (password !== undefined && password !== '') {
       await this.secrets.store(passwordSecretKey(config.id), password);
     }
@@ -270,14 +309,19 @@ export class ConnectionStore {
     ssh: SshSecretChanges = {},
   ): Promise<ConnectionConfig> {
     const index = this.items.findIndex((item) => item.id === id);
-    if (index === -1) {
+    const before = this.items[index] ?? this.projects?.get(id);
+    if (before === undefined) {
       throw new DbError('not-found', `Connection "${id}" does not exist`);
     }
-    const before = this.items[index];
-    const config: ConnectionConfig = { ...normalizeInput(input), id };
-    const items = [...this.items];
-    items[index] = config;
-    await this.save(items);
+    let config: ConnectionConfig;
+    if (index === -1) {
+      config = await this.projectsOrThrow().update(id, normalizeInput(input));
+    } else {
+      config = { ...normalizeInput(input), id };
+      const items = [...this.items];
+      items[index] = config;
+      await this.save(items);
+    }
     await this.applySecret(passwordSecretKey(id), password);
     const kept = new Set(sshHopsOf(config).map((hop) => hop.id));
     for (const hop of sshHopsOf(config)) {
@@ -286,7 +330,7 @@ export class ConnectionStore {
       }
     }
     // A hop that is gone takes its secrets with it.
-    for (const hop of before === undefined ? [] : sshHopsOf(before)) {
+    for (const hop of sshHopsOf(before)) {
       if (!kept.has(hop.id)) {
         await this.deleteHopSecrets(id, hop);
       }
@@ -295,22 +339,87 @@ export class ConnectionStore {
     return config;
   }
 
-  /** Removes the config and its password. Removing a missing id is a no-op. */
+  /** Removes the config and its secrets. Removing a missing id is a no-op. */
   async remove(id: string): Promise<void> {
-    const items = this.items.filter((item) => item.id !== id);
-    if (items.length === this.items.length) {
+    const removed = this.get(id);
+    if (removed === undefined) {
       return;
     }
-    const removed = this.get(id);
-    await this.save(items);
-    await this.secrets.delete(passwordSecretKey(id));
-    for (const hop of removed === undefined ? [] : sshHopsOf(removed)) {
-      await this.deleteHopSecrets(id, hop);
+    if (this.projects?.folderOf(id) === undefined) {
+      await this.save(this.items.filter((item) => item.id !== id));
+    } else {
+      await this.projects.remove(id);
     }
+    await this.deleteSecrets(removed);
     this.notify();
   }
 
-  /** Copies a connection, including its password, under a new id. */
+  /**
+   * Moves a connection of the user's into a project file, with its secrets, which
+   * stay on this computer. The connection gets the project's id for it.
+   */
+  async moveToProject(id: string, folderKey: string): Promise<ConnectionConfig> {
+    const source = this.items.find((item) => item.id === id);
+    if (source === undefined) {
+      throw new DbError('not-found', `Connection "${id}" is not one of your own`);
+    }
+    const { id: _id, folder: _folder, ...input } = source;
+    const moved = await this.projectsOrThrow().add(folderKey, input);
+    await this.copySecrets(source, moved.id);
+    await this.save(this.items.filter((item) => item.id !== id));
+    await this.deleteSecrets(source);
+    this.notify();
+    return moved;
+  }
+
+  /** Takes a connection out of its project file and keeps it as the user's own. */
+  async moveToUser(id: string): Promise<ConnectionConfig> {
+    const source = this.projects?.get(id);
+    if (source === undefined) {
+      throw new DbError('not-found', `Connection "${id}" is not a project connection`);
+    }
+    const moved: ConnectionConfig = { ...source, id: crypto.randomUUID() };
+    await this.save([...this.items, moved]);
+    await this.copySecrets(source, moved.id);
+    await this.projectsOrThrow().remove(id);
+    await this.deleteSecrets(source);
+    this.notify();
+    return moved;
+  }
+
+  private projectsOrThrow(): ProjectConnections {
+    if (this.projects === undefined) {
+      throw new DbError('unsupported', 'Project connections are not available');
+    }
+    return this.projects;
+  }
+
+  private async copySecrets(source: ConnectionConfig, targetId: string): Promise<void> {
+    const password = await this.secrets.get(passwordSecretKey(source.id));
+    if (password !== undefined) {
+      await this.secrets.store(passwordSecretKey(targetId), password);
+    }
+    for (const hop of sshHopsOf(source)) {
+      for (const kind of SSH_SECRET_KINDS) {
+        const value = await this.secrets.get(sshSecretKey(source.id, hop.id, kind));
+        if (value !== undefined) {
+          await this.secrets.store(sshSecretKey(targetId, hop.id, kind), value);
+        }
+      }
+    }
+  }
+
+  private async deleteSecrets(config: ConnectionConfig): Promise<void> {
+    await this.secrets.delete(passwordSecretKey(config.id));
+    for (const hop of sshHopsOf(config)) {
+      await this.deleteHopSecrets(config.id, hop);
+    }
+  }
+
+  /**
+   * Copies a connection, including its secrets, under a new id. The copy is always
+   * the user's own, even when the source is a project connection.
+   */
   async duplicate(id: string, newName?: string): Promise<ConnectionConfig> {
     const source = this.get(id);
     if (!source) {
@@ -322,18 +431,7 @@ export class ConnectionStore {
       name: newName ?? this.copyName(source.name),
     };
     await this.save([...this.items, copy]);
-    const password = await this.secrets.get(passwordSecretKey(id));
-    if (password !== undefined) {
-      await this.secrets.store(passwordSecretKey(copy.id), password);
-    }
-    for (const hop of sshHopsOf(source)) {
-      for (const kind of SSH_SECRET_KINDS) {
-        const value = await this.secrets.get(sshSecretKey(id, hop.id, kind));
-        if (value !== undefined) {
-          await this.secrets.store(sshSecretKey(copy.id, hop.id, kind), value);
-        }
-      }
-    }
+    await this.copySecrets(source, copy.id);
     this.notify();
     return copy;
   }
@@ -376,7 +474,7 @@ export class ConnectionStore {
   }
 
   private copyName(name: string): string {
-    const taken = new Set(this.items.map((item) => item.name));
+    const taken = new Set(this.list().map((item) => item.name));
     for (let attempt = 1; ; attempt++) {
       const candidate = attempt === 1 ? `${name} (copy)` : `${name} (copy ${attempt})`;
       if (!taken.has(candidate)) {

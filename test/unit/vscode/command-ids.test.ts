@@ -137,8 +137,53 @@ describe('tree menus', () => {
       COMMAND_IDS.searchObjects,
       COMMAND_IDS.addConnectionFromUrl,
       COMMAND_IDS.importEnvConnections,
+      COMMAND_IDS.openProjectFile,
       COMMAND_IDS.createFolder,
     ]);
+  });
+
+  it('offers on project connections what applies to them, and no user folders (V4.7)', () => {
+    const on = (id: string) =>
+      items
+        .filter((entry) => entry.command === id)
+        .map((entry) => entry.when)
+        .join(' ');
+    for (const id of [
+      COMMAND_IDS.connect,
+      COMMAND_IDS.editConnection,
+      COMMAND_IDS.duplicateConnection,
+      COMMAND_IDS.removeConnection,
+      COMMAND_IDS.setConnectionColor,
+      COMMAND_IDS.moveToUser,
+    ]) {
+      expect(on(id), id).toContain(`viewItem == ${TREE_CONTEXT.projectConnection}`);
+    }
+    for (const id of [
+      COMMAND_IDS.disconnect,
+      COMMAND_IDS.newQuery,
+      COMMAND_IDS.createDatabase,
+      COMMAND_IDS.refreshTree,
+    ]) {
+      expect(on(id), id).toContain(`viewItem == ${TREE_CONTEXT.projectConnectionConnected}`);
+    }
+    for (const id of [
+      COMMAND_IDS.moveToFolder,
+      COMMAND_IDS.createFolder,
+      COMMAND_IDS.moveToProject,
+    ]) {
+      expect(on(id), id).not.toContain(TREE_CONTEXT.projectConnection);
+    }
+    expect(on(COMMAND_IDS.moveToProject)).toContain(`viewItem == ${TREE_CONTEXT.connection}`);
+    expect(on(COMMAND_IDS.moveToUser)).not.toContain(`viewItem == ${TREE_CONTEXT.connection} `);
+    expect(on(COMMAND_IDS.openProjectFile)).toContain(`viewItem == ${TREE_CONTEXT.project}`);
+  });
+
+  it('wraps every list of context values in parentheses, so "||" binds inside the view', () => {
+    for (const entry of items) {
+      if (entry.when.includes('||')) {
+        expect(entry.when).toMatch(/^view == [\w.]+ && \(.*\)$/);
+      }
+    }
   });
 
   it('offers folder commands on folders and arranging commands on connections', () => {

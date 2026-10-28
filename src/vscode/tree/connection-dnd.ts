@@ -20,7 +20,9 @@ export class ConnectionsDragAndDrop implements vscode.TreeDragAndDropController<
 
   handleDrag(source: readonly TreeNode[], data: vscode.DataTransfer): void {
     const movable = source.filter(
-      (node) => node.kind === 'connection' || node.kind === 'connectionFolder',
+      (node) =>
+        (node.kind === 'connection' && this.store.projectOf(node.connectionId) === undefined) ||
+        node.kind === 'connectionFolder',
     );
     if (movable.length > 0) {
       data.set(CONNECTIONS_MIME, new vscode.DataTransferItem(movable));
@@ -30,7 +32,12 @@ export class ConnectionsDragAndDrop implements vscode.TreeDragAndDropController<
   async handleDrop(target: TreeNode | undefined, data: vscode.DataTransfer): Promise<void> {
     const value: unknown = data.get(CONNECTIONS_MIME)?.value;
     const dragged = Array.isArray(value) ? value.filter(isTreeNode) : [];
-    const plan = planDrop(dragged, target, (id) => this.store.get(id)?.folder);
+    const plan = planDrop(
+      dragged,
+      target,
+      (id) => this.store.get(id)?.folder,
+      (id) => this.store.projectOf(id) !== undefined,
+    );
     try {
       if (plan?.kind === 'connections') {
         await this.store.moveConnections(plan.ids, plan.destination);

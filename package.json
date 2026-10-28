@@ -110,6 +110,22 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.connections.moveToProject",
+        "title": "%commands.connections.moveToProject.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.moveToUser",
+        "title": "%commands.connections.moveToUser.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.project.openFile",
+        "title": "%commands.project.openFile.title%",
+        "category": "DataNest",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "datanest.connections.edit",
         "title": "%commands.connections.edit.title%",
         "category": "DataNest",
@@ -432,6 +448,11 @@
           "group": "1_add@2"
         },
         {
+          "command": "datanest.project.openFile",
+          "when": "view == datanest.connections",
+          "group": "1_add@3"
+        },
+        {
           "command": "datanest.folders.create",
           "when": "view == datanest.connections",
           "group": "2_folders@1"
@@ -450,8 +471,28 @@
         },
         {
           "command": "datanest.connections.setColor",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "3_arrange@3"
+        },
+        {
+          "command": "datanest.connections.moveToProject",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "3_arrange@4"
+        },
+        {
+          "command": "datanest.connections.moveToUser",
+          "when": "view == datanest.connections && (viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected)",
+          "group": "3_arrange@4"
+        },
+        {
+          "command": "datanest.project.openFile",
+          "when": "view == datanest.connections && viewItem == datanest.project",
+          "group": "inline@0"
+        },
+        {
+          "command": "datanest.project.openFile",
+          "when": "view == datanest.connections && viewItem == datanest.project",
+          "group": "1_project@1"
         },
         {
           "command": "datanest.folders.rename",
@@ -470,57 +511,57 @@
         },
         {
           "command": "datanest.query.new",
-          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
           "group": "inline@0"
         },
         {
           "command": "datanest.connections.connect",
-          "when": "view == datanest.connections && viewItem == datanest.connection",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection)",
           "group": "inline@1"
         },
         {
           "command": "datanest.connections.disconnect",
-          "when": "view == datanest.connections && viewItem == datanest.connection.connected",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "inline@1"
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && viewItem == datanest.connection.connected",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "inline@2"
         },
         {
           "command": "datanest.connections.edit",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "inline@3"
         },
         {
           "command": "datanest.connections.connect",
-          "when": "view == datanest.connections && viewItem == datanest.connection",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection)",
           "group": "1_state@1"
         },
         {
           "command": "datanest.connections.disconnect",
-          "when": "view == datanest.connections && viewItem == datanest.connection.connected",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "1_state@1"
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "1_state@2"
         },
         {
           "command": "datanest.connections.edit",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "2_edit@1"
         },
         {
           "command": "datanest.connections.duplicate",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "2_edit@2"
         },
         {
           "command": "datanest.connections.remove",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.projectConnection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected)",
           "group": "3_remove@1"
         },
         {
@@ -535,7 +576,7 @@
         },
         {
           "command": "datanest.query.new",
-          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
           "group": "0_query@1"
         },
         {
@@ -555,7 +596,7 @@
         },
         {
           "command": "datanest.database.create",
-          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database)",
           "group": "4_structure@1"
         },
         {
@@ -870,6 +911,12 @@
         "key": "ctrl+shift+enter",
         "mac": "cmd+shift+enter",
         "when": "editorTextFocus && editorLangId == sql"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": ".vscode/datanest.json",
+        "url": "./resources/schemas/connections.schema.json"
       }
     ]
   },

@@ -300,3 +300,18 @@ describe('connection folders', () => {
     expect(objectRefOf(node)).toBeUndefined();
   });
 });
+
+describe('project nodes', () => {
+  it('have an id of their own and no connection, scope, name or object', async () => {
+    const { nodeId, nameOf, isTreeNode, connectionIdOf, scopeOf, objectRefOf } =
+      await import('../../../../src/vscode/tree/nodes');
+    const node = { kind: 'project' as const, key: 'file:///a:b', name: 'a' };
+    expect(nodeId(node)).toBe('project:file\\:///a\\:b');
+    expect(nodeId(node)).not.toBe(nodeId({ kind: 'connectionFolder', folder: 'file:///a:b' }));
+    expect(isTreeNode(node)).toBe(true);
+    expect(connectionIdOf(node)).toBeUndefined();
+    expect(nameOf(node)).toBeUndefined();
+    expect(scopeOf(node)).toEqual({});
+    expect(objectRefOf(node)).toBeUndefined();
+  });
+});

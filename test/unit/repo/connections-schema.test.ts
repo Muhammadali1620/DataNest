@@ -1,0 +1,70 @@
+// The JSON schema the editor uses for `.vscode/datanest.json` (V4.7) must describe
+// exactly what the code reads, or people get completion for fields that are ignored.
+
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  CONNECTION_COLORS,
+  DRIVER_IDS,
+  MAX_SSH_JUMPS,
+  SSH_AUTH_METHODS,
+  SSL_MODES,
+} from '../../../src/shared/connection';
+import { connectionInputShape, sshHopShape } from '../../../src/shared/connection-schema';
+import { PROJECT_FILE_PATH } from '../../../src/services/project-connections';
+import { readJson, ROOT } from '../../helpers/repo';
+
+interface JsonSchema {
+  readonly type?: string;
+  readonly enum?: readonly unknown[];
+  readonly required?: readonly string[];
+  readonly additionalProperties?: boolean;
+  readonly maxItems?: number;
+  readonly properties?: Readonly<Record<string, JsonSchema>>;
+  readonly definitions?: Readonly<Record<string, JsonSchema>>;
+  readonly items?: JsonSchema;
+}
+
+const manifest = readJson('package.json') as {
+  contributes: { jsonValidation?: { fileMatch: string; url: string }[] };
+};
+const [validation] = manifest.contributes.jsonValidation ?? [];
+const schema = readJson(validation?.url.replace(/^\.\//, '') ?? 'missing') as JsonSchema;
+const connection = schema.definitions?.connection ?? {};
+const hop = schema.definitions?.hop ?? {};
+const props = connection.properties ?? {};
+
+const keys = (value: object | undefined): string[] => Object.keys(value ?? {}).sort();
+
+describe('connections JSON schema', () => {
+  it('is contributed for the project file and ships in resources/', () => {
+    expect(validation?.fileMatch).toBe(PROJECT_FILE_PATH);
+    expect(validation?.url).toMatch(/^\.\/resources\//);
+    expect(existsSync(join(ROOT, validation?.url ?? 'missing'))).toBe(true);
+  });
+
+  it('lists every connection field the code reads, plus the id, and nothing else', () => {
+    expect(keys(props)).toEqual([...Object.keys(connectionInputShape), 'id'].sort());
+    expect(connection.additionalProperties).toBe(false);
+    expect(connection.required).toEqual(['name', 'driver']);
+  });
+
+  it('has no password field: secrets never go into a shared file', () => {
+    expect(JSON.stringify(schema)).not.toMatch(/"password"\s*:\s*\{/);
+  });
+
+  it('offers the same choices as the code', () => {
+    expect(props.driver?.enum).toEqual([...DRIVER_IDS]);
+    expect(props.color?.enum).toEqual([...CONNECTION_COLORS]);
+    expect(props.ssl?.properties?.mode?.enum).toEqual([...SSL_MODES]);
+    expect(hop.properties?.auth?.enum).toEqual([...SSH_AUTH_METHODS]);
+  });
+
+  it('describes SSH hops as the code does, with jumps on the server only', () => {
+    expect(keys(hop.properties)).toEqual(Object.keys(sshHopShape).sort());
+    expect(keys(props.ssh?.properties)).toEqual([...Object.keys(sshHopShape), 'jumps'].sort());
+    expect(props.ssh?.properties?.jumps?.maxItems).toBe(MAX_SSH_JUMPS);
+    expect(hop.required).toEqual(['host', 'user', 'auth']);
+  });
+});

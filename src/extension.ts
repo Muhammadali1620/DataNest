@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
 import { ConnectionManager, type SessionTarget } from './services/connection-manager';
 import { ConnectionStore } from './services/connection-store';
+import { ProjectConnections } from './services/project-connections';
+import { ProjectFileWatcher, workspaceProjectFiles } from './vscode/project-files';
 import { KnownHosts } from './services/known-hosts';
 import { createBundleSshLoader, TunnelPool } from './services/tunnels';
 import { createHostKeyCheck } from './vscode/ssh-host-keys';
@@ -55,11 +57,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const { logger, channel, disposables } = createOutputLogger();
   context.subscriptions.push(...disposables);
 
+  // Connections the open project shares through .vscode/datanest.json (V4.7).
+  const projects = new ProjectConnections({ files: workspaceProjectFiles(), logger });
+  const projectFiles = new ProjectFileWatcher(projects, logger);
+  context.subscriptions.push(projectFiles);
   const store = new ConnectionStore({
     state: context.globalState,
     secrets: context.secrets,
     logger,
+    projects,
   });
+  // Read before the tree is drawn, so its first picture already has the project.
+  await projectFiles.start();
   const drivers = new DriverRegistry({
     // Driver bundles sit next to the extension bundle and load on first use (§7).
     loader: createBundleDriverLoader(__filename),
@@ -258,7 +267,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const settings = createSettings();
   const decorations = new ConnectionDecorations(store);
   context.subscriptions.push(decorations);
-  const tree = new ConnectionsTreeProvider({ store, manager, cache, settings, logger });
+  const tree = new ConnectionsTreeProvider({ store, projects, manager, cache, settings, logger });
   context.subscriptions.push(
     tree,
     vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
@@ -290,6 +299,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       exportResult,
       objectEdits,
       diagnostics,
+      reloadProjects: () => projects.reloadAll(),
     }),
   );
 

@@ -15,6 +15,12 @@ export const COMMAND_IDS = {
   removeFolder: 'datanest.folders.remove',
   /** Puts the clicked (and selected) connections into a folder. */
   moveToFolder: 'datanest.connections.moveToFolder',
+  /** Moves one of the user's connections into the project's `.vscode/datanest.json`. */
+  moveToProject: 'datanest.connections.moveToProject',
+  /** Takes a connection out of the project file and keeps it as the user's own. */
+  moveToUser: 'datanest.connections.moveToUser',
+  /** Opens (creating it when missing) the project's `.vscode/datanest.json`. */
+  openProjectFile: 'datanest.project.openFile',
   /** Gives a connection a color label. */
   setConnectionColor: 'datanest.connections.setColor',
   /** Opens the form for an existing connection. */

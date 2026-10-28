@@ -45,6 +45,7 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     color: '',
     production: false,
     readOnly: false,
+    project: '',
     ...overrides,
   };
 }
@@ -87,6 +88,7 @@ describe('fieldsFrom', () => {
       color: '',
       production: false,
       readOnly: false,
+      project: '',
     });
   });
 
@@ -567,5 +569,32 @@ describe('production and read-only', () => {
     const plain = toInput(fields());
     expect(plain).not.toHaveProperty('production');
     expect(plain).not.toHaveProperty('readOnly');
+  });
+});
+
+describe('project connections (V4.7)', () => {
+  it('starts on the project that holds the connection', () => {
+    expect(
+      fieldsFrom({
+        connectionId: 'p-1',
+        input: { name: 'Dev', driver: 'mysql', host: 'h' },
+        hasStoredPassword: false,
+        storedSsh: [],
+        drivers: [],
+        project: { key: 'file:///shop', name: 'shop' },
+      }).project,
+    ).toBe('file:///shop');
+  });
+
+  it('sends the chosen project with the draft and no folder', () => {
+    const draft = toDraft(fields({ folder: 'Work', project: 'file:///shop' }));
+    expect(draft.project).toBe('file:///shop');
+    expect(draft.input).not.toHaveProperty('folder');
+  });
+
+  it('sends no project for the user list and keeps the folder', () => {
+    const draft = toDraft(fields({ folder: 'Work' }));
+    expect(draft).not.toHaveProperty('project');
+    expect(draft.input.folder).toBe('Work');
   });
 });

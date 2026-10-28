@@ -3,6 +3,7 @@ import { DbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
+import { PROJECT_FILE_PATH } from '../services/project-connections';
 import { describeTarget, type ConnectionConfig } from '../shared/connection';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import { connectionIdOf } from './tree/nodes';
@@ -55,10 +56,22 @@ export function connectionCommandHandlers(
         return undefined;
       }
       const config = requireConnection(deps.store, target);
+      const project = deps.store.projectOf(target);
       const confirm = vscode.l10n.t('Delete');
       const answer = await vscode.window.showWarningMessage(
         vscode.l10n.t('Delete the connection "{0}"?', config.name),
-        { modal: true },
+        {
+          modal: true,
+          ...(project === undefined
+            ? {}
+            : {
+                detail: vscode.l10n.t(
+                  'It is removed from {0} of "{1}", so everyone who uses the project loses it once the change is committed.',
+                  PROJECT_FILE_PATH,
+                  project.name,
+                ),
+              }),
+        },
         confirm,
       );
       if (answer !== confirm) {

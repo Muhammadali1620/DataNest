@@ -77,5 +77,8 @@
   "commands.folders.rename.title": "Rename Folder…",
   "commands.folders.remove.title": "Remove Folder",
   "commands.connections.moveToFolder.title": "Move to Folder…",
-  "commands.connections.setColor.title": "Set Color…"
+  "commands.connections.setColor.title": "Set Color…",
+  "commands.connections.moveToProject.title": "Move to Project Connections…",
+  "commands.connections.moveToUser.title": "Move to My Connections…",
+  "commands.project.openFile.title": "Open Project Connections File"
 }

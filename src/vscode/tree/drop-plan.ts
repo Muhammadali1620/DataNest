@@ -10,19 +10,33 @@ export type DropPlan =
   | { readonly kind: 'folder'; readonly folder: string; readonly before?: string };
 
 /**
- * `folderOf` tells which folder a connection is in (undefined: the top level). Nothing
- * happens when a dragged item is dropped on itself or nothing movable is dragged.
+ * `folderOf` tells which folder a connection is in (undefined: the top level), and
+ * `inProject` whether it lives in a project file, whose order is the file's and which
+ * has no folders (V4.7): such connections neither move nor take drops. Nothing happens
+ * when a dragged item is dropped on itself or nothing movable is dragged.
  */
 export function planDrop(
   dragged: readonly TreeNode[],
   target: TreeNode | undefined,
   folderOf: (connectionId: string) => string | undefined,
+  inProject: (connectionId: string) => boolean = () => false,
 ): DropPlan | undefined {
+  if (
+    target?.kind === 'project' ||
+    (target !== undefined &&
+      'connectionId' in target &&
+      target.connectionId !== undefined &&
+      inProject(target.connectionId))
+  ) {
+    return undefined;
+  }
   const folder = dragged.find((node) => node.kind === 'connectionFolder');
   if (folder !== undefined) {
     return planFolderDrop(folder.folder, target, folderOf);
   }
-  const ids = dragged.flatMap((node) => (node.kind === 'connection' ? [node.connectionId] : []));
+  const ids = dragged.flatMap((node) =>
+    node.kind === 'connection' && !inProject(node.connectionId) ? [node.connectionId] : [],
+  );
   if (ids.length === 0) {
     return undefined;
   }

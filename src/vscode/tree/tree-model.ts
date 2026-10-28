@@ -10,6 +10,7 @@ import { browseSession } from '../../services/browse-session';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
+import type { ProjectView } from '../../services/project-connections';
 import type { DriverId } from '../../shared/connection';
 import {
   GROUP_OF_KIND,
@@ -21,9 +22,20 @@ import {
   type TreeNode,
 } from './nodes';
 
+/** What a project node says when it has nothing to list (V4.7). */
+export interface ProjectTexts {
+  /** The workspace is in Restricted Mode; `{count}` connections are listed. */
+  untrusted(count: number): string;
+  broken(error: string): string;
+  /** An entry of the file was skipped; `position` counts from 1. */
+  skipped(position: number, problem: string): string;
+  readonly empty: string;
+}
+
 export interface TreeTexts {
   /** What an empty folder of connections says. */
   readonly emptyFolder?: string;
+  readonly project?: ProjectTexts;
   readonly tables: string;
   readonly views: string;
   readonly noTables: string;
@@ -40,8 +52,14 @@ export interface TreeSettings {
   showSystemObjects(): boolean;
 }
 
+/** Where the project files of the workspace are read from. */
+export interface ProjectSource {
+  views(): ProjectView[];
+}
+
 export interface TreeModelDeps {
   readonly store: ConnectionStore;
+  readonly projects?: ProjectSource;
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
   readonly settings: TreeSettings;
@@ -58,22 +76,64 @@ export class TreeModel {
     this.logger = deps.logger.child('tree');
   }
 
-  /** Folders first, then the connections outside any folder, in the order the user keeps them. */
+  /**
+   * The open project's connections first (they belong to the code in front of the
+   * user), then folders, then the connections outside any folder, in the user's order.
+   */
   roots(): TreeNode[] {
+    const projects = (this.deps.projects?.views() ?? []).map((view): TreeNode => ({
+      kind: 'project',
+      key: view.folder.key,
+      name: view.folder.name,
+    }));
     const folders = this.deps.store
       .folders()
       .map((folder): TreeNode => ({ kind: 'connectionFolder', folder }));
-    const loose = this.deps.store
-      .list()
+    const loose = this.ownConnections()
       .filter((config) => config.folder === undefined)
       .map((config): TreeNode => ({ kind: 'connection', connectionId: config.id }));
-    return [...folders, ...loose];
+    return [...projects, ...folders, ...loose];
+  }
+
+  /** The connections of a project file, and a leaf for whatever could not be used. */
+  projectChildren(key: string): TreeNode[] {
+    const view = this.deps.projects?.views().find((one) => one.folder.key === key);
+    const texts = this.deps.texts.project;
+    if (view === undefined || texts === undefined) {
+      return [];
+    }
+    switch (view.status) {
+      case 'untrusted':
+        return [{ kind: 'message', text: texts.untrusted(view.listed) }];
+      case 'broken':
+        return [{ kind: 'message', text: texts.broken(view.error ?? ''), failed: true }];
+      case 'ok': {
+        const connections = view.connections.map((config): TreeNode => ({
+          kind: 'connection',
+          connectionId: config.id,
+        }));
+        const skipped = view.problems.map((problem): TreeNode => ({
+          kind: 'message',
+          text: texts.skipped(problem.position, problem.problem),
+          failed: true,
+        }));
+        return connections.length + skipped.length === 0
+          ? [{ kind: 'message', text: texts.empty }]
+          : [...connections, ...skipped];
+      }
+    }
+  }
+
+  /** The user's own connections; project ones live under their project node. */
+  private ownConnections(): ReturnType<ConnectionStore['list']> {
+    return this.deps.store
+      .list()
+      .filter((config) => this.deps.store.projectOf(config.id) === undefined);
   }
 
   /** The connections of one folder; a leaf that says so when there are none. */
   connectionsInFolder(folder: string): TreeNode[] {
-    const connections = this.deps.store
-      .list()
+    const connections = this.ownConnections()
       .filter((config) => config.folder === folder)
       .map((config): TreeNode => ({ kind: 'connection', connectionId: config.id }));
     if (connections.length > 0 || this.deps.texts.emptyFolder === undefined) {
@@ -106,6 +166,8 @@ export class TreeModel {
 
   private async listChildren(node: TreeNode): Promise<TreeNode[]> {
     switch (node.kind) {
+      case 'project':
+        return this.projectChildren(node.key);
       case 'connectionFolder':
         return this.connectionsInFolder(node.folder);
       case 'connection':

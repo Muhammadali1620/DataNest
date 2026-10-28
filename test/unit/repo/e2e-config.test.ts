@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { E2E_OUT_DIR } from '../../../scripts/build-config.mjs';
+import { E2E_OUT_DIR, E2E_WORKSPACE_DIR } from '../../../scripts/build-config.mjs';
 import config from '../../../.vscode-test.mjs';
 import { readJson } from '../../helpers/repo';
 
@@ -7,6 +7,7 @@ interface TestConfig {
   files: string;
   version: string;
   launchArgs: string[];
+  workspaceFolder?: string;
 }
 
 const manifest = readJson('package.json') as { engines: { vscode: string } };
@@ -20,6 +21,11 @@ describe('.vscode-test.mjs', () => {
 
   it('tests against the oldest supported VS Code', () => {
     expect(manifest.engines.vscode).toBe(`^${e2e.version}`);
+  });
+
+  it('opens a scratch folder under out/, which the e2e build empties first', () => {
+    expect(e2e.workspaceFolder).toBe(E2E_WORKSPACE_DIR);
+    expect(E2E_WORKSPACE_DIR.startsWith('out/')).toBe(true);
   });
 
   it('isolates the test host from other installed extensions', () => {

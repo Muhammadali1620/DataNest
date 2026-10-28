@@ -77,5 +77,8 @@
   "commands.folders.rename.title": "Переименовать папку…",
   "commands.folders.remove.title": "Удалить папку",
   "commands.connections.moveToFolder.title": "Переместить в папку…",
-  "commands.connections.setColor.title": "Цвет…"
+  "commands.connections.setColor.title": "Цвет…",
+  "commands.connections.moveToProject.title": "Перенести в подключения проекта…",
+  "commands.connections.moveToUser.title": "Перенести в мои подключения…",
+  "commands.project.openFile.title": "Открыть файл подключений проекта"
 }

@@ -101,28 +101,28 @@ describe('disconnect', () => {
 });
 
 describe('refresh', () => {
-  it('refreshes the clicked subtree and drops that connection from the cache', () => {
+  it('refreshes the clicked subtree and drops that connection from the cache', async () => {
     const { handlers, refresh, invalidate } = setup();
-    handlers.refresh(tableNode);
+    await handlers.refresh(tableNode);
     expect(invalidate).toHaveBeenCalledWith('c1');
     expect(refresh).toHaveBeenCalledWith(tableNode);
   });
 
-  it('refreshes everything from the view title and drops the whole cache', () => {
+  it('refreshes everything from the view title and drops the whole cache', async () => {
     const { handlers, refresh, invalidate } = setup();
-    handlers.refresh();
+    await handlers.refresh();
     expect(invalidate).toHaveBeenCalledWith(undefined);
     expect(refresh).toHaveBeenCalledWith(undefined);
   });
 
-  it('refreshes everything when given a bare id', () => {
+  it('refreshes everything when given a bare id', async () => {
     const { handlers, refresh, invalidate } = setup();
-    handlers.refresh('c1');
+    await handlers.refresh('c1');
     expect(invalidate).toHaveBeenCalledWith(undefined);
     expect(refresh).toHaveBeenCalledWith(undefined);
   });
 
-  it('drops the cache before the tree asks for children again', () => {
+  it('drops the cache before the tree asks for children again', async () => {
     const order: string[] = [];
     const handlers = treeCommandHandlers({
       manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
@@ -141,8 +141,32 @@ describe('refresh', () => {
       clipboard: { writeText: () => Promise.resolve() },
       noTargetMessage: NO_TARGET,
     });
-    handlers.refresh(tableNode);
+    await handlers.refresh(tableNode);
     expect(order).toEqual(['invalidate', 'refresh']);
+  });
+
+  it('reads the project files again before redrawing the whole tree, not for a subtree', async () => {
+    const order: string[] = [];
+    const handlers = treeCommandHandlers({
+      manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
+      tree: {
+        refresh: () => {
+          order.push('refresh');
+        },
+      },
+      cache: { invalidate: () => undefined },
+      openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.resolve(),
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+      reloadProjects: () => {
+        order.push('reload');
+        return Promise.resolve();
+      },
+    });
+    await handlers.refresh();
+    await handlers.refresh(tableNode);
+    expect(order).toEqual(['reload', 'refresh', 'refresh']);
   });
 });
 

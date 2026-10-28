@@ -28,12 +28,19 @@ const sshSecretChangeSchema = object({
   passphrase: passwordChangeSchema,
 });
 
+/** Workspace folders are named by their URI. */
+const projectKeySchema = string({ minLength: 1, maxLength: 4000 });
+
 const draftSchema = object({
   input: connectionInputSchema,
   password: passwordChangeSchema,
   /** Hops left out keep their stored secrets. */
   ssh: optional(array(sshSecretChangeSchema, { maxLength: 20 })),
+  /** A new connection goes to this project's file instead of the user's list (V4.7). */
+  project: optional(projectKeySchema),
 });
+
+const projectSchema = object({ key: projectKeySchema, name: string({ maxLength: 500 }) });
 
 /** Everything the page needs to render itself; the host re-sends it on every load (D21). */
 const formStateSchema = object({
@@ -56,6 +63,10 @@ const formStateSchema = object({
     }),
     { maxLength: 20 },
   ),
+  /** Projects whose file may take a new connection; empty outside a trusted workspace. */
+  projects: optional(array(projectSchema, { maxLength: 100 })),
+  /** The project whose file holds the edited connection; absent for the user's own. */
+  project: optional(projectSchema),
   /** Folders the connection can be put in; a new name creates one. */
   folders: optional(array(string({ maxLength: CONNECTION_LIMITS.folder }), { maxLength: 10_000 })),
   /** Driver ids the page may offer, with their default ports. */

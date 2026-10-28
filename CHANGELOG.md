@@ -44,6 +44,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   foreign key points and the comment; over a CTE, its columns. Go to Definition (F12)
   on a table, view, column or routine call opens its DDL, read-only.
 
+- A failed statement shows its error as a squiggle in the editor and in Problems, on
+  the word the server complained about. MySQL and SQLite positions are now read from
+  their messages, so “jump to the error” is exact there too.
+
 ### Fixed (completion)
 
 - After a `;` completion treats the cursor as the start of a new statement.

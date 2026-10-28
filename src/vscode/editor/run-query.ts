@@ -20,6 +20,10 @@ export interface RunQueryDeps {
   readonly logger: Logger;
   /** Opens (or reveals) the result panel of a document. */
   readonly showResults: (documentUri: string) => void;
+  /** Marks the errors of a run in its editor. */
+  readonly diagnostics?: {
+    show(documentUri: string, results: RunOutcome['results'], driver: DriverId | undefined): void;
+  };
 }
 
 export type RunCommandName = 'run' | 'runAll' | 'cancel' | 'runRange';
@@ -57,6 +61,7 @@ export function runCommandHandlers(
     // The panel opens before the run, so a slow query shows "Running…" at once.
     deps.showResults(documentUri);
     const outcome = await deps.runner.run({ documentUri, target, statements });
+    deps.diagnostics?.show(documentUri, outcome.results, driverOf(deps, documentUri));
     report(outcome, deps.logger);
     return outcome;
   };

@@ -10,6 +10,7 @@ import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/r
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
 import { objectEditHandlers, type ObjectEditRegistry } from './editor/object-edit';
+import type { ErrorDiagnostics } from './editor/error-diagnostics';
 import { SchemaActions } from '../services/schema-actions';
 import { browseSession } from '../services/browse-session';
 import { schemaCommandHandlers, schemaPerformer } from './tree/schema-commands';
@@ -41,6 +42,8 @@ export interface CommandDeps {
   readonly showResults: (documentUri: string) => void;
   /** Opens a table from the tree as a paged result. */
   readonly openTable: (node: TableNode) => Promise<void>;
+  /** Marks the errors of a run in its editor (V3.11). */
+  readonly diagnostics: ErrorDiagnostics;
   /** Which open editors edit the definition of an object. */
   readonly objectEdits: ObjectEditRegistry;
   /** Writes a result to a file the user picks. */
@@ -66,6 +69,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     store: deps.store,
     logger: deps.logger,
     showResults: deps.showResults,
+    diagnostics: deps.diagnostics,
   });
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,

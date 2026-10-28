@@ -6,6 +6,7 @@ import { DbError, errorMessage, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { SqlStatement } from '../core/sql/split';
 import { syntaxOf } from '../core/sql/tokenizer';
+import { guessErrorPosition } from '../core/sql/error-position';
 import type { ResultEdit } from '../core/model/editability';
 import type { ResultColumn, Session } from '../drivers/driver';
 import { analyzeEditability } from './result-editability';
@@ -264,6 +265,13 @@ export class QueryRunner {
       // A cancel the timeout asked for is reported as a timeout, which is the
       // difference the user cares about.
       const timedOut = run.timedOut && (dbError.code === 'cancelled' || dbError.code === 'timeout');
+      // Most servers do not say where the problem is; the message often does.
+      const driverId = await this.deps.manager
+        .driverOf(request.target.connectionId)
+        .then((driver) => driver.id)
+        .catch(() => undefined);
+      const position =
+        dbError.position ?? guessErrorPosition(dbError.message, statement.text, driverId);
       this.remember(request, statement.text, {
         durationMs: Date.now() - started,
         error: timedOut ? 'Timed out' : dbError.message,
@@ -281,7 +289,7 @@ export class QueryRunner {
           message: timedOut
             ? `Cancelled after ${Math.round(timeoutMs / 1000)} s (datanest.queryTimeout)`
             : dbError.message,
-          ...(dbError.position === undefined ? {} : { position: dbError.position }),
+          ...(position === undefined ? {} : { position }),
         },
       });
     } finally {

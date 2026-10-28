@@ -210,6 +210,21 @@ describe('QueryRunner', () => {
       expect(outcome.results[0]?.error?.position).toBe(7);
     });
 
+    it('finds the position in the message when the driver gives none', async () => {
+      drivers.driver('mysql').executeError = new DbError(
+        'syntax',
+        "You have an error in your SQL syntax; ... near 'FORM t' at line 1",
+      );
+      const outcome = await runner.run(request('SELECT a FORM t'));
+      expect(outcome.results[0]?.error?.position).toBe(9);
+    });
+
+    it('stores no position when neither the driver nor the message has one', async () => {
+      drivers.driver('mysql').executeError = new DbError('constraint', 'Duplicate entry');
+      const outcome = await runner.run(request('INSERT INTO t VALUES (1)'));
+      expect(outcome.results[0]?.error?.position).toBeUndefined();
+    });
+
     it('stops at the first failure and counts what it skipped', async () => {
       drivers.driver('mysql').executeError = new DbError('syntax', 'bad');
       const outcome = await runner.run(request('SELECT 1; SELECT 2; SELECT 3'));

@@ -30,6 +30,7 @@ import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/compl
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { SqlFormattingProvider } from './vscode/editor/formatting';
 import { DDL_SCHEME, SqlNavigation } from './vscode/editor/navigation';
+import { ErrorDiagnostics } from './vscode/editor/error-diagnostics';
 import { createBundleFormatterLoader } from './services/sql-format';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
@@ -215,7 +216,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await tables.open({ target, table });
   };
 
-  const lenses = new RunCodeLensProvider({ runner, editors, store, logger, showResults });
+  const diagnostics = new ErrorDiagnostics();
+  context.subscriptions.push(diagnostics);
+  const lenses = new RunCodeLensProvider({
+    runner,
+    editors,
+    store,
+    logger,
+    showResults,
+    diagnostics,
+  });
   context.subscriptions.push(
     lenses,
     // Results belong to a document; closing it throws them away.
@@ -258,6 +268,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       openTable,
       exportResult,
       objectEdits,
+      diagnostics,
     }),
   );
 

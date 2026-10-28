@@ -10,10 +10,13 @@ import {
   type ConnectionConfig,
   type ConnectionInput,
   connectionProblems,
-  DRIVER_IDS,
   isFileDriver,
+  type SshHop,
+  type SshHopSecrets,
+  sshHopsOf,
 } from '../shared/connection';
-import { array, literal, number, object, optional, type Schema, string } from '../shared/schema';
+import { connectionInputShape } from '../shared/connection-schema';
+import { array, literal, object, type Schema, string } from '../shared/schema';
 
 /** The slice of `vscode.Memento` the store needs. */
 export interface KeyValueState {
@@ -35,15 +38,21 @@ export function passwordSecretKey(connectionId: string): string {
   return `connection.${connectionId}.password`;
 }
 
+/** Keys of an SSH hop's password and key passphrase in SecretStorage. */
+export function sshSecretKey(
+  connectionId: string,
+  hopId: string,
+  kind: keyof SshHopSecrets,
+): string {
+  return `connection.${connectionId}.ssh.${hopId}.${kind}`;
+}
+
+const SSH_SECRET_KINDS = ['password', 'passphrase'] as const satisfies (keyof SshHopSecrets)[];
+
 const connectionConfigSchema: Schema<ConnectionConfig> = object({
+  ...connectionInputShape,
   id: string({ minLength: 1, maxLength: 100 }),
   name: string({ minLength: 1, maxLength: CONNECTION_LIMITS.name }),
-  driver: literal(...DRIVER_IDS),
-  host: optional(string({ maxLength: CONNECTION_LIMITS.field })),
-  port: optional(number({ integer: true, min: 1, max: 65_535 })),
-  user: optional(string({ maxLength: CONNECTION_LIMITS.field })),
-  database: optional(string({ maxLength: CONNECTION_LIMITS.field })),
-  file: optional(string({ maxLength: CONNECTION_LIMITS.file })),
 });
 
 const stateSchema = object({
@@ -56,6 +65,14 @@ export type PasswordChange =
   | { readonly kind: 'keep' }
   | { readonly kind: 'set'; readonly value: string }
   | { readonly kind: 'clear' };
+
+/** Secret changes per SSH hop id; hops left out keep what is stored. */
+export type SshSecretChanges = Readonly<
+  Record<string, { readonly password?: PasswordChange; readonly passphrase?: PasswordChange }>
+>;
+
+/** Secret values per SSH hop id, for a new connection. */
+export type SshSecretValues = Readonly<Record<string, SshHopSecrets>>;
 
 export interface ConnectionStoreDeps {
   readonly state: KeyValueState;
@@ -95,11 +112,23 @@ export class ConnectionStore {
     return toDisposable(() => this.listeners.delete(listener));
   }
 
-  async add(input: ConnectionInput, password?: string): Promise<ConnectionConfig> {
+  async add(
+    input: ConnectionInput,
+    password?: string,
+    ssh: SshSecretValues = {},
+  ): Promise<ConnectionConfig> {
     const config: ConnectionConfig = { ...normalizeInput(input), id: crypto.randomUUID() };
     await this.save([...this.items, config]);
     if (password !== undefined && password !== '') {
       await this.secrets.store(passwordSecretKey(config.id), password);
+    }
+    for (const hop of sshHopsOf(config)) {
+      for (const kind of SSH_SECRET_KINDS) {
+        const value = ssh[hop.id]?.[kind];
+        if (value !== undefined && value !== '') {
+          await this.secrets.store(sshSecretKey(config.id, hop.id, kind), value);
+        }
+      }
     }
     this.notify();
     return config;
@@ -109,23 +138,29 @@ export class ConnectionStore {
     id: string,
     input: ConnectionInput,
     password: PasswordChange = { kind: 'keep' },
+    ssh: SshSecretChanges = {},
   ): Promise<ConnectionConfig> {
     const index = this.items.findIndex((item) => item.id === id);
     if (index === -1) {
       throw new DbError('not-found', `Connection "${id}" does not exist`);
     }
+    const before = this.items[index];
     const config: ConnectionConfig = { ...normalizeInput(input), id };
     const items = [...this.items];
     items[index] = config;
     await this.save(items);
-    if (password.kind === 'set') {
-      if (password.value === '') {
-        await this.secrets.delete(passwordSecretKey(id));
-      } else {
-        await this.secrets.store(passwordSecretKey(id), password.value);
+    await this.applySecret(passwordSecretKey(id), password);
+    const kept = new Set(sshHopsOf(config).map((hop) => hop.id));
+    for (const hop of sshHopsOf(config)) {
+      for (const kind of SSH_SECRET_KINDS) {
+        await this.applySecret(sshSecretKey(id, hop.id, kind), ssh[hop.id]?.[kind]);
       }
-    } else if (password.kind === 'clear') {
-      await this.secrets.delete(passwordSecretKey(id));
+    }
+    // A hop that is gone takes its secrets with it.
+    for (const hop of before === undefined ? [] : sshHopsOf(before)) {
+      if (!kept.has(hop.id)) {
+        await this.deleteHopSecrets(id, hop);
+      }
     }
     this.notify();
     return config;
@@ -137,8 +172,12 @@ export class ConnectionStore {
     if (items.length === this.items.length) {
       return;
     }
+    const removed = this.get(id);
     await this.save(items);
     await this.secrets.delete(passwordSecretKey(id));
+    for (const hop of removed === undefined ? [] : sshHopsOf(removed)) {
+      await this.deleteHopSecrets(id, hop);
+    }
     this.notify();
   }
 
@@ -158,12 +197,53 @@ export class ConnectionStore {
     if (password !== undefined) {
       await this.secrets.store(passwordSecretKey(copy.id), password);
     }
+    for (const hop of sshHopsOf(source)) {
+      for (const kind of SSH_SECRET_KINDS) {
+        const value = await this.secrets.get(sshSecretKey(id, hop.id, kind));
+        if (value !== undefined) {
+          await this.secrets.store(sshSecretKey(copy.id, hop.id, kind), value);
+        }
+      }
+    }
     this.notify();
     return copy;
   }
 
   async getPassword(id: string): Promise<string | undefined> {
     return await this.secrets.get(passwordSecretKey(id));
+  }
+
+  /** The stored password and passphrase of every SSH hop of a connection, by hop id. */
+  async getSshSecrets(id: string): Promise<Record<string, SshHopSecrets>> {
+    const config = this.get(id);
+    const result: Record<string, SshHopSecrets> = {};
+    for (const hop of config === undefined ? [] : sshHopsOf(config)) {
+      const password = await this.secrets.get(sshSecretKey(id, hop.id, 'password'));
+      const passphrase = await this.secrets.get(sshSecretKey(id, hop.id, 'passphrase'));
+      result[hop.id] = {
+        ...(password === undefined ? {} : { password }),
+        ...(passphrase === undefined ? {} : { passphrase }),
+      };
+    }
+    return result;
+  }
+
+  /** Writes, erases or keeps one secret; an empty value erases it. */
+  private async applySecret(key: string, change: PasswordChange | undefined): Promise<void> {
+    if (change === undefined || change.kind === 'keep') {
+      return;
+    }
+    if (change.kind === 'set' && change.value !== '') {
+      await this.secrets.store(key, change.value);
+    } else {
+      await this.secrets.delete(key);
+    }
+  }
+
+  private async deleteHopSecrets(connectionId: string, hop: SshHop): Promise<void> {
+    for (const kind of SSH_SECRET_KINDS) {
+      await this.secrets.delete(sshSecretKey(connectionId, hop.id, kind));
+    }
   }
 
   private copyName(name: string): string {
@@ -222,10 +302,30 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     user: file ? undefined : trim(input.user),
     database: file ? undefined : trim(input.database),
     file: file ? trim(input.file) : undefined,
+    ssh: file || input.ssh === undefined ? undefined : normalizeHop(input.ssh),
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
     throw new DbError('unsupported', `Invalid connection: ${problems.join(', ')}`);
   }
   return normalized;
+}
+
+/** Only the fields of the hop's auth method are kept: a key path is not stored for `agent`. */
+function normalizeHop(hop: SshHop): SshHop {
+  const trim = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+  const keyFile = hop.auth === 'key' ? trim(hop.keyFile) : undefined;
+  const agentSocket = hop.auth === 'agent' ? trim(hop.agentSocket) : undefined;
+  return {
+    id: hop.id,
+    host: hop.host.trim(),
+    ...(hop.port === undefined ? {} : { port: hop.port }),
+    user: hop.user.trim(),
+    auth: hop.auth,
+    ...(keyFile === undefined ? {} : { keyFile }),
+    ...(agentSocket === undefined ? {} : { agentSocket }),
+  };
 }

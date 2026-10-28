@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import {
@@ -8,7 +9,15 @@ import {
 import { RpcPeer } from '../../shared/rpc';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
-import { driverOptions, NEW_CONNECTION, toInput, toPasswordChange } from './connection-form-state';
+import {
+  driverOptions,
+  NEW_CONNECTION,
+  storedSshFlags,
+  testSshSecrets,
+  toInput,
+  toPasswordChange,
+  toSshChanges,
+} from './connection-form-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface ConnectionFormDeps {
@@ -79,6 +88,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
     });
     this.rpc.handle('save', async (draft) => ({ connectionId: await this.save(draft) }));
     this.rpc.handle('pickFile', async ({ create }) => await pickDatabaseFile(create));
+    this.rpc.handle('pickKeyFile', async () => await pickKeyFile());
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
     this.rpc.on('ready', () => {
       this.sendState();
@@ -111,7 +121,9 @@ export class ConnectionFormPanel implements vscode.Disposable {
 
   private async test(draft: ConnectionDraft): Promise<void> {
     const password = await this.resolveTestPassword(draft);
-    await this.deps.manager.test(draft.input, password);
+    const stored =
+      this.connectionId === undefined ? {} : await this.deps.store.getSshSecrets(this.connectionId);
+    await this.deps.manager.test(draft.input, password, testSshSecrets(draft, stored));
   }
 
   /** "Test" must work while editing without retyping a stored password. */
@@ -131,13 +143,19 @@ export class ConnectionFormPanel implements vscode.Disposable {
       const created = await this.deps.store.add(
         draft.input,
         change.kind === 'set' ? change.value : undefined,
+        testSshSecrets(draft, {}),
       );
       this.connectionId = created.id;
       this.retitle(created.name);
       this.sendState();
       return created.id;
     }
-    const updated = await this.deps.store.update(this.connectionId, draft.input, change);
+    const updated = await this.deps.store.update(
+      this.connectionId,
+      draft.input,
+      change,
+      toSshChanges(draft),
+    );
     this.retitle(updated.name);
     this.sendState();
     return updated.id;
@@ -158,6 +176,8 @@ export class ConnectionFormPanel implements vscode.Disposable {
       connectionId === undefined
         ? false
         : (await this.deps.store.getPassword(connectionId)) !== undefined;
+    const storedSsh =
+      connectionId === undefined ? {} : await this.deps.store.getSshSecrets(connectionId);
     // The panel may have been closed while the secret was read; stay silent then.
     if (this.disposed) {
       return;
@@ -166,6 +186,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       ...(connectionId === undefined ? {} : { connectionId }),
       input: config === undefined ? NEW_CONNECTION : toInput(config),
       hasStoredPassword,
+      storedSsh: storedSshFlags(storedSsh),
       drivers: driverOptions(),
     });
   }
@@ -184,6 +205,17 @@ async function pickDatabaseFile(create: boolean): Promise<{ file?: string }> {
     title: vscode.l10n.t('Open SQLite Database'),
     canSelectMany: false,
     filters,
+  });
+  const first = chosen?.[0];
+  return first === undefined ? {} : { file: first.fsPath };
+}
+
+async function pickKeyFile(): Promise<{ file?: string }> {
+  const ssh = vscode.Uri.joinPath(vscode.Uri.file(homedir()), '.ssh');
+  const chosen = await vscode.window.showOpenDialog({
+    title: vscode.l10n.t('SSH Private Key'),
+    canSelectMany: false,
+    defaultUri: ssh,
   });
   const first = chosen?.[0];
   return first === undefined ? {} : { file: first.fsPath };

@@ -1,6 +1,9 @@
 // Connection settings for the databases from docker/compose.yml.
 // Ports can be overridden with env vars, but must stay in 7000-7999 (ARCHITECTURE.md D17).
 
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 export type TestDatabaseId = 'mysql' | 'mariadb' | 'postgres';
 
 export interface TestDatabase {
@@ -60,5 +63,44 @@ export function testDatabase(
     password: 'datanest',
     database: 'datanest_test',
     emptyDatabase: 'datanest_empty',
+  };
+}
+
+/** The SSH server from docker/compose.yml; the databases sit behind it (V4). */
+export interface TestSshServer {
+  readonly host: string;
+  readonly port: number;
+  readonly user: string;
+  readonly password: string;
+  /** Private key the server accepts, encrypted with `passphrase`. */
+  readonly keyFile: string;
+  readonly passphrase: string;
+  /** How the databases are named inside the compose network, as the server sees them. */
+  readonly targets: Readonly<Record<TestDatabaseId, { host: string; port: number }>>;
+}
+
+export const SSH_PORT_ENV = 'DATANEST_SSH_PORT';
+export const DEFAULT_SSH_PORT = 7022;
+
+export function testSshServer(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): TestSshServer {
+  const raw = env[SSH_PORT_ENV]?.trim();
+  const port = raw === undefined || raw === '' ? DEFAULT_SSH_PORT : Number(raw);
+  if (!Number.isInteger(port) || port < PORT_RANGE.min || port > PORT_RANGE.max) {
+    throw new Error(`${SSH_PORT_ENV} must be within ${PORT_RANGE.min}-${PORT_RANGE.max}`);
+  }
+  return {
+    host: '127.0.0.1',
+    port,
+    user: 'datanest',
+    password: 'datanest',
+    keyFile: join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'ssh', 'id_ed25519'),
+    passphrase: 'datanest-key',
+    targets: {
+      mysql: { host: 'mysql', port: 3306 },
+      mariadb: { host: 'mariadb', port: 3306 },
+      postgres: { host: 'postgres', port: 5432 },
+    },
   };
 }

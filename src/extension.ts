@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
 import { ConnectionManager, type SessionTarget } from './services/connection-manager';
 import { ConnectionStore } from './services/connection-store';
+import { KnownHosts } from './services/known-hosts';
+import { createBundleSshLoader, TunnelPool } from './services/tunnels';
+import { createHostKeyCheck } from './vscode/ssh-host-keys';
 import { MetadataCache } from './services/metadata-cache';
 import type { TableRef } from './core/model/objects';
 import { CONFIG_KEYS, CONFIG_SECTION, CONTEXT_KEYS } from './vscode/command-ids';
@@ -59,7 +62,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     loader: createBundleDriverLoader(__filename),
     logger,
   });
-  const manager = new ConnectionManager({ store, drivers, logger });
+  // ssh2 is a bundle of its own, loaded with the first SSH connection (§7).
+  const tunnels = new TunnelPool({ load: createBundleSshLoader(__filename), logger });
+  context.subscriptions.push(tunnels);
+  const manager = new ConnectionManager({
+    store,
+    drivers,
+    logger,
+    tunnels,
+    checkHostKey: createHostKeyCheck(new KnownHosts(context.globalState, logger)),
+  });
   context.subscriptions.push(manager);
   const cache = new MetadataCache({ logger });
 

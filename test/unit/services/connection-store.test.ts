@@ -5,6 +5,7 @@ import {
   CONNECTIONS_STATE_KEY,
   ConnectionStore,
   passwordSecretKey,
+  sshSecretKey,
 } from '../../../src/services/connection-store';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 
@@ -237,6 +238,135 @@ describe('ConnectionStore', () => {
 
     it('errors from the store surface as DbError, not silent corruption', async () => {
       await expect(store.update('missing', mysqlInput)).rejects.toBeInstanceOf(DbError);
+    });
+  });
+
+  describe('SSH', () => {
+    const viaSsh: ConnectionInput = {
+      ...mysqlInput,
+      ssh: { id: 'main', host: ' bastion ', port: 2222, user: ' deploy ', auth: 'password' },
+    };
+
+    it('saves the hop trimmed and its secrets in SecretStorage only', async () => {
+      const config = await store.add(viaSsh, 'db', { main: { password: 'sshpw', passphrase: '' } });
+      expect(config.ssh).toEqual({
+        id: 'main',
+        host: 'bastion',
+        port: 2222,
+        user: 'deploy',
+        auth: 'password',
+      });
+      expect(secrets.data.get(sshSecretKey(config.id, 'main', 'password'))).toBe('sshpw');
+      expect(secrets.data.has(sshSecretKey(config.id, 'main', 'passphrase'))).toBe(false);
+      expect(JSON.stringify(state.get(CONNECTIONS_STATE_KEY))).not.toContain('sshpw');
+      expect(await store.getSshSecrets(config.id)).toEqual({ main: { password: 'sshpw' } });
+    });
+
+    it('keeps only the fields of the chosen method', async () => {
+      const config = await store.add({
+        ...mysqlInput,
+        ssh: {
+          id: 'main',
+          host: 'b',
+          user: 'u',
+          auth: 'agent',
+          keyFile: '/key',
+          agentSocket: ' /run/agent ',
+        },
+      });
+      expect(config.ssh).toEqual({
+        id: 'main',
+        host: 'b',
+        user: 'u',
+        auth: 'agent',
+        agentSocket: '/run/agent',
+      });
+    });
+
+    it('drops SSH settings for file databases', async () => {
+      const config = await store.add({ name: 'f', driver: 'sqlite', file: '/db', ssh: viaSsh.ssh });
+      expect(config.ssh).toBeUndefined();
+    });
+
+    it('refuses a hop that cannot be used', async () => {
+      await expect(
+        store.add({ ...mysqlInput, ssh: { id: 'main', host: '', user: 'u', auth: 'password' } }),
+      ).rejects.toMatchObject({ message: expect.stringContaining('ssh-host-empty') as unknown });
+      await expect(
+        store.add({ ...mysqlInput, ssh: { id: 'a b', host: 'h', user: 'u', auth: 'password' } }),
+      ).rejects.toMatchObject({ message: expect.stringContaining('ssh-id-invalid') as unknown });
+    });
+
+    it('keeps, replaces and erases hop secrets on update', async () => {
+      const config = await store.add(viaSsh, undefined, { main: { password: 'one' } });
+      await store.update(config.id, viaSsh);
+      expect(await store.getSshSecrets(config.id)).toEqual({ main: { password: 'one' } });
+      await store.update(config.id, viaSsh, undefined, {
+        main: { password: { kind: 'set', value: 'two' }, passphrase: { kind: 'set', value: 'pp' } },
+      });
+      expect(await store.getSshSecrets(config.id)).toEqual({
+        main: { password: 'two', passphrase: 'pp' },
+      });
+      await store.update(config.id, viaSsh, undefined, {
+        main: { password: { kind: 'clear' }, passphrase: { kind: 'set', value: '' } },
+      });
+      expect(await store.getSshSecrets(config.id)).toEqual({ main: {} });
+    });
+
+    it('erases the secrets of a hop that was removed or replaced', async () => {
+      const config = await store.add(viaSsh, 'db', { main: { password: 'p', passphrase: 'q' } });
+      await store.update(config.id, {
+        ...viaSsh,
+        ssh: { id: 'other', host: 'bastion', user: 'deploy', auth: 'password' },
+      });
+      expect(secrets.data.has(sshSecretKey(config.id, 'main', 'password'))).toBe(false);
+      expect(secrets.data.has(sshSecretKey(config.id, 'main', 'passphrase'))).toBe(false);
+      await store.update(config.id, mysqlInput);
+      expect(store.get(config.id)?.ssh).toBeUndefined();
+      expect(await store.getPassword(config.id)).toBe('db');
+    });
+
+    it('removes and duplicates hop secrets along with the connection', async () => {
+      const config = await store.add(viaSsh, undefined, { main: { password: 'p' } });
+      const copy = await store.duplicate(config.id);
+      expect(copy.ssh).toEqual(config.ssh);
+      expect(await store.getSshSecrets(copy.id)).toEqual({ main: { password: 'p' } });
+      await store.remove(config.id);
+      expect(secrets.data.has(sshSecretKey(config.id, 'main', 'password'))).toBe(false);
+      expect(await store.getSshSecrets(copy.id)).toEqual({ main: { password: 'p' } });
+    });
+
+    it('has no SSH secrets for unknown or direct connections', async () => {
+      expect(await store.getSshSecrets('missing')).toEqual({});
+      const direct = await store.add(mysqlInput);
+      expect(await store.getSshSecrets(direct.id)).toEqual({});
+    });
+
+    it('loads saved state with an SSH hop and rejects a broken one', () => {
+      const good = new FakeMemento(
+        new Map<string, unknown>([
+          [
+            CONNECTIONS_STATE_KEY,
+            {
+              version: 1,
+              items: [{ id: 'x', name: 'n', driver: 'mysql', host: 'h', ssh: viaSsh.ssh }],
+            },
+          ],
+        ]),
+      );
+      expect(new ConnectionStore({ state: good, secrets, logger }).get('x')?.ssh?.id).toBe('main');
+      const bad = new FakeMemento(
+        new Map<string, unknown>([
+          [
+            CONNECTIONS_STATE_KEY,
+            {
+              version: 1,
+              items: [{ id: 'x', name: 'n', driver: 'mysql', host: 'h', ssh: { id: 'main' } }],
+            },
+          ],
+        ]),
+      );
+      expect(new ConnectionStore({ state: bad, secrets, logger }).list()).toEqual([]);
     });
   });
 });

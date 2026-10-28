@@ -8,11 +8,20 @@ import type {
   ConnectionConfig,
   ConnectionInput,
   ResolvedConnectionConfig,
+  SshHopSecrets,
 } from '../shared/connection';
 import type { DriverId } from '../shared/connection';
 import type { Driver, Session } from '../drivers/driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
+import {
+  type HostKeyCheck,
+  type Tunnel,
+  type TunnelLease,
+  tunnelKeyOf,
+  type TunnelSpec,
+  tunnelSpecOf,
+} from './tunnels';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -34,10 +43,27 @@ export interface DriverProvider {
   get(id: DriverId): Promise<Driver>;
 }
 
+/** The slice of TunnelPool the manager needs. */
+export interface TunnelProvider {
+  acquire(key: string, spec: TunnelSpec): Promise<TunnelLease>;
+  openPrivate(spec: TunnelSpec): Promise<Tunnel>;
+}
+
 export interface ConnectionManagerDeps {
   readonly store: ConnectionStore;
   readonly drivers: DriverProvider;
   readonly logger: Logger;
+  /** Needed only by connections that go through SSH. */
+  readonly tunnels?: TunnelProvider;
+  /** Asked before trusting an SSH server's key; without it every key is refused. */
+  readonly checkHostKey?: HostKeyCheck;
+}
+
+const REFUSE_HOST_KEY: HostKeyCheck = () => Promise.resolve(false);
+
+/** Where a driver should connect instead of the saved host: a local tunnel port. */
+interface Endpoint {
+  readonly port: number;
 }
 
 interface Holder {
@@ -55,6 +81,8 @@ export class ConnectionManager implements Disposable {
   private readonly store: ConnectionStore;
   private readonly drivers: DriverProvider;
   private readonly logger: Logger;
+  private readonly tunnels: TunnelProvider | undefined;
+  private readonly checkHostKey: HostKeyCheck;
   private readonly holders = new Map<string, Holder>();
   private readonly opening = new Map<string, Promise<Session>>();
   private readonly states = new Map<string, ConnectionState>();
@@ -65,6 +93,8 @@ export class ConnectionManager implements Disposable {
     this.store = deps.store;
     this.drivers = deps.drivers;
     this.logger = deps.logger.child('connections');
+    this.tunnels = deps.tunnels;
+    this.checkHostKey = deps.checkHostKey ?? REFUSE_HOST_KEY;
   }
 
   /**
@@ -172,19 +202,30 @@ export class ConnectionManager implements Disposable {
    * Opens a throwaway session to check settings the user has not saved yet
    * ("Test connection" in the form). Never touches stored state or statuses.
    */
-  async test(input: ConnectionInput, password?: string): Promise<void> {
+  async test(
+    input: ConnectionInput,
+    password?: string,
+    ssh: Readonly<Record<string, SshHopSecrets>> = {},
+  ): Promise<void> {
     const driver = await this.drivers.get(input.driver);
-    const resolved: ResolvedConnectionConfig = {
-      ...input,
-      id: 'test',
-      ...(password === undefined || password === '' ? {} : { password }),
-    };
-    const session = await driver.openSession(resolved);
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
-      // Opening alone can succeed lazily; one statement proves the link works.
-      await drain(session.execute('SELECT 1', { rowLimit: 1 }));
+      const resolved = resolve({ ...input, id: 'test' }, {}, password, tunnel);
+      let session: Session;
+      try {
+        session = await driver.openSession(resolved);
+      } catch (error) {
+        throw tunnel?.forwardError() ?? error;
+      }
+      try {
+        // Opening alone can succeed lazily; one statement proves the link works.
+        await drain(session.execute('SELECT 1', { rowLimit: 1 }));
+      } finally {
+        await session.close().catch(() => undefined);
+      }
     } finally {
-      await session.close().catch(() => undefined);
+      await tunnel?.close();
     }
   }
 
@@ -215,14 +256,29 @@ export class ConnectionManager implements Disposable {
     try {
       const driver = await this.drivers.get(config.driver);
       const password = await this.store.getPassword(connectionId);
-      const opened = await driver.openSession(resolve(config, target, password));
+      const lease = await this.leaseTunnel(config);
+      let opened: Session;
+      try {
+        opened = await driver.openSession(resolve(config, target, password, lease));
+      } catch (error) {
+        await lease?.release();
+        // "Connection reset" says little; the SSH server's reason says what is wrong.
+        throw lease?.forwardError() ?? error;
+      }
       if (this.disposed) {
         await opened.close().catch(() => undefined);
+        await lease?.release();
         throw new DbError('internal', 'The connection manager is disposed');
       }
-      const session = new ManagedSession(opened, (error) => {
-        this.forget(owner, error);
-      });
+      const session = new ManagedSession(
+        opened,
+        (error) => {
+          this.forget(owner, error);
+        },
+        async () => {
+          await lease?.release();
+        },
+      );
       this.holders.set(owner, { target, session });
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -252,6 +308,25 @@ export class ConnectionManager implements Disposable {
     if (!this.connectedIds().includes(connectionId)) {
       this.setState(connectionId, { status: 'error', error: errorMessage(error) });
     }
+  }
+
+  private async leaseTunnel(config: ConnectionConfig): Promise<TunnelLease | undefined> {
+    const spec = tunnelSpecOf(
+      config,
+      config.ssh === undefined ? {} : await this.store.getSshSecrets(config.id),
+      this.checkHostKey,
+    );
+    if (spec === undefined) {
+      return undefined;
+    }
+    return await this.tunnelProvider().acquire(tunnelKeyOf(config.id, config), spec);
+  }
+
+  private tunnelProvider(): TunnelProvider {
+    if (this.tunnels === undefined) {
+      throw new DbError('unsupported', 'SSH tunnels are not available');
+    }
+    return this.tunnels;
   }
 
   private configOf(connectionId: string): ConnectionConfig {
@@ -288,13 +363,23 @@ function sameTarget(a: SessionTarget, b: SessionTarget): boolean {
 
 function resolve(
   config: ConnectionConfig,
-  target: SessionTarget,
+  target: Partial<SessionTarget>,
   password: string | undefined,
+  endpoint: Endpoint | undefined,
 ): ResolvedConnectionConfig {
   return {
     ...config,
     ...(target.database === undefined ? {} : { database: target.database }),
     ...(password === undefined || password === '' ? {} : { password }),
+    // Through a tunnel the driver talks to a local port, but TLS still checks the
+    // certificate against the server's own name.
+    ...(endpoint === undefined
+      ? {}
+      : {
+          host: '127.0.0.1',
+          port: endpoint.port,
+          ...(config.host === undefined ? {} : { tlsServerName: config.host }),
+        }),
   };
 }
 

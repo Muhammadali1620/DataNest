@@ -23,6 +23,7 @@ function newState(overrides: Partial<ConnectionFormState> = {}): ConnectionFormS
   return {
     input: { name: '', driver: 'mysql', host: '127.0.0.1', port: 3306 },
     hasStoredPassword: false,
+    storedSsh: [],
     drivers: DRIVERS,
     ...overrides,
   };
@@ -95,6 +96,7 @@ describe('connection form App', () => {
         connectionId: 'c1',
         input: { name: 'L', driver: 'mysql', host: 'h' },
         hasStoredPassword: true,
+        storedSsh: [],
       }),
     );
     expect(field('Password').value).toBe('');
@@ -300,5 +302,188 @@ describe('connection form App', () => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Новое подключение');
     });
     expect(screen.getByRole('button', { name: 'Сохранить' })).toBeTruthy();
+  });
+
+  describe('SSH tunnel', () => {
+    function checkbox(name: string): HTMLInputElement {
+      return screen.getByRole<HTMLInputElement>('checkbox', { name });
+    }
+
+    async function enableSsh(): Promise<void> {
+      await fireEvent.click(checkbox('Connect through an SSH tunnel'));
+      await waitFor(() => {
+        expect(screen.queryByLabelText('SSH host')).not.toBeNull();
+      });
+    }
+
+    it('hides the SSH fields until the tunnel is turned on', async () => {
+      await withState();
+      expect(screen.queryByLabelText('SSH host')).toBeNull();
+      await enableSsh();
+      expect(field('SSH port').value).toBe('');
+      expect(screen.getByText('Default: 22')).toBeTruthy();
+    });
+
+    it('offers no tunnel for file databases', async () => {
+      await withState();
+      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'sqlite' } });
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Database file')).not.toBeNull();
+      });
+      expect(screen.queryByRole('checkbox', { name: 'Connect through an SSH tunnel' })).toBeNull();
+    });
+
+    it('sends the hop and its typed password', async () => {
+      const { host } = await withState();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Prod' } });
+      await enableSsh();
+      await fireEvent.input(field('SSH host'), { target: { value: ' bastion ' } });
+      await fireEvent.input(field('SSH port'), { target: { value: '2222' } });
+      await fireEvent.input(field('SSH user'), { target: { value: 'deploy' } });
+      await fireEvent.input(field('SSH password'), { target: { value: 'sshpw' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      const [draft] = drafts;
+      expect(draft?.input.ssh).toMatchObject({
+        host: 'bastion',
+        port: 2222,
+        user: 'deploy',
+        auth: 'password',
+      });
+      expect(draft?.ssh).toEqual([
+        {
+          hopId: draft?.input.ssh?.id,
+          password: { kind: 'set', value: 'sshpw' },
+          passphrase: { kind: 'clear' },
+        },
+      ]);
+    });
+
+    it('marks missing SSH fields and does not save', async () => {
+      const { host } = await withState();
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.input(field('Name'), { target: { value: 'Prod' } });
+      await enableSsh();
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByText('Enter the SSH user')).toBeTruthy();
+      });
+      expect(field('SSH host').getAttribute('aria-invalid')).toBe('true');
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('asks for a key file and passphrase when signing in with a key', async () => {
+      const { host } = await withState();
+      host.handle('pickKeyFile', () => ({ file: '/home/me/.ssh/id_ed25519' }));
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Prod' } });
+      await enableSsh();
+      await fireEvent.input(field('SSH host'), { target: { value: 'bastion' } });
+      await fireEvent.input(field('SSH user'), { target: { value: 'deploy' } });
+      await fireEvent.change(screen.getByLabelText('Sign in with'), { target: { value: 'key' } });
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Private key file')).not.toBeNull();
+      });
+      expect(screen.queryByLabelText('SSH password')).toBeNull();
+      const [browse] = screen.getAllByRole('button', { name: 'Browse…' });
+      if (browse === undefined) {
+        throw new Error('expected a Browse button');
+      }
+      await fireEvent.click(browse);
+      await waitFor(() => {
+        expect(field('Private key file').value).toBe('/home/me/.ssh/id_ed25519');
+      });
+      await fireEvent.input(field('Key passphrase'), { target: { value: 'pp' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.ssh).toMatchObject({
+        auth: 'key',
+        keyFile: '/home/me/.ssh/id_ed25519',
+      });
+      expect(drafts[0]?.ssh?.[0]).toMatchObject({
+        password: { kind: 'clear' },
+        passphrase: { kind: 'set', value: 'pp' },
+      });
+    });
+
+    it('offers an agent socket, empty meaning the usual one', async () => {
+      await withState();
+      await enableSsh();
+      await fireEvent.change(screen.getByLabelText('Sign in with'), { target: { value: 'agent' } });
+      await waitFor(() => {
+        expect(field('Agent socket').value).toBe('');
+      });
+      expect(screen.queryByLabelText('Key passphrase')).toBeNull();
+    });
+
+    it('shows a saved SSH password as a hint and keeps it when untouched', async () => {
+      const { host } = await withState(
+        newState({
+          connectionId: 'c1',
+          input: {
+            name: 'Prod',
+            driver: 'mysql',
+            host: 'db',
+            ssh: { id: 'main', host: 'bastion', user: 'deploy', auth: 'password' },
+          },
+          storedSsh: [{ hopId: 'main', password: true, passphrase: false }],
+        }),
+      );
+      expect(checkbox('Connect through an SSH tunnel').checked).toBe(true);
+      expect(field('SSH password').value).toBe('');
+      expect(screen.getAllByText('A password is saved; leave empty to keep it')).toHaveLength(1);
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.ssh).toEqual([
+        { hopId: 'main', password: { kind: 'keep' }, passphrase: { kind: 'clear' } },
+      ]);
+    });
+
+    it('sends no hop once the tunnel is turned off again', async () => {
+      const { host } = await withState(
+        newState({
+          connectionId: 'c1',
+          input: {
+            name: 'Prod',
+            driver: 'mysql',
+            host: 'db',
+            ssh: { id: 'main', host: 'bastion', user: 'deploy', auth: 'agent' },
+          },
+        }),
+      );
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.click(checkbox('Connect through an SSH tunnel'));
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.ssh).toBeUndefined();
+      expect(drafts[0]?.ssh).toBeUndefined();
+    });
   });
 });

@@ -94,12 +94,59 @@ describe('save request', () => {
   });
 });
 
+describe('SSH in the draft', () => {
+  const save = connectionFormProtocol.host.requests.save;
+  const input = {
+    name: 'x',
+    driver: 'mysql',
+    host: 'db',
+    ssh: { id: 'main', host: 'bastion', user: 'u', auth: 'key', keyFile: '/k' },
+  };
+
+  it('accepts a hop and its secret decisions', () => {
+    const draft = {
+      input,
+      password: { kind: 'keep' },
+      ssh: [
+        { hopId: 'main', password: { kind: 'clear' }, passphrase: { kind: 'set', value: 'p' } },
+      ],
+    };
+    expect(save.params.parse(draft)).toEqual(draft);
+  });
+
+  it('rejects unknown auth methods and stray hop fields', () => {
+    expect(() =>
+      save.params.parse({
+        input: { ...input, ssh: { ...input.ssh, auth: 'kerberos' } },
+        password: { kind: 'keep' },
+      }),
+    ).toThrow('auth');
+    expect(() =>
+      save.params.parse({
+        input: { ...input, ssh: { ...input.ssh, password: 'secret' } },
+        password: { kind: 'keep' },
+      }),
+    ).toThrow('unexpected field');
+  });
+
+  it('rejects an SSH secret decision without a hop id', () => {
+    expect(() =>
+      save.params.parse({
+        input,
+        password: { kind: 'keep' },
+        ssh: [{ password: { kind: 'keep' }, passphrase: { kind: 'keep' } }],
+      }),
+    ).toThrow('hopId');
+  });
+});
+
 describe('state event', () => {
   it('describes a saved connection without carrying its password', () => {
     const payload = {
       connectionId: 'c1',
       input: { name: 'Local', driver: 'mysql', host: 'h', port: 3306 },
       hasStoredPassword: true,
+      storedSsh: [],
       drivers: [
         { id: 'mysql', defaultPort: 3306, file: false },
         { id: 'sqlite', file: true },
@@ -114,6 +161,7 @@ describe('state event', () => {
     const parsed = stateEvent.parse({
       input: { name: '', driver: 'mysql' },
       hasStoredPassword: false,
+      storedSsh: [],
       drivers: [],
     });
     expect(parsed.connectionId).toBeUndefined();
@@ -124,6 +172,7 @@ describe('state event', () => {
       stateEvent.parse({
         input: { name: '', driver: 'mysql' },
         hasStoredPassword: false,
+        storedSsh: [],
         drivers: [],
         password: 'secret',
       }),
@@ -132,9 +181,10 @@ describe('state event', () => {
 });
 
 describe('protocol shape', () => {
-  it('lets the host answer only the three form requests', () => {
+  it('lets the host answer only the form requests', () => {
     expect(Object.keys(connectionFormProtocol.host.requests).sort()).toEqual([
       'pickFile',
+      'pickKeyFile',
       'save',
       'test',
     ]);

@@ -48,13 +48,23 @@ describe('integration global setup', () => {
     vi.stubEnv('DATANEST_MYSQL_PORT', String(open.port));
     vi.stubEnv('DATANEST_MARIADB_PORT', String(open.port));
     vi.stubEnv('DATANEST_POSTGRES_PORT', String(open.port));
+    vi.stubEnv('DATANEST_SSH_PORT', String(open.port));
     await expect(setup()).resolves.toBeUndefined();
+  });
+
+  it('also needs the SSH server the tunnel tests go through', async () => {
+    vi.stubEnv('DATANEST_MYSQL_PORT', String(open.port));
+    vi.stubEnv('DATANEST_MARIADB_PORT', String(open.port));
+    vi.stubEnv('DATANEST_POSTGRES_PORT', String(open.port));
+    vi.stubEnv('DATANEST_SSH_PORT', String(closedPort));
+    await expect(setup()).rejects.toThrow(`ssh (127.0.0.1:${closedPort})`);
   });
 
   it('names every unreachable database and tells how to start them', async () => {
     vi.stubEnv('DATANEST_MYSQL_PORT', String(open.port));
     vi.stubEnv('DATANEST_MARIADB_PORT', String(closedPort));
     vi.stubEnv('DATANEST_POSTGRES_PORT', String(closedPort));
+    vi.stubEnv('DATANEST_SSH_PORT', String(open.port));
     await expect(setup()).rejects.toThrow(
       `Test databases are not reachable: mariadb (127.0.0.1:${closedPort}), ` +
         `postgres (127.0.0.1:${closedPort}). Run "npm run db:up".`,

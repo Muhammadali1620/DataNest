@@ -24,6 +24,30 @@ export const WEBVIEW_TARGET = `chrome${MIN_EDITOR.chromium}`;
 export const EXTERNALS = ['vscode'];
 
 /**
+ * Optional native add-ons of bundled libraries: ssh2's crypto binding and
+ * cpu-features. DataNest ships no native modules (D5), so each is replaced by a stub
+ * that throws, and the library falls back to its pure JS code. Leaving them external
+ * is not enough: from dist/ Node would find a copy in node_modules, built for another
+ * Node, and loading it crashes the editor's extension host.
+ */
+export const NATIVE_OPTIONALS = /^cpu-features$|\.node$/;
+
+/** @type {import('esbuild').Plugin} */
+export const nativeOptionalsPlugin = {
+  name: 'datanest-native-optionals',
+  setup(build) {
+    build.onResolve({ filter: NATIVE_OPTIONALS }, (args) => ({
+      path: args.path,
+      namespace: 'datanest-native-optional',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'datanest-native-optional' }, (args) => ({
+      contents: `throw new Error(${JSON.stringify(`Native add-on "${args.path}" is not shipped`)});`,
+      loader: 'js',
+    }));
+  },
+};
+
+/**
  * Each driver lives in src/drivers/<id>/index.ts and is bundled separately to
  * dist/drivers/<id>.js, so it is loaded only on the first connection to that DBMS.
  * A driver may also ship a worker (src/drivers/<id>/worker.ts), bundled next to it
@@ -58,14 +82,21 @@ export function findDriverEntries(rootDir) {
 
 /**
  * Code that is large and needed only for one feature, bundled apart and loaded on
- * first use like a driver: sql-formatter (dist/formatter.js).
+ * first use like a driver: sql-formatter (dist/formatter.js) and ssh2 (dist/ssh.js).
  *
  * @param {string} rootDir project root
  * @returns {Record<string, string>} esbuild entry name → source path
  */
 export function findLazyEntries(rootDir) {
-  const formatter = join(rootDir, 'src', 'services', 'formatter', 'index.ts');
-  return existsSync(formatter) ? { formatter } : {};
+  /** @type {Record<string, string>} */
+  const entries = {};
+  for (const name of ['formatter', 'ssh']) {
+    const index = join(rootDir, 'src', 'services', name, 'index.ts');
+    if (existsSync(index)) {
+      entries[name] = index;
+    }
+  }
+  return entries;
 }
 
 /**
@@ -86,6 +117,7 @@ export function createHostBuildOptions({ rootDir, outDir, production = false }) 
     platform: 'node',
     target: NODE_TARGET,
     external: EXTERNALS,
+    plugins: [nativeOptionalsPlugin],
     sourcemap: production ? false : 'linked',
     sourcesContent: false,
     minify: production,
@@ -179,6 +211,7 @@ export function createE2eBuildOptions({ rootDir, outDir }) {
     platform: 'node',
     target: NODE_TARGET,
     external: [...EXTERNALS, 'mocha'],
+    plugins: [nativeOptionalsPlugin],
     sourcemap: 'inline',
     logLevel: 'warning',
   };

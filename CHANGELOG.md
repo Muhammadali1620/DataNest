@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Added
+
+- Connect through an SSH tunnel: log in with a password, a private key (with its
+  passphrase) or an SSH agent. Secrets stay in the editor's secret storage. The first
+  connection to a server shows its key fingerprint to trust, and a changed key is
+  refused.
+
 ## [0.3.0] - 2026-10-28
 
 Database structure: read and change the schema without writing DDL by hand, and a

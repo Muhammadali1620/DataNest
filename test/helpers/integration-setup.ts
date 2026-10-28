@@ -1,5 +1,5 @@
 import { createConnection } from 'node:net';
-import { testDatabase, type TestDatabaseId } from './databases';
+import { testDatabase, type TestDatabaseId, testSshServer } from './databases';
 
 const IDS: TestDatabaseId[] = ['mysql', 'mariadb', 'postgres'];
 
@@ -28,6 +28,10 @@ export async function setup(): Promise<void> {
     if (!(await canConnect(db.host, db.port))) {
       down.push(`${id} (${db.host}:${db.port})`);
     }
+  }
+  const ssh = testSshServer();
+  if (!(await canConnect(ssh.host, ssh.port))) {
+    down.push(`ssh (${ssh.host}:${ssh.port})`);
   }
   if (down.length > 0) {
     const error = new Error(

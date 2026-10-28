@@ -8,6 +8,7 @@
   import { PASSWORD_MAX_LENGTH } from '../../../../src/shared/protocols/connection-form';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Field from '../../components/Field.svelte';
+  import SshHopEditor from './SshHopEditor.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import {
@@ -110,6 +111,24 @@
       notice = { kind: 'error', text: messageOf(error) };
     } finally {
       busy = undefined;
+    }
+  }
+
+  /** What is saved for a hop: flags only, the values stay in the host. */
+  function storedFor(hopId: string): { password: boolean; passphrase: boolean } {
+    const found = formState?.storedSsh.find((entry) => entry.hopId === hopId);
+    return { password: found?.password ?? false, passphrase: found?.passphrase ?? false };
+  }
+
+  async function browseKey(hop: { keyFile: string }): Promise<void> {
+    try {
+      const { file } = await rpc.request('pickKeyFile', {});
+      if (file !== undefined) {
+        hop.keyFile = file;
+        notice = undefined;
+      }
+    } catch (error) {
+      notice = { kind: 'error', text: messageOf(error) };
     }
   }
 
@@ -262,6 +281,28 @@
             autocomplete="off"
           />
         </Field>
+
+        <fieldset class="section">
+          <legend>
+            <label class="check">
+              <input type="checkbox" bind:checked={fields.useSsh} />
+              {t('form.ssh.use')}
+            </label>
+          </legend>
+          {#if fields.useSsh}
+            <SshHopEditor
+              hop={fields.ssh}
+              stored={storedFor(fields.ssh.id)}
+              {showProblems}
+              {t}
+              onBrowseKey={() => {
+                if (fields) {
+                  void browseKey(fields.ssh);
+                }
+              }}
+            />
+          {/if}
+        </fieldset>
       {/if}
 
       {#if notice}
@@ -334,6 +375,20 @@
     display: flex;
     gap: 6px;
     align-items: center;
+  }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 8px 12px 12px;
+    border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+    border-radius: 2px;
+  }
+
+  .section legend {
+    padding: 0 4px;
   }
 
   .actions {

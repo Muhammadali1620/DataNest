@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   connectionProblems,
   DEFAULT_PORTS,
+  describeTunnel,
+  DEFAULT_SSH_PORT,
+  effectiveSshPort,
+  HOP_ID_PATTERN,
+  newHopId,
+  type SshHop,
+  sshHopProblems,
+  sshHopsOf,
   describeTarget,
   DRIVER_IDS,
   effectivePort,
@@ -113,5 +121,72 @@ describe('describeTarget', () => {
   it('shows the file path for file drivers', () => {
     expect(describeTarget({ name: 'a', driver: 'sqlite', file: '/tmp/x.db' })).toBe('/tmp/x.db');
     expect(describeTarget({ name: 'a', driver: 'sqlite' })).toBe('');
+  });
+});
+
+describe('SSH hops', () => {
+  const hop: SshHop = { id: 'main', host: 'bastion', user: 'deploy', auth: 'password' };
+
+  it('lists the hop of a config, none for a direct one', () => {
+    expect(sshHopsOf({ name: 'a', driver: 'mysql', host: 'h', ssh: hop })).toEqual([hop]);
+    expect(sshHopsOf({ name: 'a', driver: 'mysql', host: 'h' })).toEqual([]);
+  });
+
+  it('uses port 22 unless told otherwise', () => {
+    expect(DEFAULT_SSH_PORT).toBe(22);
+    expect(effectiveSshPort(hop)).toBe(22);
+    expect(effectiveSshPort({ ...hop, port: 2222 })).toBe(2222);
+  });
+
+  it('makes ids that fit into a secret key and differ', () => {
+    const ids = new Set(Array.from({ length: 50 }, () => newHopId()));
+    expect(ids.size).toBe(50);
+    for (const id of ids) {
+      expect(HOP_ID_PATTERN.test(id)).toBe(true);
+    }
+  });
+
+  it('accepts a complete hop for every method', () => {
+    expect(sshHopProblems(hop)).toEqual([]);
+    expect(sshHopProblems({ ...hop, auth: 'key', keyFile: '~/.ssh/id' })).toEqual([]);
+    expect(sshHopProblems({ ...hop, auth: 'agent' })).toEqual([]);
+  });
+
+  it('names every missing or wrong field', () => {
+    expect(
+      sshHopProblems({ id: 'x y', host: ' ', port: 0, user: '', auth: 'key', keyFile: ' ' }),
+    ).toEqual([
+      'ssh-host-empty',
+      'ssh-port-invalid',
+      'ssh-user-empty',
+      'ssh-key-empty',
+      'ssh-id-invalid',
+    ]);
+    expect(sshHopProblems({ ...hop, port: 70_000 })).toEqual(['ssh-port-invalid']);
+    expect(sshHopProblems({ ...hop, id: 'a'.repeat(65) })).toEqual(['ssh-id-invalid']);
+  });
+
+  it('adds hop problems to the connection, but not for file databases', () => {
+    const broken = { ...hop, host: '' };
+    expect(connectionProblems({ name: 'a', driver: 'mysql', host: 'h', ssh: broken })).toEqual([
+      'ssh-host-empty',
+    ]);
+    expect(connectionProblems({ name: 'a', driver: 'sqlite', file: '/f', ssh: broken })).toEqual(
+      [],
+    );
+  });
+});
+
+describe('describeTunnel', () => {
+  it('names the SSH server a connection goes through, never a secret', () => {
+    expect(
+      describeTunnel({
+        name: 'a',
+        driver: 'mysql',
+        host: 'db',
+        ssh: { id: 'm', host: 'bastion', user: 'deploy', auth: 'password' },
+      }),
+    ).toBe('deploy@bastion:22');
+    expect(describeTunnel({ name: 'a', driver: 'mysql', host: 'db' })).toBeUndefined();
   });
 });

@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import type { ConnectionConfig } from '../../../src/shared/connection';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import { FakeDriverProvider, linkLostError } from '../../helpers/fake-driver';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
+import { FakeTunnels, unreachable } from '../../helpers/fake-tunnels';
+import type { HostKeyCheck } from '../../../src/services/tunnels';
 
 async function drain(events: AsyncIterable<unknown>): Promise<void> {
   for await (const _event of events) {
@@ -293,6 +295,146 @@ describe('ConnectionManager', () => {
       await expect(
         manager.test({ name: 'probe', driver: 'mysql', host: 'h' }),
       ).rejects.toMatchObject({ code: 'internal' });
+    });
+  });
+
+  describe('SSH tunnels', () => {
+    let tunnels: FakeTunnels;
+    let checkHostKey: HostKeyCheck;
+
+    const viaSsh = {
+      name: 'Prod',
+      driver: 'mysql' as const,
+      host: 'db.internal',
+      port: 3306,
+      user: 'app',
+      ssh: { id: 'main', host: 'bastion', user: 'deploy', auth: 'password' as const },
+    };
+
+    beforeEach(() => {
+      tunnels = new FakeTunnels();
+      checkHostKey = () => Promise.resolve(true);
+      manager = new ConnectionManager({ store, drivers, logger, tunnels, checkHostKey });
+    });
+
+    it('connects the driver to the local tunnel port, checking TLS against the real host', async () => {
+      const config = await store.add(viaSsh, 'dbpw', { main: { password: 'sshpw' } });
+      await manager.acquire('editor:a', { connectionId: config.id });
+      expect(drivers.driver('mysql').opened[0]).toMatchObject({
+        host: '127.0.0.1',
+        port: 40_000,
+        tlsServerName: 'db.internal',
+        password: 'dbpw',
+      });
+      const [first] = tunnels.acquired;
+      expect(first?.spec).toMatchObject({
+        hops: [{ host: 'bastion', port: 22, user: 'deploy', auth: 'password', password: 'sshpw' }],
+        target: { host: 'db.internal', port: 3306 },
+        checkHostKey,
+      });
+    });
+
+    it('asks for one lease per session and gives it back when the session closes', async () => {
+      const config = await store.add(viaSsh);
+      await manager.acquire('editor:a', { connectionId: config.id });
+      await manager.acquire('editor:b', { connectionId: config.id });
+      expect(tunnels.acquired.map((entry) => entry.key)).toHaveLength(2);
+      expect(new Set(tunnels.acquired.map((entry) => entry.key)).size).toBe(1);
+      await manager.release('editor:a');
+      expect(tunnels.released).toHaveLength(1);
+      await manager.disconnect(config.id);
+      expect(tunnels.released).toHaveLength(2);
+    });
+
+    it('lets go of the tunnel when the link drops', async () => {
+      const config = await store.add(viaSsh);
+      drivers.driver('mysql').executeError = linkLostError();
+      const session = await manager.acquire('editor:a', { connectionId: config.id });
+      await expect(drain(session.execute('SELECT 1'))).rejects.toThrow();
+      await vi.waitFor(() => {
+        expect(tunnels.released).toHaveLength(1);
+      });
+    });
+
+    it('uses another tunnel key once the SSH settings change', async () => {
+      const config = await store.add(viaSsh);
+      await manager.acquire('editor:a', { connectionId: config.id });
+      await manager.disconnect(config.id);
+      await store.update(config.id, { ...viaSsh, ssh: { ...viaSsh.ssh, host: 'bastion2' } });
+      await manager.acquire('editor:a', { connectionId: config.id });
+      const [before, after] = tunnels.acquired.map((entry) => entry.key);
+      expect(before).not.toBe(after);
+    });
+
+    it('explains a failed open with the SSH reason and gives the lease back', async () => {
+      const config = await store.add(viaSsh);
+      tunnels.forwardFailure = unreachable();
+      drivers.driver('mysql').openError = new DbError('connection-failed', 'Connection lost');
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toMatchObject({
+        message: expect.stringContaining('cannot reach db:3306') as unknown,
+      });
+      expect(tunnels.released).toHaveLength(1);
+      expect(manager.getState(config.id).status).toBe('error');
+    });
+
+    it('keeps the driver error when the tunnel itself had no trouble', async () => {
+      const config = await store.add(viaSsh);
+      drivers.driver('mysql').openError = new DbError('auth-failed', 'Access denied');
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toMatchObject({
+        code: 'auth-failed',
+      });
+    });
+
+    it('fails the connection when the tunnel cannot open', async () => {
+      const config = await store.add(viaSsh);
+      tunnels.openError = new DbError('auth-failed', 'SSH login failed');
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toMatchObject({
+        code: 'auth-failed',
+      });
+      expect(drivers.driver('mysql').opened).toHaveLength(0);
+      expect(manager.getState(config.id)).toEqual({ status: 'error', error: 'SSH login failed' });
+    });
+
+    it('opens no tunnel for direct connections', async () => {
+      await manager.acquire('editor:a', { connectionId: mysql.id });
+      expect(tunnels.acquired).toHaveLength(0);
+      expect(drivers.driver('mysql').opened[0]).not.toHaveProperty('tlsServerName');
+    });
+
+    it('refuses SSH connections when no tunnel provider is wired in', async () => {
+      manager = new ConnectionManager({ store, drivers, logger });
+      const config = await store.add(viaSsh);
+      await expect(manager.acquire('editor:a', { connectionId: config.id })).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+    });
+
+    it('tests through a private tunnel with the given secrets and closes it', async () => {
+      await manager.test(viaSsh, 'dbpw', { main: { password: 'typed' } });
+      const [tunnel] = tunnels.privates;
+      expect(tunnel?.spec.hops[0]?.password).toBe('typed');
+      expect(tunnel?.closeCount).toBe(1);
+      expect(drivers.driver('mysql').opened[0]).toMatchObject({ host: '127.0.0.1', port: 40_000 });
+      expect(tunnels.acquired).toHaveLength(0);
+    });
+
+    it('closes the private tunnel when the test fails, with the SSH reason', async () => {
+      tunnels.forwardFailure = unreachable();
+      drivers.driver('mysql').openError = new DbError('connection-failed', 'reset');
+      await expect(manager.test(viaSsh)).rejects.toMatchObject({
+        message: expect.stringContaining('cannot reach') as unknown,
+      });
+      expect(tunnels.privates[0]?.closeCount).toBe(1);
+    });
+
+    it('refuses every host key when no check is wired in', async () => {
+      manager = new ConnectionManager({ store, drivers, logger, tunnels });
+      const config = await store.add(viaSsh);
+      await manager.acquire('editor:a', { connectionId: config.id });
+      const check = tunnels.acquired[0]?.spec.checkHostKey;
+      expect(
+        await check?.({ host: 'h', port: 22, algorithm: 'ssh-ed25519', fingerprint: 'SHA256:x' }),
+      ).toBe(false);
     });
   });
 

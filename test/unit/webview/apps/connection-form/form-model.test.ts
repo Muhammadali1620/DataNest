@@ -9,6 +9,12 @@ import {
   problemsOf,
   toDraft,
   toInput,
+  newHopFields,
+  hopFieldsFrom,
+  hopProblemsOf,
+  hopSecretChanges,
+  secretChange,
+  toHop,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { en } from '../../../../../webview/src/l10n/en';
 
@@ -24,6 +30,8 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     password: '',
     passwordTouched: false,
     erasePassword: false,
+    useSsh: false,
+    ssh: newHopFields('hop1'),
     ...overrides,
   };
 }
@@ -41,6 +49,7 @@ describe('fieldsFrom', () => {
         database: 'd',
       },
       hasStoredPassword: true,
+      storedSsh: [],
       drivers: [],
     });
     expect(result).toEqual({
@@ -54,6 +63,8 @@ describe('fieldsFrom', () => {
       password: '',
       passwordTouched: false,
       erasePassword: false,
+      useSsh: false,
+      ssh: expect.objectContaining({ host: '', auth: 'password' }) as unknown,
     });
   });
 
@@ -61,6 +72,7 @@ describe('fieldsFrom', () => {
     const result = fieldsFrom({
       input: { name: '', driver: 'sqlite', file: '/tmp/a.db' },
       hasStoredPassword: false,
+      storedSsh: [],
       drivers: [],
     });
     expect(result.port).toBe('');
@@ -203,5 +215,118 @@ describe('problem messages', () => {
     const problems = problemsOf(fields({ name: '' }));
     expect(problemMessage(problems, 'name-empty')).toBe('form.error.nameEmpty');
     expect(problemMessage(problems, 'host-empty')).toBeUndefined();
+  });
+});
+
+describe('SSH fields', () => {
+  it('starts a hop empty with a password login and a fresh id', () => {
+    const a = newHopFields();
+    const b = newHopFields();
+    expect(a).toMatchObject({ host: '', port: '', user: '', auth: 'password' });
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it('round-trips a saved hop without secrets', () => {
+    const hop = {
+      id: 'main',
+      host: 'b',
+      port: 2222,
+      user: 'u',
+      auth: 'key' as const,
+      keyFile: '/k',
+    };
+    const fields = hopFieldsFrom(hop);
+    expect(fields.port).toBe('2222');
+    expect(fields.password).toEqual({ value: '', touched: false, erase: false });
+    expect(toHop(fields)).toEqual(hop);
+  });
+
+  it('sends only the fields of the chosen method, trimmed', () => {
+    const hop = {
+      ...newHopFields('h'),
+      host: ' b ',
+      user: ' u ',
+      port: ' ',
+      keyFile: ' /k ',
+      agentSocket: '/s',
+    };
+    expect(toHop({ ...hop, auth: 'key' })).toEqual({
+      id: 'h',
+      host: 'b',
+      user: 'u',
+      auth: 'key',
+      keyFile: '/k',
+    });
+    expect(toHop({ ...hop, auth: 'agent' })).toEqual({
+      id: 'h',
+      host: 'b',
+      user: 'u',
+      auth: 'agent',
+      agentSocket: '/s',
+    });
+    expect(toHop({ ...hop, auth: 'password' })).not.toHaveProperty('keyFile');
+  });
+
+  it('turns a secret box into keep, set or clear', () => {
+    expect(secretChange({ value: '', touched: false, erase: false })).toEqual({ kind: 'keep' });
+    expect(secretChange({ value: 'x', touched: true, erase: false })).toEqual({
+      kind: 'set',
+      value: 'x',
+    });
+    expect(secretChange({ value: '', touched: true, erase: false })).toEqual({ kind: 'clear' });
+    expect(secretChange({ value: 'x', touched: true, erase: true })).toEqual({ kind: 'clear' });
+  });
+
+  it('erases the secret the chosen method does not use', () => {
+    const hop = {
+      ...newHopFields('h'),
+      password: { value: 'p', touched: true, erase: false },
+      passphrase: { value: 'q', touched: true, erase: false },
+    };
+    expect(hopSecretChanges({ ...hop, auth: 'password' })).toEqual({
+      hopId: 'h',
+      password: { kind: 'set', value: 'p' },
+      passphrase: { kind: 'clear' },
+    });
+    expect(hopSecretChanges({ ...hop, auth: 'key' }).password).toEqual({ kind: 'clear' });
+    expect(hopSecretChanges({ ...hop, auth: 'agent' })).toMatchObject({
+      password: { kind: 'clear' },
+      passphrase: { kind: 'clear' },
+    });
+  });
+
+  it('flags a port that is not a plain number', () => {
+    const hop = { ...newHopFields('h'), host: 'b', user: 'u' };
+    expect(hopProblemsOf(hop)).toEqual([]);
+    expect(hopProblemsOf({ ...hop, port: '22a' })).toEqual(['ssh-port-invalid']);
+    expect(hopProblemsOf({ ...hop, port: '0' })).toEqual(['ssh-port-invalid']);
+  });
+
+  it('puts the hop into the input and draft only while SSH is on', () => {
+    const ssh = { ...newHopFields('h'), host: 'b', user: 'u' };
+    expect(toInput(fields({ ssh })).ssh).toBeUndefined();
+    expect(toDraft(fields({ ssh })).ssh).toBeUndefined();
+    expect(toInput(fields({ ssh, useSsh: true })).ssh).toMatchObject({ host: 'b' });
+    expect(toDraft(fields({ ssh, useSsh: true })).ssh).toHaveLength(1);
+    expect(
+      toInput(fields({ ssh, useSsh: true, driver: 'sqlite', file: '/f' })).ssh,
+    ).toBeUndefined();
+  });
+
+  it('blocks saving on SSH problems only while SSH is on', () => {
+    const ssh = newHopFields('h');
+    expect(problemsOf(fields({ ssh }))).toEqual([]);
+    expect(problemsOf(fields({ ssh, useSsh: true }))).toEqual(['ssh-host-empty', 'ssh-user-empty']);
+  });
+
+  it('has a message for every SSH problem', () => {
+    for (const problem of [
+      'ssh-host-empty',
+      'ssh-port-invalid',
+      'ssh-user-empty',
+      'ssh-key-empty',
+    ] as const) {
+      expect(en[PROBLEM_MESSAGES[problem]]).toBeTruthy();
+    }
   });
 });

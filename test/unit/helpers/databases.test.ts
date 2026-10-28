@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PORTS,
@@ -5,6 +6,7 @@ import {
   resolvePort,
   testDatabase,
   type TestDatabaseId,
+  testSshServer,
 } from '../../helpers/databases';
 
 const IDS: TestDatabaseId[] = ['mysql', 'mariadb', 'postgres'];
@@ -62,5 +64,20 @@ describe('test database settings', () => {
       database: 'datanest_test',
       emptyDatabase: 'datanest_empty',
     });
+  });
+});
+
+describe('test SSH server settings', () => {
+  it('defaults to port 7022 with the test user and key', () => {
+    const ssh = testSshServer({});
+    expect(ssh).toMatchObject({ host: '127.0.0.1', port: 7022, user: 'datanest' });
+    expect(existsSync(ssh.keyFile)).toBe(true);
+    expect(ssh.targets.postgres).toEqual({ host: 'postgres', port: 5432 });
+  });
+
+  it('takes a port from the environment, within 7000-7999 only', () => {
+    expect(testSshServer({ DATANEST_SSH_PORT: '7122' }).port).toBe(7122);
+    expect(() => testSshServer({ DATANEST_SSH_PORT: '22' })).toThrow('7000-7999');
+    expect(() => testSshServer({ DATANEST_SSH_PORT: 'x' })).toThrow('7000-7999');
   });
 });

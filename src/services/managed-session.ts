@@ -29,6 +29,8 @@ export class ManagedSession implements Session {
     private readonly inner: Session,
     /** Called once when a call fails because the link is gone. */
     private readonly onLinkLost: (error: unknown) => void,
+    /** Called after the session closed, e.g. to let go of its SSH tunnel. */
+    private readonly onClosed: () => Promise<void> = () => Promise.resolve(),
   ) {
     this.metadata = new ManagedMetadata(inner.metadata, (error) => {
       this.report(error);
@@ -49,7 +51,11 @@ export class ManagedSession implements Session {
   }
 
   async close(): Promise<void> {
-    await this.inner.close();
+    try {
+      await this.inner.close();
+    } finally {
+      await this.onClosed();
+    }
   }
 
   private async *watch(events: AsyncIterable<ExecuteEvent>): AsyncGenerator<ExecuteEvent> {

@@ -2,32 +2,15 @@
 // webview to the host. A stored password is never sent back to the page — it is
 // described by a flag instead (ARCHITECTURE.md §8).
 
-import { CONNECTION_LIMITS, DRIVER_IDS, type ConnectionInput } from '../connection';
+import { CONNECTION_LIMITS, DRIVER_IDS } from '../connection';
+import { connectionInputSchema } from '../connection-schema';
 import { defineProtocol } from '../rpc';
-import {
-  array,
-  boolean,
-  type Infer,
-  literal,
-  number,
-  object,
-  optional,
-  type Schema,
-  string,
-} from '../schema';
+import { array, boolean, type Infer, literal, number, object, optional, string } from '../schema';
 
 export const PASSWORD_MAX_LENGTH = 1000;
 
 /** The editable fields, exactly as the form sends them. */
-export const connectionInputSchema: Schema<ConnectionInput> = object({
-  name: string({ maxLength: CONNECTION_LIMITS.name }),
-  driver: literal(...DRIVER_IDS),
-  host: optional(string({ maxLength: CONNECTION_LIMITS.field })),
-  port: optional(number({ integer: true, min: 1, max: 65_535 })),
-  user: optional(string({ maxLength: CONNECTION_LIMITS.field })),
-  database: optional(string({ maxLength: CONNECTION_LIMITS.field })),
-  file: optional(string({ maxLength: CONNECTION_LIMITS.file })),
-});
+export { connectionInputSchema };
 
 /**
  * What the form says about the password: leave the stored one alone, replace it,
@@ -38,9 +21,18 @@ export const passwordChangeSchema = object({
   value: optional(string({ maxLength: PASSWORD_MAX_LENGTH })),
 });
 
+/** What the form says about the secrets of one SSH hop, by the hop's id. */
+const sshSecretChangeSchema = object({
+  hopId: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
+  password: passwordChangeSchema,
+  passphrase: passwordChangeSchema,
+});
+
 const draftSchema = object({
   input: connectionInputSchema,
   password: passwordChangeSchema,
+  /** Hops left out keep their stored secrets. */
+  ssh: optional(array(sshSecretChangeSchema, { maxLength: 20 })),
 });
 
 /** Everything the page needs to render itself; the host re-sends it on every load (D21). */
@@ -50,6 +42,15 @@ const formStateSchema = object({
   input: connectionInputSchema,
   /** True when a password is stored for this connection. The value never travels. */
   hasStoredPassword: boolean(),
+  /** Which SSH hops have a stored password or passphrase; values never travel. */
+  storedSsh: array(
+    object({
+      hopId: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
+      password: boolean(),
+      passphrase: boolean(),
+    }),
+    { maxLength: 20 },
+  ),
   /** Driver ids the page may offer, with their default ports. */
   drivers: array(
     object({
@@ -72,6 +73,11 @@ export const connectionFormProtocol = defineProtocol({
       /** Shows the editor's file dialog; the result is the chosen path, if any. */
       pickFile: {
         params: object({ create: boolean() }),
+        result: object({ file: optional(string({ maxLength: CONNECTION_LIMITS.file })) }),
+      },
+      /** Shows the editor's file dialog for a private key; the result is its path. */
+      pickKeyFile: {
+        params: object({}),
         result: object({ file: optional(string({ maxLength: CONNECTION_LIMITS.file })) }),
       },
     },
@@ -100,3 +106,5 @@ export type ConnectionFormState = Infer<typeof formStateSchema>;
 export type ConnectionDraft = Infer<typeof draftSchema>;
 
 export type PasswordChangeMessage = Infer<typeof passwordChangeSchema>;
+
+export type SshSecretChangeMessage = Infer<typeof sshSecretChangeSchema>;

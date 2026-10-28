@@ -8,6 +8,8 @@ import {
   createHostBuildOptions,
   E2E_OUT_DIR,
   EXTERNALS,
+  NATIVE_OPTIONALS,
+  nativeOptionalsPlugin,
   findE2eTests,
   findDriverEntries,
   findLazyEntries,
@@ -130,6 +132,7 @@ describe('build-config', () => {
       expect(options.bundle).toBe(true);
       expect(options.target).toBe(NODE_TARGET);
       expect(options.external).toEqual(EXTERNALS);
+      expect(options.plugins).toEqual([nativeOptionalsPlugin]);
       expect(EXTERNALS).toContain('vscode');
       expect(options.entryPoints).toEqual({ extension: join(tmp.path, 'src', 'extension.ts') });
       expect(options.outdir).toBe(join(tmp.path, 'dist'));
@@ -160,6 +163,17 @@ describe('build-config', () => {
         'extension',
         'formatter',
       ]);
+    });
+
+    it('bundles ssh2 apart and leaves its native add-ons out', () => {
+      write(tmp.path, 'src/services/ssh/index.ts', '');
+      expect(findLazyEntries(tmp.path)).toEqual({
+        ssh: join(tmp.path, 'src', 'services', 'ssh', 'index.ts'),
+      });
+      expect(NATIVE_OPTIONALS.test('cpu-features')).toBe(true);
+      expect(NATIVE_OPTIONALS.test('./crypto/build/Release/sshcrypto.node')).toBe(true);
+      expect(NATIVE_OPTIONALS.test('cpu-features-extra')).toBe(false);
+      expect(NATIVE_OPTIONALS.test('node:crypto')).toBe(false);
     });
 
     it('adds driver bundles as separate entry points', () => {
@@ -204,6 +218,7 @@ describe('build-config', () => {
       expect(options.format).toBe('cjs');
       expect(options.platform).toBe('node');
       expect(options.external).toEqual(['vscode', 'mocha']);
+      expect(options.plugins).toEqual([nativeOptionalsPlugin]);
       expect(options.outdir).toBe(join(tmp.path, E2E_OUT_DIR));
       expect(Object.keys(options.entryPoints ?? {})).toEqual(['smoke.test']);
     });
@@ -240,6 +255,34 @@ describe('build-config', () => {
       const requireFromTmp = createRequire(join(tmp.path, 'index.js'));
       const driver = requireFromTmp('./dist/drivers/fake.js') as { driverId: string };
       expect(driver.driverId).toBe('fake');
+    });
+
+    it('leaves native add-ons out, so an optional require falls back to JS', async () => {
+      write(
+        tmp.path,
+        'src/services/ssh/index.ts',
+        [
+          "let binding = 'js';",
+          "try { binding = require('./crypto/build/Release/sshcrypto.node'); } catch {}",
+          "try { binding = require('cpu-features')(); } catch {}",
+          'export const loaded = binding;',
+        ].join('\n'),
+      );
+      // Copies that Node could find at runtime must never be picked up.
+      write(tmp.path, 'dist/crypto/build/Release/sshcrypto.node', 'not a binary');
+      write(
+        tmp.path,
+        'node_modules/cpu-features/index.js',
+        "module.exports = () => { throw new Error('native code loaded'); };",
+      );
+      await build({ ...createHostBuildOptions({ rootDir: tmp.path }), logLevel: 'silent' });
+
+      const bundle = readFileSync(join(tmp.path, 'dist/ssh.js'), 'utf8');
+      expect(bundle).toContain('is not shipped');
+      expect(bundle).not.toMatch(/require\("(cpu-features|[^"]*\.node)"\)/);
+      const requireFromTmp = createRequire(join(tmp.path, 'index.js'));
+      const ssh = requireFromTmp('./dist/ssh.js') as { loaded: string };
+      expect(ssh.loaded).toBe('js');
     });
 
     it('emits no source maps in production', async () => {

@@ -143,5 +143,13 @@
   "Copy Name": "Копировать имя",
   "Find Database Object": "Найти объект базы",
   "Type a name: tables, views, functions… of connected databases": "Введите имя: таблицы, представления, функции… подключённых баз",
-  "$(plug) Connect to {0} and search it": "$(plug) Подключиться к {0} и искать там"
+  "$(plug) Connect to {0} and search it": "$(plug) Подключиться к {0} и искать там",
+  "SSH Private Key": "Закрытый SSH-ключ",
+  "Trust and Connect": "Доверять и подключиться",
+  "DataNest has not connected to the SSH server {0} before.": "DataNest ещё не подключался к SSH-серверу {0}.",
+  "Make sure this is the right key of the server before trusting it:\n{0} {1}": "Прежде чем доверять, убедитесь, что это действительно ключ этого сервера:\n{0} {1}",
+  "Trust the New Key": "Доверять новому ключу",
+  "The key of the SSH server {0} has changed!": "Ключ SSH-сервера {0} изменился!",
+  "Someone may be intercepting the connection, or the server was reinstalled. Connect only if you know why the key changed.\nTrusted: {0}\nReceived: {1}": "Возможно, соединение перехватывают, или сервер переустановили. Подключайтесь, только если знаете, почему ключ сменился.\nДоверенный: {0}\nПолученный: {1}",
+  "Through SSH: {0}": "Через SSH: {0}"
 }

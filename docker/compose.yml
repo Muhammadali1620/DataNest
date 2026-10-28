@@ -102,3 +102,14 @@ services:
           '-c',
           'SELECT 1 FROM big_table LIMIT 1',
         ]
+
+  # SSH tunnels (V4): a server reachable from the host, with the databases behind it.
+  ssh:
+    build: ./ssh
+    image: datanest-ssh:1
+    container_name: datanest-ssh
+    ports:
+      - 127.0.0.1:7022:22
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '22']

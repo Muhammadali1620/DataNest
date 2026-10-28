@@ -3,7 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
-import { describeTarget } from '../../shared/connection';
+import { describeTarget, describeTunnel } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
 import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
@@ -187,6 +187,7 @@ export class ConnectionsTreeProvider
       [
         `**${config?.name ?? connectionId}**`,
         config === undefined ? '' : `\n\n${describeTarget(config)}`,
+        tunnelLine(config),
         `\n\n${statusText(state.status)}`,
         state.error === undefined ? '' : `\n\n${state.error}`,
       ].join(''),
@@ -194,6 +195,11 @@ export class ConnectionsTreeProvider
     item.iconPath = connectionIcon(state.status);
     return item;
   }
+}
+
+function tunnelLine(config: Parameters<typeof describeTunnel>[0] | undefined): string {
+  const tunnel = config === undefined ? undefined : describeTunnel(config);
+  return tunnel === undefined ? '' : `\n\n${vscode.l10n.t('Through SSH: {0}', tunnel)}`;
 }
 
 function statusText(status: ReturnType<ConnectionManager['getState']>['status']): string {

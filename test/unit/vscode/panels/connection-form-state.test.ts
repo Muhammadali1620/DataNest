@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   driverOptions,
   NEW_CONNECTION,
+  storedSshFlags,
+  testSshSecrets,
   toInput,
   toPasswordChange,
+  toSshChanges,
 } from '../../../../src/vscode/panels/connection-form-state';
+import type { ConnectionDraft } from '../../../../src/shared/protocols/connection-form';
 import { DRIVER_IDS, isFileDriver } from '../../../../src/shared/connection';
 import { connectionFormProtocol } from '../../../../src/shared/protocols/connection-form';
 
@@ -23,6 +27,7 @@ describe('NEW_CONNECTION', () => {
       connectionFormProtocol.webview.events.state.parse({
         input: NEW_CONNECTION,
         hasStoredPassword: false,
+        storedSsh: [],
         drivers: driverOptions(),
       }),
     ).not.toThrow();
@@ -109,5 +114,78 @@ describe('toPasswordChange', () => {
 
   it('clears the password', () => {
     expect(toPasswordChange({ input, password: { kind: 'clear' } })).toEqual({ kind: 'clear' });
+  });
+});
+
+describe('SSH secrets from the form', () => {
+  const draft: ConnectionDraft = {
+    input: {
+      name: 'p',
+      driver: 'mysql',
+      host: 'db',
+      ssh: { id: 'main', host: 'b', user: 'u', auth: 'password' },
+    },
+    password: { kind: 'keep' },
+    ssh: [
+      {
+        hopId: 'main',
+        password: { kind: 'set', value: 'typed' },
+        passphrase: { kind: 'clear' },
+      },
+    ],
+  };
+
+  it('keeps the SSH settings when a config is put into the form', () => {
+    const ssh = { id: 'main', host: 'b', user: 'u', auth: 'agent' as const };
+    expect(toInput({ id: 'c', name: 'n', driver: 'mysql', host: 'h', ssh })).toMatchObject({ ssh });
+  });
+
+  it('maps the decisions per hop id', () => {
+    expect(toSshChanges(draft)).toEqual({
+      main: { password: { kind: 'set', value: 'typed' }, passphrase: { kind: 'clear' } },
+    });
+    expect(toSshChanges({ ...draft, ssh: undefined })).toEqual({});
+    expect(
+      toSshChanges({
+        ...draft,
+        ssh: [{ hopId: 'main', password: { kind: 'set' }, passphrase: { kind: 'keep' } }],
+      }).main?.password,
+    ).toEqual({ kind: 'set', value: '' });
+  });
+
+  it('tests with what was typed, else with what is stored', () => {
+    expect(testSshSecrets(draft, { main: { password: 'old', passphrase: 'pp' } })).toEqual({
+      main: { password: 'typed' },
+    });
+    expect(
+      testSshSecrets({ ...draft, ssh: undefined }, { main: { password: 'old', passphrase: 'pp' } }),
+    ).toEqual({ main: { password: 'old', passphrase: 'pp' } });
+    expect(
+      testSshSecrets(
+        {
+          ...draft,
+          ssh: [
+            { hopId: 'main', password: { kind: 'set', value: '' }, passphrase: { kind: 'keep' } },
+          ],
+        },
+        {},
+      ),
+    ).toEqual({ main: {} });
+  });
+
+  it('ignores secrets of hops the draft does not have', () => {
+    expect(
+      testSshSecrets(
+        { ...draft, input: { ...draft.input, ssh: undefined } },
+        { main: { password: 'x' } },
+      ),
+    ).toEqual({});
+  });
+
+  it('tells the page only which secrets exist', () => {
+    expect(storedSshFlags({ main: { password: 'x' }, other: { passphrase: 'y' } })).toEqual([
+      { hopId: 'main', password: true, passphrase: false },
+      { hopId: 'other', password: false, passphrase: true },
+    ]);
   });
 });

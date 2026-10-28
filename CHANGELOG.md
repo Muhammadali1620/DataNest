@@ -11,11 +11,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   the same connection, ready to run: MySQL and MariaDB print it themselves, PostgreSQL
   gets a full `CREATE TABLE` with constraints, indexes, comments and triggers, SQLite
   shows the original text with the table's indexes and triggers.
+- The tree lists functions, procedures, sequences (PostgreSQL) and events (MySQL,
+  MariaDB) next to tables and views, and every table has Indexes, Foreign Keys and
+  Triggers folders. PostgreSQL overloads show their arguments.
 
 ### Fixed
 
 - A SQLite `CREATE TRIGGER … BEGIN … END` with several statements in its body is no
   longer split into pieces when it runs.
+- SQLite results with two columns of the same name (`SELECT a.id, b.id …`) showed
+  the last value in both; each column now keeps its own.
+- MariaDB sequences no longer appear among the tables.
 
 ## [0.2.0] - 2026-10-28
 

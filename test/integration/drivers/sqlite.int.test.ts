@@ -83,6 +83,18 @@ describe('sqlite driver', () => {
     expect(result.rows[0]).toEqual([1, 'alice@example.com']);
   });
 
+  it('keeps columns that share a name apart', async () => {
+    // Rows used to travel as objects keyed by column name, so the last `a` won.
+    const result = await runAll(session, "SELECT 1 AS a, 2 AS a, 'x' AS b");
+    expect(result.columnSets[0]?.map((column) => column.name)).toEqual(['a', 'a', 'b']);
+    expect(result.rows).toEqual([[1, 2, 'x']]);
+    const joined = await runAll(
+      session,
+      'SELECT c.id, a.id FROM customers c JOIN active a ON a.id = c.id + 1 ORDER BY c.id LIMIT 1',
+    );
+    expect(joined.rows).toEqual([[1, 2]]);
+  });
+
   it('returns unicode data and NULLs intact', async () => {
     const result = await runAll(
       session,

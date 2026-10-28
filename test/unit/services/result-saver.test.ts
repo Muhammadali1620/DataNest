@@ -36,6 +36,8 @@ const noMetadata: MetadataReader = {
   listColumns: () => Promise.resolve([]),
   listUniqueKeys: () => Promise.resolve([]),
   listForeignKeys: () => Promise.resolve([]),
+  listObjects: () => Promise.resolve([]),
+  listIndexes: () => Promise.resolve([]),
   getDefinition: () => Promise.resolve([]),
 };
 

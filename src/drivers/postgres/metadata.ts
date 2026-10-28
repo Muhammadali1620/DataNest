@@ -2,13 +2,16 @@ import type pg from 'pg';
 import type {
   ColumnInfo,
   ForeignKey,
+  IndexInfo,
+  ListedObjectKind,
+  ObjectInfo,
   ObjectRef,
   ObjectScope,
   TableInfo,
   TableRef,
 } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
-import { groupForeignKeys, groupKeys } from '../common/keys';
+import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readPgDefinition } from './definitions';
 import { toPgDbError } from './errors';
 
@@ -126,6 +129,99 @@ export class PostgresMetadata implements MetadataReader {
               ? undefined
               : { schema: asText(row[3]) ?? DEFAULT_SCHEMA, name: targetName },
           targetColumn: asText(row[5]),
+        };
+      }),
+    );
+  }
+
+  async listObjects(scope: ObjectScope, kind: ListedObjectKind): Promise<ObjectInfo[]> {
+    const schema = scope.schema ?? DEFAULT_SCHEMA;
+    switch (kind) {
+      case 'function':
+      case 'procedure': {
+        // Aggregates and window functions have no definition to show; members of
+        // extensions (pgcrypto, postgis, …) would bury the user's own functions.
+        const rows = await this.query(
+          `SELECT p.proname, pg_get_function_identity_arguments(p.oid)
+           FROM pg_proc p
+           JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = $1 AND p.prokind = $2
+             AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                             WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
+                               AND d.deptype = 'e')
+           ORDER BY p.proname, 2`,
+          [schema, kind === 'procedure' ? 'p' : 'f'],
+        );
+        return rows.map((row) => ({
+          name: asText(row[0]) ?? '',
+          kind,
+          signature: asText(row[1]) ?? '',
+        }));
+      }
+      case 'trigger': {
+        const rows = await this.query(
+          `SELECT t.tgname, c.relname
+           FROM pg_trigger t
+           JOIN pg_class c ON c.oid = t.tgrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = $1 AND NOT t.tgisinternal
+           ORDER BY c.relname, t.tgname`,
+          [schema],
+        );
+        return rows.map((row) => ({
+          name: asText(row[0]) ?? '',
+          kind,
+          table: asText(row[1]) ?? '',
+        }));
+      }
+      case 'sequence': {
+        // Identity columns own a sequence of their own that nobody manages by hand.
+        const rows = await this.query(
+          `SELECT c.relname
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = $1 AND c.relkind = 'S'
+             AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                             WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid
+                               AND d.deptype IN ('i', 'e'))
+           ORDER BY c.relname`,
+          [schema],
+        );
+        return rows.map((row) => ({ name: asText(row[0]) ?? '', kind }));
+      }
+      case 'event':
+        return [];
+    }
+  }
+
+  async listIndexes(table: TableRef): Promise<IndexInfo[]> {
+    // One row per key part; pg_get_indexdef(oid, n, true) prints a column or an
+    // expression the same way the server would.
+    const rows = await this.query(
+      `SELECT ic.relname, i.indisunique, i.indisprimary, am.amname,
+              pg_get_indexdef(i.indexrelid, k.n::int, true),
+              pg_get_expr(i.indpred, i.indrelid, true)
+       FROM pg_index i
+       JOIN pg_class ic ON ic.oid = i.indexrelid
+       JOIN pg_class c ON c.oid = i.indrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_am am ON am.oid = ic.relam
+       CROSS JOIN LATERAL generate_series(1, i.indnkeyatts) AS k(n)
+       WHERE n.nspname = $1 AND c.relname = $2
+       ORDER BY i.indisprimary DESC, ic.relname, k.n`,
+      [table.schema ?? DEFAULT_SCHEMA, table.name],
+    );
+    return groupIndexes(
+      rows.map((row) => {
+        const method = asText(row[3]);
+        const where = asText(row[5]);
+        return {
+          name: asText(row[0]),
+          column: asText(row[4]),
+          unique: row[1] === true,
+          primary: row[2] === true,
+          ...(method === undefined ? {} : { method }),
+          ...(where === undefined ? {} : { where }),
         };
       }),
     );

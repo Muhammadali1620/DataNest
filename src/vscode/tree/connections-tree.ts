@@ -5,7 +5,19 @@ import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import { describeTarget } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
-import { CONNECTIONS_VIEW_ID, describeColumn, nodeId, TREE_CONTEXT, type TreeNode } from './nodes';
+import {
+  CONNECTIONS_VIEW_ID,
+  describeColumn,
+  describeForeignKey,
+  describeIndex,
+  nodeId,
+  objectLabel,
+  TREE_CONTEXT,
+  type ObjectGroup,
+  type ObjectNode,
+  type TableFolder,
+  type TreeNode,
+} from './nodes';
 import { TreeModel, type TreeSettings } from './tree-model';
 
 export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
@@ -44,6 +56,15 @@ export class ConnectionsTreeProvider
         noViews: vscode.l10n.t('No views'),
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
+        empty: {
+          functions: vscode.l10n.t('No functions'),
+          procedures: vscode.l10n.t('No procedures'),
+          sequences: vscode.l10n.t('No sequences'),
+          events: vscode.l10n.t('No events'),
+          indexes: vscode.l10n.t('No indexes'),
+          foreignKeys: vscode.l10n.t('No foreign keys'),
+          triggers: vscode.l10n.t('No triggers'),
+        },
       },
     });
     this.subscriptions.push(
@@ -82,10 +103,33 @@ export class ConnectionsTreeProvider
       case 'group':
         return expandable(
           node,
-          node.group === 'tables' ? vscode.l10n.t('Tables') : vscode.l10n.t('Views'),
-          node.group === 'tables' ? 'list-flat' : 'eye',
+          groupLabel(node.group),
+          GROUP_ICONS[node.group],
           TREE_CONTEXT.group,
         );
+      case 'folder':
+        return expandable(
+          node,
+          folderLabel(node.folder),
+          FOLDER_ICONS[node.folder],
+          TREE_CONTEXT.folder,
+        );
+      case 'object':
+        return objectItem(node);
+      case 'index': {
+        const item = leaf(node, node.index.name, node.index.primary ? 'key' : 'list-ordered');
+        item.description = describeIndex(node.index);
+        item.tooltip = `${node.index.name} — ${describeIndex(node.index)}`;
+        item.contextValue = TREE_CONTEXT.index;
+        return item;
+      }
+      case 'foreignKey': {
+        const item = leaf(node, node.key.name, 'references');
+        item.description = describeForeignKey(node.key);
+        item.tooltip = `${node.key.name} — ${describeForeignKey(node.key)}`;
+        item.contextValue = TREE_CONTEXT.foreignKey;
+        return item;
+      }
       case 'table': {
         const item = expandable(
           node,
@@ -193,6 +237,72 @@ function expandable(
   item.id = nodeId(node);
   item.iconPath = new vscode.ThemeIcon(icon);
   item.contextValue = contextValue;
+  return item;
+}
+
+const GROUP_ICONS: Readonly<Record<ObjectGroup, string>> = {
+  tables: 'list-flat',
+  views: 'eye',
+  functions: 'symbol-function',
+  procedures: 'symbol-method',
+  sequences: 'symbol-number',
+  events: 'calendar',
+};
+
+const FOLDER_ICONS: Readonly<Record<TableFolder, string>> = {
+  indexes: 'list-ordered',
+  foreignKeys: 'references',
+  triggers: 'zap',
+};
+
+const OBJECT_ICONS: Readonly<Record<ObjectNode['object']['kind'], string>> = {
+  function: 'symbol-function',
+  procedure: 'symbol-method',
+  trigger: 'zap',
+  sequence: 'symbol-number',
+  event: 'calendar',
+};
+
+function groupLabel(group: ObjectGroup): string {
+  switch (group) {
+    case 'tables':
+      return vscode.l10n.t('Tables');
+    case 'views':
+      return vscode.l10n.t('Views');
+    case 'functions':
+      return vscode.l10n.t('Functions');
+    case 'procedures':
+      return vscode.l10n.t('Procedures');
+    case 'sequences':
+      return vscode.l10n.t('Sequences');
+    case 'events':
+      return vscode.l10n.t('Events');
+  }
+}
+
+function folderLabel(folder: TableFolder): string {
+  switch (folder) {
+    case 'indexes':
+      return vscode.l10n.t('Indexes');
+    case 'foreignKeys':
+      return vscode.l10n.t('Foreign Keys');
+    case 'triggers':
+      return vscode.l10n.t('Triggers');
+  }
+}
+
+function objectItem(node: ObjectNode): vscode.TreeItem {
+  const { object } = node;
+  const item = leaf(node, objectLabel(object), OBJECT_ICONS[object.kind]);
+  item.tooltip = qualifiedName(object, objectLabel(object));
+  item.contextValue = TREE_CONTEXT[object.kind];
+  return item;
+}
+
+function leaf(node: TreeNode, label: string, icon: string): vscode.TreeItem {
+  const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+  item.id = nodeId(node);
+  item.iconPath = new vscode.ThemeIcon(icon);
   return item;
 }
 

@@ -79,5 +79,19 @@
   "…and {0} more": "…и ещё {0}",
   "Safe mode blocked this run (datanest.safeMode):\n{0}": "Безопасный режим запретил этот запуск (datanest.safeMode):\n{0}",
   "Run anyway": "Всё равно выполнить",
-  "This can change or delete a lot of data. Run it?": "Это может изменить или удалить много данных. Выполнить?"
+  "This can change or delete a lot of data. Run it?": "Это может изменить или удалить много данных. Выполнить?",
+  "Functions": "Функции",
+  "Procedures": "Процедуры",
+  "Sequences": "Последовательности",
+  "Events": "События",
+  "Indexes": "Индексы",
+  "Foreign Keys": "Внешние ключи",
+  "Triggers": "Триггеры",
+  "No functions": "Нет функций",
+  "No procedures": "Нет процедур",
+  "No sequences": "Нет последовательностей",
+  "No events": "Нет событий",
+  "No indexes": "Нет индексов",
+  "No foreign keys": "Нет внешних ключей",
+  "No triggers": "Нет триггеров"
 }

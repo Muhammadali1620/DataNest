@@ -5,6 +5,9 @@ import type { DriverId, ResolvedConnectionConfig } from '../shared/connection';
 import type {
   ColumnInfo,
   ForeignKey,
+  IndexInfo,
+  ListedObjectKind,
+  ObjectInfo,
   ObjectRef,
   ObjectScope,
   TableInfo,
@@ -26,6 +29,11 @@ export interface DriverCapabilities {
   readonly databaseScopedSessions: boolean;
   /** A running statement can be cancelled from another connection or API. */
   readonly cancel: boolean;
+  /**
+   * Kinds of objects that live in a database or schema next to tables and views,
+   * in the order the tree shows their folders. Triggers belong to tables instead.
+   */
+  readonly objectKinds: readonly ListedObjectKind[];
 }
 
 /** Everything that differs between SQL dialects. UI builds SQL only through this. */
@@ -99,6 +107,13 @@ export interface MetadataReader {
   listUniqueKeys(table: TableRef): Promise<string[][]>;
   /** Foreign keys that start in this table, so a cell can lead to the row it points at. */
   listForeignKeys(table: TableRef): Promise<ForeignKey[]>;
+  /**
+   * Objects of one kind in a scope, by name. A kind the database does not have
+   * lists nothing. Objects that belong to installed extensions are left out.
+   */
+  listObjects(scope: ObjectScope, kind: ListedObjectKind): Promise<ObjectInfo[]>;
+  /** Every index of a table, the primary key first, then by name. */
+  listIndexes(table: TableRef): Promise<IndexInfo[]>;
   /**
    * The statements that create an object as it is now, without trailing semicolons:
    * a table with its indexes, comments and triggers, a view, a routine, …

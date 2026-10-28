@@ -3,7 +3,7 @@
 
 import { DbError, errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
-import type { ObjectScope } from '../../core/model/objects';
+import type { ListedObjectKind, ObjectScope, TableRef } from '../../core/model/objects';
 import { withoutSystemDatabases, withoutSystemSchemas } from '../../core/model/system-objects';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
 import { browseSession } from '../../services/browse-session';
@@ -11,7 +11,15 @@ import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { DriverId } from '../../shared/connection';
-import type { TreeNode } from './nodes';
+import {
+  GROUP_OF_KIND,
+  KIND_OF_GROUP,
+  type FolderNode,
+  type ObjectFolder,
+  type ObjectGroup,
+  type TableFolder,
+  type TreeNode,
+} from './nodes';
 
 export interface TreeTexts {
   readonly tables: string;
@@ -20,6 +28,8 @@ export interface TreeTexts {
   readonly noViews: string;
   readonly noDatabases: string;
   readonly noColumns: string;
+  /** What an empty folder says, per folder. */
+  readonly empty: Readonly<Record<ObjectFolder | TableFolder, string>>;
 }
 
 /** Settings the tree reads; asked every time, so a change takes effect at once. */
@@ -83,15 +93,20 @@ export class TreeModel {
       case 'database':
         return await this.databaseChildren(node.connectionId, node.database);
       case 'schema':
-        return this.groups(node.connectionId, {
+        return await this.groups(node.connectionId, {
           ...(node.database === undefined ? {} : { database: node.database }),
           schema: node.schema,
         });
       case 'group':
         return await this.groupChildren(node.connectionId, node.scope, node.group);
       case 'table':
-        return await this.columnChildren(node);
+        return await this.tableChildren(node);
+      case 'folder':
+        return await this.folderChildren(node);
       case 'column':
+      case 'object':
+      case 'index':
+      case 'foreignKey':
       case 'message':
         return [];
     }
@@ -103,7 +118,7 @@ export class TreeModel {
     const metadata = await this.metadataOf(connectionId);
     if (!capabilities.databases) {
       // A single-file database (SQLite): objects sit right under the connection.
-      return this.groups(connectionId, {});
+      return await this.groups(connectionId, {});
     }
     const all = await metadata.listDatabases();
     // Filtering happens here, not in the cache: toggling the setting needs no
@@ -120,7 +135,7 @@ export class TreeModel {
   private async databaseChildren(connectionId: string, database: string): Promise<TreeNode[]> {
     const capabilities = await this.capabilitiesOf(connectionId);
     if (!capabilities.schemas) {
-      return this.groups(connectionId, { database });
+      return await this.groups(connectionId, { database });
     }
     const metadata = await this.metadataOf(connectionId, database);
     const all = await metadata.listSchemas(database);
@@ -130,18 +145,31 @@ export class TreeModel {
     return schemas.map((schema) => ({ kind: 'schema', connectionId, database, schema }));
   }
 
-  private groups(connectionId: string, scope: ObjectScope): TreeNode[] {
-    return [
-      { kind: 'group', group: 'tables', connectionId, scope },
-      { kind: 'group', group: 'views', connectionId, scope },
+  /** Tables and views, then the folders of whatever else this database keeps. */
+  private async groups(connectionId: string, scope: ObjectScope): Promise<TreeNode[]> {
+    const { objectKinds } = await this.capabilitiesOf(connectionId);
+    const groups: ObjectGroup[] = [
+      'tables',
+      'views',
+      ...objectKinds.flatMap((kind) => (kind === 'trigger' ? [] : [GROUP_OF_KIND[kind]])),
     ];
+    return groups.map((group) => ({ kind: 'group', group, connectionId, scope }));
   }
 
   private async groupChildren(
     connectionId: string,
     scope: ObjectScope,
-    group: 'tables' | 'views',
+    group: ObjectGroup,
   ): Promise<TreeNode[]> {
+    if (group !== 'tables' && group !== 'views') {
+      return await this.objectChildren(
+        connectionId,
+        scope,
+        KIND_OF_GROUP[group],
+        () => true,
+        group,
+      );
+    }
     const metadata = await this.metadataOf(connectionId, scope.database);
     const wanted = group === 'tables' ? 'table' : 'view';
     const found = (await metadata.listTables(scope)).filter((table) => table.kind === wanted);
@@ -161,6 +189,85 @@ export class TreeModel {
       name: table.name,
       tableKind: table.kind,
     }));
+  }
+
+  /** Objects of one kind in a scope, narrowed by `keep`; an empty list says so. */
+  private async objectChildren(
+    connectionId: string,
+    scope: ObjectScope,
+    kind: ListedObjectKind,
+    keep: (object: { table?: string }) => unknown,
+    folder: keyof TreeTexts['empty'],
+  ): Promise<TreeNode[]> {
+    const metadata = await this.metadataOf(connectionId, scope.database);
+    const found = (await metadata.listObjects(scope, kind)).filter((object) => keep(object));
+    if (found.length === 0) {
+      return [{ kind: 'message', text: this.deps.texts.empty[folder], connectionId }];
+    }
+    return found.map((object) => ({
+      kind: 'object',
+      connectionId,
+      object: {
+        ...scope,
+        kind: object.kind,
+        name: object.name,
+        ...(object.signature === undefined ? {} : { signature: object.signature }),
+        ...(object.table === undefined ? {} : { table: object.table }),
+      },
+    }));
+  }
+
+  /** Columns first; a table also gets its Indexes, Foreign Keys and Triggers folders. */
+  private async tableChildren(node: Extract<TreeNode, { kind: 'table' }>): Promise<TreeNode[]> {
+    const columns = await this.columnChildren(node);
+    if (node.tableKind !== 'table') {
+      return columns;
+    }
+    const table: TableRef = { ...node.scope, name: node.name };
+    const folders: TableFolder[] = ['indexes', 'foreignKeys', 'triggers'];
+    return [
+      ...columns,
+      ...folders.map((folder) => ({
+        kind: 'folder' as const,
+        folder,
+        connectionId: node.connectionId,
+        table,
+      })),
+    ];
+  }
+
+  private async folderChildren(node: FolderNode): Promise<TreeNode[]> {
+    const { connectionId, table } = node;
+    const scope: ObjectScope = {
+      ...(table.database === undefined ? {} : { database: table.database }),
+      ...(table.schema === undefined ? {} : { schema: table.schema }),
+    };
+    const empty = (): TreeNode[] => [
+      { kind: 'message', text: this.deps.texts.empty[node.folder], connectionId },
+    ];
+    const metadata = await this.metadataOf(connectionId, table.database);
+    switch (node.folder) {
+      case 'indexes': {
+        const indexes = await metadata.listIndexes(table);
+        return indexes.length === 0
+          ? empty()
+          : indexes.map((index) => ({ kind: 'index', connectionId, table, index }));
+      }
+      case 'foreignKeys': {
+        const keys = await metadata.listForeignKeys(table);
+        return keys.length === 0
+          ? empty()
+          : keys.map((key) => ({ kind: 'foreignKey', connectionId, table, key }));
+      }
+      case 'triggers':
+        return await this.objectChildren(
+          connectionId,
+          scope,
+          'trigger',
+          (object) => object.table === table.name,
+          'triggers',
+        );
+    }
   }
 
   private async columnChildren(node: Extract<TreeNode, { kind: 'table' }>): Promise<TreeNode[]> {

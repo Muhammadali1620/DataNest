@@ -56,9 +56,13 @@ describe('connections view', () => {
   });
 
   it('showing DDL without a node does nothing and opens no editor', async () => {
-    const before = vscode.workspace.textDocuments.length;
+    // Only new query documents count: output channels come and go on their own.
+    const queries = () =>
+      vscode.workspace.textDocuments.filter((document) => document.uri.scheme === 'untitled')
+        .length;
+    const before = queries();
     await vscode.commands.executeCommand('datanest.object.showDefinition');
-    assert.equal(vscode.workspace.textDocuments.length, before);
+    assert.equal(queries(), before);
   });
 
   it('refreshing the whole tree works without a selected node', async () => {
@@ -118,6 +122,16 @@ describe('tree over a real SQLite database', () => {
       // A file database has no databases to list: the tree shows groups directly.
       assert.deepEqual(await session.metadata.listDatabases(), []);
 
+      // Indexes and triggers, which the tree lists inside a table.
+      const indexes = await session.metadata.listIndexes({ name: 'customers' });
+      assert.deepEqual(
+        indexes.map((index) => index.name),
+        ['ix_customers_email'],
+      );
+      assert.deepEqual(await session.metadata.listObjects({}, 'trigger'), [
+        { name: 'customers_audit', kind: 'trigger', table: 'customers' },
+      ]);
+
       // "Show DDL" reads through the shipped bundle as well.
       assert.deepEqual(await session.metadata.getDefinition({ kind: 'view', name: 'active' }), [
         'CREATE VIEW active AS SELECT id FROM customers',
@@ -137,6 +151,8 @@ interface SqliteSessionLike {
       table: Record<string, unknown>,
     ): Promise<{ name: string; dataType: string; nullable: boolean; primaryKey: boolean }[]>;
     getDefinition(object: Record<string, unknown>): Promise<string[]>;
+    listIndexes(table: Record<string, unknown>): Promise<{ name: string }[]>;
+    listObjects(scope: Record<string, unknown>, kind: string): Promise<unknown[]>;
   };
   close(): Promise<void>;
 }
@@ -164,6 +180,8 @@ async function seed(file: string): Promise<void> {
       'CREATE TABLE customers (id INTEGER PRIMARY KEY, email TEXT NOT NULL)',
       "INSERT INTO customers VALUES (1, 'a@example.com')",
       'CREATE VIEW active AS SELECT id FROM customers',
+      'CREATE INDEX ix_customers_email ON customers (email)',
+      'CREATE TRIGGER customers_audit AFTER INSERT ON customers BEGIN SELECT 1; END',
     ]) {
       for await (const _event of session.execute(sql)) {
         // Draining the stream is what runs the statement.

@@ -6,6 +6,9 @@ import type { DriverId, ResolvedConnectionConfig } from '../../src/shared/connec
 import type {
   ColumnInfo,
   ForeignKey,
+  IndexInfo,
+  ListedObjectKind,
+  ObjectInfo,
   ObjectRef,
   ObjectScope,
   TableInfo,
@@ -42,6 +45,9 @@ export class FakeMetadata implements MetadataReader {
   columns: ColumnInfo[] = [{ name: 'id', dataType: 'int', nullable: false, primaryKey: true }];
   uniqueKeys: string[][] = [];
   foreignKeys: ForeignKey[] = [];
+  /** Objects listed by `listObjects`, filtered by kind. */
+  objects: ObjectInfo[] = [];
+  indexes: IndexInfo[] = [];
   /** Definitions by `kind:name`; a missing one is reported as not found. */
   definitions = new Map<string, string[]>();
   /** Thrown by every reader when set. */
@@ -70,6 +76,17 @@ export class FakeMetadata implements MetadataReader {
 
   listUniqueKeys(table: TableRef): Promise<string[][]> {
     return this.answer(`listUniqueKeys:${table.name}`, this.uniqueKeys);
+  }
+
+  listObjects(scope: ObjectScope, kind: ListedObjectKind): Promise<ObjectInfo[]> {
+    return this.answer(
+      `listObjects:${scope.database ?? ''}/${scope.schema ?? ''}:${kind}`,
+      this.objects.filter((object) => object.kind === kind),
+    );
+  }
+
+  listIndexes(table: TableRef): Promise<IndexInfo[]> {
+    return this.answer(`listIndexes:${table.name}`, this.indexes);
   }
 
   getDefinition(object: ObjectRef): Promise<string[]> {
@@ -158,6 +175,7 @@ export class FakeDriver implements Driver {
     schemas: false,
     databaseScopedSessions: false,
     cancel: true,
+    objectKinds: [],
   };
   readonly sessions: FakeSession[] = [];
   readonly opened: ResolvedConnectionConfig[] = [];
@@ -227,6 +245,8 @@ export class FakeDriver implements Driver {
     session.metadata.uniqueKeys = [...this.sessionMetadata.uniqueKeys];
     session.metadata.foreignKeys = [...this.sessionMetadata.foreignKeys];
     session.metadata.definitions = new Map(this.sessionMetadata.definitions);
+    session.metadata.objects = [...this.sessionMetadata.objects];
+    session.metadata.indexes = [...this.sessionMetadata.indexes];
     session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);

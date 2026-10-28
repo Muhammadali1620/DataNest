@@ -48,6 +48,20 @@ describe('isTreeNode', () => {
       { kind: 'group', group: 'views', connectionId: 'c1', scope: {} },
       { kind: 'table', connectionId: 'c1', scope: {}, name: 't', tableKind: 'table' },
       column,
+      { kind: 'folder', folder: 'indexes', connectionId: 'c1', table: { name: 't' } },
+      { kind: 'object', connectionId: 'c1', object: { kind: 'event', name: 'e' } },
+      {
+        kind: 'index',
+        connectionId: 'c1',
+        table: { name: 't' },
+        index: { name: 'i', columns: [], unique: false, primary: false },
+      },
+      {
+        kind: 'foreignKey',
+        connectionId: 'c1',
+        table: { name: 't' },
+        key: { name: 'k', columns: [], target: { name: 'u' }, targetColumns: [] },
+      },
       { kind: 'message', text: 'x' },
     ];
     for (const node of nodes) {
@@ -72,6 +86,29 @@ describe('nameOf', () => {
       nameOf({ kind: 'table', connectionId: 'c1', scope: {}, name: 'orders', tableKind: 'table' }),
     ).toBe('orders');
     expect(nameOf(column)).toBe('id');
+    expect(
+      nameOf({
+        kind: 'object',
+        connectionId: 'c1',
+        object: { kind: 'function', name: 'total', signature: 'a integer' },
+      }),
+    ).toBe('total');
+    expect(
+      nameOf({
+        kind: 'index',
+        connectionId: 'c1',
+        table: { name: 't' },
+        index: { name: 'ix_t', columns: ['a'], unique: false, primary: false },
+      }),
+    ).toBe('ix_t');
+    expect(
+      nameOf({
+        kind: 'foreignKey',
+        connectionId: 'c1',
+        table: { name: 't' },
+        key: { name: 'fk_t', columns: ['a'], target: { name: 'u' }, targetColumns: ['id'] },
+      }),
+    ).toBe('fk_t');
   });
 
   it('has nothing to copy for connections, groups and messages', () => {
@@ -80,5 +117,8 @@ describe('nameOf', () => {
       nameOf({ kind: 'group', group: 'tables', connectionId: 'c1', scope: {} }),
     ).toBeUndefined();
     expect(nameOf({ kind: 'message', text: 'x' })).toBeUndefined();
+    expect(
+      nameOf({ kind: 'folder', folder: 'triggers', connectionId: 'c1', table: { name: 't' } }),
+    ).toBeUndefined();
   });
 });

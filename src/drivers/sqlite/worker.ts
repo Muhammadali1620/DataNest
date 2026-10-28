@@ -64,6 +64,13 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
     }
     // Integers arrive as bigint so they are never silently rounded.
     statement.setReadBigInts(true);
+    // Rows as arrays keep columns that share a name (`SELECT a.id, b.id`) apart;
+    // an object keyed by name would keep only the last one. Older runtimes lack
+    // the switch and fall back to objects.
+    const asArrays = typeof statement.setReturnArrays === 'function';
+    if (asArrays) {
+      statement.setReturnArrays(true);
+    }
     const names = described.map((column, index) => column.name ?? `column${index + 1}`);
     const columns: ResultColumn[] = described.map((column, index) => {
       const name = names[index] ?? `column${index + 1}`;
@@ -81,8 +88,12 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
         break;
       }
       count += 1;
-      const record = row as Record<string, unknown>;
-      batch.push(names.map((name) => toCellValue(record[name])));
+      if (asArrays) {
+        batch.push((row as unknown as unknown[]).map((value) => toCellValue(value)));
+      } else {
+        const record = row as Record<string, unknown>;
+        batch.push(names.map((name) => toCellValue(record[name])));
+      }
       if (batch.length >= ROW_BATCH_SIZE) {
         postRows(id, batch);
         batch = [];

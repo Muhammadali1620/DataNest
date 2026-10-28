@@ -11,7 +11,13 @@ export function createSqliteDriver(options: SqliteSessionOptions = {}): Driver {
   return {
     id: 'sqlite',
     dialect: sqliteDialect,
-    capabilities: { databases: false, schemas: false, databaseScopedSessions: false, cancel: true },
+    capabilities: {
+      databases: false,
+      schemas: false,
+      databaseScopedSessions: false,
+      cancel: true,
+      objectKinds: [],
+    },
     openSession: (config: ResolvedConnectionConfig): Promise<Session> =>
       openSqliteSession(config, options),
   };

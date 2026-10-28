@@ -57,6 +57,37 @@ describe('MetadataCache', () => {
       expect(inner.calls).toHaveLength(3);
     });
 
+    it('caches objects per scope and kind, and indexes per table', async () => {
+      const inner = reader();
+      const wrapped = cache.wrap('c1', inner);
+      await wrapped.listObjects({ database: 'app' }, 'function');
+      await wrapped.listObjects({ database: 'app' }, 'function');
+      await wrapped.listObjects({ database: 'app' }, 'procedure');
+      await wrapped.listObjects({ database: 'shop' }, 'function');
+      await wrapped.listIndexes({ database: 'app', name: 'orders' });
+      await wrapped.listIndexes({ database: 'app', name: 'orders' });
+      await wrapped.listIndexes({ database: 'shop', name: 'orders' });
+      expect(inner.calls).toEqual([
+        'listObjects:app/:function',
+        'listObjects:app/:procedure',
+        'listObjects:shop/:function',
+        'listIndexes:orders',
+        'listIndexes:orders',
+      ]);
+    });
+
+    it('never caches definitions: the user wants the current one', async () => {
+      const inner = reader();
+      inner.definitions.set('view:v', ['CREATE VIEW v AS SELECT 1']);
+      const wrapped = cache.wrap('c1', inner);
+      await wrapped.getDefinition({ kind: 'view', name: 'v' });
+      inner.definitions.set('view:v', ['CREATE VIEW v AS SELECT 2']);
+      expect(await wrapped.getDefinition({ kind: 'view', name: 'v' })).toEqual([
+        'CREATE VIEW v AS SELECT 2',
+      ]);
+      expect(inner.calls).toEqual(['getDefinition:view:v', 'getDefinition:view:v']);
+    });
+
     it('tells scopes apart even when a name contains the separator', async () => {
       const inner = reader();
       const wrapped = cache.wrap('c1', inner);
@@ -86,6 +117,8 @@ describe('MetadataCache', () => {
         listColumns: () => Promise.resolve([]),
         listUniqueKeys: () => Promise.resolve([]),
         listForeignKeys: () => Promise.resolve([]),
+        listObjects: () => Promise.resolve([]),
+        listIndexes: () => Promise.resolve([]),
         getDefinition: () => Promise.resolve([]),
       };
       const load = vi.spyOn(inner, 'listDatabases');

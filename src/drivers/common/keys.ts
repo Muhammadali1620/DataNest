@@ -1,4 +1,4 @@
-import type { ForeignKey, TableRef } from '../../core/model/objects';
+import type { ForeignKey, IndexInfo, TableRef } from '../../core/model/objects';
 
 /**
  * Rows of (index, column) in index order become one list per index. An index with a
@@ -71,4 +71,46 @@ export function groupForeignKeys(rows: readonly ForeignKeyRow[]): ForeignKey[] {
     }
   }
   return [...keys.values()].filter((key): key is NonNullable<typeof key> => key !== null);
+}
+
+/** One row of an index listing: a key part of one index. */
+export interface IndexRow {
+  readonly name: string | undefined;
+  /** The column, or undefined for an expression the server does not print. */
+  readonly column: string | undefined;
+  readonly unique: boolean;
+  readonly primary: boolean;
+  readonly method?: string;
+  readonly where?: string;
+}
+
+/** Shown for a key part that is an expression rather than a column. */
+export const EXPRESSION_PART = '(expression)';
+
+/** Key parts grouped into indexes, keeping the order rows arrive in. */
+export function groupIndexes(rows: readonly IndexRow[]): IndexInfo[] {
+  const indexes = new Map<string, { info: IndexInfo; columns: string[] }>();
+  for (const row of rows) {
+    if (row.name === undefined) {
+      continue;
+    }
+    let entry = indexes.get(row.name);
+    if (entry === undefined) {
+      const columns: string[] = [];
+      entry = {
+        columns,
+        info: {
+          name: row.name,
+          columns,
+          unique: row.unique || row.primary,
+          primary: row.primary,
+          ...(row.method === undefined || row.method === '' ? {} : { method: row.method }),
+          ...(row.where === undefined || row.where === '' ? {} : { where: row.where }),
+        },
+      };
+      indexes.set(row.name, entry);
+    }
+    entry.columns.push(row.column ?? EXPRESSION_PART);
+  }
+  return [...indexes.values()].map((entry) => entry.info);
 }

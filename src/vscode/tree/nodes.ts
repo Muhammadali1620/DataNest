@@ -3,6 +3,9 @@
 
 import type {
   ColumnInfo,
+  ForeignKey,
+  IndexInfo,
+  ListedObjectKind,
   ObjectRef,
   ObjectScope,
   TableKind,
@@ -25,10 +28,42 @@ export const TREE_CONTEXT = {
   table: 'datanest.table',
   view: 'datanest.view',
   column: 'datanest.column',
+  /** Indexes, Foreign Keys and Triggers inside a table. */
+  folder: 'datanest.folder',
+  function: 'datanest.function',
+  procedure: 'datanest.procedure',
+  trigger: 'datanest.trigger',
+  sequence: 'datanest.sequence',
+  event: 'datanest.event',
+  index: 'datanest.index',
+  foreignKey: 'datanest.foreignKey',
   message: 'datanest.message',
 } as const;
 
-export type TableGroup = 'tables' | 'views';
+/** Folders of a database or schema. */
+export type ObjectGroup = 'tables' | 'views' | 'functions' | 'procedures' | 'sequences' | 'events';
+
+/** The folder each listed kind lives in at the scope level (triggers live in tables). */
+export const GROUP_OF_KIND: Readonly<Record<Exclude<ListedObjectKind, 'trigger'>, ObjectFolder>> = {
+  function: 'functions',
+  procedure: 'procedures',
+  sequence: 'sequences',
+  event: 'events',
+};
+
+/** Scope folders that hold listed objects rather than tables and views. */
+export type ObjectFolder = Exclude<ObjectGroup, 'tables' | 'views'>;
+
+/** The listed kind each object folder holds. */
+export const KIND_OF_GROUP: Readonly<Record<ObjectFolder, ListedObjectKind>> = {
+  functions: 'function',
+  procedures: 'procedure',
+  sequences: 'sequence',
+  events: 'event',
+};
+
+/** Folders inside a table, after its columns. */
+export type TableFolder = 'indexes' | 'foreignKeys' | 'triggers';
 
 export interface ConnectionNode {
   readonly kind: 'connection';
@@ -48,10 +83,10 @@ export interface SchemaNode {
   readonly schema: string;
 }
 
-/** The "Tables" / "Views" folders inside a scope. */
+/** The "Tables", "Views", "Functions", … folders inside a scope. */
 export interface GroupNode {
   readonly kind: 'group';
-  readonly group: TableGroup;
+  readonly group: ObjectGroup;
   readonly connectionId: string;
   readonly scope: ObjectScope;
 }
@@ -71,6 +106,35 @@ export interface ColumnNode {
   readonly column: ColumnInfo;
 }
 
+/** "Indexes", "Foreign Keys" or "Triggers" of one table. */
+export interface FolderNode {
+  readonly kind: 'folder';
+  readonly folder: TableFolder;
+  readonly connectionId: string;
+  readonly table: TableRef;
+}
+
+/** A function, procedure, trigger, sequence or event. */
+export interface ObjectNode {
+  readonly kind: 'object';
+  readonly connectionId: string;
+  readonly object: ObjectRef & { readonly kind: ListedObjectKind };
+}
+
+export interface IndexNode {
+  readonly kind: 'index';
+  readonly connectionId: string;
+  readonly table: TableRef;
+  readonly index: IndexInfo;
+}
+
+export interface ForeignKeyNode {
+  readonly kind: 'foreignKey';
+  readonly connectionId: string;
+  readonly table: TableRef;
+  readonly key: ForeignKey;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -82,7 +146,17 @@ export interface MessageNode {
 }
 
 export type TreeNode =
-  ConnectionNode | DatabaseNode | SchemaNode | GroupNode | TableNode | ColumnNode | MessageNode;
+  | ConnectionNode
+  | DatabaseNode
+  | SchemaNode
+  | GroupNode
+  | TableNode
+  | ColumnNode
+  | FolderNode
+  | ObjectNode
+  | IndexNode
+  | ForeignKeyNode
+  | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
 export function scopeOf(node: TreeNode): ObjectScope {
@@ -98,14 +172,19 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'table':
       return node.scope;
     case 'column':
+    case 'folder':
+    case 'index':
+    case 'foreignKey':
       return scopeOfRef(node.table);
+    case 'object':
+      return scopeOfRef(node.object);
     case 'connection':
     case 'message':
       return {};
   }
 }
 
-function scopeOfRef(table: TableRef): ObjectScope {
+function scopeOfRef(table: ObjectScope): ObjectScope {
   return {
     ...(table.database === undefined ? {} : { database: table.database }),
     ...(table.schema === undefined ? {} : { schema: table.schema }),
@@ -139,6 +218,42 @@ export function nodeId(node: TreeNode): string {
         scopeKey(scopeOfRef(node.table)),
         node.table.name,
         node.column.name,
+      ]);
+    case 'folder':
+      return join([
+        'folder',
+        node.connectionId,
+        scopeKey(scopeOfRef(node.table)),
+        node.table.name,
+        node.folder,
+      ]);
+    case 'object':
+      // Overloads share a name; the signature tells them apart. Triggers are
+      // unique per table only, in some databases.
+      return join([
+        'object',
+        node.connectionId,
+        scopeKey(scopeOfRef(node.object)),
+        node.object.kind,
+        node.object.table ?? '',
+        node.object.name,
+        node.object.signature ?? '',
+      ]);
+    case 'index':
+      return join([
+        'index',
+        node.connectionId,
+        scopeKey(scopeOfRef(node.table)),
+        node.table.name,
+        node.index.name,
+      ]);
+    case 'foreignKey':
+      return join([
+        'foreignKey',
+        node.connectionId,
+        scopeKey(scopeOfRef(node.table)),
+        node.table.name,
+        node.key.name,
       ]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
@@ -176,6 +291,10 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'group' ||
     kind === 'table' ||
     kind === 'column' ||
+    kind === 'folder' ||
+    kind === 'object' ||
+    kind === 'index' ||
+    kind === 'foreignKey' ||
     kind === 'message'
   );
 }
@@ -191,8 +310,15 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.name;
     case 'column':
       return node.column.name;
+    case 'object':
+      return node.object.name;
+    case 'index':
+      return node.index.name;
+    case 'foreignKey':
+      return node.key.name;
     case 'connection':
     case 'group':
+    case 'folder':
     case 'message':
       return undefined;
   }
@@ -208,14 +334,42 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
   switch (node.kind) {
     case 'table':
       return { ...node.scope, kind: node.tableKind, name: node.name };
+    case 'object':
+      return node.object;
     case 'connection':
     case 'database':
     case 'schema':
     case 'group':
     case 'column':
+    case 'folder':
+    case 'index':
+    case 'foreignKey':
     case 'message':
       return undefined;
   }
+}
+
+/** One-line summary of an index: its kind and key parts. */
+export function describeIndex(index: IndexInfo): string {
+  const kind = index.primary ? 'PRIMARY KEY' : index.unique ? 'UNIQUE' : '';
+  const method = index.method === undefined ? '' : index.method.toLowerCase();
+  const head = [kind, method === 'btree' ? '' : method].filter((part) => part !== '').join(' ');
+  const parts = `(${index.columns.join(', ')})`;
+  const where = index.where === undefined ? '' : ` WHERE ${index.where}`;
+  return head === '' ? `${parts}${where}` : `${head} ${parts}${where}`;
+}
+
+/** One-line summary of a foreign key: its columns and where they point. */
+export function describeForeignKey(key: ForeignKey): string {
+  const target = [key.target.database, key.target.schema, key.target.name]
+    .filter((part) => part !== undefined)
+    .join('.');
+  return `(${key.columns.join(', ')}) → ${target} (${key.targetColumns.join(', ')})`;
+}
+
+/** The label of a routine: overloads show their arguments. */
+export function objectLabel(object: ObjectRef): string {
+  return object.signature === undefined ? object.name : `${object.name}(${object.signature})`;
 }
 
 /** One-line summary of a column: type, key and nullability. */

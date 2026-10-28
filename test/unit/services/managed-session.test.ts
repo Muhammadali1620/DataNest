@@ -98,7 +98,32 @@ describe('ManagedSession', () => {
       await expect(session.metadata.listColumns({ name: 't' })).rejects.toMatchObject({
         code: 'connection-failed',
       });
-      expect(lost).toHaveBeenCalledTimes(4);
+      await expect(session.metadata.listObjects({}, 'function')).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      await expect(session.metadata.listIndexes({ name: 't' })).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      await expect(
+        session.metadata.getDefinition({ kind: 'table', name: 't' }),
+      ).rejects.toMatchObject({ code: 'connection-failed' });
+      expect(lost).toHaveBeenCalledTimes(7);
+    });
+
+    it('passes the structure readers of V3 through', async () => {
+      const inner = fake();
+      inner.metadata.objects = [{ name: 'f', kind: 'function' }];
+      inner.metadata.indexes = [{ name: 'i', columns: ['a'], unique: false, primary: false }];
+      inner.metadata.definitions.set('function:f', ['CREATE FUNCTION f']);
+      const { session } = managed(inner);
+      expect(await session.metadata.listObjects({}, 'function')).toEqual([
+        { name: 'f', kind: 'function' },
+      ]);
+      expect(await session.metadata.listObjects({}, 'event')).toEqual([]);
+      expect(await session.metadata.listIndexes({ name: 't' })).toHaveLength(1);
+      expect(await session.metadata.getDefinition({ kind: 'function', name: 'f' })).toEqual([
+        'CREATE FUNCTION f',
+      ]);
     });
 
     it('keeps unsupported readers as plain errors', async () => {

@@ -2,13 +2,16 @@ import { DbError } from '../../core/errors';
 import type {
   ColumnInfo,
   ForeignKey,
+  IndexInfo,
+  ListedObjectKind,
+  ObjectInfo,
   ObjectRef,
   TableInfo,
   TableRef,
 } from '../../core/model/objects';
 import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
-import { groupForeignKeys, groupKeys } from '../common/keys';
+import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { quoteIdentifier } from './dialect';
 import type { SqliteParam } from './protocol';
 
@@ -105,6 +108,37 @@ export class SqliteMetadata implements MetadataReader {
       });
     }
     return groupForeignKeys(resolved).map((key, index) => ({ ...key, name: `fk_${index + 1}` }));
+  }
+
+  /** SQLite has triggers only: no routines, sequences or events to list. */
+  async listObjects(_scope: unknown, kind: ListedObjectKind): Promise<ObjectInfo[]> {
+    if (kind !== 'trigger') {
+      return [];
+    }
+    const rows = await this.session.queryRows(
+      `SELECT name, tbl_name FROM sqlite_master WHERE type = 'trigger' ORDER BY tbl_name, name`,
+      [],
+    );
+    return rows.map((row) => ({ name: asText(row[0]) ?? '', kind, table: asText(row[1]) ?? '' }));
+  }
+
+  async listIndexes(table: TableRef): Promise<IndexInfo[]> {
+    // An INTEGER PRIMARY KEY is the rowid itself and has no index to list.
+    const rows = await this.session.queryRows(
+      `SELECT l.name, l."unique", l.origin, i.name FROM pragma_index_list(?) AS l
+       JOIN pragma_index_xinfo(l.name) AS i
+       WHERE i."key" = 1
+       ORDER BY l.origin <> 'pk', l.name, i.seqno`,
+      [table.name],
+    );
+    return groupIndexes(
+      rows.map((row) => ({
+        name: asText(row[0]),
+        column: asText(row[3]),
+        unique: asNumber(row[1]) === 1,
+        primary: asText(row[2]) === 'pk',
+      })),
+    );
   }
 
   /**

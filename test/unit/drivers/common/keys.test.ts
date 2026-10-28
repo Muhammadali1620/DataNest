@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { groupForeignKeys, groupKeys } from '../../../../src/drivers/common/keys';
+import {
+  EXPRESSION_PART,
+  groupForeignKeys,
+  groupIndexes,
+  groupKeys,
+} from '../../../../src/drivers/common/keys';
 
 describe('groupKeys', () => {
   it('groups rows by index and keeps column order', () => {
@@ -88,5 +93,48 @@ describe('groupForeignKeys', () => {
   it('ignores rows without a constraint id and handles nothing', () => {
     expect(groupForeignKeys([row(undefined, 'a', 'p', 'x')])).toEqual([]);
     expect(groupForeignKeys([])).toEqual([]);
+  });
+});
+
+describe('groupIndexes', () => {
+  it('groups key parts by index in the order they arrive', () => {
+    expect(
+      groupIndexes([
+        { name: 'PRIMARY', column: 'id', unique: true, primary: true, method: 'BTREE' },
+        { name: 'ix_ab', column: 'b', unique: false, primary: false },
+        { name: 'ix_ab', column: 'a', unique: false, primary: false },
+      ]),
+    ).toEqual([
+      { name: 'PRIMARY', columns: ['id'], unique: true, primary: true, method: 'BTREE' },
+      { name: 'ix_ab', columns: ['b', 'a'], unique: false, primary: false },
+    ]);
+  });
+
+  it('shows an expression part it cannot print as a placeholder', () => {
+    expect(
+      groupIndexes([
+        { name: 'ix', column: undefined, unique: false, primary: false },
+        { name: 'ix', column: 'a', unique: false, primary: false },
+      ]),
+    ).toEqual([{ name: 'ix', columns: [EXPRESSION_PART, 'a'], unique: false, primary: false }]);
+  });
+
+  it('treats a primary key as unique and keeps a partial condition', () => {
+    expect(
+      groupIndexes([
+        { name: 'pk', column: 'id', unique: false, primary: true },
+        { name: 'p', column: 'a', unique: true, primary: false, where: 'a > 0', method: '' },
+      ]),
+    ).toEqual([
+      { name: 'pk', columns: ['id'], unique: true, primary: true },
+      { name: 'p', columns: ['a'], unique: true, primary: false, where: 'a > 0' },
+    ]);
+  });
+
+  it('skips rows without an index name and is empty for no rows', () => {
+    expect(groupIndexes([{ name: undefined, column: 'a', unique: false, primary: false }])).toEqual(
+      [],
+    );
+    expect(groupIndexes([])).toEqual([]);
   });
 });

@@ -17,7 +17,13 @@ function fakeDriver(id: DriverId): Driver {
       defaultKeyword: true,
       insertDefaultRow: () => '',
     },
-    capabilities: { databases: true, schemas: false, databaseScopedSessions: false, cancel: true },
+    capabilities: {
+      databases: true,
+      schemas: false,
+      databaseScopedSessions: false,
+      cancel: true,
+      objectKinds: [],
+    },
     openSession: () => Promise.reject(new Error('not implemented')),
   };
 }

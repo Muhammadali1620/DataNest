@@ -14,6 +14,7 @@ import {
   extensionOf,
   suggestedFileName,
 } from './services/result-export';
+import { ResultCopier } from './services/result-copier';
 import { ResultEditor } from './services/result-editor';
 import { ResultSaver } from './services/result-saver';
 import { ResultStore } from './services/result-store';
@@ -98,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   const editor = new ResultEditor(results);
+  const copier = new ResultCopier({ results, manager });
   const saver = new ResultSaver({
     manager,
     results,
@@ -114,6 +116,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         runner,
         editor,
         saver,
+        copier,
         reloadTable: (resultId, change) => tables.reload(resultId, change),
         exportResult,
         logger,

@@ -61,6 +61,8 @@
     onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
     /** Called when the focused cell changes, e.g. so the value panel can follow it. */
     onFocusChange?: ((cell: CellRef | undefined) => void) | undefined;
+    /** Called when the selected cells change, so "Copy as" knows what to copy. */
+    onSelectionChange?: ((selection: Selection | undefined) => void) | undefined;
     /** Called for F4, which opens or closes the value panel. */
     onToggleValue?: (() => void) | undefined;
     t: Translate;
@@ -85,6 +87,7 @@
     onRowAction,
     onSave,
     onFocusChange,
+    onSelectionChange,
     onToggleValue,
     t,
   }: Props = $props();
@@ -225,6 +228,13 @@
     const cell = focusCell;
     untrack(() => {
       onFocusChange?.(cell);
+    });
+  });
+
+  $effect(() => {
+    const current = selection;
+    untrack(() => {
+      onSelectionChange?.(current);
     });
   });
 

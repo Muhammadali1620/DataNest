@@ -114,6 +114,25 @@ function cell(row: number, column: number): HTMLElement {
   return found;
 }
 
+/** The editor a cell opens; the toolbar's own menu is not it. */
+function queryEditor(): HTMLElement | null {
+  return (
+    screen
+      .queryAllByRole('combobox')
+      .find((item) => item.getAttribute('data-testid') !== 'copy-as') ?? null
+  );
+}
+
+async function findEditor(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const found = queryEditor();
+    if (found === null) {
+      throw new Error('no editor');
+    }
+    return found;
+  });
+}
+
 describe('result grid editing', () => {
   it('opens an editor on double-click, filled with the exact value', async () => {
     await open();
@@ -167,17 +186,17 @@ describe('result grid editing', () => {
   it('gives a boolean and an enum a choice instead of free text', async () => {
     await open();
     await fireEvent.dblClick(cell(0, 2));
-    const bool = await screen.findByRole('combobox');
+    const bool = await findEditor();
     expect([...bool.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
       'true',
       'false',
     ]);
     await fireEvent.keyDown(bool, { key: 'Escape' });
     await waitFor(() => {
-      expect(screen.queryByRole('combobox')).toBeNull();
+      expect(queryEditor()).toBeNull();
     });
     await fireEvent.dblClick(cell(0, 3));
-    const status = await screen.findByRole('combobox');
+    const status = await findEditor();
     expect([...status.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
       'new',
       'paid',
@@ -187,7 +206,7 @@ describe('result grid editing', () => {
   it('sends a chosen value at once', async () => {
     const { edits } = await open();
     await fireEvent.dblClick(cell(0, 3));
-    const status = await screen.findByRole('combobox');
+    const status = await findEditor();
     await fireEvent.change(status, { target: { value: 'paid' } });
     await waitFor(() => {
       expect(edits).toHaveBeenCalledWith({
@@ -326,7 +345,7 @@ describe('result grid editing', () => {
     await fireEvent.dblClick(cell(0, 2));
     await flush();
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(queryEditor()).toBeNull();
   });
 
   describe('rows', () => {

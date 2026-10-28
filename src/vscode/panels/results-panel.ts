@@ -3,6 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
 import type { ExportFormat } from '../../services/result-export';
 import type { ResultEditor } from '../../services/result-editor';
+import type { ResultCopier } from '../../services/result-copier';
 import type { ResultSaver } from '../../services/result-saver';
 import type { TableChange } from '../../services/table-view';
 import type { ResultStore } from '../../services/result-store';
@@ -26,6 +27,8 @@ export interface ResultsPanelDeps {
   readonly saver: ResultSaver;
   /** Re-reads a table view with another page, filter or order; absent outside table views. */
   readonly reloadTable?: (resultId: string, change: TableChange) => Promise<boolean>;
+  /** Renders cells in a format; the panel puts the text on the clipboard. */
+  readonly copier: ResultCopier;
   /** Writes a result to a file the user picks. */
   readonly exportResult?: (resultId: string, format: ExportFormat) => Promise<void>;
   readonly logger: Logger;
@@ -186,6 +189,14 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
       return { resultId, applied };
+    });
+    this.rpc.handle('copyAs', async (params) => {
+      const outcome = await this.deps.copier.render(params);
+      if (!outcome.ok) {
+        return { ok: false, error: outcome.error };
+      }
+      await vscode.env.clipboard.writeText(outcome.text);
+      return { ok: true, rows: outcome.rows };
     });
     this.rpc.handle('pageSize', async ({ resultId, pageSize }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { pageSize })) ?? false;

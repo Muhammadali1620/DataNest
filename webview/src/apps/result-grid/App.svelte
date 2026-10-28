@@ -15,6 +15,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import { toTsv } from '../../../../src/shared/tsv';
   import { keepWidths } from './columns';
   import Grid from './Grid.svelte';
+  import { COPY_FORMATS, type CopyFormat } from '../../../../src/shared/copy-format';
+  import type { MessageKey } from '../../l10n/en';
   import FilterBar from './FilterBar.svelte';
   import { activeCount } from './filter-model';
   import {
@@ -44,6 +46,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let hitTotal = $state(0);
   let hitIndex = $state(0);
   let revealRow = $state<number | undefined>(undefined);
+  /** The selected cells, which "Copy as" renders; the whole result when nothing is selected. */
+  let selected = $state<Selection | undefined>(undefined);
+  /** What the last "Copy as" did, until the selection changes. */
+  let copyNote = $state<string | undefined>(undefined);
   /** The filter bar of a table view, the columns it offers and whether a request is out. */
   let filterOpen = $state(false);
   let filterColumns = $state<string[]>([]);
@@ -204,6 +210,32 @@ import type { RowAction } from '../../../../src/shared/row-action';
       failure = error instanceof Error ? error.message : t('grid.pageFailed');
     } finally {
       paging = false;
+    }
+  }
+
+  async function copyAs(format: CopyFormat): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined || tab.error !== undefined) {
+      return;
+    }
+    failure = undefined;
+    copyNote = undefined;
+    const box = selected === undefined ? undefined : selectionBox(selected);
+    try {
+      const answer = await rpc.request('copyAs', {
+        resultId: tab.id,
+        format,
+        ...(box === undefined
+          ? {}
+          : { top: box.top, bottom: box.bottom, left: box.left, right: box.right }),
+      });
+      if (answer.ok) {
+        copyNote = t('grid.copied', answer.rows ?? 0);
+      } else {
+        failure = t(`grid.copyError.${answer.error ?? 'no-rows'}`);
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.copyFailed');
     }
   }
 
@@ -472,6 +504,32 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </button>
       {/each}
       <span class="spacer"></span>
+      {#if activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
+        <select
+          class="cancel"
+          aria-label={t('grid.copyAs')}
+          title={t('grid.copyAsHint')}
+          data-testid="copy-as"
+          value=""
+          onchange={(event) => {
+            const format = COPY_FORMATS.find((item) => item === event.currentTarget.value);
+            event.currentTarget.value = '';
+            if (format !== undefined) {
+              void copyAs(format);
+            }
+          }}
+        >
+          <option value="" disabled>{t('grid.copyAs')}</option>
+          {#each COPY_FORMATS as format (format)}
+            <option value={format} disabled={format === 'update' && editColumns === undefined}>
+              {t(`grid.copyFormat.${format}` as MessageKey)}
+            </option>
+          {/each}
+        </select>
+        {#if copyNote !== undefined}
+          <span class="note" data-testid="copy-note">{copyNote}</span>
+        {/if}
+      {/if}
       {#if activeTab?.page !== undefined}
         <button
           type="button"
@@ -713,6 +771,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {onEdit}
           {onRowAction}
           {onSave}
+          onSelectionChange={(next: Selection | undefined) => {
+            selected = next;
+            copyNote = undefined;
+          }}
           onFocusChange={(cell: CellRef | undefined) => {
             focused = cell;
           }}
@@ -994,6 +1056,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
     align-items: center;
     padding: 4px 8px;
     border-top: 1px solid var(--vscode-panel-border);
+  }
+
+  .note {
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
   }
 
   .field {

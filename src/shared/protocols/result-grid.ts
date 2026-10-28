@@ -2,6 +2,7 @@
 // show (ARCHITECTURE.md D6), so a million-row result costs the webview nothing.
 
 import { MAX_BINARY_VIEW_BYTES } from '../binary-bytes';
+import { COPY_ERRORS, COPY_FORMATS } from '../copy-format';
 import { resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
@@ -234,6 +235,26 @@ export const resultGridProtocol = defineProtocol({
           resultId,
           rows: array(number({ integer: true, min: 0 }), { maxLength: MAX_SEARCH_HITS }),
           total: number({ integer: true, min: 0 }),
+        }),
+      },
+      /**
+       * Page → host: put the cells in a rectangle on the clipboard in a chosen format.
+       * Without a rectangle the whole result is copied.
+       */
+      copyAs: {
+        params: object({
+          resultId,
+          format: literal(...COPY_FORMATS),
+          top: optional(number({ integer: true, min: 0 })),
+          bottom: optional(number({ integer: true, min: 0 })),
+          left: optional(number({ integer: true, min: 0 })),
+          right: optional(number({ integer: true, min: 0 })),
+        }),
+        result: object({
+          ok: boolean(),
+          error: optional(literal(...COPY_ERRORS)),
+          /** Rows that were copied. */
+          rows: optional(number({ integer: true, min: 0 })),
         }),
       },
       /** Page → host: change one cell; the change is queued, not saved. */

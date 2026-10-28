@@ -47,6 +47,8 @@
     onSort: (column: number) => void;
     /** Row to scroll to and select, e.g. the next search hit. */
     revealRow?: number | undefined;
+    /** Column that stays focused when a row is revealed; the first one by default. */
+    revealColumn?: number | undefined;
     /** How each column is edited; undefined means the whole result is read-only. */
     editColumns?: readonly (EditColumn | null)[] | undefined;
     /** How a cell was changed and not yet saved. */
@@ -65,6 +67,8 @@
     onSelectionChange?: ((selection: Selection | undefined) => void) | undefined;
     /** Called for F4, which opens or closes the value panel. */
     onToggleValue?: (() => void) | undefined;
+    /** Called for Shift+F4, which opens or closes the record card. */
+    onToggleRecord?: (() => void) | undefined;
     t: Translate;
   }
 
@@ -80,6 +84,7 @@
     sort,
     onSort,
     revealRow,
+    revealColumn,
     editColumns,
     changeAt,
     stateAt,
@@ -89,6 +94,7 @@
     onFocusChange,
     onSelectionChange,
     onToggleValue,
+    onToggleRecord,
     t,
   }: Props = $props();
 
@@ -193,7 +199,10 @@
     if (row === undefined) {
       return;
     }
-    const cell = selectCell({ row, column: 0 }, { rowCount, columnCount: columns.length });
+    const cell = selectCell(
+      { row, column: untrack(() => revealColumn) ?? 0 },
+      { rowCount, columnCount: columns.length },
+    );
     selection = cell;
     if (cell !== undefined) {
       scrollTo(cell.focus);
@@ -360,6 +369,11 @@
 
   function onKeyDown(event: KeyboardEvent): void {
     const modifier = event.ctrlKey || event.metaKey;
+    if (event.key === 'F4' && event.shiftKey && onToggleRecord !== undefined) {
+      event.preventDefault();
+      onToggleRecord();
+      return;
+    }
     if (event.key === 'F4' && onToggleValue !== undefined) {
       event.preventDefault();
       onToggleValue();

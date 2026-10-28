@@ -27,6 +27,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
     pageCount,
     pageSizeChoices,
   } from './pager-model';
+  import RecordPanel from './RecordPanel.svelte';
   import ValuePanel from './ValuePanel.svelte';
   import { RowCache, windowFor } from './rows';
   import { type CellRef, selectionBox, type Selection } from './selection';
@@ -59,6 +60,32 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let filtering = $state(false);
   /** The value panel beside the grid, and the cell it follows. */
   let valueOpen = $state(false);
+  /** The record card; it takes the same place, so only one of the two is open. */
+  let recordOpen = $state(false);
+  let revealColumn = $state<number | undefined>(undefined);
+
+  function toggleValue(): void {
+    valueOpen = !valueOpen;
+    recordOpen = false;
+  }
+
+  function toggleRecord(): void {
+    recordOpen = !recordOpen;
+    valueOpen = false;
+  }
+
+  /** Moves the card to the neighbouring row, keeping the focused column. */
+  function stepRecord(delta: number): void {
+    const tab = activeTab;
+    if (focused === undefined || tab === undefined) {
+      return;
+    }
+    const row = Math.max(0, Math.min(focused.row + delta, displayCount(tab) - 1));
+    revealColumn = focused.column;
+    // Re-pointing at the same row must still scroll, so the value is cleared first.
+    revealRow = undefined;
+    revealRow = row;
+  }
   let focused = $state<CellRef | undefined>(undefined);
   /** Bumped when rows arrive, so the grid re-reads the cache. */
   let loaded = $state(0);
@@ -555,11 +582,19 @@ import type { RowAction } from '../../../../src/shared/row-action';
           aria-pressed={valueOpen}
           title={t('value.toggleHint')}
           data-testid="value-toggle"
-          onclick={() => {
-            valueOpen = !valueOpen;
-          }}
+          onclick={toggleValue}
         >
           {t('value.title')}
+        </button>
+        <button
+          type="button"
+          class="cancel"
+          aria-pressed={recordOpen}
+          title={t('record.toggleHint')}
+          data-testid="record-toggle"
+          onclick={toggleRecord}
+        >
+          {t('record.title')}
         </button>
       {/if}
       {#if gridState.running}
@@ -800,12 +835,30 @@ import type { RowAction } from '../../../../src/shared/row-action';
           onFocusChange={(cell: CellRef | undefined) => {
             focused = cell;
           }}
-          onToggleValue={() => {
-            valueOpen = !valueOpen;
-          }}
+          onToggleValue={toggleValue}
+          onToggleRecord={toggleRecord}
+          {revealColumn}
           {t}
         />
           </div>
+          {#if recordOpen}
+            <RecordPanel
+              row={focused?.row}
+              rowCount={displayCount(activeTab)}
+              rowKey={`${activeTab.id}:${activeTab.revision}:${activeTab.sort?.column ?? ''}${activeTab.sort?.direction ?? ''}:${focused?.row ?? ''}`}
+              columns={activeTab.columns}
+              cells={focused === undefined ? undefined : rowAt(focused.row)}
+              {editColumns}
+              {changeAt}
+              {stateAt}
+              {onEdit}
+              onStep={stepRecord}
+              onClose={() => {
+                recordOpen = false;
+              }}
+              {t}
+            />
+          {/if}
           {#if valueOpen}
             <ValuePanel
               cell={focusedCell}

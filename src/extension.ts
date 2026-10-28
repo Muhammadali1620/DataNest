@@ -9,8 +9,9 @@ import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
 import {
+  type ExportError,
   type ExportFormat,
-  exportResult as exportResultText,
+  exportBytes,
   extensionOf,
   suggestedFileName,
 } from './services/result-export';
@@ -75,6 +76,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   /** Writes a result to a file the user picks; the whole result, not just a page. */
+  const exportErrorMessage = (error: ExportError): string =>
+    error === 'too-large'
+      ? vscode.l10n.t('The result does not fit this format (Excel holds about a million rows)')
+      : error === 'no-rows'
+        ? vscode.l10n.t('There is nothing to export')
+        : vscode.l10n.t(
+            'This format needs rows and writable columns; computed columns are skipped',
+          );
+
   const exportResult = async (resultId: string, format: ExportFormat): Promise<void> => {
     const summary = results.get(resultId);
     const rows = results.allRows(resultId);
@@ -92,8 +102,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (target === undefined) {
       return;
     }
-    const text = exportResultText({ columns: summary.columns, rows }, format);
-    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(text));
+    const dialect =
+      summary.origin === undefined
+        ? undefined
+        : (await manager.driverOf(summary.origin.target.connectionId)).dialect;
+    const outcome = exportBytes(
+      { columns: summary.columns, rows, dialect, edit: summary.edit },
+      format,
+    );
+    if (!outcome.ok) {
+      void vscode.window.showWarningMessage(exportErrorMessage(outcome.error));
+      return;
+    }
+    await vscode.workspace.fs.writeFile(target, outcome.data);
     logger.info(`Exported ${rows.length} rows to ${target.fsPath}`);
     void vscode.window.showInformationMessage(vscode.l10n.t('Exported {0} rows', rows.length));
   };

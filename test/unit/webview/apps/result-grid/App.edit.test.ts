@@ -114,12 +114,14 @@ function cell(row: number, column: number): HTMLElement {
   return found;
 }
 
+const TOOLBAR_MENUS = ['copy-as', 'export-more'];
+
 /** The editor a cell opens; the toolbar's own menu is not it. */
 function queryEditor(): HTMLElement | null {
   return (
     screen
       .queryAllByRole('combobox')
-      .find((item) => item.getAttribute('data-testid') !== 'copy-as') ?? null
+      .find((item) => !TOOLBAR_MENUS.includes(item.getAttribute('data-testid') ?? '')) ?? null
   );
 }
 

@@ -1109,6 +1109,32 @@ describe('result grid App', () => {
       });
     });
 
+    it('offers SQL, Markdown and Excel in a menu and sends the chosen one', async () => {
+      const { exported } = await withState({
+        tabs: [tab()],
+        activeId: 'result-1',
+        running: false,
+      });
+      const menu = await screen.findByTestId('export-more');
+      const labels = [...menu.querySelectorAll('option')].map((option) =>
+        option.textContent.trim(),
+      );
+      expect(labels).toEqual([
+        'Export as…',
+        'SQL INSERT (.sql)',
+        'Markdown (.md)',
+        'Excel (.xlsx)',
+      ]);
+      await fireEvent.change(menu, { target: { value: 'xlsx' } });
+      await waitFor(() => {
+        expect(exported).toHaveBeenCalledWith({ resultId: 'result-1', format: 'xlsx' });
+      });
+      await fireEvent.change(menu, { target: { value: 'sql' } });
+      await waitFor(() => {
+        expect(exported).toHaveBeenLastCalledWith({ resultId: 'result-1', format: 'sql' });
+      });
+    });
+
     it('exports the tab the user is looking at', async () => {
       const { exported } = await withState({
         tabs: [tab(), tab({ id: 'result-2', title: 'SELECT 2' })],

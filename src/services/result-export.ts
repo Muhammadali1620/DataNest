@@ -4,31 +4,87 @@
 import { cellJson } from '../shared/cell-text';
 import type { CellValue } from '../shared/cell-value';
 import { toCsv } from '../shared/csv';
-import type { ResultColumn } from '../drivers/driver';
+import type { ResultEdit } from '../core/model/editability';
+import type { Dialect, ResultColumn } from '../drivers/driver';
+import { columnNames } from './column-names';
+import { copyAs } from './copy-as';
 
-export type ExportFormat = 'csv' | 'json';
+export { columnNames };
+import { toXlsx, XlsxLimitError } from './xlsx';
 
-export const EXPORT_FORMATS: readonly ExportFormat[] = ['csv', 'json'];
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+export const EXPORT_FORMATS = ['csv', 'json', 'sql', 'markdown', 'xlsx'] as const;
 
 export function isExportFormat(value: unknown): value is ExportFormat {
-  return value === 'csv' || value === 'json';
+  return EXPORT_FORMATS.some((format) => format === value);
 }
 
 export interface ExportInput {
   readonly columns: readonly ResultColumn[];
   readonly rows: readonly (readonly CellValue[])[];
+  /** Needed for SQL: how to quote names and write values. */
+  readonly dialect?: Dialect | undefined;
+  /** Where the rows came from, so INSERTs name the real table and columns. */
+  readonly edit?: ResultEdit | undefined;
 }
 
 /** The file extension a format writes. */
 export function extensionOf(format: ExportFormat): string {
-  return format === 'csv' ? 'csv' : 'json';
+  return format === 'markdown' ? 'md' : format;
+}
+
+/** What went wrong when a result cannot be written in a format. */
+export type ExportError = 'no-rows' | 'nothing-to-write' | 'too-large';
+
+export type ExportOutcome =
+  | { readonly ok: true; readonly data: Uint8Array }
+  | { readonly ok: false; readonly error: ExportError };
+
+/** The file contents for any format, as bytes. */
+export function exportBytes(input: ExportInput, format: ExportFormat): ExportOutcome {
+  const encode = (text: string): ExportOutcome => ({
+    ok: true,
+    data: new TextEncoder().encode(text),
+  });
+  switch (format) {
+    case 'csv':
+    case 'json':
+      return encode(exportResult(input, format));
+    case 'markdown':
+    case 'sql': {
+      const last = Math.max(0, input.columns.length - 1);
+      const outcome = copyAs({
+        format: format === 'sql' ? 'insert' : 'markdown',
+        columns: input.columns,
+        rows: input.rows,
+        left: 0,
+        right: last,
+        dialect: input.dialect,
+        edit: input.edit,
+      });
+      return outcome.ok ? encode(`${outcome.text}\n`) : { ok: false, error: 'nothing-to-write' };
+    }
+    case 'xlsx':
+      try {
+        return {
+          ok: true,
+          data: toXlsx({ header: columnNames(input.columns), rows: input.rows }),
+        };
+      } catch (error) {
+        if (error instanceof XlsxLimitError) {
+          return { ok: false, error: 'too-large' };
+        }
+        throw error;
+      }
+  }
 }
 
 /**
  * The file contents. JSON is an array of objects keyed by column name, with exact
  * numbers kept as strings so no value is rounded on the way out.
  */
-export function exportResult(input: ExportInput, format: ExportFormat): string {
+export function exportResult(input: ExportInput, format: 'csv' | 'json'): string {
   const names = columnNames(input.columns);
   if (format === 'csv') {
     return toCsv(input.rows, { header: names });
@@ -41,25 +97,6 @@ export function exportResult(input: ExportInput, format: ExportFormat): string {
     return record;
   });
   return `${JSON.stringify(records, undefined, 2)}\n`;
-}
-
-/**
- * Column names for a file header. Unnamed columns get a position, and duplicates
- * are numbered, so a JSON object never silently loses a column.
- */
-export function columnNames(columns: readonly ResultColumn[]): string[] {
-  const used = new Set<string>();
-  return columns.map((column, index) => {
-    const base = column.name === '' ? `column${index + 1}` : column.name;
-    let candidate = base;
-    // Counting up until the name is free also covers a column literally called
-    // `id_2` next to two columns called `id`.
-    for (let attempt = 2; used.has(candidate); attempt++) {
-      candidate = `${base}_${attempt}`;
-    }
-    used.add(candidate);
-    return candidate;
-  });
 }
 
 /** A file name suggestion from the statement, safe on every platform. */

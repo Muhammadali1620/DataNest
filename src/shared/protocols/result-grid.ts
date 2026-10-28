@@ -349,7 +349,7 @@ export const resultGridProtocol = defineProtocol({
       /** Page → host: put the cursor where this result's error is. */
       revealError: object({ resultId }),
       /** Page → host: write this result to a file the user picks. */
-      exportResult: object({ resultId, format: literal('csv', 'json') }),
+      exportResult: object({ resultId, format: literal('csv', 'json', 'sql', 'markdown', 'xlsx') }),
     },
   },
   webview: {

@@ -31,6 +31,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import { RowCache, windowFor } from './rows';
   import { type CellRef, selectionBox, type Selection } from './selection';
 
+  /** Export formats beyond the CSV and JSON buttons. */
+  const MORE_EXPORTS = ['sql', 'markdown', 'xlsx'] as const;
+
   interface Props {
     rpc: RpcPeer<ResultGridProtocol['webview'], ResultGridProtocol['host']>;
     t: Translate;
@@ -590,6 +593,25 @@ import type { RowAction } from '../../../../src/shared/row-action';
         >
           {t('grid.exportJson')}
         </button>
+        <select
+          class="cancel"
+          aria-label={t('grid.exportMore')}
+          title={t('grid.exportHint')}
+          data-testid="export-more"
+          value=""
+          onchange={(event) => {
+            const format = MORE_EXPORTS.find((item) => item === event.currentTarget.value);
+            event.currentTarget.value = '';
+            if (format !== undefined) {
+              rpc.emit('exportResult', { resultId: activeTab.id, format });
+            }
+          }}
+        >
+          <option value="" disabled>{t('grid.exportMore')}</option>
+          {#each MORE_EXPORTS as format (format)}
+            <option value={format}>{t(`grid.exportFormat.${format}` as MessageKey)}</option>
+          {/each}
+        </select>
       {/if}
     </div>
 

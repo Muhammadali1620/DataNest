@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CellValue } from '../../../src/shared/cell-value';
 import {
   columnNames,
+  exportBytes,
   EXPORT_FORMATS,
   exportResult,
   extensionOf,
@@ -108,6 +109,9 @@ describe('suggestedFileName', () => {
     expect(suggestedFileName('SELECT 1', 'json')).toBe('select-1.json');
     expect(extensionOf('csv')).toBe('csv');
     expect(extensionOf('json')).toBe('json');
+    expect(extensionOf('markdown')).toBe('md');
+    expect(extensionOf('sql')).toBe('sql');
+    expect(extensionOf('xlsx')).toBe('xlsx');
   });
 
   it('keeps the name short and free of path characters', () => {
@@ -135,8 +139,64 @@ describe('isExportFormat', () => {
   });
 
   it('rejects anything else', () => {
-    expect(isExportFormat('xlsx')).toBe(false);
+    expect(isExportFormat('xls')).toBe(false);
+    expect(isExportFormat('CSV')).toBe(false);
     expect(isExportFormat(undefined)).toBe(false);
     expect(isExportFormat('')).toBe(false);
+  });
+});
+
+describe('exportBytes', () => {
+  const dialect = {
+    quoteIdentifier: (name: string) => `"${name}"`,
+    quoteTable: (table: { name: string }) => `"${table.name}"`,
+    literal: (value: unknown) =>
+      typeof value === 'string' ? `'${value}'` : typeof value === 'number' ? String(value) : 'NULL',
+  } as never;
+  const decode = (outcome: ReturnType<typeof exportBytes>): string => {
+    if (!outcome.ok) {
+      throw new Error(outcome.error);
+    }
+    return new TextDecoder().decode(outcome.data);
+  };
+
+  it('encodes the text formats as UTF-8', () => {
+    expect(decode(exportBytes({ columns, rows }, 'csv'))).toBe(
+      'id,email\r\n1,alice@example.com\r\n2,\r\n',
+    );
+    expect(decode(exportBytes({ columns: [{ name: 'ключ' }], rows: [['Ünï']] }, 'csv'))).toBe(
+      'ключ\r\nÜnï\r\n',
+    );
+  });
+
+  it('writes Markdown ending with a newline', () => {
+    expect(decode(exportBytes({ columns, rows }, 'markdown'))).toBe(
+      '| id | email |\n| ---: | --- |\n| 1 | alice@example.com |\n| 2 | NULL |\n',
+    );
+  });
+
+  it('writes INSERTs through the dialect', () => {
+    expect(decode(exportBytes({ columns, rows, dialect }, 'sql'))).toBe(
+      `INSERT INTO "table_name" ("id", "email") VALUES (1, 'alice@example.com');\n` +
+        `INSERT INTO "table_name" ("id", "email") VALUES (2, NULL);\n`,
+    );
+  });
+
+  it('refuses SQL without a dialect or without rows', () => {
+    expect(exportBytes({ columns, rows }, 'sql')).toEqual({ ok: false, error: 'nothing-to-write' });
+    expect(exportBytes({ columns, rows: [], dialect }, 'sql')).toEqual({
+      ok: false,
+      error: 'nothing-to-write',
+    });
+  });
+
+  it('writes an xlsx that is a real archive', () => {
+    const outcome = exportBytes({ columns, rows }, 'xlsx');
+    expect(outcome.ok && Buffer.from(outcome.data).subarray(0, 2).toString()).toBe('PK');
+  });
+
+  it('reports a result too large for Excel instead of failing', () => {
+    const huge = { length: 1_048_576 } as unknown as CellValue[][];
+    expect(exportBytes({ columns, rows: huge }, 'xlsx')).toEqual({ ok: false, error: 'too-large' });
   });
 });

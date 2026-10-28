@@ -540,7 +540,7 @@ describe('exportResult event', () => {
   });
 
   it('rejects a format the host cannot write', () => {
-    expect(() => exportResult.parse({ resultId: 'r', format: 'xlsx' })).toThrow('format');
+    expect(() => exportResult.parse({ resultId: 'r', format: 'pdf' })).toThrow('format');
     expect(() => exportResult.parse({ resultId: 'r' })).toThrow('format');
   });
 });

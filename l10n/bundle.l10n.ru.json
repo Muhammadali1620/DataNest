@@ -48,5 +48,8 @@
   "Discard {0} unsaved changes?": "Отменить несохранённые изменения: {0}?",
   "Load": "Загрузить",
   "Load all {0} rows? This can be slow and use a lot of memory.": "Загрузить все строки: {0}? Это может быть медленно и займёт много памяти.",
-  "Load the whole table? It may hold a very large number of rows (up to {0}), which can be slow and use a lot of memory.": "Загрузить всю таблицу? В ней может быть очень много строк (до {0}), это может быть медленно и займёт много памяти."
+  "Load the whole table? It may hold a very large number of rows (up to {0}), which can be slow and use a lot of memory.": "Загрузить всю таблицу? В ней может быть очень много строк (до {0}), это может быть медленно и займёт много памяти.",
+  "The result does not fit this format (Excel holds about a million rows)": "Результат не помещается в этот формат (в Excel около миллиона строк)",
+  "There is nothing to export": "Нечего выгружать",
+  "This format needs rows and writable columns; computed columns are skipped": "Для этого формата нужны строки и записываемые колонки; вычисляемые колонки пропускаются"
 }

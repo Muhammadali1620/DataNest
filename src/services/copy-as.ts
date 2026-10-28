@@ -10,7 +10,7 @@ import { toCsv } from '../shared/csv';
 import { toTsv } from '../shared/tsv';
 import type { ResultEdit } from '../core/model/editability';
 import type { Dialect, ResultColumn } from '../drivers/driver';
-import { columnNames } from './result-export';
+import { columnNames } from './column-names';
 
 export interface CopyInput {
   readonly format: CopyFormat;

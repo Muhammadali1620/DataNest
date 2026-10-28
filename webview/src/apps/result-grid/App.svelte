@@ -120,6 +120,28 @@ import type { RowAction } from '../../../../src/shared/row-action';
     });
   }
 
+  /** The table a column's foreign key leads to, if the column is part of one. */
+  function linkTarget(column: number): string | undefined {
+    return activeTab?.links?.find((link) => link.columns.includes(column))?.target;
+  }
+
+  async function follow(row: number, column: number): Promise<void> {
+    const tab = activeTab;
+    const link = tab?.links?.find((candidate) => candidate.columns.includes(column));
+    if (tab === undefined || link === undefined) {
+      return;
+    }
+    failure = undefined;
+    try {
+      const answer = await rpc.request('followLink', { resultId: tab.id, row, link: link.id });
+      if (!answer.ok) {
+        failure = t(`grid.linkError.${answer.error ?? 'no-link'}`);
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.linkFailed');
+    }
+  }
+
   function stateAt(row: number): 'inserted' | 'deleted' | undefined {
     return loaded >= 0 ? cache.stateAt(row) : undefined;
   }
@@ -838,6 +860,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
           onToggleValue={toggleValue}
           onToggleRecord={toggleRecord}
           {revealColumn}
+          {linkTarget}
+          onFollow={(row: number, column: number) => {
+            void follow(row, column);
+          }}
           {t}
         />
           </div>
@@ -852,6 +878,12 @@ import type { RowAction } from '../../../../src/shared/row-action';
               {changeAt}
               {stateAt}
               {onEdit}
+              {linkTarget}
+              onFollow={(column: number) => {
+                if (focused !== undefined) {
+                  void follow(focused.row, column);
+                }
+              }}
               onStep={stepRecord}
               onClose={() => {
                 recordOpen = false;

@@ -1,7 +1,13 @@
 import type pg from 'pg';
-import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../../core/model/objects';
+import type {
+  ColumnInfo,
+  ForeignKey,
+  ObjectScope,
+  TableInfo,
+  TableRef,
+} from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
-import { groupKeys } from '../common/keys';
+import { groupForeignKeys, groupKeys } from '../common/keys';
 import { toPgDbError } from './errors';
 
 const DEFAULT_SCHEMA = 'public';
@@ -89,6 +95,38 @@ export class PostgresMetadata implements MetadataReader {
       [table.schema ?? DEFAULT_SCHEMA, table.name],
     );
     return groupKeys(rows.map((row) => [asText(row[0]), asText(row[1])]));
+  }
+
+  async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
+    const rows = await this.query(
+      `SELECT con.oid::text, con.conname, a.attname, tn.nspname, tc.relname, ra.attname
+       FROM pg_constraint con
+       JOIN pg_class c ON c.oid = con.conrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_class tc ON tc.oid = con.confrelid
+       JOIN pg_namespace tn ON tn.oid = tc.relnamespace
+       CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(attnum, refnum, ord)
+       JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+       JOIN pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = k.refnum
+       WHERE con.contype = 'f' AND n.nspname = $1 AND c.relname = $2
+       ORDER BY con.oid, k.ord`,
+      [table.schema ?? DEFAULT_SCHEMA, table.name],
+    );
+    return groupForeignKeys(
+      rows.map((row) => {
+        const targetName = asText(row[4]);
+        return {
+          id: asText(row[0]),
+          name: asText(row[1]),
+          column: asText(row[2]),
+          target:
+            targetName === undefined
+              ? undefined
+              : { schema: asText(row[3]) ?? DEFAULT_SCHEMA, name: targetName },
+          targetColumn: asText(row[5]),
+        };
+      }),
+    );
   }
 
   private async query(text: string, values: unknown[] = []): Promise<unknown[][]> {

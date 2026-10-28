@@ -45,6 +45,18 @@ describe('MetadataCache', () => {
       ]);
     });
 
+    it('caches foreign keys per table and drops them with the rest', async () => {
+      const inner = reader();
+      const wrapped = cache.wrap('c1', inner);
+      await wrapped.listForeignKeys({ database: 'app', name: 'orders' });
+      await wrapped.listForeignKeys({ database: 'app', name: 'orders' });
+      await wrapped.listForeignKeys({ database: 'app', name: 'items' });
+      expect(inner.calls).toEqual(['listForeignKeys:orders', 'listForeignKeys:items']);
+      cache.invalidate('c1');
+      await wrapped.listForeignKeys({ database: 'app', name: 'orders' });
+      expect(inner.calls).toHaveLength(3);
+    });
+
     it('tells scopes apart even when a name contains the separator', async () => {
       const inner = reader();
       const wrapped = cache.wrap('c1', inner);
@@ -73,6 +85,7 @@ describe('MetadataCache', () => {
         listTables: () => Promise.resolve([]),
         listColumns: () => Promise.resolve([]),
         listUniqueKeys: () => Promise.resolve([]),
+        listForeignKeys: () => Promise.resolve([]),
       };
       const load = vi.spyOn(inner, 'listDatabases');
       const wrapped = cache.wrap('c1', inner);

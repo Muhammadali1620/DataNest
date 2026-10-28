@@ -2,7 +2,13 @@
 // know only these types; a new database means a new folder here, not UI changes.
 
 import type { DriverId, ResolvedConnectionConfig } from '../shared/connection';
-import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../core/model/objects';
+import type {
+  ColumnInfo,
+  ForeignKey,
+  ObjectScope,
+  TableInfo,
+  TableRef,
+} from '../core/model/objects';
 import type { CellValue } from '../shared/cell-value';
 
 /** What the DBMS supports; the UI adapts instead of special-casing driver ids. */
@@ -90,6 +96,8 @@ export interface MetadataReader {
    * order. Partial and expression indexes are left out: they do not identify a row.
    */
   listUniqueKeys(table: TableRef): Promise<string[][]>;
+  /** Foreign keys that start in this table, so a cell can lead to the row it points at. */
+  listForeignKeys(table: TableRef): Promise<ForeignKey[]>;
 }
 
 /**

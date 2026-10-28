@@ -35,6 +35,7 @@ const noMetadata: MetadataReader = {
   listTables: () => Promise.resolve([]),
   listColumns: () => Promise.resolve([]),
   listUniqueKeys: () => Promise.resolve([]),
+  listForeignKeys: () => Promise.resolve([]),
 };
 
 /** A session that records statements and answers as a script says. */

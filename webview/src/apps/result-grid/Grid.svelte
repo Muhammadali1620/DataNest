@@ -67,6 +67,10 @@
     onSelectionChange?: ((selection: Selection | undefined) => void) | undefined;
     /** Called for F4, which opens or closes the value panel. */
     onToggleValue?: (() => void) | undefined;
+    /** The table a foreign key column leads to, or undefined when the column is not a key. */
+    linkTarget?: ((column: number) => string | undefined) | undefined;
+    /** Called to open the row a foreign key cell points at. */
+    onFollow?: ((row: number, column: number) => void) | undefined;
     /** Called for Shift+F4, which opens or closes the record card. */
     onToggleRecord?: (() => void) | undefined;
     t: Translate;
@@ -95,6 +99,8 @@
     onSelectionChange,
     onToggleValue,
     onToggleRecord,
+    linkTarget,
+    onFollow,
     t,
   }: Props = $props();
 
@@ -350,11 +356,26 @@
     if (event.button !== 0) {
       return;
     }
+    if ((event.ctrlKey || event.metaKey) && follow(row, column)) {
+      selection = selectCell({ row, column }, bounds);
+      viewport?.focus();
+      return;
+    }
     selecting = true;
     selection = event.shiftKey
       ? extendTo(selection, { row, column }, bounds)
       : selectCell({ row, column }, bounds);
     viewport?.focus();
+  }
+
+  /** Opens the row a foreign key cell points at; false when this cell is not such a link. */
+  function follow(row: number, column: number): boolean {
+    const cell = rowAt(row)?.[column];
+    if (onFollow === undefined || linkTarget?.(column) === undefined || cell === null) {
+      return false;
+    }
+    onFollow(row, column);
+    return true;
   }
 
   function overCell(row: number, column: number): void {
@@ -369,6 +390,11 @@
 
   function onKeyDown(event: KeyboardEvent): void {
     const modifier = event.ctrlKey || event.metaKey;
+    if (event.key === 'F12' && selection !== undefined) {
+      event.preventDefault();
+      follow(selection.focus.row, selection.focus.column);
+      return;
+    }
     if (event.key === 'F4' && event.shiftKey && onToggleRecord !== undefined) {
       event.preventDefault();
       onToggleRecord();
@@ -590,8 +616,13 @@
               class:changed={mark !== undefined}
               class:defaulted={mark === 'default'}
               class:editing={editor !== undefined}
+              class:link={!cell.isNull && linkTarget?.(column) !== undefined}
               style="width: {widthOf(column)}px;"
-              title={cell.truncated || cell.flattened ? cell.text : undefined}
+              title={!cell.isNull && linkTarget?.(column) !== undefined
+                ? t('grid.followLink', linkTarget(column) ?? '')
+                : cell.truncated || cell.flattened
+                  ? cell.text
+                  : undefined}
               onpointerdown={(event) => {
                 if (editor === undefined) {
                   startSelect(event, index, column);
@@ -857,6 +888,17 @@
 
   .defaulted {
     font-style: italic;
+  }
+
+  .cell.link::after {
+    float: right;
+    margin-left: 4px;
+    content: '↗';
+    opacity: 0.5;
+  }
+
+  .cell.link:hover::after {
+    opacity: 1;
   }
 
   .cell.editing {

@@ -24,6 +24,10 @@
     changeAt: (row: number, column: number) => 'value' | 'default' | undefined;
     stateAt: (row: number) => 'inserted' | 'deleted' | undefined;
     onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
+    /** The table a foreign key column leads to, or undefined when it is not a key. */
+    linkTarget?: ((column: number) => string | undefined) | undefined;
+    /** Opens the row a foreign key column points at. */
+    onFollow?: ((column: number) => void) | undefined;
     /** Moves to the previous (-1) or next (+1) row. */
     onStep: (delta: number) => void;
     onClose: () => void;
@@ -40,6 +44,8 @@
     changeAt,
     stateAt,
     onEdit,
+    linkTarget,
+    onFollow,
     onStep,
     onClose,
     t,
@@ -166,6 +172,19 @@
             {column.name === '' ? `#${index + 1}` : column.name}
             {#if column.dataType !== undefined}<span class="type">{column.dataType}</span>{/if}
           </label>
+          {#if linkTarget?.(index) !== undefined && cell !== null}
+            <button
+              type="button"
+              class="mini link"
+              title={t('grid.followLink', linkTarget(index) ?? '')}
+              data-testid="record-follow"
+              onclick={() => {
+                onFollow?.(index);
+              }}
+            >
+              ↗ {linkTarget(index)}
+            </button>
+          {/if}
           {#if control === undefined || info === undefined}
             {@const shown = displayOf(cell)}
             <div class="readonly" class:null={shown.isNull} id={`record-${index}`} data-testid="record-value">
@@ -422,6 +441,11 @@
   .mini:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  .link {
+    justify-self: start;
+    font-size: 0.85em;
   }
 
   .problem {

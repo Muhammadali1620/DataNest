@@ -3,6 +3,10 @@ import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
 import type { ExportFormat } from '../../services/result-export';
 import type { ResultEditor } from '../../services/result-editor';
+import type { TableRef } from '../../core/model/objects';
+import type { SessionTarget } from '../../services/connection-manager';
+import type { ResultLinks } from '../../services/result-links';
+import type { TableFilter } from '../../shared/table-filter';
 import type { ResultCopier } from '../../services/result-copier';
 import type { ResultSaver } from '../../services/result-saver';
 import type { TableChange } from '../../services/table-view';
@@ -27,6 +31,14 @@ export interface ResultsPanelDeps {
   readonly saver: ResultSaver;
   /** Re-reads a table view with another page, filter or order; absent outside table views. */
   readonly reloadTable?: (resultId: string, change: TableChange) => Promise<boolean>;
+  /** Finds the row a foreign key cell points at. */
+  readonly links: ResultLinks;
+  /** Opens a table filtered to the related row, in that table's own panel. */
+  readonly openRelated: (
+    target: SessionTarget,
+    table: TableRef,
+    filter: TableFilter,
+  ) => Promise<void>;
   /** Renders cells in a format; the panel puts the text on the clipboard. */
   readonly copier: ResultCopier;
   /** Writes a result to a file the user picks. */
@@ -189,6 +201,14 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
       return { resultId, applied };
+    });
+    this.rpc.handle('followLink', async (params) => {
+      const outcome = this.deps.links.follow(params);
+      if (!outcome.ok) {
+        return { ok: false, error: outcome.error };
+      }
+      await this.deps.openRelated(outcome.target, outcome.table, outcome.filter);
+      return { ok: true };
     });
     this.rpc.handle('copyAs', async (params) => {
       const outcome = await this.deps.copier.render(params);

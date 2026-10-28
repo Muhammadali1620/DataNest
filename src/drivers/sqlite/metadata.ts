@@ -1,8 +1,8 @@
 import { DbError } from '../../core/errors';
-import type { ColumnInfo, TableInfo, TableRef } from '../../core/model/objects';
+import type { ColumnInfo, ForeignKey, TableInfo, TableRef } from '../../core/model/objects';
 import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
-import { groupKeys } from '../common/keys';
+import { groupForeignKeys, groupKeys } from '../common/keys';
 import type { SqliteParam } from './protocol';
 
 /** What metadata needs from the session, kept narrow for tests. */
@@ -65,7 +65,43 @@ export class SqliteMetadata implements MetadataReader {
     );
     return groupKeys(rows.map((row) => [asText(row[0]), asText(row[1])]));
   }
+
+  async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
+    const rows = await this.session.queryRows(
+      `SELECT id, seq, "table", "from", "to" FROM pragma_foreign_key_list(?) ORDER BY id, seq`,
+      [table.name],
+    );
+    // A key written without target columns points at the other table's primary key.
+    const primaryKeys = new Map<string, string[]>();
+    const keyOf = async (name: string): Promise<string[]> => {
+      const known = primaryKeys.get(name);
+      if (known !== undefined) {
+        return known;
+      }
+      const columns = await this.listColumns({ name });
+      const key = columns.filter((column) => column.primaryKey).map((column) => column.name);
+      primaryKeys.set(name, key);
+      return key;
+    };
+    const resolved: ForeignKeyRowLike[] = [];
+    for (const row of rows) {
+      const target = asText(row[2]);
+      const explicit = asText(row[4]);
+      const position = asNumber(row[1]) ?? 0;
+      resolved.push({
+        id: asText(row[0]),
+        name: undefined,
+        column: asText(row[3]),
+        target: target === undefined ? undefined : { name: target },
+        targetColumn:
+          explicit ?? (target === undefined ? undefined : (await keyOf(target))[position]),
+      });
+    }
+    return groupForeignKeys(resolved).map((key, index) => ({ ...key, name: `fk_${index + 1}` }));
+  }
 }
+
+type ForeignKeyRowLike = Parameters<typeof groupForeignKeys>[0][number];
 
 function asText(value: CellValue | undefined): string | undefined {
   if (typeof value === 'string') {

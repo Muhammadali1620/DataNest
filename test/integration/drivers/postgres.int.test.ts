@@ -193,6 +193,28 @@ describe('postgres driver', () => {
       ).toEqual([]);
     });
 
+    it('lists foreign keys, also into another schema', async () => {
+      const items = await session.metadata.listForeignKeys({
+        schema: 'public',
+        name: 'order_items',
+      });
+      expect(items.map((key) => [key.columns, key.target, key.targetColumns])).toEqual([
+        [['order_id'], { schema: 'public', name: 'orders' }, ['id']],
+        [['product_id'], { schema: 'public', name: 'products' }, ['id']],
+      ]);
+      const stock = await session.metadata.listForeignKeys({
+        schema: 'inventory',
+        name: 'stock_levels',
+      });
+      expect(stock.map((key) => key.target)).toEqual([
+        { schema: 'inventory', name: 'warehouses' },
+        { schema: 'public', name: 'products' },
+      ]);
+      expect(
+        await session.metadata.listForeignKeys({ schema: 'public', name: 'customers' }),
+      ).toEqual([]);
+    });
+
     it('describes columns with type, nullability, key and default', async () => {
       const columns = await session.metadata.listColumns({ schema: 'public', name: 'customers' });
       const byName = new Map(columns.map((c) => [c.name, c]));

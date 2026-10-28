@@ -142,6 +142,7 @@ describe('protocol shape', () => {
       'discardChanges',
       'editCell',
       'filterTable',
+      'followLink',
       'loadAll',
       'pageSize',
       'pageTo',

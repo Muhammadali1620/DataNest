@@ -205,3 +205,33 @@ describe('errorOffsetOf', () => {
     expect(buildState([summary()], undefined, false).tabs[0]).not.toHaveProperty('filter');
   });
 });
+
+describe('buildState links', () => {
+  const editable = {
+    editable: true as const,
+    table: { name: 'items' },
+    columnMap: ['id', 'order_id'],
+    columns: [null, null],
+    keyColumns: ['id'],
+    keyIndexes: [0],
+    foreignKeys: [
+      { name: 'fk', columns: ['order_id'], target: { name: 'orders' }, targetColumns: ['id'] },
+    ],
+  };
+
+  it('tells the page which columns lead to another table', () => {
+    const state = buildState([{ ...summary(), edit: editable }], undefined, false);
+    expect(state.tabs[0]?.links).toEqual([{ id: 0, columns: [1], target: 'orders' }]);
+  });
+
+  it('says nothing about links for a result without foreign keys or one that is read-only', () => {
+    const { foreignKeys: _none, ...plain } = editable;
+    expect(
+      buildState([{ ...summary(), edit: plain }], undefined, false).tabs[0],
+    ).not.toHaveProperty('links');
+    expect(
+      buildState([{ ...summary(), edit: { editable: false, reason: 'view' } }], undefined, false)
+        .tabs[0],
+    ).not.toHaveProperty('links');
+  });
+});

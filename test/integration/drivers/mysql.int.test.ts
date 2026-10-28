@@ -200,6 +200,27 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
       expect(await session.metadata.listUniqueKeys({ ...scope, name: 'nope' })).toEqual([]);
     });
 
+    it('lists foreign keys with their targets', async () => {
+      const scope = { database: 'datanest_test' };
+      const keys = await session.metadata.listForeignKeys({ ...scope, name: 'order_items' });
+      expect(keys).toEqual([
+        {
+          name: 'fk_items_order',
+          columns: ['order_id'],
+          target: { database: 'datanest_test', name: 'orders' },
+          targetColumns: ['id'],
+        },
+        {
+          name: 'fk_items_product',
+          columns: ['product_id'],
+          target: { database: 'datanest_test', name: 'products' },
+          targetColumns: ['id'],
+        },
+      ]);
+      expect(await session.metadata.listForeignKeys({ ...scope, name: 'customers' })).toEqual([]);
+      expect(await session.metadata.listForeignKeys({ ...scope, name: 'nope' })).toEqual([]);
+    });
+
     it('describes columns with type, nullability, key and default', async () => {
       const columns = await session.metadata.listColumns({
         database: 'datanest_test',

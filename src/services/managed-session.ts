@@ -3,7 +3,13 @@
 // dropped and the next acquire() opens a fresh one.
 
 import { toDbError } from '../core/errors';
-import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../core/model/objects';
+import type {
+  ColumnInfo,
+  ForeignKey,
+  ObjectScope,
+  TableInfo,
+  TableRef,
+} from '../core/model/objects';
 import type { ExecuteEvent, ExecuteOptions, MetadataReader, Session } from '../drivers/driver';
 
 /** Errors that mean the connection itself is unusable, not just this statement. */
@@ -83,6 +89,10 @@ class ManagedMetadata implements MetadataReader {
 
   async listUniqueKeys(table: TableRef): Promise<string[][]> {
     return await this.guard(() => this.inner.listUniqueKeys(table));
+  }
+
+  async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
+    return await this.guard(() => this.inner.listForeignKeys(table));
   }
 
   private async guard<T>(call: () => Promise<T>): Promise<T> {

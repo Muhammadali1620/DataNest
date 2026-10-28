@@ -27,3 +27,14 @@ export interface ColumnInfo {
   /** Default expression as text, if any. */
   readonly defaultValue?: string;
 }
+
+/** A foreign key: columns of a table that point at columns of another (or the same) one. */
+export interface ForeignKey {
+  readonly name: string;
+  /** Columns of the table that holds the key, in key order. */
+  readonly columns: readonly string[];
+  /** The table the key points at. */
+  readonly target: TableRef;
+  /** The referenced columns, in the same order as `columns`. */
+  readonly targetColumns: readonly string[];
+}

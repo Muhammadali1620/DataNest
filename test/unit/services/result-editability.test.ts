@@ -43,6 +43,42 @@ describe('analyzeEditability', () => {
     });
   });
 
+  it('carries the foreign keys of an editable table', async () => {
+    const { analyze, metadata } = setup();
+    metadata.foreignKeys = [
+      { name: 'fk', columns: ['name'], target: { name: 'groups' }, targetColumns: ['id'] },
+    ];
+    expect(await analyze('SELECT * FROM users', ['id', 'name'])).toMatchObject({
+      editable: true,
+      foreignKeys: [{ name: 'fk', columns: ['name'], target: { name: 'groups' } }],
+    });
+  });
+
+  it('adds nothing when the table has no foreign keys', async () => {
+    const { analyze } = setup();
+    expect(await analyze('SELECT * FROM users', ['id', 'name'])).not.toHaveProperty('foreignKeys');
+  });
+
+  it('stays editable when the foreign keys cannot be read', async () => {
+    const { analyze, metadata } = setup();
+    let first = true;
+    const original = metadata.listForeignKeys.bind(metadata);
+    metadata.listForeignKeys = (table) => {
+      if (first) {
+        first = false;
+        return Promise.reject(new Error('no permission'));
+      }
+      return original(table);
+    };
+    expect(await analyze('SELECT * FROM users', ['id', 'name'])).toMatchObject({ editable: true });
+  });
+
+  it('does not look for foreign keys of a result that is not editable', async () => {
+    const { analyze, metadata } = setup();
+    await analyze('SELECT * FROM active_users', ['id', 'name']);
+    expect(metadata.calls.some((call) => call.startsWith('listForeignKeys'))).toBe(false);
+  });
+
   it('does not ask for unique keys when there is a primary key', async () => {
     const { analyze, metadata } = setup();
     await analyze('SELECT * FROM Users', ['id', 'name']);

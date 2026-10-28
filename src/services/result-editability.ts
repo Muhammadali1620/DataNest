@@ -9,7 +9,7 @@ import {
   resolveEditability,
   type ResultEdit,
 } from '../core/model/editability';
-import type { ObjectScope, TableRef } from '../core/model/objects';
+import type { ForeignKey, ObjectScope, TableRef } from '../core/model/objects';
 import { parseSelectSource } from '../core/sql/select-source';
 import type { SqlSyntax } from '../core/sql/tokenizer';
 import type { Logger } from '../core/logging/logger';
@@ -71,7 +71,7 @@ export async function analyzeEditability(
     const uniqueKeys = columns.some((column) => column.primaryKey)
       ? []
       : await context.metadata.listUniqueKeys(table);
-    return resolveEditability({
+    const resolved = resolveEditability({
       table,
       kind: info.kind,
       columns,
@@ -79,8 +79,23 @@ export async function analyzeEditability(
       items: parsed.source.items,
       resultColumns,
     });
+    if (!resolved.editable) {
+      return resolved;
+    }
+    const foreignKeys = await foreignKeysOf(context, table);
+    return foreignKeys.length === 0 ? resolved : { ...resolved, foreignKeys };
   } catch (error) {
     context.logger.debug(`Could not tell if the result is editable: ${errorMessage(error)}`);
     return readOnlyResult('failed');
+  }
+}
+
+/** Foreign keys are a convenience: not being able to read them must not cost editing. */
+async function foreignKeysOf(context: EditabilityContext, table: TableRef): Promise<ForeignKey[]> {
+  try {
+    return await context.metadata.listForeignKeys(table);
+  } catch (error) {
+    context.logger.debug(`Could not read the foreign keys: ${errorMessage(error)}`);
+    return [];
   }
 }

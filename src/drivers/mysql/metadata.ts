@@ -1,8 +1,14 @@
 import type { Connection } from 'mysql2/promise';
 import { DbError } from '../../core/errors';
-import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../../core/model/objects';
+import type {
+  ColumnInfo,
+  ForeignKey,
+  ObjectScope,
+  TableInfo,
+  TableRef,
+} from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
-import { groupKeys } from '../common/keys';
+import { groupForeignKeys, groupKeys } from '../common/keys';
 import { toMysqlDbError } from './errors';
 
 /** Reads structure from information_schema; shares the session's connection. */
@@ -68,6 +74,37 @@ export class MysqlMetadata implements MetadataReader {
       [table.database ?? null, table.name],
     );
     return groupKeys(rows.map((row) => [asText(row[0]), asText(row[1])]));
+  }
+
+  async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
+    const rows = await this.query(
+      `SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME,
+              REFERENCED_COLUMN_NAME
+       FROM information_schema.KEY_COLUMN_USAGE
+       WHERE TABLE_SCHEMA = COALESCE(?, DATABASE()) AND TABLE_NAME = ?
+         AND REFERENCED_TABLE_NAME IS NOT NULL
+       ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION`,
+      [table.database ?? null, table.name],
+    );
+    return groupForeignKeys(
+      rows.map((row) => {
+        const name = asText(row[0]);
+        const targetName = asText(row[3]);
+        return {
+          id: name,
+          name,
+          column: asText(row[1]),
+          target:
+            targetName === undefined
+              ? undefined
+              : { database: asText(row[2]) ?? table.database ?? '', name: targetName },
+          targetColumn: asText(row[4]),
+        };
+      }),
+    ).map((key) => ({
+      ...key,
+      target: key.target.database === '' ? { name: key.target.name } : key.target,
+    }));
   }
 
   private async query(sql: string, params: unknown[] = []): Promise<unknown[][]> {

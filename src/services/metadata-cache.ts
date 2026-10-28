@@ -58,6 +58,12 @@ export class MetadataCache {
           `columns:${scopeKey(table)}:${table.name}`,
           async () => await reader.listColumns(table),
         ),
+      listForeignKeys: async (table: TableRef) =>
+        await this.read(
+          connectionId,
+          `foreign:${scopeKey(table)}:${table.name}`,
+          async () => await reader.listForeignKeys(table),
+        ),
       listUniqueKeys: async (table: TableRef) =>
         await this.read(
           connectionId,

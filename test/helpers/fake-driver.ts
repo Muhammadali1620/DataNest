@@ -3,7 +3,13 @@
 
 import { DbError } from '../../src/core/errors';
 import type { DriverId, ResolvedConnectionConfig } from '../../src/shared/connection';
-import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../../src/core/model/objects';
+import type {
+  ColumnInfo,
+  ForeignKey,
+  ObjectScope,
+  TableInfo,
+  TableRef,
+} from '../../src/core/model/objects';
 import type {
   Dialect,
   Driver,
@@ -34,6 +40,7 @@ export class FakeMetadata implements MetadataReader {
   tables: TableInfo[] = [{ name: 'customers', kind: 'table' }];
   columns: ColumnInfo[] = [{ name: 'id', dataType: 'int', nullable: false, primaryKey: true }];
   uniqueKeys: string[][] = [];
+  foreignKeys: ForeignKey[] = [];
   /** Thrown by every reader when set. */
   error: Error | undefined;
   readonly calls: string[] = [];
@@ -52,6 +59,10 @@ export class FakeMetadata implements MetadataReader {
 
   listColumns(table: TableRef): Promise<ColumnInfo[]> {
     return this.answer(`listColumns:${table.name}`, this.columns);
+  }
+
+  listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
+    return this.answer(`listForeignKeys:${table.name}`, this.foreignKeys);
   }
 
   listUniqueKeys(table: TableRef): Promise<string[][]> {
@@ -201,6 +212,7 @@ export class FakeDriver implements Driver {
     session.metadata.tables = [...this.sessionMetadata.tables];
     session.metadata.columns = [...this.sessionMetadata.columns];
     session.metadata.uniqueKeys = [...this.sessionMetadata.uniqueKeys];
+    session.metadata.foreignKeys = [...this.sessionMetadata.foreignKeys];
     session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);

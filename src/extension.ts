@@ -15,6 +15,8 @@ import {
   extensionOf,
   suggestedFileName,
 } from './services/result-export';
+import { ResultLinks } from './services/result-links';
+import type { TableFilter } from './shared/table-filter';
 import { ResultCopier } from './services/result-copier';
 import { ResultEditor } from './services/result-editor';
 import { ResultSaver } from './services/result-saver';
@@ -135,6 +137,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const editor = new ResultEditor(results);
   const copier = new ResultCopier({ results, manager });
+  const links = new ResultLinks(results);
+  /** Opens the table a foreign key points at, filtered to the related row. */
+  const openRelated = async (
+    target: SessionTarget,
+    table: TableRef,
+    filter: TableFilter,
+  ): Promise<void> => {
+    showResults(tableDocumentUri(target, table));
+    await tables.open({ target, table, filter });
+  };
   const saver = new ResultSaver({
     manager,
     results,
@@ -152,6 +164,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         editor,
         saver,
         copier,
+        links,
+        openRelated,
         reloadTable: (resultId, change) => tables.reload(resultId, change),
         exportResult,
         logger,

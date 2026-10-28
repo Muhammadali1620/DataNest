@@ -202,6 +202,34 @@ describe('sqlite driver', () => {
       expect(await session.metadata.listUniqueKeys({ name: 'nope' })).toEqual([]);
     });
 
+    it('lists foreign keys: explicit targets, implicit ones and composite keys', async () => {
+      await runAll(session, `CREATE TABLE fk_parent (a INTEGER, b INTEGER, PRIMARY KEY (a, b))`);
+      await runAll(
+        session,
+        `CREATE TABLE fk_child (
+           id INTEGER PRIMARY KEY,
+           customer_id INTEGER REFERENCES customers (id),
+           parent_a INTEGER, parent_b INTEGER,
+           implicit_a INTEGER, implicit_b INTEGER,
+           FOREIGN KEY (parent_a, parent_b) REFERENCES fk_parent (a, b),
+           FOREIGN KEY (implicit_a, implicit_b) REFERENCES fk_parent
+         )`,
+      );
+      const keys = await session.metadata.listForeignKeys({ name: 'fk_child' });
+      expect(keys.map((key) => [key.columns, key.target, key.targetColumns]).sort()).toEqual(
+        [
+          [['customer_id'], { name: 'customers' }, ['id']],
+          [['parent_a', 'parent_b'], { name: 'fk_parent' }, ['a', 'b']],
+          [['implicit_a', 'implicit_b'], { name: 'fk_parent' }, ['a', 'b']],
+        ].sort(),
+      );
+      expect(new Set(keys.map((key) => key.name)).size).toBe(3);
+      expect(await session.metadata.listForeignKeys({ name: 'customers' })).toEqual([]);
+      expect(await session.metadata.listForeignKeys({ name: 'nope' })).toEqual([]);
+      await runAll(session, 'DROP TABLE fk_child');
+      await runAll(session, 'DROP TABLE fk_parent');
+    });
+
     it('describes columns with type, nullability, key and default', async () => {
       const columns = await session.metadata.listColumns({ name: 'customers' });
       const byName = new Map(columns.map((c) => [c.name, c]));

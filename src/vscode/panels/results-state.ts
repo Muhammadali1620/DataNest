@@ -1,6 +1,7 @@
 // What the result page is told about a document's results. Free of `vscode`, so the
 // tab building and the active-tab rules are covered by unit tests.
 
+import { linksOf } from '../../services/result-links';
 import type { ResultSummary } from '../../services/result-store';
 import { tabTitle, type ResultGridState, type ResultTab } from '../../shared/protocols/result-grid';
 
@@ -45,6 +46,9 @@ export function buildState(
             },
           }
         : { edit: { editable: false, reason: summary.edit.reason } }),
+    ...(summary.edit?.editable === true && linksOf(summary.edit).length > 0
+      ? { links: linksOf(summary.edit) }
+      : {}),
     changedCells: summary.changedCells,
     insertedRows: summary.insertedRows,
     deletedRows: summary.deletedRows,

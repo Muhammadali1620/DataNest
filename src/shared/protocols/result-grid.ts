@@ -3,6 +3,7 @@
 
 import { MAX_BINARY_VIEW_BYTES } from '../binary-bytes';
 import { COPY_ERRORS, COPY_FORMATS } from '../copy-format';
+import { LINK_ERRORS } from '../link-error';
 import { resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
@@ -104,6 +105,17 @@ const tabSchema = object({
         ),
       ),
     }),
+  ),
+  /** Foreign keys of an editable result: cells in these columns can lead to the row they point at. */
+  links: optional(
+    array(
+      object({
+        id: number({ integer: true, min: 0 }),
+        columns: array(number({ integer: true, min: 0 }), { maxLength: 100 }),
+        target: string({ maxLength: 1000 }),
+      }),
+      { maxLength: 1000 },
+    ),
   ),
   /** Cells changed in rows that exist on the server. */
   changedCells: number({ integer: true, min: 0 }),
@@ -256,6 +268,18 @@ export const resultGridProtocol = defineProtocol({
           /** Rows that were copied. */
           rows: optional(number({ integer: true, min: 0 })),
         }),
+      },
+      /**
+       * Page → host: open the row a foreign key cell points at, in the target table's own
+       * result panel.
+       */
+      followLink: {
+        params: object({
+          resultId,
+          row: number({ integer: true, min: 0 }),
+          link: number({ integer: true, min: 0 }),
+        }),
+        result: object({ ok: boolean(), error: optional(literal(...LINK_ERRORS)) }),
       },
       /** Page → host: change one cell; the change is queued, not saved. */
       editCell: {

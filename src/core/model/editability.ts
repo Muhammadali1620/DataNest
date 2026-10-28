@@ -5,7 +5,7 @@
 import { enumOptions, type InputKind, inputKindOf } from '../../shared/cell-input';
 import type { ReadOnlyReason } from '../../shared/read-only-reason';
 import type { SelectItem } from '../sql/select-source';
-import type { ColumnInfo, TableKind, TableRef } from './objects';
+import type { ColumnInfo, ForeignKey, TableKind, TableRef } from './objects';
 
 /** What the grid needs to edit one result column. */
 export interface EditableColumn {
@@ -32,6 +32,8 @@ export interface EditableResult {
   /** Key column names, and where each one sits in the result. */
   readonly keyColumns: readonly string[];
   readonly keyIndexes: readonly number[];
+  /** Foreign keys of the table, so a cell can lead to the row it points at (V2.13). */
+  readonly foreignKeys?: readonly ForeignKey[];
 }
 
 export interface ReadOnlyResult {

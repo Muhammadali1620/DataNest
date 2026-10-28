@@ -8,7 +8,8 @@ import { runCommandHandlers } from './editor/run-query';
 import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
-import { readDefinitionDocument } from '../services/object-definitions';
+import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
+import { objectEditHandlers, type ObjectEditRegistry } from './editor/object-edit';
 import { SchemaActions } from '../services/schema-actions';
 import { browseSession } from '../services/browse-session';
 import { schemaCommandHandlers, schemaPerformer } from './tree/schema-commands';
@@ -40,6 +41,8 @@ export interface CommandDeps {
   readonly showResults: (documentUri: string) => void;
   /** Opens a table from the tree as a paged result. */
   readonly openTable: (node: TableNode) => Promise<void>;
+  /** Which open editors edit the definition of an object. */
+  readonly objectEdits: ObjectEditRegistry;
   /** Writes a result to a file the user picks. */
   readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
 }
@@ -115,6 +118,34 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         perform,
       }),
   });
+  const objectEdits = objectEditHandlers({
+    manager: deps.manager,
+    registry: deps.objectEdits,
+    readDefinition: async (connectionId, object) =>
+      await (
+        await browseSession(deps.manager, connectionId, object.database)
+      ).metadata.getDefinition(object),
+    renderDefinition: async (connectionId, statements) =>
+      definitionDocument(statements, (await deps.manager.driverOf(connectionId)).id),
+    openDocument: async (binding, text) =>
+      (await deps.editors.newQuery(binding, text)).uri.toString(),
+    textOf: (documentUri) =>
+      vscode.workspace.textDocuments
+        .find((document) => document.uri.toString() === documentUri)
+        ?.getText(),
+    perform,
+    info: (message) => {
+      void vscode.window.showInformationMessage(message);
+    },
+    texts: {
+      applyTitle: (name) => vscode.l10n.t('Replace "{0}" with the edited definition?', name),
+      apply: vscode.l10n.t('Apply'),
+      notAnObjectEditor: vscode.l10n.t(
+        'This editor does not edit a database object: open one with "Edit Definition…" in the DataNest view',
+      ),
+      nothingToApply: vscode.l10n.t('Nothing to apply: the editor is empty'),
+    },
+  });
   let pings: PingPanel[] = [];
   const handlers: Record<CommandId, (target?: CommandTarget) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
@@ -140,6 +171,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.renameTable]: schemaCommands.renameTable,
     [COMMAND_IDS.truncateTable]: schemaCommands.truncateTable,
     [COMMAND_IDS.dropObject]: schemaCommands.dropObject,
+    [COMMAND_IDS.editObject]: objectEdits.edit,
+    [COMMAND_IDS.applyObject]: async (target?: unknown) =>
+      await objectEdits.apply(
+        typeof target === 'string'
+          ? target
+          : vscode.window.activeTextEditor?.document.uri.toString(),
+      ),
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;
       const panel =

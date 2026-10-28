@@ -27,6 +27,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   changed or moved, PostgreSQL applies everything in one transaction, SQLite changes
   what it can in place and otherwise rebuilds the table, keeping rows, indexes,
   triggers and views. Indexes the designer cannot express are kept as they are.
+- “Edit Definition…” opens a view, function, procedure, trigger or event as SQL;
+  “Apply” replaces it. MySQL first tries the new text out under a scratch name, so
+  a typo or a missing privilege never drops the original; PostgreSQL and SQLite
+  replace it in one transaction.
 
 ### Fixed
 

@@ -24,6 +24,8 @@ import { QueryHistory } from './services/history';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
+import { ObjectEditRegistry } from './vscode/editor/object-edit';
+import { ObjectEditors } from './vscode/editor/object-editors';
 import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/completion';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { ResultsPanel } from './vscode/panels/results-panel';
@@ -210,6 +212,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
+  const objectEdits = new ObjectEditRegistry();
+  context.subscriptions.push(new ObjectEditors(objectEdits));
+
   context.subscriptions.push(
     ...registerCommands({
       logger,
@@ -225,6 +230,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       showResults,
       openTable,
       exportResult,
+      objectEdits,
     }),
   );
 

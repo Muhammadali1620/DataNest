@@ -64,6 +64,11 @@ export const fakeDialect: Dialect = {
     renameRelation: (table, _kind, newName) => `RENAME "${table.name}" TO "${newName}"`,
     truncateTable: (table) => `TRUNCATE "${table.name}"`,
     dropObject: (object) => `DROP ${object.kind.toUpperCase()} "${object.name}"`,
+    replaceObject: (object, statements, original) => ({
+      check: object.kind === 'procedure' ? [`CHECK ${object.name}`, `UNCHECK ${object.name}`] : [],
+      statements: [`DROP ${object.kind.toUpperCase()} "${object.name}"`, ...statements],
+      recovery: [`DROP ${object.kind.toUpperCase()} "${object.name}"`, ...original],
+    }),
   },
 };
 

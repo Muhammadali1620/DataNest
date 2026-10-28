@@ -238,6 +238,18 @@
         "icon": "$(symbol-structure)"
       },
       {
+        "command": "datanest.object.edit",
+        "title": "%commands.object.edit.title%",
+        "category": "DataNest",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "datanest.object.apply",
+        "title": "%commands.object.apply.title%",
+        "category": "DataNest",
+        "icon": "$(check)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -300,6 +312,14 @@
         {
           "command": "datanest.table.design",
           "when": "false"
+        },
+        {
+          "command": "datanest.object.edit",
+          "when": "false"
+        },
+        {
+          "command": "datanest.object.apply",
+          "when": "datanest.objectEditor"
         }
       ],
       "view/title": [
@@ -464,6 +484,11 @@
           "command": "datanest.table.design",
           "when": "view == datanest.connections && viewItem == datanest.table",
           "group": "4_structure@0"
+        },
+        {
+          "command": "datanest.object.edit",
+          "when": "view == datanest.connections && (viewItem == datanest.view || viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.event)",
+          "group": "4_structure@0"
         }
       ],
       "editor/title": [
@@ -496,6 +521,11 @@
           "command": "datanest.history.show",
           "when": "editorLangId == sql",
           "group": "navigation@5"
+        },
+        {
+          "command": "datanest.object.apply",
+          "when": "editorLangId == sql && datanest.objectEditor",
+          "group": "navigation@0"
         }
       ],
       "editor/context": [

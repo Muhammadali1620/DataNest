@@ -7,6 +7,7 @@ import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import {
+  actionChecks,
   actionDatabase,
   actionRecovery,
   actionScript,
@@ -93,6 +94,37 @@ describe('alterTable actions', () => {
     expect(actionRecovery(action, postgresDialect.ddl)).toEqual(['ROLLBACK']);
     expect(actionRecovery(action, mysqlDialect.ddl)).toEqual([]);
     expect(actionRecovery({ kind: 'dropDatabase', name: 'x' }, postgresDialect.ddl)).toEqual([]);
+  });
+});
+
+describe('replaceObject actions', () => {
+  const action = {
+    kind: 'replaceObject' as const,
+    object: { database: 'shop', kind: 'procedure' as const, name: 'p' },
+    statements: ['CREATE PROCEDURE p() SELECT 2'],
+    original: ['CREATE PROCEDURE p() SELECT 1'],
+  };
+
+  it('shows the checks before the statements, as they will run', () => {
+    expect(actionSql(action, mysqlDialect.ddl)).toEqual([
+      'CREATE PROCEDURE `p__datanest_check`() SELECT 2',
+      'DROP PROCEDURE IF EXISTS `shop`.`p__datanest_check`',
+      'DROP PROCEDURE IF EXISTS `shop`.`p`',
+      'CREATE PROCEDURE p() SELECT 2',
+    ]);
+    expect(actionChecks(action, mysqlDialect.ddl)).toHaveLength(2);
+    expect(actionRecovery(action, mysqlDialect.ddl)).toEqual([
+      'DROP PROCEDURE IF EXISTS `shop`.`p`',
+      'CREATE PROCEDURE p() SELECT 1',
+    ]);
+    expect(actionDatabase(action)).toBe('shop');
+  });
+
+  it('has no checks elsewhere', () => {
+    expect(actionChecks({ kind: 'dropDatabase', name: 'x' }, mysqlDialect.ddl)).toEqual([]);
+    expect(
+      actionChecks({ ...action, object: { kind: 'function', name: 'f' } }, postgresDialect.ddl),
+    ).toEqual([]);
   });
 });
 
@@ -195,6 +227,41 @@ describe('SchemaActions', () => {
       ),
     ).rejects.toThrow('Not allowed: ALTER x');
     expect(drivers.driver('mysql').lastSession?.executed).toEqual(['BEGIN', 'ALTER x', 'ROLLBACK']);
+  });
+
+  describe('replacing an object', () => {
+    const replace = {
+      kind: 'replaceObject' as const,
+      object: { kind: 'procedure' as const, name: 'p' },
+      statements: ['NEW'],
+      original: ['OLD'],
+    };
+    // The fake dialect checks a procedure with CHECK p / UNCHECK p.
+    const all = ['CHECK p', 'UNCHECK p', 'DROP PROCEDURE "p"', 'NEW'];
+
+    it('changes nothing when the check fails: only the scratch object is cleaned up', async () => {
+      const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql === 'CHECK p';
+      await expect(actions.run(config.id, replace, all)).rejects.toThrow('Not allowed: CHECK p');
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual(['CHECK p', 'UNCHECK p']);
+    });
+
+    it('restores the old definition when the new one fails after the drop', async () => {
+      const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql === 'NEW';
+      await expect(actions.run(config.id, replace, all)).rejects.toThrow('Not allowed: NEW');
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual([
+        ...all,
+        'DROP PROCEDURE "p"',
+        'OLD',
+      ]);
+    });
+
+    it('runs checks and statements in order when all goes well', async () => {
+      const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
+      await actions.run(config.id, replace, all);
+      expect(drivers.driver('mysql').lastSession?.executed).toEqual(all);
+    });
   });
 
   it('stops at the first failing statement', async () => {

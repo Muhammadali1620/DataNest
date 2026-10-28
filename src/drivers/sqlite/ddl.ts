@@ -6,6 +6,7 @@ import type { ObjectRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
 import { sqliteAlterTable } from './alter';
 import { sqliteCreateTable } from './create-table';
+import { sqliteReplaceObject } from './replace';
 import { quoteIdentifier, quoteTable } from './quote';
 
 const TYPES = ['integer', 'real', 'text', 'blob', 'numeric'];
@@ -40,4 +41,5 @@ export const sqliteDdl: SchemaDdl = {
         throw new DbError('unsupported', `SQLite has no ${object.kind}s`);
     }
   },
+  replaceObject: (object, statements) => sqliteReplaceObject(object, statements),
 };

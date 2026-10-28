@@ -10,6 +10,7 @@ import {
   primaryKeySql,
 } from '../common/design-sql';
 import { mysqlAlterTable } from './alter';
+import { mysqlReplaceObject } from './replace';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -108,4 +109,5 @@ export const mysqlDdl: SchemaDdl = {
         return `DROP ${object.kind.toUpperCase()} ${qualified(object)}`;
     }
   },
+  replaceObject: (object, statements, original) => mysqlReplaceObject(object, statements, original),
 };

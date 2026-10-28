@@ -35,6 +35,18 @@ export interface AlterPlan {
 
 export const EMPTY_PLAN: AlterPlan = { statements: [], notes: [], recovery: [] };
 
+/** How an edited definition takes the place of the current one. */
+export interface ReplacePlan {
+  /**
+   * Run before anything is dropped, and undone at once: proves that the new text is
+   * accepted (syntax, privileges) where DDL cannot be rolled back (MySQL).
+   */
+  readonly check: readonly string[];
+  readonly statements: readonly string[];
+  /** Run when a statement fails: a rollback, or the old definition created again. */
+  readonly recovery: readonly string[];
+}
+
 /** What the DBMS supports; the UI adapts instead of special-casing driver ids. */
 export interface DriverCapabilities {
   /** The server hosts several databases the session can see (MySQL, PostgreSQL). */
@@ -93,6 +105,16 @@ export interface SchemaDdl {
   truncateTable(table: TableRef): string;
   /** Drops a function, procedure, trigger, sequence or event. */
   dropObject(object: ObjectRef): string;
+  /**
+   * Puts an edited definition (`statements`, as the user wrote them) in place of the
+   * object; `original` is its definition before the edit. Throws `unsupported` for
+   * kinds that are not edited this way (tables have the designer).
+   */
+  replaceObject(
+    object: ObjectRef,
+    statements: readonly string[],
+    original: readonly string[],
+  ): ReplacePlan;
 }
 
 /** Everything that differs between SQL dialects. UI builds SQL only through this. */

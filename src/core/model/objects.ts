@@ -77,6 +77,8 @@ export interface ObjectRef extends ObjectScope {
   readonly signature?: string;
   /** See `ObjectInfo.table`. */
   readonly table?: string;
+  /** A PostgreSQL materialized view, which is replaced by DROP and CREATE. */
+  readonly materialized?: boolean;
 }
 
 /** An index of a table, including the ones behind primary and unique keys. */

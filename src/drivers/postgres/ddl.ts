@@ -12,6 +12,7 @@ import {
   primaryKeySql,
 } from '../common/design-sql';
 import { postgresAlterTable } from './alter';
+import { postgresReplaceObject } from './replace';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -123,4 +124,5 @@ export const postgresDdl: SchemaDdl = {
         throw new DbError('unsupported', 'PostgreSQL has no scheduled events');
     }
   },
+  replaceObject: (object, statements) => postgresReplaceObject(object, statements),
 };

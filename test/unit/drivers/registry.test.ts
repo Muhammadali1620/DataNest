@@ -24,6 +24,7 @@ function fakeDriver(id: DriverId): Driver {
         renameRelation: () => '',
         truncateTable: () => '',
         dropObject: () => '',
+        replaceObject: () => ({ check: [], statements: [], recovery: [] }),
       },
     },
     capabilities: {

@@ -55,6 +55,8 @@ describe('connections view', () => {
       'datanest.table.rename',
       'datanest.table.truncate',
       'datanest.object.drop',
+      'datanest.object.edit',
+      'datanest.object.apply',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -85,6 +87,7 @@ describe('connections view', () => {
       'datanest.table.truncate',
       'datanest.table.design',
       'datanest.object.drop',
+      'datanest.object.edit',
     ]) {
       await vscode.commands.executeCommand(id);
     }

@@ -43,6 +43,10 @@ export const COMMAND_IDS = {
   renameTable: 'datanest.table.rename',
   truncateTable: 'datanest.table.truncate',
   dropObject: 'datanest.object.drop',
+  /** Opens the definition of a view, routine, trigger or event for editing. */
+  editObject: 'datanest.object.edit',
+  /** Puts the edited definition of the active editor in place of the object. */
+  applyObject: 'datanest.object.apply',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */
@@ -56,6 +60,8 @@ export const CONTEXT_KEYS = {
   isDevelopment: 'datanest.isDevelopment',
   /** True while a query of the active editor is running. */
   queryRunning: 'datanest.queryRunning',
+  /** True while the active editor edits the definition of a database object. */
+  objectEditor: 'datanest.objectEditor',
 } as const;
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

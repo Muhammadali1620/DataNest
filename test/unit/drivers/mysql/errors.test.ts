@@ -44,6 +44,9 @@ describe('toMysqlDbError', () => {
       expect(toMysqlDbError(mysqlError({ errno })).code).toBe('not-found');
     }
     expect(toMysqlDbError(mysqlError({ errno: 4161 })).code).toBe('syntax');
+    // Creating with another DEFINER, or a routine under binary logging, needs privileges.
+    expect(toMysqlDbError(mysqlError({ errno: 1227 })).code).toBe('permission-denied');
+    expect(toMysqlDbError(mysqlError({ errno: 1419 })).code).toBe('permission-denied');
   });
 
   it('maps network failures to connection-failed', () => {

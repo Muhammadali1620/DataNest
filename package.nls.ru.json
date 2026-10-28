@@ -48,5 +48,7 @@
   "commands.table.rename.title": "Переименовать…",
   "commands.table.truncate.title": "Очистить таблицу (TRUNCATE)…",
   "commands.object.drop.title": "Удалить…",
-  "commands.table.design.title": "Изменить таблицу…"
+  "commands.table.design.title": "Изменить таблицу…",
+  "commands.object.edit.title": "Изменить определение…",
+  "commands.object.apply.title": "Применить определение"
 }

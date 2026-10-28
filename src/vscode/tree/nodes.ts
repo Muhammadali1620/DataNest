@@ -346,7 +346,12 @@ export function tableRefOf(node: TableNode): TableRef {
 export function objectRefOf(node: TreeNode): ObjectRef | undefined {
   switch (node.kind) {
     case 'table':
-      return { ...node.scope, kind: node.tableKind, name: node.name };
+      return {
+        ...node.scope,
+        kind: node.tableKind,
+        name: node.name,
+        ...(node.materialized === true ? { materialized: true } : {}),
+      };
     case 'object':
       return node.object;
     case 'connection':

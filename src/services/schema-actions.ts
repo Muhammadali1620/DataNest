@@ -22,6 +22,13 @@ export type SchemaAction =
     }
   /** `table` is the scope and `design.name` the name of the new table. */
   | { readonly kind: 'createTable'; readonly table: TableRef; readonly design: TableDesign }
+  /** An edited definition (`statements`) put in place of `object`, defined as `original`. */
+  | {
+      readonly kind: 'replaceObject';
+      readonly object: ObjectRef;
+      readonly statements: readonly string[];
+      readonly original: readonly string[];
+    }
   /** `table` names the table as it is now; `before` is the design it was loaded with. */
   | {
       readonly kind: 'alterTable';
@@ -48,7 +55,21 @@ export function actionSql(action: SchemaAction, ddl: SchemaDdl): string[] {
   if (action.kind === 'alterTable') {
     return [...alterPlan(action, ddl).statements];
   }
+  if (action.kind === 'replaceObject') {
+    // The checks run first and are shown too: everything that runs is shown (§8).
+    const plan = replacePlan(action, ddl);
+    return [...plan.check, ...plan.statements];
+  }
   return [singleStatement(action, ddl)];
+}
+
+function replacePlan(action: Extract<SchemaAction, { kind: 'replaceObject' }>, ddl: SchemaDdl) {
+  return ddl.replaceObject(action.object, action.statements, action.original);
+}
+
+/** The leading statements of an action that only try the change out. */
+export function actionChecks(action: SchemaAction, ddl: SchemaDdl): readonly string[] {
+  return action.kind === 'replaceObject' ? replacePlan(action, ddl).check : [];
 }
 
 function alterPlan(action: Extract<SchemaAction, { kind: 'alterTable' }>, ddl: SchemaDdl) {
@@ -57,7 +78,10 @@ function alterPlan(action: Extract<SchemaAction, { kind: 'alterTable' }>, ddl: S
 
 /** What to run after a failed statement, so nothing is left half done or switched on. */
 export function actionRecovery(action: SchemaAction, ddl: SchemaDdl): readonly string[] {
-  return action.kind === 'alterTable' ? alterPlan(action, ddl).recovery : [];
+  if (action.kind === 'alterTable') {
+    return alterPlan(action, ddl).recovery;
+  }
+  return action.kind === 'replaceObject' ? replacePlan(action, ddl).recovery : [];
 }
 
 /** A script of statements as the user sees it and as it opens in an editor. */
@@ -66,7 +90,7 @@ export function actionScript(statements: readonly string[]): string {
 }
 
 function singleStatement(
-  action: Exclude<SchemaAction, { kind: 'createTable' | 'alterTable' }>,
+  action: Exclude<SchemaAction, { kind: 'createTable' | 'alterTable' | 'replaceObject' }>,
   ddl: SchemaDdl,
 ): string {
   switch (action.kind) {
@@ -118,6 +142,7 @@ export function actionDatabase(action: SchemaAction): string | undefined {
     case 'truncateTable':
       return action.table.database;
     case 'dropObject':
+    case 'replaceObject':
       return action.object.database;
   }
 }
@@ -153,13 +178,20 @@ export class SchemaActions {
       await this.deps.manager.release(ConnectionManager.treeOwner(connectionId, action.name));
     }
     const session = await browseSession(this.deps.manager, connectionId, actionDatabase(action));
+    const { ddl } = (await this.deps.manager.driverOf(connectionId)).dialect;
+    const checks = actionChecks(action, ddl).length;
+    let done = 0;
     try {
       for (const statement of statements) {
         await drain(session, statement);
+        done += 1;
       }
       this.logger.info(`${action.kind} done on ${connectionId}`);
     } catch (error) {
-      await this.recover(connectionId, session, action);
+      // A failed check has changed nothing: only its scratch object may need to go.
+      const recovery =
+        done < checks ? actionChecks(action, ddl).slice(-1) : actionRecovery(action, ddl);
+      await this.recover(session, recovery);
       throw error;
     } finally {
       // Even a failed statement may have changed something (MySQL DDL is not atomic).
@@ -168,13 +200,8 @@ export class SchemaActions {
   }
 
   /** Rolls back what a failed plan started; a failure here is logged, the first one wins. */
-  private async recover(
-    connectionId: string,
-    session: Session,
-    action: SchemaAction,
-  ): Promise<void> {
-    const driver = await this.deps.manager.driverOf(connectionId);
-    for (const statement of actionRecovery(action, driver.dialect.ddl)) {
+  private async recover(session: Session, statements: readonly string[]): Promise<void> {
+    for (const statement of statements) {
       try {
         await drain(session, statement);
       } catch (error) {

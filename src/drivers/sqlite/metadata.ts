@@ -2,6 +2,7 @@ import { DbError } from '../../core/errors';
 import type { ColumnInfo, TableInfo, TableRef } from '../../core/model/objects';
 import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
+import { groupKeys } from '../common/keys';
 import type { SqliteParam } from './protocol';
 
 /** What metadata needs from the session, kept narrow for tests. */
@@ -51,6 +52,18 @@ export class SqliteMetadata implements MetadataReader {
       };
       return info;
     });
+  }
+
+  async listUniqueKeys(table: TableRef): Promise<string[][]> {
+    // origin 'pk' is the primary key, which listColumns already reports.
+    const rows = await this.session.queryRows(
+      `SELECT l.name, i.name FROM pragma_index_list(?) AS l
+       JOIN pragma_index_info(l.name) AS i
+       WHERE l."unique" = 1 AND l.origin <> 'pk' AND l.partial = 0
+       ORDER BY l.name, i.seqno`,
+      [table.name],
+    );
+    return groupKeys(rows.map((row) => [asText(row[0]), asText(row[1])]));
   }
 }
 

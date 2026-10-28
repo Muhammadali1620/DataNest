@@ -37,6 +37,32 @@ describe('buildState', () => {
     });
   });
 
+  it('tells the page whether a result is editable and why not, without internals', () => {
+    const state = buildState(
+      [
+        summary({
+          edit: {
+            editable: true,
+            table: { name: 't' },
+            columnMap: ['one'],
+            keyColumns: ['one'],
+            keyIndexes: [0],
+          },
+        }),
+        summary({ id: 'result-2', edit: { editable: false, reason: 'no-key' } }),
+        summary({ id: 'result-3' }),
+      ],
+      undefined,
+      false,
+    );
+    expect(state.tabs.map((tab) => tab.edit)).toEqual([
+      { editable: true },
+      { editable: false, reason: 'no-key' },
+      undefined,
+    ]);
+    expect(() => resultGridProtocol.webview.events.state.parse(state)).not.toThrow();
+  });
+
   it('is valid for the protocol, including the awkward cases', () => {
     const state = buildState(
       [

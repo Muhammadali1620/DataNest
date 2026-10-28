@@ -5,8 +5,11 @@
 import { errorMessage, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { TableRef } from '../core/model/objects';
+import { syntaxOf } from '../core/sql/tokenizer';
 import type { ResultColumn, Session } from '../drivers/driver';
 import type { ConnectionManager, SessionTarget } from './connection-manager';
+import type { MetadataCache } from './metadata-cache';
+import { analyzeEditability } from './result-editability';
 import type { ResultRow, ResultStore, ResultSummary } from './result-store';
 
 /** Limits the user controls through settings (V1.25). */
@@ -18,6 +21,7 @@ export interface TableViewLimits {
 export interface TableViewerDeps {
   readonly manager: ConnectionManager;
   readonly results: ResultStore;
+  readonly cache: MetadataCache;
   readonly limits: TableViewLimits;
   readonly logger: Logger;
 }
@@ -76,6 +80,16 @@ export class TableViewer {
       const { columns, rows } = await readAll(session, sql, pageSize);
       // Counting is a separate statement, and a failure there must not lose the page.
       const totalRows = request.totalRows ?? (await this.countRows(session, quoted));
+      const edit = await analyzeEditability(
+        {
+          metadata: this.deps.cache.wrap(request.target.connectionId, session.metadata),
+          syntax: syntaxOf(driver.id),
+          schemas: driver.capabilities.schemas,
+          logger: this.logger,
+        },
+        `SELECT * FROM ${quoted}`,
+        columns.map((column) => column.name),
+      );
       return this.deps.results.add({
         documentUri,
         statement: sql,
@@ -84,6 +98,7 @@ export class TableViewer {
         rows,
         truncated: false,
         durationMs: Date.now() - started,
+        edit,
         page: {
           offset,
           pageSize,

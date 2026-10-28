@@ -175,6 +175,12 @@ describe('sqlite driver', () => {
       expect([...byName.keys()].some((name) => name.startsWith('sqlite_'))).toBe(false);
     });
 
+    it('lists unique keys other than the primary key', async () => {
+      expect(await session.metadata.listUniqueKeys({ name: 'customers' })).toEqual([['email']]);
+      expect(await session.metadata.listUniqueKeys({ name: 'big_table' })).toEqual([]);
+      expect(await session.metadata.listUniqueKeys({ name: 'nope' })).toEqual([]);
+    });
+
     it('describes columns with type, nullability, key and default', async () => {
       const columns = await session.metadata.listColumns({ name: 'customers' });
       const byName = new Map(columns.map((c) => [c.name, c]));

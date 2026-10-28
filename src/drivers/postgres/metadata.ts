@@ -1,6 +1,7 @@
 import type pg from 'pg';
 import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
+import { groupKeys } from '../common/keys';
 import { toPgDbError } from './errors';
 
 const DEFAULT_SCHEMA = 'public';
@@ -69,6 +70,25 @@ export class PostgresMetadata implements MetadataReader {
       };
       return info;
     });
+  }
+
+  async listUniqueKeys(table: TableRef): Promise<string[][]> {
+    // Only the key columns count (not INCLUDE ones); partial, expression and
+    // not-yet-valid indexes do not identify rows.
+    const rows = await this.query(
+      `SELECT i.indexrelid::text, a.attname
+       FROM pg_index i
+       JOIN pg_class c ON c.oid = i.indrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
+       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+       WHERE i.indisunique AND NOT i.indisprimary AND i.indisvalid
+         AND i.indpred IS NULL AND i.indexprs IS NULL AND k.ord <= i.indnkeyatts
+         AND n.nspname = $1 AND c.relname = $2
+       ORDER BY i.indexrelid, k.ord`,
+      [table.schema ?? DEFAULT_SCHEMA, table.name],
+    );
+    return groupKeys(rows.map((row) => [asText(row[0]), asText(row[1])]));
   }
 
   private async query(text: string, values: unknown[] = []): Promise<unknown[][]> {

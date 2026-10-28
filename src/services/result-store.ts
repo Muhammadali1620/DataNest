@@ -3,6 +3,7 @@
 // makes a large result set cheap to display.
 
 import { type Disposable, toDisposable } from '../core/disposable';
+import type { ResultEdit } from '../core/model/editability';
 import type { ResultColumn } from '../drivers/driver';
 import { type SortDirection, sortRows } from '../shared/cell-compare';
 import { findRows, type SearchHits } from '../shared/cell-search';
@@ -47,6 +48,8 @@ export interface ResultSummary {
   readonly sort?: ResultSort;
   /** Set for a table view, which is paged rather than scrolled to the end. */
   readonly page?: ResultPage;
+  /** Whether rows can be edited in place; absent for statements that return no rows. */
+  readonly edit?: ResultEdit;
 }
 
 export interface ResultError {
@@ -83,6 +86,7 @@ export interface NewResult {
   readonly durationMs: number;
   readonly error?: ResultError;
   readonly page?: ResultPage;
+  readonly edit?: ResultEdit;
 }
 
 /** How many results of one document are kept; older ones are dropped. */
@@ -119,6 +123,7 @@ export class ResultStore {
       durationMs: result.durationMs,
       ...(result.error === undefined ? {} : { error: result.error }),
       ...(result.page === undefined ? {} : { page: result.page }),
+      ...(result.edit === undefined ? {} : { edit: result.edit }),
     };
     this.results.set(id, stored);
     const ids = this.byDocument.get(result.documentUri) ?? [];

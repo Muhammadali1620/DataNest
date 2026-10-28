@@ -81,6 +81,10 @@ class ManagedMetadata implements MetadataReader {
     return await this.guard(() => this.inner.listColumns(table));
   }
 
+  async listUniqueKeys(table: TableRef): Promise<string[][]> {
+    return await this.guard(() => this.inner.listUniqueKeys(table));
+  }
+
   private async guard<T>(call: () => Promise<T>): Promise<T> {
     try {
       return await call();

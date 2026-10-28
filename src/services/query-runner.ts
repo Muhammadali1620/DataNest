@@ -5,7 +5,10 @@ import { type Disposable, toDisposable } from '../core/disposable';
 import { DbError, errorMessage, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { SqlStatement } from '../core/sql/split';
-import type { ResultColumn } from '../drivers/driver';
+import { syntaxOf } from '../core/sql/tokenizer';
+import type { ResultEdit } from '../core/model/editability';
+import type { ResultColumn, Session } from '../drivers/driver';
+import { analyzeEditability } from './result-editability';
 import { ConnectionManager, type SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import type { ResultStore, ResultSummary, ResultRow } from './result-store';
@@ -140,6 +143,25 @@ export class QueryRunner {
     }
   }
 
+  private async editabilityOf(
+    request: RunRequest,
+    session: Session,
+    sql: string,
+    columns: readonly ResultColumn[],
+  ): Promise<ResultEdit> {
+    const driver = await this.deps.manager.driverOf(request.target.connectionId);
+    return await analyzeEditability(
+      {
+        metadata: this.deps.cache.wrap(request.target.connectionId, session.metadata),
+        syntax: syntaxOf(driver.id),
+        schemas: driver.capabilities.schemas,
+        logger: this.logger,
+      },
+      sql,
+      columns.map((column) => column.name),
+    );
+  }
+
   private notify(documentUri: string): void {
     for (const listener of [...this.listeners]) {
       try {
@@ -193,6 +215,10 @@ export class QueryRunner {
       }
       // The structure may have changed, so stale metadata must not survive.
       this.deps.cache.noteStatement(request.target.connectionId, statement.text);
+      const edit =
+        columns.length === 0
+          ? undefined
+          : await this.editabilityOf(request, session, statement.text, columns);
       return this.deps.results.add({
         documentUri: request.documentUri,
         statement: statement.text,
@@ -202,6 +228,7 @@ export class QueryRunner {
         truncated,
         ...(affectedRows === undefined ? {} : { affectedRows }),
         durationMs: Date.now() - started,
+        ...(edit === undefined ? {} : { edit }),
       });
     } catch (error) {
       const dbError = toDbError(error);

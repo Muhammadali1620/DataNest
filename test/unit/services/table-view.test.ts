@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
+import { MetadataCache } from '../../../src/services/metadata-cache';
 import { ResultStore } from '../../../src/services/result-store';
 import { TableViewer, tableDocumentUri } from '../../../src/services/table-view';
 import type { ConnectionConfig } from '../../../src/shared/connection';
@@ -57,6 +58,7 @@ describe('TableViewer', () => {
     viewer = new TableViewer({
       manager,
       results,
+      cache: new MetadataCache({ logger }),
       limits: { pageSize: () => pageSize },
       logger,
     });
@@ -76,6 +78,31 @@ describe('TableViewer', () => {
     expect(summary.page).toEqual({ offset: 0, pageSize: 100, totalRows: 1 });
     expect(driver.lastSession?.executed[0]).toBe('SELECT * FROM "orders" LIMIT 100 OFFSET 0');
     expect(driver.lastSession?.executed[1]).toBe('SELECT COUNT(*) FROM "orders"');
+  });
+
+  it('marks the page editable when the table has a key', async () => {
+    const driver = drivers.driver('postgres');
+    driver.sessionMetadata.tables = [{ name: 'orders', kind: 'table' }];
+    driver.sessionMetadata.columns = [
+      { name: 'one', dataType: 'int', nullable: false, primaryKey: true },
+    ];
+    const pg = await store.add({ name: 'Pg', driver: 'postgres', host: 'h' });
+    const summary = await viewer.open({
+      target: { connectionId: pg.id },
+      table: { name: 'orders' },
+    });
+    expect(summary.edit).toMatchObject({ editable: true, table: { name: 'orders' } });
+  });
+
+  it('marks the page of a view read-only', async () => {
+    const driver = drivers.driver('postgres');
+    driver.sessionMetadata.tables = [{ name: 'orders', kind: 'view' }];
+    const pg = await store.add({ name: 'Pg', driver: 'postgres', host: 'h' });
+    const summary = await viewer.open({
+      target: { connectionId: pg.id },
+      table: { name: 'orders' },
+    });
+    expect(summary.edit).toEqual({ editable: false, reason: 'view' });
   });
 
   it('quotes the table through the dialect, never by hand', async () => {

@@ -334,6 +334,21 @@
         {#if activeTab.truncated}
           <span class="warn">{t('grid.truncated')}</span>
         {/if}
+        {#if activeTab.edit !== undefined}
+          {#if activeTab.edit.editable}
+            <span class="badge" data-testid="edit-badge">{t('grid.editable')}</span>
+          {:else}
+            <span
+              class="badge readonly"
+              data-testid="edit-badge"
+              title={activeTab.edit.reason === undefined
+                ? ''
+                : t(`grid.readOnly.${activeTab.edit.reason}`)}
+            >
+              {t('grid.readOnly')}
+            </span>
+          {/if}
+        {/if}
       </p>
       {#if activeTab.columns.length > 0}
         <div class="find">
@@ -543,6 +558,21 @@
 
   .summary,
   .hint {
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .badge {
+    margin-left: 8px;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    font-size: 0.9em;
+  }
+
+  .badge.readonly {
+    background: transparent;
+    border: 1px solid var(--vscode-widget-border, var(--vscode-contrastBorder, currentColor));
     color: var(--vscode-descriptionForeground);
   }
 

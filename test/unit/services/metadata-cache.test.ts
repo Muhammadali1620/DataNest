@@ -72,6 +72,7 @@ describe('MetadataCache', () => {
         listSchemas: () => Promise.resolve([]),
         listTables: () => Promise.resolve([]),
         listColumns: () => Promise.resolve([]),
+        listUniqueKeys: () => Promise.resolve([]),
       };
       const load = vi.spyOn(inner, 'listDatabases');
       const wrapped = cache.wrap('c1', inner);

@@ -68,6 +68,22 @@ export const en = {
   'grid.exportCsv': 'CSV',
   'grid.exportJson': 'JSON',
   'grid.exportHint': 'Export every row of this result to a file',
+  'grid.editable': 'Editable',
+  'grid.readOnly': 'Read-only',
+  'grid.readOnly.not-select': 'only SELECT results can be edited',
+  'grid.readOnly.no-table': 'the query reads no table',
+  'grid.readOnly.distinct': 'DISTINCT merges rows, so a row is not one table row',
+  'grid.readOnly.grouped': 'GROUP BY / HAVING builds rows that are not in the table',
+  'grid.readOnly.compound': 'UNION / INTERSECT / EXCEPT combines several queries',
+  'grid.readOnly.multiple-tables': 'the query reads more than one table',
+  'grid.readOnly.subquery': 'the rows come from a subquery',
+  'grid.readOnly.complex': 'the query is too complex to map rows back to a table',
+  'grid.readOnly.view': 'views cannot be edited',
+  'grid.readOnly.table-not-found': 'the table was not found on the server',
+  'grid.readOnly.no-key': 'the table has no primary or unique key to find a row by',
+  'grid.readOnly.key-not-selected': 'select the key columns too, so each row can be identified',
+  'grid.readOnly.columns-mismatch': 'the result columns do not match the table columns',
+  'grid.readOnly.failed': 'the table structure could not be read',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -28,6 +28,7 @@ export class FakeMetadata implements MetadataReader {
   schemas: string[] = ['public'];
   tables: TableInfo[] = [{ name: 'customers', kind: 'table' }];
   columns: ColumnInfo[] = [{ name: 'id', dataType: 'int', nullable: false, primaryKey: true }];
+  uniqueKeys: string[][] = [];
   /** Thrown by every reader when set. */
   error: Error | undefined;
   readonly calls: string[] = [];
@@ -46,6 +47,10 @@ export class FakeMetadata implements MetadataReader {
 
   listColumns(table: TableRef): Promise<ColumnInfo[]> {
     return this.answer(`listColumns:${table.name}`, this.columns);
+  }
+
+  listUniqueKeys(table: TableRef): Promise<string[][]> {
+    return this.answer(`listUniqueKeys:${table.name}`, this.uniqueKeys);
   }
 
   private answer<T>(call: string, value: T): Promise<T> {
@@ -180,6 +185,7 @@ export class FakeDriver implements Driver {
     session.metadata.schemas = [...this.sessionMetadata.schemas];
     session.metadata.tables = [...this.sessionMetadata.tables];
     session.metadata.columns = [...this.sessionMetadata.columns];
+    session.metadata.uniqueKeys = [...this.sessionMetadata.uniqueKeys];
     session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);

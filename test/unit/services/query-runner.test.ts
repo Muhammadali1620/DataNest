@@ -66,6 +66,38 @@ describe('QueryRunner', () => {
     };
   }
 
+  describe('editability', () => {
+    it('marks a select of a keyed table editable', async () => {
+      const driver = drivers.driver('mysql');
+      driver.sessionMetadata.tables = [{ name: 'customers', kind: 'table' }];
+      const outcome = await runner.run(request('SELECT * FROM customers'));
+      // The fake session returns one column named "one", which the table does not have.
+      expect(outcome.results[0]?.edit).toEqual({ editable: false, reason: 'columns-mismatch' });
+    });
+
+    it('is editable when the result columns are those of the table', async () => {
+      const driver = drivers.driver('mysql');
+      driver.sessionMetadata.tables = [{ name: 'customers', kind: 'table' }];
+      driver.sessionMetadata.columns = [
+        { name: 'one', dataType: 'int', nullable: false, primaryKey: true },
+      ];
+      const outcome = await runner.run(request('SELECT * FROM customers'));
+      expect(outcome.results[0]?.edit).toMatchObject({ editable: true, keyColumns: ['one'] });
+    });
+
+    it('explains why a join is read-only', async () => {
+      const outcome = await runner.run(request('SELECT * FROM a JOIN b ON 1'));
+      expect(outcome.results[0]?.edit).toEqual({ editable: false, reason: 'multiple-tables' });
+    });
+
+    it('says nothing about editing for a failed statement', async () => {
+      drivers.driver('mysql').failExecuteWhen = () => true;
+      const outcome = await runner.run(request('SELECT * FROM customers'));
+      expect(outcome.results[0]?.error).toBeDefined();
+      expect(outcome.results[0]?.edit).toBeUndefined();
+    });
+  });
+
   describe('running statements', () => {
     it('runs one statement and stores its result', async () => {
       const outcome = await runner.run(request('SELECT 1'));

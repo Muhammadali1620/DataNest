@@ -2,6 +2,7 @@
 // show (ARCHITECTURE.md D6), so a million-row result costs the webview nothing.
 
 import { resultRowSchema } from '../cell-value';
+import { READ_ONLY_REASONS } from '../read-only-reason';
 import { defineProtocol } from '../rpc';
 import { array, boolean, type Infer, literal, number, object, optional, string } from '../schema';
 
@@ -53,6 +54,13 @@ const tabSchema = object({
       offset: number({ integer: true, min: 0 }),
       pageSize: number({ integer: true, min: 1 }),
       totalRows: optional(number({ integer: true, min: 0 })),
+    }),
+  ),
+  /** Whether rows can be edited in place, and why not when they cannot. */
+  edit: optional(
+    object({
+      editable: boolean(),
+      reason: optional(literal(...READ_ONLY_REASONS)),
     }),
   ),
   /** How the result is ordered right now; absent means the server's own order. */

@@ -69,6 +69,11 @@ export interface MetadataReader {
   listSchemas(database?: string): Promise<string[]>;
   listTables(scope: ObjectScope): Promise<TableInfo[]>;
   listColumns(table: TableRef): Promise<ColumnInfo[]>;
+  /**
+   * Unique indexes of a table other than the primary key, as column names in index
+   * order. Partial and expression indexes are left out: they do not identify a row.
+   */
+  listUniqueKeys(table: TableRef): Promise<string[][]>;
 }
 
 /**

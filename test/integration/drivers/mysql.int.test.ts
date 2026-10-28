@@ -191,6 +191,15 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
       expect(await session.metadata.listTables({ database: 'datanest_empty' })).toEqual([]);
     });
 
+    it('lists unique keys other than the primary key', async () => {
+      const scope = { database: 'datanest_test' };
+      expect(await session.metadata.listUniqueKeys({ ...scope, name: 'customers' })).toEqual([
+        ['email'],
+      ]);
+      expect(await session.metadata.listUniqueKeys({ ...scope, name: 'order_items' })).toEqual([]);
+      expect(await session.metadata.listUniqueKeys({ ...scope, name: 'nope' })).toEqual([]);
+    });
+
     it('describes columns with type, nullability, key and default', async () => {
       const columns = await session.metadata.listColumns({
         database: 'datanest_test',

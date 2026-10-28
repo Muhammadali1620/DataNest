@@ -2,6 +2,7 @@ import type { Connection } from 'mysql2/promise';
 import { DbError } from '../../core/errors';
 import type { ColumnInfo, ObjectScope, TableInfo, TableRef } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
+import { groupKeys } from '../common/keys';
 import { toMysqlDbError } from './errors';
 
 /** Reads structure from information_schema; shares the session's connection. */
@@ -56,6 +57,17 @@ export class MysqlMetadata implements MetadataReader {
       };
       return info;
     });
+  }
+
+  async listUniqueKeys(table: TableRef): Promise<string[][]> {
+    const rows = await this.query(
+      `SELECT INDEX_NAME, COLUMN_NAME FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = COALESCE(?, DATABASE()) AND TABLE_NAME = ?
+         AND NON_UNIQUE = 0 AND INDEX_NAME <> 'PRIMARY'
+       ORDER BY INDEX_NAME, SEQ_IN_INDEX`,
+      [table.database ?? null, table.name],
+    );
+    return groupKeys(rows.map((row) => [asText(row[0]), asText(row[1])]));
   }
 
   private async query(sql: string, params: unknown[] = []): Promise<unknown[][]> {

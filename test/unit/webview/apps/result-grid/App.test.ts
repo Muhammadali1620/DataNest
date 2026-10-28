@@ -181,6 +181,43 @@ describe('result grid App', () => {
     });
   });
 
+  describe('edit badge', () => {
+    it('shows that a result is editable', async () => {
+      await withState({
+        tabs: [tab({ edit: { editable: true } })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-badge').textContent.trim()).toBe('Editable');
+      });
+    });
+
+    it('shows read-only with the reason as the tooltip, in the page language', async () => {
+      await withState(
+        {
+          tabs: [tab({ edit: { editable: false, reason: 'no-key' } })],
+          activeId: 'result-1',
+          running: false,
+        },
+        'ru',
+      );
+      await waitFor(() => {
+        const badge = screen.getByTestId('edit-badge');
+        expect(badge.textContent.trim()).toBe('Только чтение');
+        expect(badge.getAttribute('title')).toContain('ключа');
+      });
+    });
+
+    it('shows nothing for a result without editing information', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await waitFor(() => {
+        expect(screen.getByTestId('summary')).toBeTruthy();
+      });
+      expect(screen.queryByTestId('edit-badge')).toBeNull();
+    });
+  });
+
   it('shows the error of a failed statement and asks for no rows', async () => {
     const { handler } = await withState({
       tabs: [tab({ error: { code: 'syntax', message: 'near "SELEC"' }, rowCount: 0 })],

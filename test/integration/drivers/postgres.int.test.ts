@@ -181,6 +181,18 @@ describe('postgres driver', () => {
       expect(tables.map((t) => t.name)).toContain('customers');
     });
 
+    it('lists unique keys other than the primary key', async () => {
+      expect(
+        await session.metadata.listUniqueKeys({ schema: 'public', name: 'customers' }),
+      ).toEqual([['email']]);
+      expect(
+        await session.metadata.listUniqueKeys({ schema: 'inventory', name: 'warehouses' }),
+      ).toEqual([['code']]);
+      expect(
+        await session.metadata.listUniqueKeys({ schema: 'public', name: 'order_items' }),
+      ).toEqual([]);
+    });
+
     it('describes columns with type, nullability, key and default', async () => {
       const columns = await session.metadata.listColumns({ schema: 'public', name: 'customers' });
       const byName = new Map(columns.map((c) => [c.name, c]));

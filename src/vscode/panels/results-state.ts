@@ -25,6 +25,11 @@ export function buildState(
     ...(summary.error === undefined ? {} : { error: summary.error }),
     ...(summary.sort === undefined ? {} : { sort: summary.sort }),
     ...(summary.page === undefined ? {} : { page: summary.page }),
+    ...(summary.edit === undefined
+      ? {}
+      : summary.edit.editable
+        ? { edit: { editable: true } }
+        : { edit: { editable: false, reason: summary.edit.reason } }),
   }));
   // The newest tab is the one the user just produced, unless they picked another.
   const active =

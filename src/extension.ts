@@ -66,6 +66,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const tables = new TableViewer({
     manager,
     results,
+    cache,
     limits: { pageSize: () => readPageSize() },
     logger,
   });

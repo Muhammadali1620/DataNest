@@ -2,6 +2,7 @@
 // problems block saving. Kept apart from the component so it is tested directly.
 
 import {
+  type ConnectionColor,
   type ConnectionInput,
   type ConnectionProblem,
   connectionProblems,
@@ -100,6 +101,8 @@ export interface FormFields {
   sslCa: string;
   sslCert: string;
   sslKey: string;
+  folder: string;
+  color: ConnectionColor | '';
 }
 
 export function fieldsFrom(state: ConnectionFormState): FormFields {
@@ -122,6 +125,17 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     sslCa: input.ssl?.ca ?? '',
     sslCert: input.ssl?.cert ?? '',
     sslKey: input.ssl?.key ?? '',
+    folder: input.folder ?? '',
+    color: input.color ?? '',
+  };
+}
+
+/** Folder and color apply to every driver; blanks are left out. */
+function arrangement(fields: FormFields): Pick<ConnectionInput, 'folder' | 'color'> {
+  const folder = trim(fields.folder);
+  return {
+    ...(folder === undefined ? {} : { folder }),
+    ...(fields.color === '' ? {} : { color: fields.color }),
   };
 }
 
@@ -185,7 +199,12 @@ export function toInput(fields: FormFields): ConnectionInput {
   const name = fields.name.trim();
   if (isFileDriver(fields.driver)) {
     const file = trim(fields.file);
-    return { name, driver: fields.driver, ...(file === undefined ? {} : { file }) };
+    return {
+      name,
+      driver: fields.driver,
+      ...(file === undefined ? {} : { file }),
+      ...arrangement(fields),
+    };
   }
   const host = trim(fields.host);
   const port = parsePort(fields.port);
@@ -208,6 +227,7 @@ export function toInput(fields: FormFields): ConnectionInput {
         }
       : {}),
     ...(ssl === undefined ? {} : { ssl }),
+    ...arrangement(fields),
   };
 }
 

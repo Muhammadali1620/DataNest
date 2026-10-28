@@ -701,4 +701,38 @@ describe('connection form App', () => {
       expect(drafts[0]?.password).toEqual({ kind: 'keep' });
     });
   });
+
+  describe('folder and color', () => {
+    it('offers the existing folders and sends the chosen folder and color', async () => {
+      const { host } = await withState(newState({ folders: ['Prod', 'Dev'] }));
+      const options = [...document.querySelectorAll('#datanest-folders option')].map(
+        (option) => (option as HTMLOptionElement).value,
+      );
+      expect(options).toEqual(['Prod', 'Dev']);
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Live' } });
+      await fireEvent.input(field('Folder'), { target: { value: 'Prod' } });
+      await fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'red' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input).toMatchObject({ folder: 'Prod', color: 'red' });
+    });
+
+    it('shows the saved folder and color', async () => {
+      await withState(
+        newState({
+          connectionId: 'c1',
+          input: { name: 'L', driver: 'mysql', host: 'h', folder: 'Prod', color: 'green' },
+        }),
+      );
+      expect(field('Folder').value).toBe('Prod');
+      expect(screen.getByLabelText<HTMLSelectElement>('Color').value).toBe('green');
+    });
+  });
 });

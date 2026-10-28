@@ -22,6 +22,8 @@ import {
 } from './nodes';
 
 export interface TreeTexts {
+  /** What an empty folder of connections says. */
+  readonly emptyFolder?: string;
   readonly tables: string;
   readonly views: string;
   readonly noTables: string;
@@ -56,12 +58,28 @@ export class TreeModel {
     this.logger = deps.logger.child('tree');
   }
 
-  /** Saved connections, in the order the user keeps them. */
+  /** Folders first, then the connections outside any folder, in the order the user keeps them. */
   roots(): TreeNode[] {
-    return this.deps.store.list().map((config) => ({
-      kind: 'connection' as const,
-      connectionId: config.id,
-    }));
+    const folders = this.deps.store
+      .folders()
+      .map((folder): TreeNode => ({ kind: 'connectionFolder', folder }));
+    const loose = this.deps.store
+      .list()
+      .filter((config) => config.folder === undefined)
+      .map((config): TreeNode => ({ kind: 'connection', connectionId: config.id }));
+    return [...folders, ...loose];
+  }
+
+  /** The connections of one folder; a leaf that says so when there are none. */
+  connectionsInFolder(folder: string): TreeNode[] {
+    const connections = this.deps.store
+      .list()
+      .filter((config) => config.folder === folder)
+      .map((config): TreeNode => ({ kind: 'connection', connectionId: config.id }));
+    if (connections.length > 0 || this.deps.texts.emptyFolder === undefined) {
+      return connections;
+    }
+    return [{ kind: 'message', text: this.deps.texts.emptyFolder, folder }];
   }
 
   /**
@@ -88,6 +106,8 @@ export class TreeModel {
 
   private async listChildren(node: TreeNode): Promise<TreeNode[]> {
     switch (node.kind) {
+      case 'connectionFolder':
+        return this.connectionsInFolder(node.folder);
       case 'connection':
         return await this.connectionChildren(node.connectionId);
       case 'database':

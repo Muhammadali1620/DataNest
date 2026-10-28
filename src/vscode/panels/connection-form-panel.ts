@@ -218,6 +218,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       hasStoredPassword,
       ...(this.prefill?.password === undefined ? {} : { importedPassword: true }),
       storedSsh: storedSshFlags(storedSsh),
+      folders: this.deps.store.folders(),
       drivers: driverOptions(),
     });
   }

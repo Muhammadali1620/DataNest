@@ -46,6 +46,8 @@ import {
 } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 import type { TableNode } from './vscode/tree/nodes';
+import { ConnectionDecorations } from './vscode/tree/connection-decorations';
+import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -252,13 +254,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   const settings = createSettings();
+  const decorations = new ConnectionDecorations(store);
+  context.subscriptions.push(decorations);
   const tree = new ConnectionsTreeProvider({ store, manager, cache, settings, logger });
   context.subscriptions.push(
     tree,
     vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
       treeDataProvider: tree,
       showCollapseAll: true,
+      canSelectMany: true,
+      dragAndDropController: new ConnectionsDragAndDrop(store, logger),
     }),
+    vscode.window.registerFileDecorationProvider(decorations),
   );
 
   const objectEdits = new ObjectEditRegistry();

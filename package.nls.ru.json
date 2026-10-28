@@ -72,5 +72,10 @@
   "commands.table.generateSelect.title": "Сгенерировать SELECT",
   "commands.table.generateInsert.title": "Сгенерировать INSERT",
   "commands.table.generateUpdate.title": "Сгенерировать UPDATE",
-  "commands.table.generateDelete.title": "Сгенерировать DELETE"
+  "commands.table.generateDelete.title": "Сгенерировать DELETE",
+  "commands.folders.create.title": "Новая папка…",
+  "commands.folders.rename.title": "Переименовать папку…",
+  "commands.folders.remove.title": "Удалить папку",
+  "commands.connections.moveToFolder.title": "Переместить в папку…",
+  "commands.connections.setColor.title": "Цвет…"
 }

@@ -285,3 +285,18 @@ describe('relationKindOf', () => {
     );
   });
 });
+
+describe('connection folders', () => {
+  it('have an id of their own, a name and no connection', async () => {
+    const { nodeId, nameOf, isTreeNode, connectionIdOf, scopeOf, objectRefOf } =
+      await import('../../../../src/vscode/tree/nodes');
+    const node = { kind: 'connectionFolder' as const, folder: 'Prod:EU' };
+    expect(nodeId(node)).toBe('connectionFolder:Prod\\:EU');
+    expect(nodeId(node)).not.toBe(nodeId({ kind: 'connection', connectionId: 'Prod:EU' }));
+    expect(nameOf(node)).toBe('Prod:EU');
+    expect(isTreeNode(node)).toBe(true);
+    expect(connectionIdOf(node)).toBeUndefined();
+    expect(scopeOf(node)).toEqual({});
+    expect(objectRefOf(node)).toBeUndefined();
+  });
+});

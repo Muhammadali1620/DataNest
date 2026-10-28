@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
+    CONNECTION_COLORS,
     CONNECTION_LIMITS,
     isFileDriver,
     MAX_SSH_JUMPS,
@@ -248,6 +249,32 @@
           autocomplete="off"
         />
       </Field>
+
+      <div class="pair">
+        <Field label={t('form.folder')} hint={t('form.folderHint')}>
+          <input
+            class="control"
+            bind:value={fields.folder}
+            list="datanest-folders"
+            maxlength={CONNECTION_LIMITS.folder}
+            aria-label={t('form.folder')}
+            autocomplete="off"
+          />
+          <datalist id="datanest-folders">
+            {#each formState?.folders ?? [] as folder (folder)}
+              <option value={folder}></option>
+            {/each}
+          </datalist>
+        </Field>
+        <Field label={t('form.color')}>
+          <select class="control" bind:value={fields.color} aria-label={t('form.color')}>
+            <option value="">{t('form.color.none')}</option>
+            {#each CONNECTION_COLORS as color (color)}
+              <option value={color}>{t(`form.color.${color}`)}</option>
+            {/each}
+          </select>
+        </Field>
+      </div>
 
       <Field label={t('form.driver')}>
         <select

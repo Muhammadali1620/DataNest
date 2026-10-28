@@ -137,7 +137,26 @@ describe('tree menus', () => {
       COMMAND_IDS.searchObjects,
       COMMAND_IDS.addConnectionFromUrl,
       COMMAND_IDS.importEnvConnections,
+      COMMAND_IDS.createFolder,
     ]);
+  });
+
+  it('offers folder commands on folders and arranging commands on connections', () => {
+    const on = (id: string) => items.filter((entry) => entry.command === id).map((e) => e.when);
+    for (const id of [COMMAND_IDS.renameFolder, COMMAND_IDS.removeFolder]) {
+      expect(on(id)).toEqual([
+        `view == datanest.connections && viewItem == ${TREE_CONTEXT.connectionFolder}`,
+      ]);
+    }
+    for (const id of [
+      COMMAND_IDS.moveToFolder,
+      COMMAND_IDS.setConnectionColor,
+      COMMAND_IDS.createFolder,
+    ]) {
+      const [when] = on(id);
+      expect(when).toContain(`viewItem == ${TREE_CONTEXT.connection} `);
+      expect(when).toContain(`viewItem == ${TREE_CONTEXT.connectionConnected}`);
+    }
   });
 
   it('keeps the import commands in the view title menu, not as icons', () => {

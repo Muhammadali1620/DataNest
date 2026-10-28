@@ -41,6 +41,8 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     sslCa: '',
     sslCert: '',
     sslKey: '',
+    folder: '',
+    color: '',
     ...overrides,
   };
 }
@@ -79,6 +81,8 @@ describe('fieldsFrom', () => {
       sslCa: '',
       sslCert: '',
       sslKey: '',
+      folder: '',
+      color: '',
     });
   });
 
@@ -520,5 +524,28 @@ describe('applyUrl', () => {
     for (const key of Object.values(URL_PROBLEM_MESSAGES)) {
       expect(en[key]).toBeTruthy();
     }
+  });
+});
+
+describe('folder and color', () => {
+  it('reads them from the saved connection and sends them back, for every driver', () => {
+    const read = fieldsFrom({
+      input: { name: 'a', driver: 'sqlite', file: '/f', folder: 'Local', color: 'green' },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect([read.folder, read.color]).toEqual(['Local', 'green']);
+    expect(toInput(read)).toMatchObject({ folder: 'Local', color: 'green' });
+    expect(toInput(fields({ folder: ' Prod ', color: 'red' }))).toMatchObject({
+      folder: 'Prod',
+      color: 'red',
+    });
+  });
+
+  it('leaves out an empty folder and no color', () => {
+    const input = toInput(fields({ folder: '  ', color: '' }));
+    expect(input).not.toHaveProperty('folder');
+    expect(input).not.toHaveProperty('color');
   });
 });

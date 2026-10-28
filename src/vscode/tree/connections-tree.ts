@@ -5,6 +5,7 @@ import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import { describeTarget, describeTunnel } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
+import { connectionUri } from './connection-decorations';
 import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
   CONNECTIONS_VIEW_ID,
@@ -53,6 +54,7 @@ export class ConnectionsTreeProvider
         noViews: vscode.l10n.t('No views'),
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
+        emptyFolder: vscode.l10n.t('Empty: drag connections here'),
         empty: {
           functions: vscode.l10n.t('No functions'),
           procedures: vscode.l10n.t('No procedures'),
@@ -91,6 +93,13 @@ export class ConnectionsTreeProvider
 
   getTreeItem(node: TreeNode): vscode.TreeItem {
     switch (node.kind) {
+      case 'connectionFolder': {
+        const item = new vscode.TreeItem(node.folder, vscode.TreeItemCollapsibleState.Expanded);
+        item.id = nodeId(node);
+        item.iconPath = vscode.ThemeIcon.Folder;
+        item.contextValue = TREE_CONTEXT.connectionFolder;
+        return item;
+      }
       case 'connection':
         return this.connectionItem(node.connectionId);
       case 'database':
@@ -180,6 +189,8 @@ export class ConnectionsTreeProvider
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     item.id = nodeId({ kind: 'connection', connectionId });
+    // Carries the color label (ConnectionDecorations); the icon stays the status.
+    item.resourceUri = connectionUri(connectionId);
     item.description = config === undefined ? '' : describeTarget(config);
     item.contextValue =
       state.status === 'connected' ? TREE_CONTEXT.connectionConnected : TREE_CONTEXT.connection;

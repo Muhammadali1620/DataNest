@@ -29,7 +29,14 @@ export const CONNECTION_LIMITS = {
   file: 4000,
   /** Id of an SSH hop; it becomes part of a SecretStorage key. */
   hopId: 64,
+  /** Name of a folder in the tree. */
+  folder: 200,
 } as const;
+
+/** Labels a connection can wear in the tree, e.g. red for production. */
+export const CONNECTION_COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'] as const;
+
+export type ConnectionColor = (typeof CONNECTION_COLORS)[number];
 
 /**
  * TLS to the database server. `require` encrypts but trusts any certificate;
@@ -112,6 +119,9 @@ export interface ConnectionInput {
   readonly ssh?: SshTunnelConfig;
   /** Encrypt the connection; absent means the driver's plain default. */
   readonly ssl?: SslSettings;
+  /** The folder the tree shows it in; absent means the top level. */
+  readonly folder?: string;
+  readonly color?: ConnectionColor;
 }
 
 export interface ConnectionConfig extends ConnectionInput {

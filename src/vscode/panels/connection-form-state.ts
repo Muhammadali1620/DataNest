@@ -49,6 +49,9 @@ export function toInput(config: ConnectionConfig): ConnectionInput {
     ...(config.database === undefined ? {} : { database: config.database }),
     ...(config.file === undefined ? {} : { file: config.file }),
     ...(config.ssh === undefined ? {} : { ssh: config.ssh }),
+    ...(config.ssl === undefined ? {} : { ssl: config.ssl }),
+    ...(config.folder === undefined ? {} : { folder: config.folder }),
+    ...(config.color === undefined ? {} : { color: config.color }),
   };
 }
 

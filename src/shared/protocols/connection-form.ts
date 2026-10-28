@@ -56,6 +56,8 @@ const formStateSchema = object({
     }),
     { maxLength: 20 },
   ),
+  /** Folders the connection can be put in; a new name creates one. */
+  folders: optional(array(string({ maxLength: CONNECTION_LIMITS.folder }), { maxLength: 10_000 })),
   /** Driver ids the page may offer, with their default ports. */
   drivers: array(
     object({

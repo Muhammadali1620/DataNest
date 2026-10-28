@@ -10,6 +10,7 @@ import { FakeDriverProvider, linkLostError } from '../../../helpers/fake-driver'
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helpers/fakes';
 
 const TEXTS: TreeTexts = {
+  emptyFolder: 'Drag here',
   tables: 'Tables',
   views: 'Views',
   noTables: 'No tables',
@@ -71,6 +72,27 @@ describe('TreeModel', () => {
     it('is empty when nothing is saved', async () => {
       await store.remove(mysql.id);
       expect(model.roots()).toEqual([]);
+    });
+
+    it('puts folders first, then the connections outside them', async () => {
+      await store.createFolder('Prod');
+      await store.createFolder('Empty');
+      const inside = await store.add({ name: 'In', driver: 'sqlite', file: '/db', folder: 'Prod' });
+      expect(model.roots()).toEqual([
+        { kind: 'connectionFolder', folder: 'Prod' },
+        { kind: 'connectionFolder', folder: 'Empty' },
+        { kind: 'connection', connectionId: mysql.id },
+      ]);
+      expect(await model.children({ kind: 'connectionFolder', folder: 'Prod' })).toEqual([
+        { kind: 'connection', connectionId: inside.id },
+      ]);
+    });
+
+    it('says where to drop connections in an empty folder', async () => {
+      await store.createFolder('Empty');
+      expect(await model.children({ kind: 'connectionFolder', folder: 'Empty' })).toEqual([
+        { kind: 'message', text: 'Drag here', folder: 'Empty' },
+      ]);
     });
   });
 

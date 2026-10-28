@@ -41,6 +41,11 @@ describe('connections view', () => {
     for (const id of [
       'datanest.connections.connect',
       'datanest.connections.disconnect',
+      'datanest.connections.moveToFolder',
+      'datanest.connections.setColor',
+      'datanest.folders.create',
+      'datanest.folders.rename',
+      'datanest.folders.remove',
       'datanest.tree.refresh',
       'datanest.tree.copyName',
       'datanest.table.open',

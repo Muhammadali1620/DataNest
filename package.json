@@ -84,6 +84,32 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.folders.create",
+        "title": "%commands.folders.create.title%",
+        "category": "DataNest",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "datanest.folders.rename",
+        "title": "%commands.folders.rename.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.folders.remove",
+        "title": "%commands.folders.remove.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.moveToFolder",
+        "title": "%commands.connections.moveToFolder.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.connections.setColor",
+        "title": "%commands.connections.setColor.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.connections.edit",
         "title": "%commands.connections.edit.title%",
         "category": "DataNest",
@@ -404,9 +430,39 @@
           "command": "datanest.connections.importEnv",
           "when": "view == datanest.connections",
           "group": "1_add@2"
+        },
+        {
+          "command": "datanest.folders.create",
+          "when": "view == datanest.connections",
+          "group": "2_folders@1"
         }
       ],
       "view/item/context": [
+        {
+          "command": "datanest.connections.moveToFolder",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "3_arrange@1"
+        },
+        {
+          "command": "datanest.folders.create",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "3_arrange@2"
+        },
+        {
+          "command": "datanest.connections.setColor",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected)",
+          "group": "3_arrange@3"
+        },
+        {
+          "command": "datanest.folders.rename",
+          "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
+          "group": "1_folder@1"
+        },
+        {
+          "command": "datanest.folders.remove",
+          "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
+          "group": "1_folder@2"
+        },
         {
           "command": "datanest.table.open",
           "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",

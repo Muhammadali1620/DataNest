@@ -9,6 +9,14 @@ export const COMMAND_IDS = {
   addConnectionFromUrl: 'datanest.connections.addFromUrl',
   /** Adds connections found in the workspace's .env files. */
   importEnvConnections: 'datanest.connections.importEnv',
+  /** Folders of connections in the tree. */
+  createFolder: 'datanest.folders.create',
+  renameFolder: 'datanest.folders.rename',
+  removeFolder: 'datanest.folders.remove',
+  /** Puts the clicked (and selected) connections into a folder. */
+  moveToFolder: 'datanest.connections.moveToFolder',
+  /** Gives a connection a color label. */
+  setConnectionColor: 'datanest.connections.setColor',
   /** Opens the form for an existing connection. */
   editConnection: 'datanest.connections.edit',
   duplicateConnection: 'datanest.connections.duplicate',

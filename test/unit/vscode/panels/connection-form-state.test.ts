@@ -189,3 +189,34 @@ describe('SSH secrets from the form', () => {
     ]);
   });
 });
+
+describe('toInput keeps every editable setting', () => {
+  it('carries TLS, folder and color into the form, so saving does not drop them', () => {
+    const config = {
+      id: 'c',
+      name: 'n',
+      driver: 'postgres' as const,
+      host: 'h',
+      ssl: { mode: 'verify-full' as const, ca: '/ca' },
+      folder: 'Prod',
+      color: 'red' as const,
+    };
+    const input = toInput(config);
+    expect(input).toEqual({
+      name: 'n',
+      driver: 'postgres',
+      host: 'h',
+      ssl: { mode: 'verify-full', ca: '/ca' },
+      folder: 'Prod',
+      color: 'red',
+    });
+    expect(() =>
+      connectionFormProtocol.webview.events.state.parse({
+        input,
+        hasStoredPassword: false,
+        storedSsh: [],
+        drivers: driverOptions(),
+      }),
+    ).not.toThrow();
+  });
+});

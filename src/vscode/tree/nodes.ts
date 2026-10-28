@@ -21,6 +21,8 @@ export const CONNECTIONS_VIEW_ID = 'datanest.connections';
  * test can check that no menu refers to a value the tree never sets.
  */
 export const TREE_CONTEXT = {
+  /** A folder of connections at the top of the tree. */
+  connectionFolder: 'datanest.connectionFolder',
   connection: 'datanest.connection',
   connectionConnected: 'datanest.connection.connected',
   database: 'datanest.database',
@@ -67,6 +69,12 @@ export const KIND_OF_GROUP: Readonly<Record<ObjectFolder, ListedObjectKind>> = {
 
 /** Folders inside a table, after its columns. */
 export type TableFolder = 'indexes' | 'foreignKeys' | 'triggers';
+
+/** A folder the user keeps connections in; it has no connection of its own. */
+export interface ConnectionFolderNode {
+  readonly kind: 'connectionFolder';
+  readonly folder: string;
+}
 
 export interface ConnectionNode {
   readonly kind: 'connection';
@@ -148,9 +156,12 @@ export interface MessageNode {
   readonly connectionId?: string;
   /** Marks a failure, so the item can be shown differently. */
   readonly failed?: boolean;
+  /** Set on the "empty folder" leaf, so connections dropped on it land in the folder. */
+  readonly folder?: string;
 }
 
 export type TreeNode =
+  | ConnectionFolderNode
   | ConnectionNode
   | DatabaseNode
   | SchemaNode
@@ -183,6 +194,7 @@ export function scopeOf(node: TreeNode): ObjectScope {
       return scopeOfRef(node.table);
     case 'object':
       return scopeOfRef(node.object);
+    case 'connectionFolder':
     case 'connection':
     case 'message':
       return {};
@@ -206,6 +218,8 @@ function scopeKey(scope: ObjectScope): string {
  */
 export function nodeId(node: TreeNode): string {
   switch (node.kind) {
+    case 'connectionFolder':
+      return join(['connectionFolder', node.folder]);
     case 'connection':
       return join(['connection', node.connectionId]);
     case 'database':
@@ -290,6 +304,7 @@ export function isTreeNode(value: unknown): value is TreeNode {
   }
   const { kind } = value as { kind?: unknown };
   return (
+    kind === 'connectionFolder' ||
     kind === 'connection' ||
     kind === 'database' ||
     kind === 'schema' ||
@@ -321,6 +336,8 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.index.name;
     case 'foreignKey':
       return node.key.name;
+    case 'connectionFolder':
+      return node.folder;
     case 'connection':
     case 'group':
     case 'folder':
@@ -354,6 +371,7 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
       };
     case 'object':
       return node.object;
+    case 'connectionFolder':
     case 'connection':
     case 'database':
     case 'schema':

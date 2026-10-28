@@ -14,11 +14,12 @@ import {
   type SshHop,
   type SshHopSecrets,
   sshHopsOf,
+  type ConnectionColor,
   type SshTunnelConfig,
   type SslSettings,
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
-import { array, literal, object, type Schema, string } from '../shared/schema';
+import { array, literal, object, type Schema, string, union } from '../shared/schema';
 
 /** The slice of `vscode.Memento` the store needs. */
 export interface KeyValueState {
@@ -57,10 +58,27 @@ const connectionConfigSchema: Schema<ConnectionConfig> = object({
   name: string({ minLength: 1, maxLength: CONNECTION_LIMITS.name }),
 });
 
-const stateSchema = object({
-  version: literal(1),
-  items: array(connectionConfigSchema, { maxLength: 10_000 }),
-});
+const folderSchema = string({ minLength: 1, maxLength: CONNECTION_LIMITS.folder });
+
+/** Version 1 had no folders; it is read as is and written back as version 2. */
+const stateSchema = union(
+  object({
+    version: literal(2),
+    items: array(connectionConfigSchema, { maxLength: 10_000 }),
+    folders: array(folderSchema, { maxLength: 10_000 }),
+  }),
+  object({
+    version: literal(1),
+    items: array(connectionConfigSchema, { maxLength: 10_000 }),
+  }),
+);
+
+/** Where moved connections go: a folder (or the top level) and, optionally, before whom. */
+export interface MoveDestination {
+  readonly folder?: string;
+  /** A connection in that folder to put them in front of; the end of it when absent. */
+  readonly before?: string;
+}
 
 /** How a password changes on update: keep the stored one, replace it, or erase it. */
 export type PasswordChange =
@@ -92,12 +110,121 @@ export class ConnectionStore {
   private readonly logger: Logger;
   private readonly listeners = new Set<() => void>();
   private items: ConnectionConfig[];
+  private folderList: string[];
 
   constructor(deps: ConnectionStoreDeps) {
     this.state = deps.state;
     this.secrets = deps.secrets;
     this.logger = deps.logger.child('connections');
-    this.items = this.load();
+    const loaded = this.load();
+    this.items = loaded.items;
+    this.folderList = withReferenced(loaded.folders, loaded.items);
+  }
+
+  /** Folder names in the order the tree shows them. */
+  folders(): string[] {
+    return [...this.folderList];
+  }
+
+  async createFolder(name: string): Promise<string> {
+    const folder = folderName(name);
+    if (this.folderList.includes(folder)) {
+      throw new DbError('unsupported', `A folder named "${folder}" already exists`);
+    }
+    await this.save(this.items, [...this.folderList, folder]);
+    this.notify();
+    return folder;
+  }
+
+  /** Renames a folder; its connections go along. */
+  async renameFolder(from: string, to: string): Promise<string> {
+    const target = folderName(to);
+    this.requireFolder(from);
+    if (target === from) {
+      return target;
+    }
+    if (this.folderList.includes(target)) {
+      throw new DbError('unsupported', `A folder named "${target}" already exists`);
+    }
+    await this.save(
+      this.items.map((item) => (item.folder === from ? { ...item, folder: target } : item)),
+      this.folderList.map((folder) => (folder === from ? target : folder)),
+    );
+    this.notify();
+    return target;
+  }
+
+  /** Removes a folder; its connections move to the top level, none is deleted. */
+  async removeFolder(name: string): Promise<void> {
+    this.requireFolder(name);
+    await this.save(
+      this.items.map((item) => (item.folder === name ? withoutFolder(item) : item)),
+      this.folderList.filter((folder) => folder !== name),
+    );
+    this.notify();
+  }
+
+  /** Puts a folder in front of another one, or last. */
+  async moveFolder(name: string, before?: string): Promise<void> {
+    this.requireFolder(name);
+    if (before === name) {
+      return;
+    }
+    const rest = this.folderList.filter((folder) => folder !== name);
+    const index = before === undefined ? -1 : rest.indexOf(before);
+    rest.splice(index === -1 ? rest.length : index, 0, name);
+    await this.save(this.items, rest);
+    this.notify();
+  }
+
+  /**
+   * Moves connections, keeping their order, into a folder (or the top level) and in
+   * front of one connection there, or after the last one. Unknown ids are ignored.
+   */
+  async moveConnections(ids: readonly string[], destination: MoveDestination): Promise<void> {
+    const { folder } = destination;
+    if (folder !== undefined) {
+      this.requireFolder(folder);
+    }
+    const moving = new Set(ids);
+    const moved = this.items
+      .filter((item) => moving.has(item.id))
+      .map((item) => (folder === undefined ? withoutFolder(item) : { ...item, folder }));
+    if (moved.length === 0) {
+      return;
+    }
+    const rest = this.items.filter((item) => !moving.has(item.id));
+    let index =
+      destination.before === undefined
+        ? -1
+        : rest.findIndex((item) => item.id === destination.before);
+    if (index === -1) {
+      // After the last connection of the folder, or at the very end.
+      const last = rest.findLastIndex((item) => item.folder === folder);
+      index = last === -1 ? rest.length : last + 1;
+    }
+    rest.splice(index, 0, ...moved);
+    await this.save(rest);
+    this.notify();
+  }
+
+  async setColor(id: string, color: ConnectionColor | undefined): Promise<void> {
+    const index = this.items.findIndex((item) => item.id === id);
+    const current = this.items[index];
+    if (current === undefined) {
+      throw new DbError('not-found', `Connection "${id}" does not exist`);
+    }
+    const { color: _old, ...rest } = current;
+    const items = [...this.items];
+    items[index] = color === undefined ? rest : { ...rest, color };
+    await this.save(items);
+    this.notify();
+  }
+
+  private requireFolder(name: string): void {
+    if (!this.folderList.includes(name)) {
+      throw new DbError('not-found', `Folder "${name}" does not exist`);
+    }
   }
 
   list(): ConnectionConfig[] {
@@ -258,23 +385,29 @@ export class ConnectionStore {
     }
   }
 
-  private load(): ConnectionConfig[] {
+  private load(): { items: ConnectionConfig[]; folders: string[] } {
     const raw = this.state.get(CONNECTIONS_STATE_KEY);
     if (raw === undefined) {
-      return [];
+      return { items: [], folders: [] };
     }
     try {
-      return stateSchema.parse(raw).items;
+      const parsed = stateSchema.parse(raw);
+      return { items: parsed.items, folders: parsed.version === 2 ? parsed.folders : [] };
     } catch (error) {
       // Broken state must not brick the extension: start empty, keep the log loud.
       this.logger.error('Saved connections are corrupted and were ignored', error);
-      return [];
+      return { items: [], folders: [] };
     }
   }
 
-  private async save(items: ConnectionConfig[]): Promise<void> {
-    await this.state.update(CONNECTIONS_STATE_KEY, { version: 1, items });
+  private async save(
+    items: ConnectionConfig[],
+    folders: string[] = this.folderList,
+  ): Promise<void> {
+    const kept = withReferenced(folders, items);
+    await this.state.update(CONNECTIONS_STATE_KEY, { version: 2, items, folders: kept });
     this.items = items;
+    this.folderList = kept;
   }
 
   private notify(): void {
@@ -286,6 +419,30 @@ export class ConnectionStore {
       }
     }
   }
+}
+
+function folderName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed === '' || trimmed.length > CONNECTION_LIMITS.folder) {
+    throw new DbError('unsupported', 'A folder needs a name of up to 200 characters');
+  }
+  return trimmed;
+}
+
+function withoutFolder(config: ConnectionConfig): ConnectionConfig {
+  const { folder: _folder, ...rest } = config;
+  return rest;
+}
+
+/** Every folder a connection names is listed, even if the list lost it. */
+function withReferenced(folders: readonly string[], items: readonly ConnectionConfig[]): string[] {
+  const result = [...new Set(folders)];
+  for (const item of items) {
+    if (item.folder !== undefined && !result.includes(item.folder)) {
+      result.push(item.folder);
+    }
+  }
+  return result;
 }
 
 /** Trims text fields and drops empty optional ones, with a final validity check. */
@@ -306,6 +463,8 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     file: file ? trim(input.file) : undefined,
     ssh: file || input.ssh === undefined ? undefined : normalizeTunnel(input.ssh),
     ssl: file || input.ssl === undefined ? undefined : normalizeSsl(input.ssl),
+    folder: trim(input.folder),
+    color: input.color,
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {

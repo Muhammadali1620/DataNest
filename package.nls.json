@@ -72,5 +72,10 @@
   "commands.table.generateSelect.title": "Generate SELECT",
   "commands.table.generateInsert.title": "Generate INSERT",
   "commands.table.generateUpdate.title": "Generate UPDATE",
-  "commands.table.generateDelete.title": "Generate DELETE"
+  "commands.table.generateDelete.title": "Generate DELETE",
+  "commands.folders.create.title": "New Folder…",
+  "commands.folders.rename.title": "Rename Folder…",
+  "commands.folders.remove.title": "Remove Folder",
+  "commands.connections.moveToFolder.title": "Move to Folder…",
+  "commands.connections.setColor.title": "Set Color…"
 }

@@ -432,3 +432,182 @@ describe('ConnectionStore SSL', () => {
     ).rejects.toThrow('ssl-cert-without-key');
   });
 });
+
+describe('ConnectionStore folders', () => {
+  let state: FakeMemento;
+  let store: ConnectionStore;
+  const input = (name: string, folder?: string): ConnectionInput => ({
+    name,
+    driver: 'mysql',
+    host: 'h',
+    ...(folder === undefined ? {} : { folder }),
+  });
+  const order = () => store.list().map((config) => `${config.folder ?? '-'}:${config.name}`);
+
+  beforeEach(() => {
+    state = new FakeMemento();
+    store = new ConnectionStore({
+      state,
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+  });
+
+  it('creates folders in order and refuses empty, too long or taken names', async () => {
+    await store.createFolder(' Prod ');
+    await store.createFolder('Dev');
+    expect(store.folders()).toEqual(['Prod', 'Dev']);
+    await expect(store.createFolder('Prod')).rejects.toThrow('already exists');
+    await expect(store.createFolder('  ')).rejects.toThrow('name');
+    await expect(store.createFolder('x'.repeat(201))).rejects.toThrow('name');
+  });
+
+  it('saves folders and connections as version 2 and reads them back', async () => {
+    await store.createFolder('Prod');
+    await store.add(input('a', 'Prod'));
+    expect(state.get(CONNECTIONS_STATE_KEY)).toMatchObject({ version: 2, folders: ['Prod'] });
+    const reloaded = new ConnectionStore({
+      state,
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+    expect(reloaded.folders()).toEqual(['Prod']);
+    expect(reloaded.list()[0]?.folder).toBe('Prod');
+  });
+
+  it('reads version 1 state without folders', () => {
+    const old = new FakeMemento(
+      new Map<string, unknown>([
+        [
+          CONNECTIONS_STATE_KEY,
+          { version: 1, items: [{ id: 'x', name: 'n', driver: 'mysql', host: 'h' }] },
+        ],
+      ]),
+    );
+    const loaded = new ConnectionStore({
+      state: old,
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+    expect(loaded.folders()).toEqual([]);
+    expect(loaded.list()).toHaveLength(1);
+  });
+
+  it('lists a folder a connection names even when the list lost it', async () => {
+    await store.add(input('a', 'Imported'));
+    expect(store.folders()).toEqual(['Imported']);
+    const broken = new FakeMemento(
+      new Map<string, unknown>([
+        [
+          CONNECTIONS_STATE_KEY,
+          {
+            version: 2,
+            folders: ['A', 'A'],
+            items: [{ id: 'x', name: 'n', driver: 'mysql', host: 'h', folder: 'B' }],
+          },
+        ],
+      ]),
+    );
+    expect(
+      new ConnectionStore({
+        state: broken,
+        secrets: new FakeSecretStorage(),
+        logger: new RecordingLogger(),
+      }).folders(),
+    ).toEqual(['A', 'B']);
+  });
+
+  it('renames a folder with its connections, and refuses a taken name', async () => {
+    await store.createFolder('Prod');
+    await store.createFolder('Dev');
+    await store.add(input('a', 'Prod'));
+    expect(await store.renameFolder('Prod', ' Live ')).toBe('Live');
+    expect(store.folders()).toEqual(['Live', 'Dev']);
+    expect(store.list()[0]?.folder).toBe('Live');
+    await expect(store.renameFolder('Live', 'Dev')).rejects.toThrow('already exists');
+    await expect(store.renameFolder('Missing', 'X')).rejects.toMatchObject({ code: 'not-found' });
+    expect(await store.renameFolder('Dev', 'Dev')).toBe('Dev');
+  });
+
+  it('removes a folder and moves its connections to the top level', async () => {
+    await store.createFolder('Prod');
+    const a = await store.add(input('a', 'Prod'));
+    await store.removeFolder('Prod');
+    expect(store.folders()).toEqual([]);
+    expect(store.get(a.id)).not.toHaveProperty('folder');
+    await expect(store.removeFolder('Prod')).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('moves a folder in front of another one, or last', async () => {
+    for (const name of ['A', 'B', 'C']) {
+      await store.createFolder(name);
+    }
+    await store.moveFolder('C', 'A');
+    expect(store.folders()).toEqual(['C', 'A', 'B']);
+    await store.moveFolder('C');
+    expect(store.folders()).toEqual(['A', 'B', 'C']);
+    await store.moveFolder('A', 'missing');
+    expect(store.folders()).toEqual(['B', 'C', 'A']);
+    await store.moveFolder('B', 'B');
+    expect(store.folders()).toEqual(['B', 'C', 'A']);
+  });
+
+  it('moves connections into a folder, keeping their order, after its last one', async () => {
+    await store.createFolder('Prod');
+    const a = await store.add(input('a'));
+    const b = await store.add(input('b', 'Prod'));
+    const c = await store.add(input('c'));
+    await store.add(input('d'));
+    await store.moveConnections([c.id, a.id], { folder: 'Prod' });
+    expect(order()).toEqual(['Prod:b', 'Prod:a', 'Prod:c', '-:d']);
+    await store.moveConnections([b.id], { folder: 'Prod', before: a.id });
+    expect(order()).toEqual(['Prod:b', 'Prod:a', 'Prod:c', '-:d']);
+    await store.moveConnections([c.id], { folder: 'Prod', before: b.id });
+    expect(order()).toEqual(['Prod:c', 'Prod:b', 'Prod:a', '-:d']);
+  });
+
+  it('moves connections to the top level, at its end or before one', async () => {
+    await store.createFolder('Prod');
+    const a = await store.add(input('a', 'Prod'));
+    const b = await store.add(input('b'));
+    await store.moveConnections([a.id], {});
+    expect(order()).toEqual(['-:b', '-:a']);
+    expect(store.get(a.id)).not.toHaveProperty('folder');
+    await store.moveConnections([a.id], { before: b.id });
+    expect(order()).toEqual(['-:a', '-:b']);
+  });
+
+  it('refuses a folder that does not exist and ignores unknown ids', async () => {
+    const a = await store.add(input('a'));
+    await expect(store.moveConnections([a.id], { folder: 'Nope' })).rejects.toMatchObject({
+      code: 'not-found',
+    });
+    let changes = 0;
+    store.onDidChange(() => {
+      changes += 1;
+    });
+    await store.moveConnections(['missing'], {});
+    expect(changes).toBe(0);
+  });
+
+  it('sets and clears a color, and keeps both through edits and copies', async () => {
+    const a = await store.add({ ...input('a'), color: 'red' });
+    expect(a.color).toBe('red');
+    await store.setColor(a.id, 'blue');
+    expect(store.get(a.id)?.color).toBe('blue');
+    const copy = await store.duplicate(a.id);
+    expect(copy.color).toBe('blue');
+    await store.setColor(a.id, undefined);
+    expect(store.get(a.id)).not.toHaveProperty('color');
+    await expect(store.setColor('missing', 'red')).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('takes the folder from the form, creating it, trimmed', async () => {
+    const a = await store.add(input('a', '  New one '));
+    expect(a.folder).toBe('New one');
+    expect(store.folders()).toEqual(['New one']);
+    const updated = await store.update(a.id, input('a', ''));
+    expect(updated.folder).toBeUndefined();
+    expect(store.folders()).toEqual(['New one']);
+  });
+});

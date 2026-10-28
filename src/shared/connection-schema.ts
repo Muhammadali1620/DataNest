@@ -2,6 +2,7 @@
 // connection form protocol (what the page sends), so the two never disagree.
 
 import {
+  CONNECTION_COLORS,
   CONNECTION_LIMITS,
   DRIVER_IDS,
   type ConnectionInput,
@@ -51,6 +52,8 @@ export const connectionInputShape = {
   file: optional(string({ maxLength: CONNECTION_LIMITS.file })),
   ssh: optional(sshTunnelSchema),
   ssl: optional(sslSchema),
+  folder: optional(string({ maxLength: CONNECTION_LIMITS.folder })),
+  color: optional(literal(...CONNECTION_COLORS)),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

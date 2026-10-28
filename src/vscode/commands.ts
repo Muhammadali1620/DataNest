@@ -7,7 +7,7 @@ import type { QueryEditors } from './editor/query-editor';
 import { runCommandHandlers } from './editor/run-query';
 import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
-import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
+import { connectionIdOf, isTreeNode, scopeOf, type TableNode, type TreeNode } from './tree/nodes';
 import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
 import type { ObjectRef } from '../core/model/objects';
 import { objectEditHandlers, type ObjectEditRegistry } from './editor/object-edit';
@@ -24,6 +24,7 @@ import { COMMAND_IDS, type CommandId } from './command-ids';
 import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
 import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
+import { folderCommandHandlers } from './tree/folder-commands';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
@@ -55,6 +56,11 @@ export interface CommandDeps {
   readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
 }
 
+/** The items selected in the tree, which VS Code passes after the clicked one. */
+function selectionOf(value: unknown): TreeNode[] | undefined {
+  return Array.isArray(value) ? value.filter(isTreeNode) : undefined;
+}
+
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
 export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const runner = {
@@ -69,6 +75,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     logger: deps.logger,
   };
   const connections = connectionCommandHandlers(importDeps);
+  const folders = folderCommandHandlers({ store: deps.store });
   const runCommands = runCommandHandlers({
     runner: deps.runner,
     editors: deps.editors,
@@ -171,11 +178,17 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
   });
   let pings: PingPanel[] = [];
-  const handlers: Record<CommandId, (target?: CommandTarget) => unknown> = {
+  const handlers: Record<CommandId, (target?: CommandTarget, ...rest: unknown[]) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
       deps.channel.show(true);
     },
     [COMMAND_IDS.addConnection]: connections.add,
+    [COMMAND_IDS.createFolder]: folders.createFolder,
+    [COMMAND_IDS.renameFolder]: folders.renameFolder,
+    [COMMAND_IDS.removeFolder]: folders.removeFolder,
+    [COMMAND_IDS.moveToFolder]: (target, ...rest: unknown[]) =>
+      folders.moveToFolder(target, selectionOf(rest[0])),
+    [COMMAND_IDS.setConnectionColor]: folders.setColor,
     [COMMAND_IDS.addConnectionFromUrl]: (target) =>
       addConnectionFromUrl(importDeps, typeof target === 'string' ? target : undefined),
     [COMMAND_IDS.importEnvConnections]: () => importConnectionsFromEnv(importDeps),

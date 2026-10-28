@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Fixed
+
+- Editing a connection no longer drops its TLS settings when it is saved again.
+
 ### Added
 
 - Connect through an SSH tunnel: log in with a password, a private key (with its
@@ -17,6 +21,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   The host name is checked against the real server even through an SSH tunnel.
 - Connection URLs: paste `postgres://…`, `mysql://…` or `sqlite:///…` into the form, or use
   “Add Connection from URL…”. TLS parameters such as `sslmode` are understood.
+- Folders for connections: create, rename and remove them, drag connections (several at
+  once) and folders around, or use “Move to Folder…”. Color labels for connections.
 - “Import Connections from .env…” finds database URLs and `DB_HOST`/`PGHOST`-style
   variables in the workspace's `.env` files and adds the ones you pick.
 

@@ -101,7 +101,16 @@ describe('.github/workflows/ci.yml (V0.11)', () => {
 
   it('gives VS Code a virtual display on Linux', () => {
     const linux = workflow.jobs.e2e?.steps.find((s) => s.if === "runner.os == 'Linux'");
-    expect(linux?.run).toBe('xvfb-run -a npm run test:e2e');
+    expect(linux?.run).toMatch(/ xvfb-run -a npm run test:e2e$/);
+  });
+
+  it('repeats e2e failures as annotations, which can be read without a token', () => {
+    const runs = (workflow.jobs.e2e?.steps ?? []).flatMap((s) => (s.run ? [s.run] : []));
+    const e2e = runs.filter((run) => run.includes('npm run test:e2e'));
+    expect(e2e).toHaveLength(2);
+    for (const run of e2e) {
+      expect(run.startsWith('node scripts/annotate-failures.mjs ')).toBe(true);
+    }
   });
 
   it('runs integration tests against the compose databases and always stops them', () => {

@@ -89,12 +89,13 @@ jobs:
         with:
           path: .vscode-test
           key: vscode-test-${{ runner.os }}-${{ hashFiles('.vscode-test.mjs') }}
+      # A failure repeats its summary as an annotation, readable without a token.
       - name: Run e2e (Linux, virtual display)
         if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:e2e
+        run: node scripts/annotate-failures.mjs "E2E (Linux)" xvfb-run -a npm run test:e2e
       - name: Run e2e
         if: runner.os != 'Linux'
-        run: npm run test:e2e
+        run: node scripts/annotate-failures.mjs "E2E (${{ runner.os }})" npm run test:e2e
 
   package:
     name: Package .vsix

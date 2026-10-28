@@ -105,6 +105,12 @@ describe.each(['mysql', 'mariadb'] as const)('table structure on %s', (serverId)
       session.metadata.describeTable({ database, name: 'no_such_table' }),
     ).rejects.toMatchObject({ code: 'not-found' });
   });
+
+  it('reads a view without the comment VIEW that MySQL gives every view', async () => {
+    const structure = await session.metadata.describeTable({ database, name: 'order_totals' });
+    expect(structure.comment).toBeUndefined();
+    expect(structure.columns.map((c) => c.name)).toContain('total');
+  });
 });
 
 describe('table structure on postgres', () => {

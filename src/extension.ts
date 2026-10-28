@@ -29,6 +29,7 @@ import { ObjectEditors } from './vscode/editor/object-editors';
 import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/completion';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { SqlFormattingProvider } from './vscode/editor/formatting';
+import { DDL_SCHEME, SqlNavigation } from './vscode/editor/navigation';
 import { createBundleFormatterLoader } from './services/sql-format';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
@@ -86,6 +87,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       new SqlCompletionProvider({ editors, store, manager, cache, logger }),
       ...TRIGGER_CHARACTERS,
     ),
+  );
+  const navigation = new SqlNavigation({
+    bindings: editors.bindings,
+    store,
+    manager,
+    cache,
+    logger,
+  });
+  context.subscriptions.push(
+    navigation,
+    vscode.languages.registerHoverProvider({ language: 'sql' }, navigation),
+    vscode.languages.registerDefinitionProvider({ language: 'sql' }, navigation),
+    vscode.workspace.registerTextDocumentContentProvider(DDL_SCHEME, navigation),
   );
   const formatting = new SqlFormattingProvider({
     bindings: editors.bindings,

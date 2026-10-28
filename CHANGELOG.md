@@ -40,6 +40,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   list (`*` included), dialect functions inserted as calls with argument
   placeholders, and statement snippets (`sel`, `join`, `ins`, `upd`, `cte`, `upsert`…).
 
+- Hover over a table or a column shows its type, `NOT NULL`, key, default, where a
+  foreign key points and the comment; over a CTE, its columns. Go to Definition (F12)
+  on a table, view, column or routine call opens its DDL, read-only.
+
 ### Fixed (completion)
 
 - After a `;` completion treats the cursor as the start of a new statement.

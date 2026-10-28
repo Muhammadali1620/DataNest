@@ -95,11 +95,12 @@ export async function readMysqlStructure(
     };
   });
   const [tableRow] = await read(
-    `SELECT TABLE_COMMENT FROM information_schema.TABLES
+    `SELECT TABLE_COMMENT, TABLE_TYPE FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = COALESCE(?, DATABASE()) AND TABLE_NAME = ?`,
     scope,
   );
-  const comment = text(tableRow?.[0]);
+  // MySQL fills the comment of every view with the word VIEW.
+  const comment = /VIEW/i.test(text(tableRow?.[1])) ? '' : text(tableRow?.[0]);
   const indexes = await reader.listIndexes(table);
   return {
     columns,

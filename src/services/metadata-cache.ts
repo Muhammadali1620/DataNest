@@ -82,9 +82,15 @@ export class MetadataCache {
           `indexes:${scopeKey(table)}:${table.name}`,
           async () => await reader.listIndexes(table),
         ),
-      // A definition, and the structure the designer edits, are read when the user asks
-      // and must be the current ones.
-      describeTable: async (table) => await reader.describeTable(table),
+      // Structure changes made through DataNest drop the cache, like any DDL statement,
+      // so the designer still loads what is there after its own save.
+      describeTable: async (table: TableRef) =>
+        await this.read(
+          connectionId,
+          `structure:${scopeKey(table)}:${table.name}`,
+          async () => await reader.describeTable(table),
+        ),
+      // A definition is read when the user asks for it and must be the current one.
       getDefinition: async (object) => await reader.getDefinition(object),
     };
   }

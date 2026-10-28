@@ -76,6 +76,18 @@ describe('MetadataCache', () => {
       ]);
     });
 
+    it('caches the structure of a table until something drops the cache', async () => {
+      const inner = reader();
+      inner.structure = { columns: [], primaryKey: [], indexes: [], foreignKeys: [] };
+      const wrapped = cache.wrap('c1', inner);
+      await wrapped.describeTable({ database: 'app', name: 'orders' });
+      await wrapped.describeTable({ database: 'app', name: 'orders' });
+      expect(inner.calls).toEqual(['describeTable:orders']);
+      cache.noteStatement('c1', 'ALTER TABLE orders ADD x int');
+      await wrapped.describeTable({ database: 'app', name: 'orders' });
+      expect(inner.calls).toEqual(['describeTable:orders', 'describeTable:orders']);
+    });
+
     it('never caches definitions: the user wants the current one', async () => {
       const inner = reader();
       inner.definitions.set('view:v', ['CREATE VIEW v AS SELECT 1']);

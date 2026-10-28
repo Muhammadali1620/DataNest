@@ -130,5 +130,13 @@
   "Replace \"{0}\" with the edited definition?": "Заменить «{0}» отредактированным определением?",
   "This editor does not edit a database object: open one with \"Edit Definition…\" in the DataNest view": "Этот редактор не редактирует объект базы: откройте его через «Изменить определение…» в панели DataNest",
   "Nothing to apply: the editor is empty": "Применять нечего: редактор пуст",
-  "DataNest: {0} statement(s) could not be read and were left as they are": "DataNest: не удалось разобрать операторов: {0}, они оставлены как есть"
+  "DataNest: {0} statement(s) could not be read and were left as they are": "DataNest: не удалось разобрать операторов: {0}, они оставлены как есть",
+  "table": "таблица",
+  "view": "представление",
+  "defined in this statement": "определена в этом запросе",
+  "primary key": "первичный ключ",
+  "NULL allowed": "допускает NULL",
+  "default {0}": "по умолчанию {0}",
+  "auto-numbered": "автонумерация",
+  "…and {0} more columns": "…и ещё колонок: {0}"
 }

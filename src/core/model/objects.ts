@@ -42,6 +42,9 @@ export interface ForeignKey {
   readonly target: TableRef;
   /** The referenced columns, in the same order as `columns`. */
   readonly targetColumns: readonly string[];
+  /** Referential actions as SQL words (`CASCADE`, `SET NULL`, …), where the reader knows them. */
+  readonly onDelete?: string;
+  readonly onUpdate?: string;
 }
 
 /** Objects other than tables and views that a database can hold. */
@@ -87,4 +90,42 @@ export interface IndexInfo {
   readonly method?: string;
   /** The condition of a partial index. */
   readonly where?: string;
+  /** The index stands behind a UNIQUE constraint and is dropped with the constraint (PostgreSQL). */
+  readonly constraint?: boolean;
+}
+
+/** A column as the table designer needs it, with what `ColumnInfo` leaves out. */
+export interface ColumnDetail {
+  readonly name: string;
+  /** The full type as the server prints it: `varchar(255)`, `decimal(10,2) unsigned`. */
+  readonly dataType: string;
+  readonly nullable: boolean;
+  /** The default as a SQL expression that can be written back after DEFAULT. */
+  readonly defaultExpression?: string;
+  readonly autoIncrement: boolean;
+  readonly comment?: string;
+  /** A computed column; the designer shows it but does not change it. */
+  readonly generated: boolean;
+}
+
+/** An index or trigger that a table rebuild must create again, as its original SQL (SQLite). */
+export interface TableDependent {
+  readonly kind: 'index' | 'trigger';
+  readonly name: string;
+  readonly sql: string;
+}
+
+/** Everything the table designer reads about an existing table. */
+export interface TableStructure {
+  readonly comment?: string;
+  readonly columns: readonly ColumnDetail[];
+  /** Primary key columns in key order; empty for a table without one. */
+  readonly primaryKey: readonly string[];
+  /** Name of the primary key constraint, where the server names it (PostgreSQL). */
+  readonly primaryKeyName?: string;
+  /** Every index, the primary key included. */
+  readonly indexes: readonly IndexInfo[];
+  readonly foreignKeys: readonly ForeignKey[];
+  /** SQLite: what disappears with the table and must be recreated after a rebuild. */
+  readonly dependents?: readonly TableDependent[];
 }

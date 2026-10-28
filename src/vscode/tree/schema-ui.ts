@@ -53,6 +53,8 @@ export function schemaTexts(): SchemaTexts {
     schemaOnlyIfEmpty: vscode.l10n.t('Only if it is empty'),
     schemaCascade: vscode.l10n.t('With every object inside it (CASCADE)'),
     createTable: (name) => vscode.l10n.t('Create table "{0}"?', name),
+    alterTable: (name) => vscode.l10n.t('Apply the changes to table "{0}"?', name),
+    apply: vscode.l10n.t('Apply'),
     dropRelation: (name) => vscode.l10n.t('Drop "{0}"?', name),
     rename: (from, to) => vscode.l10n.t('Rename "{0}" to "{1}"?', from, to),
     truncate: (name) => vscode.l10n.t('Delete every row of "{0}"?', name),

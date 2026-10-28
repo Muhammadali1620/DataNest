@@ -82,7 +82,9 @@ export class MetadataCache {
           `indexes:${scopeKey(table)}:${table.name}`,
           async () => await reader.listIndexes(table),
         ),
-      // A definition is read when the user asks for it and must be the current one.
+      // A definition, and the structure the designer edits, are read when the user asks
+      // and must be the current ones.
+      describeTable: async (table) => await reader.describeTable(table),
       getDefinition: async (object) => await reader.getDefinition(object),
     };
   }

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type DesignPreview,
   tableDesignerProtocol,
   type TableDesignerProtocol,
   type TableDesignerState,
@@ -18,8 +19,14 @@ function state(overrides: Partial<TableDesignerState> = {}): TableDesignerState 
     mode: 'create',
     driver: 'mysql',
     scope: 'shop',
-    features: { columnComments: true, tableComment: true, types: ['int', 'varchar'] },
+    features: {
+      columnComments: true,
+      tableComment: true,
+      types: ['int', 'varchar'],
+      reorder: true,
+    },
     design: newTableDesign('mysql'),
+    kept: { indexes: [], columns: [] },
     ...overrides,
   };
 }
@@ -38,10 +45,14 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
   });
   const previews: TableDesign[] = [];
   const saves: TableDesign[] = [];
-  let saveOutcome: 'ran' | 'cancelled' | 'invalid' = 'cancelled';
+  let saveOutcome: 'ran' | 'cancelled' | 'invalid' | 'unchanged' = 'cancelled';
+  let previewAnswer: (design: TableDesign) => DesignPreview = (design) => ({
+    statements: [`CREATE TABLE ${design.name}`],
+    notes: [],
+  });
   host.handle('preview', (design) => {
     previews.push(design);
-    return { statements: [`CREATE TABLE ${design.name}`] };
+    return previewAnswer(design);
   });
   const askedColumns: string[] = [];
   host.handle('tables', () => ({ tables: ['customers', 'products'] }));
@@ -73,6 +84,9 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     setOutcome: (outcome: typeof saveOutcome) => {
       saveOutcome = outcome;
     },
+    setPreview: (answer: (design: TableDesign) => DesignPreview) => {
+      previewAnswer = answer;
+    },
   };
 }
 
@@ -92,7 +106,7 @@ describe('table designer App', () => {
       state({
         driver: 'sqlite',
         scope: '',
-        features: { columnComments: false, tableComment: false, types: [] },
+        features: { columnComments: false, tableComment: false, types: [], reorder: true },
         design: newTableDesign('sqlite'),
       }),
     );
@@ -292,5 +306,139 @@ describe('table designer App', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Pick at least one column, each once')).toBeTruthy();
     expect(screen.getByText('Pick the referenced table')).toBeTruthy();
+  });
+
+  describe('editing an existing table', () => {
+    const existing = (): TableDesignerState =>
+      state({
+        mode: 'edit',
+        driver: 'postgres',
+        scope: 'shop.public',
+        features: { columnComments: true, tableComment: true, types: [], reorder: false },
+        design: {
+          ...newTableDesign('postgres', 'orders'),
+          columns: [
+            {
+              id: 'col-1',
+              original: 'id',
+              name: 'id',
+              type: 'integer',
+              length: '',
+              nullable: false,
+              defaultValue: '',
+              autoIncrement: true,
+              primaryKey: true,
+              comment: '',
+            },
+            {
+              id: 'col-2',
+              original: 'note',
+              name: 'note',
+              type: 'text',
+              length: '',
+              nullable: true,
+              defaultValue: '',
+              autoIncrement: false,
+              primaryKey: false,
+              comment: '',
+            },
+          ],
+        },
+        kept: {
+          indexes: [{ name: 'ix_lower', description: '(lower(note))' }],
+          columns: ['twice'],
+        },
+      });
+
+    it('names the table in the title and tells what stays as is', async () => {
+      await setup(existing());
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(
+        'Table shop.public.orders',
+      );
+      expect(screen.getByText('Computed columns, kept as they are: twice')).toBeTruthy();
+      expect(
+        screen.getByText(
+          'Indexes the designer does not edit, kept as they are: ix_lower (lower(note))',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('offers no moving of columns where the database cannot move them', async () => {
+      await setup(existing());
+      expect(screen.queryByRole('button', { name: /^Move column/ })).toBeNull();
+    });
+
+    it('says there are no changes yet, then shows the ALTER with its notes', async () => {
+      const harness = await setup(existing());
+      harness.setPreview((design) =>
+        design.columns.some((column) => column.name === 'remark')
+          ? {
+              statements: ['ALTER TABLE orders RENAME COLUMN note TO remark'],
+              notes: ['order-ignored'],
+            }
+          : { statements: [], notes: [] },
+      );
+      await fireEvent.click(screen.getByRole('tab', { name: 'SQL' }));
+      await waitFor(() => {
+        expect(screen.getByText('No changes yet')).toBeTruthy();
+      });
+      await fireEvent.click(screen.getByRole('tab', { name: 'Columns' }));
+      await fireEvent.input(input('Name of column note'), { target: { value: 'remark' } });
+      await fireEvent.click(screen.getByRole('tab', { name: 'SQL' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('sql').textContent).toBe(
+          'ALTER TABLE orders RENAME COLUMN note TO remark;',
+        );
+      });
+      expect(screen.getByRole('note').textContent).toContain('PostgreSQL cannot move columns');
+    });
+
+    it('goes back to the stored design with Revert', async () => {
+      await setup(existing());
+      await fireEvent.input(input('Name of column note'), { target: { value: 'remark' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
+      expect(input('Name of column note').value).toBe('note');
+    });
+
+    it('says when there is nothing to save', async () => {
+      const harness = await setup(existing());
+      harness.setOutcome('unchanged');
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('notice').textContent).toBe(
+          'Nothing to save: the table already looks like this',
+        );
+      });
+    });
+
+    it('shows the rebuild note of SQLite', async () => {
+      const harness = await setup(existing());
+      harness.setPreview(() => ({ statements: ['BEGIN'], notes: ['rebuild'] }));
+      await fireEvent.input(input('Name of column note'), { target: { value: 'x' } });
+      await fireEvent.click(screen.getByRole('tab', { name: 'SQL' }));
+      await waitFor(() => {
+        expect(screen.getByRole('note').textContent).toContain('SQLite rebuilds the table');
+      });
+    });
+
+    it('takes a fresh state from the host after a save', async () => {
+      const harness = await setup(existing());
+      await fireEvent.input(input('Name of column note'), { target: { value: 'remark' } });
+      const next = existing();
+      harness.host.emit('state', {
+        ...next,
+        design: {
+          ...next.design,
+          columns: next.design.columns.map((c) =>
+            c.id === 'col-2' ? { ...c, name: 'remark', original: 'remark' } : c,
+          ),
+        },
+      });
+      await waitFor(() => {
+        expect(input('Name of column remark').value).toBe('remark');
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
+      expect(input('Name of column remark').value).toBe('remark');
+    });
   });
 });

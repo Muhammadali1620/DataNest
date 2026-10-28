@@ -13,9 +13,27 @@ import type {
   RelationKind,
   TableInfo,
   TableRef,
+  TableStructure,
 } from '../core/model/objects';
 import type { CellValue } from '../shared/cell-value';
-import type { DesignerFeatures, TableDesign } from '../shared/table-design';
+import type { DesignerFeatures, TableBackground, TableDesign } from '../shared/table-design';
+
+/** Something the user should know about an ALTER before running it. */
+export type AlterNote =
+  /** PostgreSQL cannot move columns: the new order on the page is not applied. */
+  | 'order-ignored'
+  /** SQLite copies the table into a new one: slower on big tables. */
+  | 'rebuild';
+
+export interface AlterPlan {
+  /** Statements in order; transactional dialects wrap them in BEGIN … COMMIT. */
+  readonly statements: readonly string[];
+  readonly notes: readonly AlterNote[];
+  /** Run, each on its own and ignoring failures, when a statement of the plan fails. */
+  readonly recovery: readonly string[];
+}
+
+export const EMPTY_PLAN: AlterPlan = { statements: [], notes: [], recovery: [] };
 
 /** What the DBMS supports; the UI adapts instead of special-casing driver ids. */
 export interface DriverCapabilities {
@@ -57,6 +75,17 @@ export interface SchemaDdl {
    * (`designProblems` is empty); `table` gives the scope and the final name.
    */
   createTable(table: TableRef, design: TableDesign): string[];
+  /**
+   * The statements that turn an existing table (`before`, as loaded) into `after`.
+   * `table` names the table as it is now. Empty when nothing changed. Throws
+   * `unsupported` for a change this database cannot make.
+   */
+  alterTable(
+    table: TableRef,
+    before: TableDesign,
+    after: TableDesign,
+    background: TableBackground,
+  ): AlterPlan;
   dropRelation(table: TableRef, kind: RelationKind): string;
   /** Renames within the same database or schema; `newName` is a bare name. */
   renameRelation(table: TableRef, kind: RelationKind, newName: string): string;
@@ -146,6 +175,8 @@ export interface MetadataReader {
   listObjects(scope: ObjectScope, kind: ListedObjectKind): Promise<ObjectInfo[]>;
   /** Every index of a table, the primary key first, then by name. */
   listIndexes(table: TableRef): Promise<IndexInfo[]>;
+  /** The structure of an existing table, as the table designer edits it. */
+  describeTable(table: TableRef): Promise<TableStructure>;
   /**
    * The statements that create an object as it is now, without trailing semicolons:
    * a table with its indexes, comments and triggers, a view, a routine, …

@@ -6,7 +6,7 @@ import { DbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { ObjectRef, RelationKind, TableRef } from '../core/model/objects';
 import type { SchemaDdl, Session } from '../drivers/driver';
-import type { TableDesign } from '../shared/table-design';
+import type { TableBackground, TableDesign } from '../shared/table-design';
 import { browseSession } from './browse-session';
 import { ConnectionManager } from './connection-manager';
 
@@ -22,6 +22,14 @@ export type SchemaAction =
     }
   /** `table` is the scope and `design.name` the name of the new table. */
   | { readonly kind: 'createTable'; readonly table: TableRef; readonly design: TableDesign }
+  /** `table` names the table as it is now; `before` is the design it was loaded with. */
+  | {
+      readonly kind: 'alterTable';
+      readonly table: TableRef;
+      readonly before: TableDesign;
+      readonly after: TableDesign;
+      readonly background: TableBackground;
+    }
   | { readonly kind: 'dropTable'; readonly table: TableRef; readonly relation: RelationKind }
   | {
       readonly kind: 'renameTable';
@@ -37,7 +45,19 @@ export function actionSql(action: SchemaAction, ddl: SchemaDdl): string[] {
   if (action.kind === 'createTable') {
     return ddl.createTable(action.table, action.design);
   }
+  if (action.kind === 'alterTable') {
+    return [...alterPlan(action, ddl).statements];
+  }
   return [singleStatement(action, ddl)];
+}
+
+function alterPlan(action: Extract<SchemaAction, { kind: 'alterTable' }>, ddl: SchemaDdl) {
+  return ddl.alterTable(action.table, action.before, action.after, action.background);
+}
+
+/** What to run after a failed statement, so nothing is left half done or switched on. */
+export function actionRecovery(action: SchemaAction, ddl: SchemaDdl): readonly string[] {
+  return action.kind === 'alterTable' ? alterPlan(action, ddl).recovery : [];
 }
 
 /** A script of statements as the user sees it and as it opens in an editor. */
@@ -46,7 +66,7 @@ export function actionScript(statements: readonly string[]): string {
 }
 
 function singleStatement(
-  action: Exclude<SchemaAction, { kind: 'createTable' }>,
+  action: Exclude<SchemaAction, { kind: 'createTable' | 'alterTable' }>,
   ddl: SchemaDdl,
 ): string {
   switch (action.kind) {
@@ -91,6 +111,7 @@ export function actionDatabase(action: SchemaAction): string | undefined {
     case 'createSchema':
     case 'dropSchema':
       return action.database;
+    case 'alterTable':
     case 'createTable':
     case 'dropTable':
     case 'renameTable':
@@ -137,9 +158,28 @@ export class SchemaActions {
         await drain(session, statement);
       }
       this.logger.info(`${action.kind} done on ${connectionId}`);
+    } catch (error) {
+      await this.recover(connectionId, session, action);
+      throw error;
     } finally {
       // Even a failed statement may have changed something (MySQL DDL is not atomic).
       this.deps.cache.invalidate(connectionId);
+    }
+  }
+
+  /** Rolls back what a failed plan started; a failure here is logged, the first one wins. */
+  private async recover(
+    connectionId: string,
+    session: Session,
+    action: SchemaAction,
+  ): Promise<void> {
+    const driver = await this.deps.manager.driverOf(connectionId);
+    for (const statement of actionRecovery(action, driver.dialect.ddl)) {
+      try {
+        await drain(session, statement);
+      } catch (error) {
+        this.logger.warn(`Recovery statement failed: ${statement}`, error);
+      }
     }
   }
 }

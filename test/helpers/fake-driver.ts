@@ -13,6 +13,7 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStructure,
 } from '../../src/core/model/objects';
 import type {
   Dialect,
@@ -41,7 +42,20 @@ export const fakeDialect: Dialect = {
     dropDatabase: (name) => `DROP DATABASE "${name}"`,
     createSchema: (name) => `CREATE SCHEMA "${name}"`,
     dropSchema: (name, cascade) => `DROP SCHEMA "${name}"${cascade ? ' CASCADE' : ''}`,
-    designer: { columnComments: true, tableComment: true, types: ['integer', 'text'] },
+    designer: {
+      columnComments: true,
+      tableComment: true,
+      types: ['integer', 'text'],
+      reorder: true,
+    },
+    alterTable: (table, before, after) => ({
+      statements:
+        before.name === after.name && before.columns.length === after.columns.length
+          ? []
+          : [`ALTER "${table.name}"`],
+      notes: [],
+      recovery: ['ROLLBACK'],
+    }),
     createTable: (table, design) => [
       `CREATE TABLE "${design.name}" (${design.columns.map((c) => c.name).join(', ')})`,
       ...(table.schema === undefined ? [] : [`-- in ${table.schema}`]),
@@ -63,6 +77,8 @@ export class FakeMetadata implements MetadataReader {
   /** Objects listed by `listObjects`, filtered by kind. */
   objects: ObjectInfo[] = [];
   indexes: IndexInfo[] = [];
+  /** What describeTable answers; undefined means the table does not exist. */
+  structure: TableStructure | undefined;
   /** Definitions by `kind:name`; a missing one is reported as not found. */
   definitions = new Map<string, string[]>();
   /** Thrown by every reader when set. */
@@ -102,6 +118,17 @@ export class FakeMetadata implements MetadataReader {
 
   listIndexes(table: TableRef): Promise<IndexInfo[]> {
     return this.answer(`listIndexes:${table.name}`, this.indexes);
+  }
+
+  describeTable(table: TableRef): Promise<TableStructure> {
+    if (this.structure === undefined && this.error === undefined) {
+      this.calls.push(`describeTable:${table.name}`);
+      return Promise.reject(new DbError('not-found', `${table.name} does not exist`));
+    }
+    return this.answer(
+      `describeTable:${table.name}`,
+      this.structure ?? { columns: [], primaryKey: [], indexes: [], foreignKeys: [] },
+    );
   }
 
   getDefinition(object: ObjectRef): Promise<string[]> {
@@ -262,6 +289,7 @@ export class FakeDriver implements Driver {
     session.metadata.definitions = new Map(this.sessionMetadata.definitions);
     session.metadata.objects = [...this.sessionMetadata.objects];
     session.metadata.indexes = [...this.sessionMetadata.indexes];
+    session.metadata.structure = this.sessionMetadata.structure;
     session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);

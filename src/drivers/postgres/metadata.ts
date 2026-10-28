@@ -9,10 +9,12 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStructure,
 } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readPgDefinition } from './definitions';
+import { pgReferentialAction, readPgStructure } from './structure';
 import { toPgDbError } from './errors';
 
 const DEFAULT_SCHEMA = 'public';
@@ -108,7 +110,8 @@ export class PostgresMetadata implements MetadataReader {
 
   async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
     const rows = await this.query(
-      `SELECT con.oid::text, con.conname, a.attname, tn.nspname, tc.relname, ra.attname
+      `SELECT con.oid::text, con.conname, a.attname, tn.nspname, tc.relname, ra.attname,
+              con.confdeltype::text, con.confupdtype::text
        FROM pg_constraint con
        JOIN pg_class c ON c.oid = con.conrelid
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -133,6 +136,8 @@ export class PostgresMetadata implements MetadataReader {
               ? undefined
               : { schema: asText(row[3]) ?? DEFAULT_SCHEMA, name: targetName },
           targetColumn: asText(row[5]),
+          onDelete: pgReferentialAction(asText(row[6])),
+          onUpdate: pgReferentialAction(asText(row[7])),
         };
       }),
     );
@@ -204,7 +209,9 @@ export class PostgresMetadata implements MetadataReader {
     const rows = await this.query(
       `SELECT ic.relname, i.indisunique, i.indisprimary, am.amname,
               pg_get_indexdef(i.indexrelid, k.n::int, true),
-              pg_get_expr(i.indpred, i.indrelid, true)
+              pg_get_expr(i.indpred, i.indrelid, true),
+              EXISTS (SELECT 1 FROM pg_constraint con
+                      WHERE con.conindid = i.indexrelid AND con.contype IN ('u', 'x'))
        FROM pg_index i
        JOIN pg_class ic ON ic.oid = i.indexrelid
        JOIN pg_class c ON c.oid = i.indrelid
@@ -224,11 +231,16 @@ export class PostgresMetadata implements MetadataReader {
           column: asText(row[4]),
           unique: row[1] === true,
           primary: row[2] === true,
+          constraint: row[6] === true,
           ...(method === undefined ? {} : { method }),
           ...(where === undefined ? {} : { where }),
         };
       }),
     );
+  }
+
+  async describeTable(table: TableRef): Promise<TableStructure> {
+    return await readPgStructure(async (sql, params) => await this.query(sql, params), table, this);
   }
 
   async getDefinition(object: ObjectRef): Promise<string[]> {

@@ -13,6 +13,7 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStructure,
 } from '../core/model/objects';
 import type { ExecuteEvent, ExecuteOptions, MetadataReader, Session } from '../drivers/driver';
 
@@ -105,6 +106,10 @@ class ManagedMetadata implements MetadataReader {
 
   async listIndexes(table: TableRef): Promise<IndexInfo[]> {
     return await this.guard(() => this.inner.listIndexes(table));
+  }
+
+  async describeTable(table: TableRef): Promise<TableStructure> {
+    return await this.guard(() => this.inner.describeTable(table));
   }
 
   async getDefinition(object: ObjectRef): Promise<string[]> {

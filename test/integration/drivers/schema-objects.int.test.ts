@@ -199,7 +199,15 @@ describe('schema objects on postgres', () => {
         primary: false,
         method: 'btree',
       },
-      { name: 'products_sku_key', columns: ['sku'], unique: true, primary: false, method: 'btree' },
+      {
+        name: 'products_sku_key',
+        columns: ['sku'],
+        unique: true,
+        // The index stands behind the UNIQUE constraint of the column.
+        constraint: true,
+        primary: false,
+        method: 'btree',
+      },
     ]);
     await runAll(session, 'CREATE INDEX objects_expr ON objects_idx (lower(b), a)');
     await runAll(session, 'CREATE UNIQUE INDEX objects_part ON objects_idx (a) WHERE c > 0');

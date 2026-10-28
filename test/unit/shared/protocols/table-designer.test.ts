@@ -50,8 +50,9 @@ describe('tableDesignerProtocol', () => {
       mode: 'create',
       driver: 'sqlite',
       scope: '',
-      features: { columnComments: false, tableComment: false, types: ['integer'] },
+      features: { columnComments: false, tableComment: false, types: ['integer'], reorder: true },
       design: newTableDesign('sqlite'),
+      kept: { indexes: [{ name: 'ix', description: '(lower(a))' }], columns: ['twice'] },
     };
     expect(tableDesignerProtocol.webview.events.state.parse(state)).toEqual(state);
     expect(() =>
@@ -61,7 +62,7 @@ describe('tableDesignerProtocol', () => {
 
   it('answers a save with one of the known outcomes only', () => {
     const result = tableDesignerProtocol.host.requests.save.result;
-    for (const outcome of ['ran', 'opened', 'cancelled', 'unsupported', 'invalid']) {
+    for (const outcome of ['ran', 'opened', 'cancelled', 'unsupported', 'invalid', 'unchanged']) {
       expect(result.parse({ outcome })).toEqual({ outcome });
     }
     expect(() => result.parse({ outcome: 'maybe' })).toThrow();
@@ -69,10 +70,16 @@ describe('tableDesignerProtocol', () => {
 
   it('answers a preview with statements and an optional error', () => {
     const result = tableDesignerProtocol.host.requests.preview.result;
-    expect(result.parse({ statements: ['CREATE TABLE t (id int)'] })).toEqual({
+    expect(result.parse({ statements: ['CREATE TABLE t (id int)'], notes: [] })).toEqual({
       statements: ['CREATE TABLE t (id int)'],
+      notes: [],
     });
-    expect(result.parse({ statements: [], error: 'no' })).toEqual({ statements: [], error: 'no' });
+    expect(result.parse({ statements: [], notes: ['rebuild'], error: 'no' })).toEqual({
+      statements: [],
+      notes: ['rebuild'],
+      error: 'no',
+    });
+    expect(() => result.parse({ statements: [], notes: ['explode'] })).toThrow();
   });
 });
 

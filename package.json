@@ -232,6 +232,12 @@
         "icon": "$(trash)"
       },
       {
+        "command": "datanest.table.design",
+        "title": "%commands.table.design.title%",
+        "category": "DataNest",
+        "icon": "$(symbol-structure)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -289,6 +295,10 @@
         },
         {
           "command": "datanest.object.drop",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.design",
           "when": "false"
         }
       ],
@@ -449,6 +459,11 @@
           "command": "datanest.database.drop",
           "when": "view == datanest.connections && viewItem == datanest.database",
           "group": "8_destroy@2"
+        },
+        {
+          "command": "datanest.table.design",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "4_structure@0"
         }
       ],
       "editor/title": [

@@ -72,7 +72,21 @@ export const tableDesignSchema: Schema<TableDesign> = object({
 
 const namesSchema = array(string({ maxLength: DESIGN_LIMITS.name }), { maxLength: 100_000 });
 
+const keptSchema = object({
+  /** Indexes the designer cannot express, with a short description of each. */
+  indexes: array(
+    object({
+      name: string({ maxLength: DESIGN_LIMITS.name }),
+      description: string({ maxLength: 4000 }),
+    }),
+    { maxLength: 1000 },
+  ),
+  /** Computed columns, shown but never changed. */
+  columns: array(string({ maxLength: DESIGN_LIMITS.name }), { maxLength: DESIGN_LIMITS.columns }),
+});
+
 const stateSchema = object({
+  /** `create` for a new table; `edit` for an existing one, whose design is as stored. */
   mode: literal('create', 'edit'),
   driver: literal(...DRIVER_IDS),
   /** Where the table lives, shown in the title: `shop`, `shop.public`. */
@@ -81,12 +95,16 @@ const stateSchema = object({
     columnComments: boolean(),
     tableComment: boolean(),
     types: array(string({ maxLength: DESIGN_LIMITS.type }), { maxLength: 500 }),
+    reorder: boolean(),
   }),
   design: tableDesignSchema,
+  kept: keptSchema,
 });
 
 const previewSchema = object({
   statements: array(string(), { maxLength: 10_000 }),
+  /** Things worth knowing before running the statements. */
+  notes: array(literal('order-ignored', 'rebuild'), { maxLength: 10 }),
   /** Why no SQL could be built, e.g. a database that cannot do this. */
   error: optional(string({ maxLength: 2000 })),
 });
@@ -107,7 +125,7 @@ export const tableDesignerProtocol = defineProtocol({
       save: {
         params: tableDesignSchema,
         result: object({
-          outcome: literal('ran', 'opened', 'cancelled', 'unsupported', 'invalid'),
+          outcome: literal('ran', 'opened', 'cancelled', 'unsupported', 'invalid', 'unchanged'),
         }),
       },
     },

@@ -47,5 +47,6 @@
   "commands.table.drop.title": "Drop…",
   "commands.table.rename.title": "Rename…",
   "commands.table.truncate.title": "Empty Table (TRUNCATE)…",
-  "commands.object.drop.title": "Drop…"
+  "commands.object.drop.title": "Drop…",
+  "commands.table.design.title": "Edit Table…"
 }

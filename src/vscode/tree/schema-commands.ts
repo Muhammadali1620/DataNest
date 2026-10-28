@@ -55,6 +55,8 @@ export interface SchemaTexts {
   readonly schemaOnlyIfEmpty: string;
   readonly schemaCascade: string;
   createTable(name: string): string;
+  alterTable(name: string): string;
+  readonly apply: string;
   dropRelation(name: string): string;
   rename(from: string, to: string): string;
   truncate(name: string): string;
@@ -74,8 +76,12 @@ export interface SchemaCommandDeps {
   readonly tree: RefreshableTree;
   /** Opens SQL in a new editor bound to the connection, instead of running it. */
   readonly openEditor: (binding: DocumentBinding, sql: string) => Promise<unknown>;
-  /** Opens the table designer for a new table in this scope. */
-  readonly openDesigner: (connectionId: string, scope: ObjectScope) => Promise<unknown>;
+  /** Opens the table designer: for a new table in this scope, or for an existing one. */
+  readonly openDesigner: (
+    connectionId: string,
+    scope: ObjectScope,
+    table?: string,
+  ) => Promise<unknown>;
 }
 
 export type SchemaCommandName =
@@ -84,6 +90,7 @@ export type SchemaCommandName =
   | 'createSchema'
   | 'dropSchema'
   | 'createTable'
+  | 'designTable'
   | 'dropTable'
   | 'renameTable'
   | 'truncateTable'
@@ -287,6 +294,14 @@ export function schemaCommandHandlers(
           ? { ...scope, schema: 'public' }
           : scope;
       await deps.openDesigner(connectionId, withSchema);
+    },
+
+    designTable: async (target) => {
+      const node = nodeOf(target, ['table']);
+      if (node?.tableKind !== 'table') {
+        return;
+      }
+      await deps.openDesigner(node.connectionId, node.scope, node.name);
     },
 
     dropTable: async (target) => {

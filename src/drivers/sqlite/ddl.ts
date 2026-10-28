@@ -4,52 +4,18 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
-import {
-  columnSql,
-  createIndexSql,
-  createTableSql,
-  foreignKeySql,
-  primaryKeySql,
-} from '../common/design-sql';
+import { sqliteAlterTable } from './alter';
+import { sqliteCreateTable } from './create-table';
 import { quoteIdentifier, quoteTable } from './quote';
 
 const TYPES = ['integer', 'real', 'text', 'blob', 'numeric'];
 
 export const sqliteDdl: SchemaDdl = {
-  designer: { columnComments: false, tableComment: false, types: TYPES },
-  createTable: (table, design) => {
-    // AUTOINCREMENT exists only as part of an inline INTEGER PRIMARY KEY.
-    const inlineKey = design.columns.some((column) => column.autoIncrement);
-    const columns = design.columns.map((column) =>
-      columnSql(column, {
-        quote: quoteIdentifier,
-        autoIncrement: () => 'PRIMARY KEY AUTOINCREMENT',
-        trailer: () => '',
-      }),
-    );
-    const target = quoteTable({ ...table, name: design.name.trim() });
-    // A foreign key in SQLite can only point into the same database file.
-    const keys = design.foreignKeys.map((key) =>
-      foreignKeySql(design, key, quoteIdentifier, quoteIdentifier(key.targetTable.trim())),
-    );
-    return [
-      createTableSql(target, [
-        ...columns,
-        ...(inlineKey ? [] : primaryKeySql(design, quoteIdentifier)),
-        ...keys,
-      ]),
-      // An attached database names the index, not the table: "aux"."ix" ON "t".
-      ...design.indexes.map((index) =>
-        createIndexSql(
-          design,
-          index,
-          quoteIdentifier,
-          quoteIdentifier(design.name.trim()),
-          quoteTable({ ...table, name: index.name.trim() }),
-        ),
-      ),
-    ];
-  },
+  designer: { columnComments: false, tableComment: false, types: TYPES, reorder: true },
+  alterTable: (table, before, after, background) =>
+    sqliteAlterTable(table, before, after, background),
+  createTable: sqliteCreateTable,
+
   dropRelation: (table, kind) => `DROP ${kind === 'table' ? 'TABLE' : 'VIEW'} ${quoteTable(table)}`,
   renameRelation: (table, kind, newName) => {
     if (kind !== 'table') {

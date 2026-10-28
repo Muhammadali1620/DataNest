@@ -10,10 +10,12 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStructure,
 } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readMysqlDefinition } from './definitions';
+import { readMysqlStructure } from './structure';
 import { toMysqlDbError } from './errors';
 
 /** Reads structure from information_schema; shares the session's connection. */
@@ -84,12 +86,15 @@ export class MysqlMetadata implements MetadataReader {
 
   async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
     const rows = await this.query(
-      `SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME,
-              REFERENCED_COLUMN_NAME
-       FROM information_schema.KEY_COLUMN_USAGE
-       WHERE TABLE_SCHEMA = COALESCE(?, DATABASE()) AND TABLE_NAME = ?
-         AND REFERENCED_TABLE_NAME IS NOT NULL
-       ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION`,
+      `SELECT k.CONSTRAINT_NAME, k.COLUMN_NAME, k.REFERENCED_TABLE_SCHEMA,
+              k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME, r.DELETE_RULE, r.UPDATE_RULE
+       FROM information_schema.KEY_COLUMN_USAGE k
+       LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r
+         ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+            AND r.TABLE_NAME = k.TABLE_NAME
+       WHERE k.TABLE_SCHEMA = COALESCE(?, DATABASE()) AND k.TABLE_NAME = ?
+         AND k.REFERENCED_TABLE_NAME IS NOT NULL
+       ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION`,
       [table.database ?? null, table.name],
     );
     return groupForeignKeys(
@@ -105,6 +110,8 @@ export class MysqlMetadata implements MetadataReader {
               ? undefined
               : { database: asText(row[2]) ?? table.database ?? '', name: targetName },
           targetColumn: asText(row[4]),
+          onDelete: asText(row[5]),
+          onUpdate: asText(row[6]),
         };
       }),
     ).map((key) => ({
@@ -180,6 +187,14 @@ export class MysqlMetadata implements MetadataReader {
           ...(method === undefined ? {} : { method }),
         };
       }),
+    );
+  }
+
+  async describeTable(table: TableRef): Promise<TableStructure> {
+    return await readMysqlStructure(
+      async (sql, params) => await this.query(sql, params),
+      table,
+      this,
     );
   }
 

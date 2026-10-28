@@ -119,6 +119,7 @@ describe('MetadataCache', () => {
         listForeignKeys: () => Promise.resolve([]),
         listObjects: () => Promise.resolve([]),
         listIndexes: () => Promise.resolve([]),
+        describeTable: () => Promise.reject(new Error('no table')),
         getDefinition: () => Promise.resolve([]),
       };
       const load = vi.spyOn(inner, 'listDatabases');

@@ -8,12 +8,14 @@ import type {
   ObjectRef,
   TableInfo,
   TableRef,
+  TableStructure,
 } from '../../core/model/objects';
 import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { quoteIdentifier } from './dialect';
 import type { SqliteParam } from './protocol';
+import { readSqliteStructure } from './structure';
 
 /** What metadata needs from the session, kept narrow for tests. */
 export interface SqliteQueryRunner {
@@ -78,7 +80,8 @@ export class SqliteMetadata implements MetadataReader {
 
   async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
     const rows = await this.session.queryRows(
-      `SELECT id, seq, "table", "from", "to" FROM pragma_foreign_key_list(?) ORDER BY id, seq`,
+      `SELECT id, seq, "table", "from", "to", on_delete, on_update
+       FROM pragma_foreign_key_list(?) ORDER BY id, seq`,
       [table.name],
     );
     // A key written without target columns points at the other table's primary key.
@@ -105,6 +108,8 @@ export class SqliteMetadata implements MetadataReader {
         target: target === undefined ? undefined : { name: target },
         targetColumn:
           explicit ?? (target === undefined ? undefined : (await keyOf(target))[position]),
+        onDelete: asText(row[5]),
+        onUpdate: asText(row[6]),
       });
     }
     return groupForeignKeys(resolved).map((key, index) => ({ ...key, name: `fk_${index + 1}` }));
@@ -139,6 +144,10 @@ export class SqliteMetadata implements MetadataReader {
         primary: asText(row[2]) === 'pk',
       })),
     );
+  }
+
+  async describeTable(table: TableRef): Promise<TableStructure> {
+    return await readSqliteStructure(this.session, table, this);
   }
 
   /**

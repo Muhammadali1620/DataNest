@@ -93,12 +93,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const schemaCommands = schemaCommandHandlers({
     ...schemaDeps,
     manager: deps.manager,
-    openDesigner: async (connectionId, scope) =>
+    openDesigner: async (connectionId, scope, table) =>
       TableDesignerPanel.show({
         extensionUri: deps.extensionUri,
         logger: deps.logger,
         connectionId,
         scope,
+        ...(table === undefined ? {} : { table }),
         driver: await deps.manager.driverOf(connectionId),
         metadata: async () =>
           deps.cache.wrap(
@@ -108,6 +109,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         texts: {
           createTable: (name) => schemaDeps.texts.createTable(name),
           create: schemaDeps.texts.create,
+          alterTable: (name) => schemaDeps.texts.alterTable(name),
+          apply: schemaDeps.texts.apply,
         },
         perform,
       }),
@@ -132,6 +135,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.createSchema]: schemaCommands.createSchema,
     [COMMAND_IDS.dropSchema]: schemaCommands.dropSchema,
     [COMMAND_IDS.createTable]: schemaCommands.createTable,
+    [COMMAND_IDS.designTable]: schemaCommands.designTable,
     [COMMAND_IDS.dropTable]: schemaCommands.dropTable,
     [COMMAND_IDS.renameTable]: schemaCommands.renameTable,
     [COMMAND_IDS.truncateTable]: schemaCommands.truncateTable,

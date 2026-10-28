@@ -24,11 +24,14 @@
     features: TableDesignerState['features'];
     problems: readonly DesignProblem[];
     showProblems: boolean;
+    /** False where existing columns cannot change places (PostgreSQL). */
+    canReorder: boolean;
     t: Translate;
     onchange: (design: TableDesign) => void;
   }
 
-  const { design, driver, features, problems, showProblems, t, onchange }: Props = $props();
+  const { design, driver, features, problems, showProblems, canReorder, t, onchange }: Props =
+    $props();
 
   type Patch = Partial<Omit<ColumnDesign, 'id' | 'original'>>;
 
@@ -86,6 +89,7 @@
       {@const own = visibleProblems(column.id)}
       <tr class:invalid={own.length > 0}>
         <td class="order">
+          {#if canReorder}
           <button
             class="icon"
             disabled={index === 0}
@@ -102,6 +106,7 @@
               onchange(moveColumn(design, column.id, 1));
             }}>▼</button
           >
+          {/if}
         </td>
         <td>
           <input

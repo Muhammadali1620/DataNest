@@ -30,6 +30,8 @@ export interface ForeignKeyRow {
   readonly column: string | undefined;
   readonly target: TableRef | undefined;
   readonly targetColumn: string | undefined;
+  readonly onDelete?: string | undefined;
+  readonly onUpdate?: string | undefined;
 }
 
 /**
@@ -39,7 +41,14 @@ export interface ForeignKeyRow {
 export function groupForeignKeys(rows: readonly ForeignKeyRow[]): ForeignKey[] {
   const keys = new Map<
     string,
-    { name: string; columns: string[]; targetColumns: string[]; target: TableRef } | null
+    {
+      name: string;
+      columns: string[];
+      targetColumns: string[];
+      target: TableRef;
+      onDelete?: string;
+      onUpdate?: string;
+    } | null
   >();
   for (const row of rows) {
     if (row.id === undefined) {
@@ -64,6 +73,8 @@ export function groupForeignKeys(rows: readonly ForeignKeyRow[]): ForeignKey[] {
         columns: [row.column],
         targetColumns: [row.targetColumn],
         target: row.target,
+        ...(row.onDelete === undefined ? {} : { onDelete: row.onDelete }),
+        ...(row.onUpdate === undefined ? {} : { onUpdate: row.onUpdate }),
       });
     } else {
       known.columns.push(row.column);
@@ -82,6 +93,7 @@ export interface IndexRow {
   readonly primary: boolean;
   readonly method?: string;
   readonly where?: string;
+  readonly constraint?: boolean;
 }
 
 /** Shown for a key part that is an expression rather than a column. */
@@ -106,6 +118,7 @@ export function groupIndexes(rows: readonly IndexRow[]): IndexInfo[] {
           primary: row.primary,
           ...(row.method === undefined || row.method === '' ? {} : { method: row.method }),
           ...(row.where === undefined || row.where === '' ? {} : { where: row.where }),
+          ...(row.constraint === true ? { constraint: true } : {}),
         },
       };
       indexes.set(row.name, entry);

@@ -37,6 +37,8 @@ export const COMMAND_IDS = {
   createSchema: 'datanest.schema.create',
   dropSchema: 'datanest.schema.drop',
   createTable: 'datanest.table.create',
+  /** Opens an existing table in the table designer. */
+  designTable: 'datanest.table.design',
   dropTable: 'datanest.table.drop',
   renameTable: 'datanest.table.rename',
   truncateTable: 'datanest.table.truncate',

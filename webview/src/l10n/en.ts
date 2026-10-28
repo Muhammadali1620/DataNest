@@ -270,6 +270,16 @@ export const en = {
   'designer.problem.indexColumns': 'Pick at least one column, each once',
   'designer.problem.keyTarget': 'Pick the referenced table',
   'designer.problem.keyTargetColumns': 'Pick one referenced column for each key column',
+  'designer.titleEdit': 'Table {0}',
+  'designer.revert': 'Revert',
+  'designer.unchanged': 'Nothing to save: the table already looks like this',
+  'designer.noChanges': 'No changes yet',
+  'designer.note.orderIgnored':
+    'PostgreSQL cannot move columns: new ones are added at the end, and the order shown here is not applied',
+  'designer.note.rebuild':
+    'SQLite rebuilds the table for this change: the rows are copied into a new table that replaces the old one',
+  'designer.keptColumns': 'Computed columns, kept as they are: {0}',
+  'designer.keptIndexes': 'Indexes the designer does not edit, kept as they are: {0}',
 } as const;
 
 export type MessageKey = keyof typeof en;

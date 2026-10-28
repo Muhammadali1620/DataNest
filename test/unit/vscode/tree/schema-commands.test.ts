@@ -32,6 +32,8 @@ const TEXTS: SchemaTexts = {
   schemaOnlyIfEmpty: 'only if empty',
   schemaCascade: 'cascade',
   createTable: (name) => `create table ${name}?`,
+  alterTable: (name) => `alter table ${name}?`,
+  apply: 'Apply',
   dropRelation: (name) => `drop ${name}?`,
   rename: (from, to) => `rename ${from} to ${to}?`,
   truncate: (name) => `truncate ${name}?`,
@@ -102,7 +104,7 @@ function setup(script: Script = {}) {
   } as unknown as Driver;
   const refresh = vi.fn();
   const opened: { binding: unknown; sql: string }[] = [];
-  const designers: { connectionId: string; scope: unknown }[] = [];
+  const designers: { connectionId: string; scope: unknown; table?: string }[] = [];
   const handlers = schemaCommandHandlers({
     actions,
     manager: { driverOf: () => Promise.resolve(driver) },
@@ -113,8 +115,8 @@ function setup(script: Script = {}) {
       opened.push({ binding, sql });
       return Promise.resolve();
     },
-    openDesigner: (connectionId, scope) => {
-      designers.push({ connectionId, scope });
+    openDesigner: (connectionId, scope, table) => {
+      designers.push({ connectionId, scope, ...(table === undefined ? {} : { table }) });
       return Promise.resolve();
     },
   });
@@ -353,6 +355,18 @@ describe('tables and objects', () => {
       scope: {},
     });
     expect(harness.designers[0]).toEqual({ connectionId: 'c1', scope: {} });
+  });
+
+  it('opens an existing table in the designer, but not a view', async () => {
+    const harness = setup();
+    await harness.handlers.designTable(table);
+    expect(harness.designers).toEqual([
+      { connectionId: 'c1', scope: { database: 'shop' }, table: 'orders' },
+    ]);
+    await harness.handlers.designTable({ ...table, tableKind: 'view' });
+    await harness.handlers.designTable(database);
+    await harness.handlers.designTable();
+    expect(harness.designers).toHaveLength(1);
   });
 
   it('drops a materialized view as one', async () => {

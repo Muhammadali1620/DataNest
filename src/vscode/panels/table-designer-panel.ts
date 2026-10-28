@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
 import { RpcPeer } from '../../shared/rpc';
 import {
@@ -13,11 +14,17 @@ export interface TableDesignerPanelDeps extends TableDesignerModelDeps {
   readonly logger: Logger;
 }
 
-/** The designer of a new table. Each "New Table…" opens its own panel. */
+/**
+ * The table designer. Each "New Table…" opens a panel of its own; "Edit Table…"
+ * brings back the panel of that table when it is already open.
+ */
 export class TableDesignerPanel implements vscode.Disposable {
   static readonly viewType = 'datanest.tableDesigner';
 
   private static readonly open = new Set<TableDesignerPanel>();
+
+  /** Identifies the edited table across panels; new tables have none. */
+  private key: string | undefined;
 
   private readonly panel: vscode.WebviewPanel;
   private readonly rpc: RpcPeer<TableDesignerProtocol['host'], TableDesignerProtocol['webview']>;
@@ -25,6 +32,14 @@ export class TableDesignerPanel implements vscode.Disposable {
   private disposed = false;
 
   static show(deps: TableDesignerPanelDeps): TableDesignerPanel {
+    const key = deps.table === undefined ? undefined : keyOf(deps, deps.table);
+    const existing = [...TableDesignerPanel.open].find(
+      (panel) => panel.key !== undefined && panel.key === key,
+    );
+    if (existing !== undefined) {
+      existing.panel.reveal();
+      return existing;
+    }
     const panel = new TableDesignerPanel(deps);
     TableDesignerPanel.open.add(panel);
     return panel;
@@ -36,15 +51,15 @@ export class TableDesignerPanel implements vscode.Disposable {
     }
   }
 
-  private constructor(deps: TableDesignerPanelDeps) {
+  private constructor(private readonly deps: TableDesignerPanelDeps) {
     const log = deps.logger.child('table-designer');
     this.model = new TableDesignerModel(deps);
-    const scope = this.model.scopeLabel;
     this.panel = createWebviewAppPanel(deps.extensionUri, {
       viewType: TableDesignerPanel.viewType,
-      title: scope === '' ? vscode.l10n.t('New Table') : vscode.l10n.t('New Table in {0}', scope),
+      title: this.title(),
       app: 'table-designer',
     });
+    this.key = deps.table === undefined ? undefined : keyOf(deps, deps.table);
     this.rpc = new RpcPeer({
       local: tableDesignerProtocol.host,
       remote: tableDesignerProtocol.webview,
@@ -59,13 +74,16 @@ export class TableDesignerPanel implements vscode.Disposable {
     this.rpc.handle('save', async (design) => {
       const result = await this.model.save(design);
       if (result.outcome === 'ran') {
-        // The table exists now; its structure lives in the tree from here on.
-        this.dispose();
+        // The table now is what was saved: show it as stored, under its new name.
+        const name = this.model.tableName;
+        this.key = name === undefined ? undefined : keyOf(deps, name);
+        this.panel.title = this.title();
+        await this.sendState();
       }
       return result;
     });
     this.rpc.on('ready', () => {
-      this.rpc.emit('state', this.model.state());
+      void this.sendState();
     });
     this.rpc.on('close', () => {
       this.dispose();
@@ -73,6 +91,29 @@ export class TableDesignerPanel implements vscode.Disposable {
     this.panel.onDidDispose(() => {
       this.dispose();
     });
+  }
+
+  private title(): string {
+    const scope = this.model.scopeLabel;
+    const name = this.model.tableName;
+    if (name !== undefined) {
+      return vscode.l10n.t('Table {0}', scope === '' ? name : `${scope}.${name}`);
+    }
+    return scope === '' ? vscode.l10n.t('New Table') : vscode.l10n.t('New Table in {0}', scope);
+  }
+
+  /** Loading an existing table can fail (it was dropped meanwhile); the user is told why. */
+  private async sendState(): Promise<void> {
+    try {
+      const state = await this.model.state();
+      if (!this.disposed) {
+        this.rpc.emit('state', state);
+      }
+    } catch (error) {
+      this.deps.logger.warn('Could not load the table for the designer', error);
+      void vscode.window.showErrorMessage(vscode.l10n.t('DataNest: {0}', errorMessage(error)));
+      this.dispose();
+    }
   }
 
   get isDisposed(): boolean {
@@ -88,4 +129,13 @@ export class TableDesignerPanel implements vscode.Disposable {
     this.rpc.dispose();
     this.panel.dispose();
   }
+}
+
+function keyOf(deps: TableDesignerPanelDeps, table: string): string {
+  return JSON.stringify([
+    deps.connectionId,
+    deps.scope.database ?? '',
+    deps.scope.schema ?? '',
+    table,
+  ]);
 }

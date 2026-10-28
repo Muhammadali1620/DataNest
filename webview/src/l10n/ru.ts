@@ -273,4 +273,14 @@ export const ru: Record<MessageKey, string> = {
   'designer.problem.indexColumns': 'Выберите хотя бы одну колонку, каждую по одному разу',
   'designer.problem.keyTarget': 'Выберите таблицу, на которую ссылается ключ',
   'designer.problem.keyTargetColumns': 'Выберите по одной колонке цели на каждую колонку ключа',
+  'designer.titleEdit': 'Таблица {0}',
+  'designer.revert': 'Вернуть как было',
+  'designer.unchanged': 'Сохранять нечего: таблица уже такая',
+  'designer.noChanges': 'Изменений пока нет',
+  'designer.note.orderIgnored':
+    'PostgreSQL не умеет переставлять колонки: новые добавляются в конец, порядок на странице не применяется',
+  'designer.note.rebuild':
+    'Для этого изменения SQLite пересоздаёт таблицу: строки копируются в новую таблицу, которая заменяет старую',
+  'designer.keptColumns': 'Вычисляемые колонки остаются как есть: {0}',
+  'designer.keptIndexes': 'Индексы, которые конструктор не меняет, остаются как есть: {0}',
 };

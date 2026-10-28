@@ -11,6 +11,7 @@ import {
   foreignKeySql,
   primaryKeySql,
 } from '../common/design-sql';
+import { postgresAlterTable } from './alter';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -57,7 +58,9 @@ export const postgresDdl: SchemaDdl = {
   dropDatabase: (name) => `DROP DATABASE ${quoteIdentifier(name)}`,
   createSchema: (name) => `CREATE SCHEMA ${quoteIdentifier(name)}`,
   dropSchema: (name, cascade) => `DROP SCHEMA ${quoteIdentifier(name)}${cascade ? ' CASCADE' : ''}`,
-  designer: { columnComments: true, tableComment: true, types: TYPES },
+  // Columns of an existing table keep their places: PostgreSQL cannot move them.
+  designer: { columnComments: true, tableComment: true, types: TYPES, reorder: false },
+  alterTable: postgresAlterTable,
   createTable: (table, design) => {
     const target = qualified({ ...table, name: design.name.trim() });
     const columns = design.columns.map((column) =>

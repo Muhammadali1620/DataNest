@@ -79,12 +79,39 @@ export interface TableDesign {
   readonly foreignKeys: readonly ForeignKeyDesign[];
 }
 
+/**
+ * What the designer keeps about an existing table besides the design: things it
+ * shows but does not edit, and what ALTER needs to know to leave them intact.
+ */
+export interface TableBackground {
+  /** The primary key constraint's own name, where the server has one (PostgreSQL). */
+  readonly primaryKeyName?: string;
+  /** Indexes the designer cannot express (expressions, partial, FULLTEXT, …): kept as they are. */
+  readonly fixedIndexes: readonly { readonly name: string; readonly description: string }[];
+  /** Computed columns: shown, never changed. */
+  readonly generatedColumns: readonly string[];
+  /** Index names that stand behind a UNIQUE constraint (PostgreSQL) or are automatic (SQLite). */
+  readonly constraintIndexes: readonly string[];
+  /** SQLite: SQL of the indexes and triggers a rebuild must create again. */
+  readonly rebuildSql: readonly string[];
+}
+
+/** The background of a table that does not exist yet. */
+export const NO_BACKGROUND: TableBackground = {
+  fixedIndexes: [],
+  generatedColumns: [],
+  constraintIndexes: [],
+  rebuildSql: [],
+};
+
 /** What a driver's designer can do, so the page shows only what will work. */
 export interface DesignerFeatures {
   readonly columnComments: boolean;
   readonly tableComment: boolean;
   /** Type names offered while typing; any other text is accepted too. */
   readonly types: readonly string[];
+  /** Existing columns can change places (MySQL with AFTER, SQLite by a rebuild). */
+  readonly reorder: boolean;
 }
 
 /** Words that may follow a length: `decimal(10,2) unsigned`, `time(3) with time zone`. */

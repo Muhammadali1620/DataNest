@@ -50,6 +50,7 @@ describe('connections view', () => {
       'datanest.schema.create',
       'datanest.schema.drop',
       'datanest.table.create',
+      'datanest.table.design',
       'datanest.table.drop',
       'datanest.table.rename',
       'datanest.table.truncate',
@@ -82,6 +83,7 @@ describe('connections view', () => {
       'datanest.table.drop',
       'datanest.table.rename',
       'datanest.table.truncate',
+      'datanest.table.design',
       'datanest.object.drop',
     ]) {
       await vscode.commands.executeCommand(id);

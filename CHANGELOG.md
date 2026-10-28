@@ -22,6 +22,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   primary key, auto numbering and comment, in any order, with the SQL it will run
   shown as you type. Indexes and foreign keys (with `ON DELETE` / `ON UPDATE`) are
   designed in tabs of their own; a key may point at the new table itself.
+- “Edit Table…” opens an existing table in the designer and turns the difference
+  into `ALTER TABLE`: renames stay renames, MySQL rewrites only the columns that
+  changed or moved, PostgreSQL applies everything in one transaction, SQLite changes
+  what it can in place and otherwise rebuilds the table, keeping rows, indexes,
+  triggers and views. Indexes the designer cannot express are kept as they are.
 
 ### Fixed
 
@@ -30,6 +35,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - SQLite results with two columns of the same name (`SELECT a.id, b.id …`) showed
   the last value in both; each column now keeps its own.
 - MariaDB sequences no longer appear among the tables.
+- MariaDB's “Unknown data type” error is reported as a syntax error.
 
 ## [0.2.0] - 2026-10-28
 

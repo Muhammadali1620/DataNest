@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type {
+    DesignPreview,
     TableDesignerProtocol,
     TableDesignerState,
   } from '../../../../src/shared/protocols/table-designer';
@@ -37,6 +38,9 @@
 
   let designerState = $state<TableDesignerState | undefined>(undefined);
   let design = $state<TableDesign | undefined>(undefined);
+  /** The design as the host sent it: what Revert goes back to. */
+  let original = $state<TableDesign | undefined>(undefined);
+  let notes = $state<DesignPreview['notes']>([]);
   let tab = $state<Tab>('columns');
   let statements = $state<string[]>([]);
   let previewError = $state<string | undefined>(undefined);
@@ -62,6 +66,7 @@
     const subscription = rpc.on('state', (next) => {
       designerState = next;
       design = next.design;
+      original = next.design;
       notice = undefined;
       showProblems = false;
     });
@@ -91,6 +96,7 @@
     try {
       const result = await rpc.request('preview', snapshot);
       statements = result.statements;
+      notes = result.notes;
       previewError = result.error;
     } catch (error) {
       statements = [];
@@ -151,6 +157,8 @@
       const { outcome } = await rpc.request('save', $state.snapshot(design));
       if (outcome === 'invalid') {
         notice = t('designer.invalid');
+      } else if (outcome === 'unchanged') {
+        notice = t('designer.unchanged');
       }
     } catch (error) {
       notice = t('designer.saveFailed', messageOf(error));
@@ -182,11 +190,25 @@
     design = next;
   }
 
-  const title = $derived(
-    designerState === undefined || designerState.scope === ''
-      ? t('designer.titleNew')
-      : t('designer.titleNewIn', designerState.scope),
-  );
+  function revert(): void {
+    design = original;
+    notice = undefined;
+    showProblems = false;
+  }
+
+  const editing = $derived(designerState?.mode === 'edit');
+
+  const title = $derived.by(() => {
+    if (designerState === undefined) {
+      return '';
+    }
+    const scope = designerState.scope;
+    if (designerState.mode === 'edit') {
+      const name = original?.name ?? '';
+      return t('designer.titleEdit', scope === '' ? name : `${scope}.${name}`);
+    }
+    return scope === '' ? t('designer.titleNew') : t('designer.titleNewIn', scope);
+  });
   const nameError = $derived(
     showProblems && tableProblems.some((problem) => problem.kind === 'table-name')
       ? t('designer.problem.tableName')
@@ -227,6 +249,20 @@
       {/if}
     </div>
 
+    {#if designerState.kept.columns.length > 0}
+      <p class="hint">{t('designer.keptColumns', designerState.kept.columns.join(', '))}</p>
+    {/if}
+    {#if designerState.kept.indexes.length > 0}
+      <p class="hint">
+        {t(
+          'designer.keptIndexes',
+          designerState.kept.indexes
+            .map((index) => `${index.name} ${index.description}`)
+            .join('; '),
+        )}
+      </p>
+    {/if}
+
     <div class="tabs" role="tablist">
       {#each TABS as item (item.id)}
         <button
@@ -245,6 +281,7 @@
         {design}
         driver={designerState.driver}
         features={designerState.features}
+        canReorder={!editing || designerState.features.reorder}
         {problems}
         {showProblems}
         {t}
@@ -271,8 +308,15 @@
         {#if previewError !== undefined}
           <p class="error" role="alert">{previewError}</p>
         {:else if statements.length === 0}
-          <p class="hint">{t('designer.sqlEmpty')}</p>
+          <p class="hint">
+            {editing && problems.length === 0 ? t('designer.noChanges') : t('designer.sqlEmpty')}
+          </p>
         {:else}
+          {#each notes as note (note)}
+            <p class="note" role="note">
+              {note === 'rebuild' ? t('designer.note.rebuild') : t('designer.note.orderIgnored')}
+            </p>
+          {/each}
           <pre data-testid="sql">{statements.map((statement) => `${statement};`).join('\n\n')}</pre>
         {/if}
       </section>
@@ -286,6 +330,9 @@
         <span class="notice" data-testid="notice" role="status">{notice}</span>
       {/if}
       <span class="spacer"></span>
+      {#if editing}
+        <button class="button secondary" onclick={revert}>{t('designer.revert')}</button>
+      {/if}
       <button
         class="button secondary"
         onclick={() => {
@@ -373,5 +420,12 @@
 
   .notice {
     color: var(--vscode-descriptionForeground);
+  }
+
+  .note {
+    margin: 0 0 8px;
+    padding: 6px 8px;
+    border-left: 3px solid var(--vscode-editorWarning-foreground, var(--vscode-focusBorder));
+    background: var(--vscode-textBlockQuote-background);
   }
 </style>

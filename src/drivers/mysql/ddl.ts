@@ -9,6 +9,7 @@ import {
   foreignKeySql,
   primaryKeySql,
 } from '../common/design-sql';
+import { mysqlAlterTable } from './alter';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -53,7 +54,8 @@ function qualified(object: { database?: string; name: string }): string {
 export const mysqlDdl: SchemaDdl = {
   createDatabase: (name) => `CREATE DATABASE ${quoteIdentifier(name)}`,
   dropDatabase: (name) => `DROP DATABASE ${quoteIdentifier(name)}`,
-  designer: { columnComments: true, tableComment: true, types: TYPES },
+  designer: { columnComments: true, tableComment: true, types: TYPES, reorder: true },
+  alterTable: mysqlAlterTable,
   createTable: (table, design) => {
     const columns = design.columns.map((column) =>
       columnSql(column, {

@@ -203,18 +203,24 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
     it('lists foreign keys with their targets', async () => {
       const scope = { database: 'datanest_test' };
       const keys = await session.metadata.listForeignKeys({ ...scope, name: 'order_items' });
+      // MariaDB names the default action RESTRICT; for InnoDB it is the same as NO ACTION.
+      const byDefault = serverId === 'mariadb' ? 'RESTRICT' : 'NO ACTION';
       expect(keys).toEqual([
         {
           name: 'fk_items_order',
           columns: ['order_id'],
           target: { database: 'datanest_test', name: 'orders' },
           targetColumns: ['id'],
+          onDelete: 'CASCADE',
+          onUpdate: byDefault,
         },
         {
           name: 'fk_items_product',
           columns: ['product_id'],
           target: { database: 'datanest_test', name: 'products' },
           targetColumns: ['id'],
+          onDelete: byDefault,
+          onUpdate: byDefault,
         },
       ]);
       expect(await session.metadata.listForeignKeys({ ...scope, name: 'customers' })).toEqual([]);

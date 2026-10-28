@@ -1,30 +1,38 @@
 // What the table designer panel does, without `vscode`: the state it sends, the
-// preview it builds and how a save goes. The panel only wires this to a webview.
+// preview it builds and how a save goes, for a new table and for an existing one.
+// The panel only wires this to a webview.
 
 import { errorMessage } from '../../core/errors';
-import type { ObjectScope } from '../../core/model/objects';
-import type { Driver, MetadataReader } from '../../drivers/driver';
+import type { ObjectScope, TableRef } from '../../core/model/objects';
+import type { AlterNote, Driver, MetadataReader } from '../../drivers/driver';
 import type {
-  TableDesignerState,
   DesignPreview,
   SaveOutcome,
+  TableDesignerState,
 } from '../../shared/protocols/table-designer';
 import { designProblems, newTableDesign, type TableDesign } from '../../shared/table-design';
 import { actionSql, type SchemaAction } from '../../services/schema-actions';
+import { designFromStructure, type LoadedTable } from '../../services/table-structure';
 import type { PerformOutcome } from '../tree/schema-commands';
 
 export interface TableDesignerTexts {
   createTable(name: string): string;
   readonly create: string;
+  alterTable(name: string): string;
+  readonly apply: string;
 }
 
 export interface TableDesignerModelDeps {
   readonly connectionId: string;
   readonly scope: ObjectScope;
+  /** The table to edit; absent when designing a new one. */
+  readonly table?: string;
   readonly driver: Pick<Driver, 'id' | 'dialect'>;
   readonly texts: TableDesignerTexts;
   /** The structure of the table's scope, read through the metadata cache. */
-  readonly metadata: () => Promise<Pick<MetadataReader, 'listTables' | 'listColumns'>>;
+  readonly metadata: () => Promise<
+    Pick<MetadataReader, 'listTables' | 'listColumns' | 'describeTable'>
+  >;
   readonly perform: (
     connectionId: string,
     action: SchemaAction,
@@ -34,7 +42,13 @@ export interface TableDesignerModelDeps {
 }
 
 export class TableDesignerModel {
-  constructor(private readonly deps: TableDesignerModelDeps) {}
+  /** The table being edited as it is now; undefined while designing a new one. */
+  private table: string | undefined;
+  private loaded: LoadedTable | undefined;
+
+  constructor(private readonly deps: TableDesignerModelDeps) {
+    this.table = deps.table;
+  }
 
   /** `shop`, `shop.public`, or nothing for a file database. */
   get scopeLabel(): string {
@@ -42,31 +56,60 @@ export class TableDesignerModel {
     return [database, schema].filter((part) => part !== undefined).join('.');
   }
 
-  state(): TableDesignerState {
+  /** The name of the edited table, for the panel title; undefined for a new one. */
+  get tableName(): string | undefined {
+    return this.table;
+  }
+
+  async state(): Promise<TableDesignerState> {
     const { driver } = this.deps;
     const { designer } = driver.dialect.ddl;
+    const features = {
+      columnComments: designer.columnComments,
+      tableComment: designer.tableComment,
+      types: [...designer.types],
+      reorder: designer.reorder,
+    };
+    if (this.table === undefined) {
+      return {
+        mode: 'create',
+        driver: driver.id,
+        scope: this.scopeLabel,
+        features,
+        design: newTableDesign(driver.id),
+        kept: { indexes: [], columns: [] },
+      };
+    }
+    const loaded = await this.load(this.table);
     return {
-      mode: 'create',
+      mode: 'edit',
       driver: driver.id,
       scope: this.scopeLabel,
-      features: {
-        columnComments: designer.columnComments,
-        tableComment: designer.tableComment,
-        types: [...designer.types],
+      features,
+      design: loaded.design,
+      kept: {
+        indexes: loaded.background.fixedIndexes.map((index) => ({ ...index })),
+        columns: [...loaded.background.generatedColumns],
       },
-      design: newTableDesign(driver.id),
     };
   }
 
-  /** The SQL of a design; nothing while the design still has problems. */
+  /** The SQL of a design; nothing while it has problems or changes nothing. */
   preview(design: TableDesign): DesignPreview {
     if (designProblems(design, this.deps.driver.id).length > 0) {
-      return { statements: [] };
+      return { statements: [], notes: [] };
     }
     try {
-      return { statements: actionSql(this.action(design), this.deps.driver.dialect.ddl) };
+      if (this.loaded !== undefined) {
+        const plan = this.plan(design);
+        return { statements: [...plan.statements], notes: [...plan.notes] };
+      }
+      return {
+        statements: actionSql(this.action(design), this.deps.driver.dialect.ddl),
+        notes: [],
+      };
     } catch (error) {
-      return { statements: [], error: errorMessage(error) };
+      return { statements: [], notes: [], error: errorMessage(error) };
     }
   }
 
@@ -84,22 +127,74 @@ export class TableDesignerModel {
     return { columns: columns.map((column) => column.name) };
   }
 
+  /**
+   * Shows the SQL and runs it if the user agrees. After a successful run the model
+   * holds the table as it now is, so the next save starts from there.
+   */
   async save(design: TableDesign): Promise<SaveOutcome> {
     // The page checks the same rules, but the page is not trusted (§5).
     if (designProblems(design, this.deps.driver.id).length > 0) {
       return { outcome: 'invalid' };
     }
+    if (this.loaded !== undefined && this.plan(design).statements.length === 0) {
+      return { outcome: 'unchanged' };
+    }
     const { texts } = this.deps;
+    const name = design.name.trim();
     const outcome = await this.deps.perform(
       this.deps.connectionId,
       this.action(design),
-      texts.createTable(design.name.trim()),
-      texts.create,
+      this.loaded === undefined ? texts.createTable(name) : texts.alterTable(this.table ?? name),
+      this.loaded === undefined ? texts.create : texts.apply,
     );
+    if (outcome === 'ran') {
+      this.table = name;
+      this.loaded = undefined;
+    }
     return { outcome };
   }
 
+  private plan(design: TableDesign): {
+    statements: readonly string[];
+    notes: readonly AlterNote[];
+  } {
+    const loaded = this.loaded;
+    if (loaded === undefined) {
+      return { statements: [], notes: [] };
+    }
+    return this.deps.driver.dialect.ddl.alterTable(
+      this.ref(),
+      loaded.design,
+      design,
+      loaded.background,
+    );
+  }
+
+  private ref(): TableRef {
+    return { ...this.deps.scope, name: this.table ?? '' };
+  }
+
   private action(design: TableDesign): SchemaAction {
-    return { kind: 'createTable', table: { ...this.deps.scope, name: design.name.trim() }, design };
+    if (this.loaded !== undefined) {
+      return {
+        kind: 'alterTable',
+        table: this.ref(),
+        before: this.loaded.design,
+        after: design,
+        background: this.loaded.background,
+      };
+    }
+    return {
+      kind: 'createTable',
+      table: { ...this.deps.scope, name: design.name.trim() },
+      design,
+    };
+  }
+
+  private async load(table: string): Promise<LoadedTable> {
+    const metadata = await this.deps.metadata();
+    const ref = { ...this.deps.scope, name: table };
+    this.loaded = designFromStructure(ref, await metadata.describeTable(ref));
+    return this.loaded;
   }
 }

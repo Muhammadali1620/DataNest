@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
 import { postgresDialect } from '../../../src/drivers/postgres/dialect';
-import { newTableDesign } from '../../../src/shared/table-design';
+import { NO_BACKGROUND, newTableDesign } from '../../../src/shared/table-design';
 import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import {
   actionDatabase,
+  actionRecovery,
   actionScript,
   actionSql,
   SchemaActions,
@@ -69,6 +70,32 @@ describe('actionSql', () => {
   });
 });
 
+describe('alterTable actions', () => {
+  const before = newTableDesign('postgres', 'orders');
+  const action = {
+    kind: 'alterTable' as const,
+    table: { database: 'shop', schema: 'public', name: 'orders' },
+    before,
+    after: { ...before, name: 'purchases' },
+    background: NO_BACKGROUND,
+  };
+
+  it('runs the plan of the dialect inside the table database', () => {
+    expect(actionSql(action, postgresDialect.ddl)).toEqual([
+      'BEGIN',
+      'ALTER TABLE "public"."orders" RENAME TO "purchases"',
+      'COMMIT',
+    ]);
+    expect(actionDatabase(action)).toBe('shop');
+  });
+
+  it('knows how to recover from a failed plan, and other actions need nothing', () => {
+    expect(actionRecovery(action, postgresDialect.ddl)).toEqual(['ROLLBACK']);
+    expect(actionRecovery(action, mysqlDialect.ddl)).toEqual([]);
+    expect(actionRecovery({ kind: 'dropDatabase', name: 'x' }, postgresDialect.ddl)).toEqual([]);
+  });
+});
+
 describe('actionScript', () => {
   it('ends each statement with a semicolon and separates them by a blank line', () => {
     expect(actionScript(['CREATE TABLE a (id int)', "COMMENT ON TABLE a IS 'x'"])).toBe(
@@ -126,6 +153,48 @@ describe('SchemaActions', () => {
     expect(await actions.sqlOf(config.id, { kind: 'truncateTable', table: { name: 't' } })).toEqual(
       ['TRUNCATE "t"'],
     );
+  });
+
+  it('rolls back a failed ALTER and lets the first error through', async () => {
+    const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
+    drivers.driver('mysql').failExecuteWhen = (sql) => sql.startsWith('ALTER');
+    const design = newTableDesign('mysql', 'orders');
+    await expect(
+      actions.run(
+        config.id,
+        {
+          kind: 'alterTable',
+          table: { name: 'orders' },
+          before: design,
+          after: { ...design, name: 'x' },
+          background: NO_BACKGROUND,
+        },
+        ['BEGIN', 'ALTER x', 'COMMIT'],
+      ),
+    ).rejects.toThrow('Not allowed: ALTER x');
+    // The fake dialect recovers with ROLLBACK; COMMIT never runs.
+    expect(drivers.driver('mysql').lastSession?.executed).toEqual(['BEGIN', 'ALTER x', 'ROLLBACK']);
+    expect(invalidated).toEqual([config.id]);
+  });
+
+  it('keeps going when a recovery statement fails too', async () => {
+    const config = await store.add({ name: 'L', driver: 'mysql', host: 'h' });
+    drivers.driver('mysql').failExecuteWhen = (sql) => sql !== 'BEGIN';
+    const design = newTableDesign('mysql', 'orders');
+    await expect(
+      actions.run(
+        config.id,
+        {
+          kind: 'alterTable',
+          table: { name: 'orders' },
+          before: design,
+          after: { ...design, name: 'x' },
+          background: NO_BACKGROUND,
+        },
+        ['BEGIN', 'ALTER x'],
+      ),
+    ).rejects.toThrow('Not allowed: ALTER x');
+    expect(drivers.driver('mysql').lastSession?.executed).toEqual(['BEGIN', 'ALTER x', 'ROLLBACK']);
   });
 
   it('stops at the first failing statement', async () => {

@@ -38,6 +38,7 @@ const noMetadata: MetadataReader = {
   listForeignKeys: () => Promise.resolve([]),
   listObjects: () => Promise.resolve([]),
   listIndexes: () => Promise.resolve([]),
+  describeTable: () => Promise.reject(new Error('no table')),
   getDefinition: () => Promise.resolve([]),
 };
 

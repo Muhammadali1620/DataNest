@@ -45,6 +45,8 @@ export function buildState(
           }
         : { edit: { editable: false, reason: summary.edit.reason } }),
     changedCells: summary.changedCells,
+    insertedRows: summary.insertedRows,
+    deletedRows: summary.deletedRows,
     revision: summary.revision,
   }));
   // The newest tab is the one the user just produced, unless they picked another.

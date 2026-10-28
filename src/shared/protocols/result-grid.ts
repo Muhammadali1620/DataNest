@@ -21,6 +21,9 @@ import {
 /** Rows the page may ask for in one request. */
 export const MAX_WINDOW_ROWS = 2000;
 
+/** Rows one row action may name; a guard against a nonsense payload. */
+export const MAX_ACTION_ROWS = 100_000;
+
 /** Rows the page keeps around the visible range. */
 export const WINDOW_OVERSCAN = 50;
 
@@ -89,8 +92,12 @@ const tabSchema = object({
       ),
     }),
   ),
-  /** Cells with a pending change. */
+  /** Cells changed in rows that exist on the server. */
   changedCells: number({ integer: true, min: 0 }),
+  /** New rows waiting to be inserted; the grid shows them after the others. */
+  insertedRows: number({ integer: true, min: 0 }),
+  /** Rows marked for deletion. */
+  deletedRows: number({ integer: true, min: 0 }),
   /** Grows with every pending-change update; a page reloads its rows when it moves. */
   revision: number({ integer: true, min: 0 }),
   /** How the result is ordered right now; absent means the server's own order. */
@@ -125,6 +132,14 @@ const windowSchema = object({
     }),
     { maxLength: MAX_WINDOW_ROWS * 100 },
   ),
+  /** Which rows of this window are new or marked for deletion. */
+  states: array(
+    object({
+      row: number({ integer: true, min: 0 }),
+      state: literal('inserted', 'deleted'),
+    }),
+    { maxLength: MAX_WINDOW_ROWS },
+  ),
 });
 
 const editInput = union(
@@ -137,6 +152,7 @@ const editInput = union(
 export const EDIT_ERRORS = [
   'not-editable',
   'no-such-row',
+  'row-deleted',
   'read-only-column',
   'not-null',
   'invalid-integer',
@@ -188,6 +204,20 @@ export const resultGridProtocol = defineProtocol({
           input: editInput,
         }),
         result: object({ ok: boolean(), error: optional(literal(...EDIT_ERRORS)) }),
+      },
+      /** Page → host: add, duplicate, delete or restore rows; queued, not saved. */
+      rowAction: {
+        params: object({
+          resultId,
+          action: literal('add', 'duplicate', 'delete', 'restore'),
+          rows: array(number({ integer: true, min: 0 }), { maxLength: MAX_ACTION_ROWS }),
+        }),
+        result: object({
+          ok: boolean(),
+          error: optional(literal(...EDIT_ERRORS)),
+          /** Where the first new row is shown, so the page can scroll to it. */
+          row: optional(number({ integer: true, min: 0 })),
+        }),
       },
       /** Page → host: the rows of a visible range. */
       rows: {

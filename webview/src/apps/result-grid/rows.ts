@@ -11,6 +11,12 @@ export interface ChangeMark {
   readonly kind: 'value' | 'default';
 }
 
+/** A row that is new or marked for deletion, as the host reports it. */
+export interface StateMark {
+  readonly row: number;
+  readonly state: 'inserted' | 'deleted';
+}
+
 export interface RowRange {
   readonly offset: number;
   readonly limit: number;
@@ -41,6 +47,8 @@ export class RowCache {
   private rows = new Map<number, readonly CellValue[]>();
   /** Pending changes of cells, keyed `row:column`. */
   private marks = new Map<string, 'value' | 'default'>();
+  /** Rows that are new or marked for deletion. */
+  private states = new Map<number, 'inserted' | 'deleted'>();
   private total = 0;
 
   get rowCount(): number {
@@ -55,6 +63,7 @@ export class RowCache {
   reset(rowCount = 0): void {
     this.rows = new Map();
     this.marks = new Map();
+    this.states = new Map();
     this.total = Math.max(0, Math.trunc(rowCount));
   }
 
@@ -64,6 +73,7 @@ export class RowCache {
     rows: readonly (readonly CellValue[])[],
     rowCount: number,
     changes: readonly ChangeMark[] = [],
+    states: readonly StateMark[] = [],
   ): void {
     const total = Math.max(0, Math.trunc(rowCount));
     if (total !== this.total) {
@@ -78,6 +88,11 @@ export class RowCache {
           this.marks.delete(key);
         }
       }
+      for (const row of [...this.states.keys()]) {
+        if (row >= total) {
+          this.states.delete(row);
+        }
+      }
     }
     // The window is the truth for its rows, so marks of an edit that was undone go.
     for (const key of [...this.marks.keys()]) {
@@ -88,6 +103,12 @@ export class RowCache {
     }
     for (const change of changes) {
       this.marks.set(`${change.row}:${change.column}`, change.kind);
+    }
+    for (let row = offset; row < offset + rows.length; row++) {
+      this.states.delete(row);
+    }
+    for (const mark of states) {
+      this.states.set(mark.row, mark.state);
     }
     for (const [position, row] of rows.entries()) {
       const index = offset + position;
@@ -100,6 +121,11 @@ export class RowCache {
   /** How a cell was changed and not yet saved, if it was. */
   changeAt(row: number, column: number): 'value' | 'default' | undefined {
     return this.marks.get(`${row}:${column}`);
+  }
+
+  /** Whether a row is new or marked for deletion. */
+  stateAt(row: number): 'inserted' | 'deleted' | undefined {
+    return this.states.get(row);
   }
 
   get(index: number): readonly CellValue[] | undefined {

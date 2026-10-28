@@ -7,9 +7,16 @@ import type { ResultEdit } from '../core/model/editability';
 import type { ResultColumn } from '../drivers/driver';
 import { type SortDirection, sortRows } from '../shared/cell-compare';
 import { findRows, type SearchHits } from '../shared/cell-search';
-import type { CellValue } from '../shared/cell-value';
+import {
+  type CellChange,
+  type ChangedCell,
+  PendingEdits,
+  type PendingRow,
+  type ResultRow,
+  type RowMark,
+} from './pending-edits';
 
-export type ResultRow = readonly CellValue[];
+export type { CellChange, ChangedCell, PendingRow, ResultRow };
 
 /** A page of a table view, so the panel can offer Prev/Next and a count. */
 export interface ResultPage {
@@ -50,23 +57,14 @@ export interface ResultSummary {
   readonly page?: ResultPage;
   /** Whether rows can be edited in place; absent for statements that return no rows. */
   readonly edit?: ResultEdit;
-  /** Cells with a pending change; zero when nothing waits to be saved. */
+  /** Cells changed in rows that exist on the server; zero when nothing waits to be saved. */
   readonly changedCells: number;
+  /** New rows waiting to be inserted; the grid shows them after the server's rows. */
+  readonly insertedRows: number;
+  /** Rows marked for deletion. */
+  readonly deletedRows: number;
   /** Grows with every change to the pending edits, so a page can tell its rows went stale. */
   readonly revision: number;
-}
-
-/** A cell the user changed but has not saved yet. */
-export type CellChange =
-  | { readonly kind: 'value'; readonly value: CellValue }
-  /** The column's own default, written as the DEFAULT keyword. */
-  | { readonly kind: 'default' };
-
-/** Where a pending change sits in the rows as they are shown. */
-export interface ChangedCell {
-  readonly row: number;
-  readonly column: number;
-  readonly kind: CellChange['kind'];
 }
 
 export interface ResultError {
@@ -77,24 +75,28 @@ export interface ResultError {
 }
 
 /** A result with its rows; only the store sees this whole object. */
-interface StoredResult extends Omit<ResultSummary, 'changedCells'> {
+interface StoredResult extends Omit<
+  ResultSummary,
+  'changedCells' | 'insertedRows' | 'deletedRows' | 'revision'
+> {
   /** Rows in the order they are shown. */
   rows: ResultRow[];
   /** The order the server returned, so sorting can be undone. */
   readonly original: readonly ResultRow[];
   sort?: ResultSort;
   /** Pending changes, keyed by the row object so sorting cannot move them. */
-  readonly changes: Map<ResultRow, Map<number, CellChange>>;
-  revision: number;
+  readonly pending: PendingEdits;
 }
 
 export interface ResultWindow {
   readonly offset: number;
   readonly rows: ResultRow[];
-  /** Total rows held, so the grid can size its scrollbar. */
+  /** Rows shown in all (server rows, then new ones), so the grid can size its scrollbar. */
   readonly rowCount: number;
   /** Pending changes inside this window; `rows` already show the changed values. */
   readonly changes: ChangedCell[];
+  /** Which rows of the window are new or marked for deletion. */
+  readonly states: RowMark[];
 }
 
 export interface NewResult {
@@ -139,8 +141,7 @@ export class ResultStore {
       columns: result.columns,
       rows: result.rows,
       original: [...result.rows],
-      changes: new Map(),
-      revision: 0,
+      pending: new PendingEdits(),
       rowCount: result.rows.length,
       truncated: result.truncated,
       ...(result.affectedRows === undefined ? {} : { affectedRows: result.affectedRows }),
@@ -185,27 +186,22 @@ export class ResultStore {
     if (stored === undefined) {
       return undefined;
     }
-    const from = Math.max(0, Math.min(Math.trunc(offset), stored.rows.length));
-    const to = Math.min(stored.rows.length, from + Math.max(0, Math.trunc(limit)));
-    const rows: ResultRow[] = [];
-    const changes: ChangedCell[] = [];
-    for (let index = from; index < to; index++) {
-      const row = stored.rows[index];
-      const pending = row === undefined ? undefined : stored.changes.get(row);
-      if (row === undefined || pending === undefined) {
-        rows.push(row ?? []);
-        continue;
-      }
-      // The grid shows the edited value; a DEFAULT has none, so it shows as NULL
-      // and the change list tells the page what it really is.
-      const shown = [...row];
-      for (const [column, change] of pending) {
-        shown[column] = change.kind === 'value' ? change.value : null;
-        changes.push({ row: index, column, kind: change.kind });
-      }
-      rows.push(shown);
-    }
-    return { offset: from, rows, rowCount: stored.rows.length, changes };
+    const total = stored.rows.length + stored.pending.insertedRows;
+    const from = Math.max(0, Math.min(Math.trunc(offset), total));
+    const to = Math.min(total, from + Math.max(0, Math.trunc(limit)));
+    const insertable = (column: number): boolean => {
+      const edit = stored.edit;
+      const info = edit?.editable === true ? edit.columns[column] : undefined;
+      return info !== undefined && info !== null;
+    };
+    const overlaid = stored.pending.overlay(
+      stored.rows,
+      from,
+      to,
+      stored.columns.length,
+      insertable,
+    );
+    return { offset: from, rowCount: total, ...overlaid };
   }
 
   /** The row shown at an index, as the server returned it (without pending changes). */
@@ -213,36 +209,105 @@ export class ResultStore {
     return this.results.get(id)?.rows[index];
   }
 
+  /** True when the index is past the server's rows, i.e. a row waiting to be inserted. */
+  isInsertedRow(id: string, index: number): boolean {
+    const stored = this.results.get(id);
+    return (
+      stored !== undefined &&
+      index >= stored.rows.length &&
+      stored.pending.insertedRow(index - stored.rows.length) !== undefined
+    );
+  }
+
+  isDeletedRow(id: string, index: number): boolean {
+    const stored = this.results.get(id);
+    const row = stored?.rows[index];
+    return row !== undefined && stored?.pending.isDeleted(row) === true;
+  }
+
   /** The pending change of one cell, if any. */
   changeAt(id: string, index: number, column: number): CellChange | undefined {
     const stored = this.results.get(id);
-    const row = stored?.rows[index];
-    return row === undefined ? undefined : stored?.changes.get(row)?.get(column);
+    if (stored === undefined) {
+      return undefined;
+    }
+    const fresh = stored.pending.insertedRow(index - stored.rows.length);
+    if (index >= stored.rows.length) {
+      return fresh?.get(column);
+    }
+    const row = stored.rows[index];
+    return row === undefined ? undefined : stored.pending.changeOf(row, column);
   }
 
   /**
-   * Records, or with `undefined` withdraws, the pending change of one cell. A change
-   * back to what the server has is withdrawn by the caller, so nothing is queued
-   * that would not alter the row.
+   * Records, or with `undefined` withdraws, the pending change of one cell, in a
+   * server row or in a new one. False when there is no such cell.
    */
   setChange(id: string, index: number, column: number, change: CellChange | undefined): boolean {
     const stored = this.results.get(id);
-    const row = stored?.rows[index];
-    if (stored === undefined || row === undefined || column < 0 || column >= row.length) {
+    if (stored === undefined || column < 0 || column >= stored.columns.length) {
       return false;
     }
-    const cells = stored.changes.get(row) ?? new Map<number, CellChange>();
-    if (change === undefined) {
-      cells.delete(column);
+    let done: boolean;
+    if (index >= stored.rows.length) {
+      done = stored.pending.setInsertedChange(index - stored.rows.length, column, change);
     } else {
-      cells.set(column, change);
+      const row = stored.rows[index];
+      done = row !== undefined;
+      if (row !== undefined) {
+        stored.pending.setChange(row, column, change);
+      }
     }
-    if (cells.size === 0) {
-      stored.changes.delete(row);
+    if (done) {
+      this.notify(stored.documentUri);
+    }
+    return done;
+  }
+
+  /** Queues a new row; returns where the grid shows it. */
+  addRow(id: string, cells?: PendingRow): number | undefined {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return undefined;
+    }
+    const index = stored.rows.length + stored.pending.addInserted(cells);
+    this.notify(stored.documentUri);
+    return index;
+  }
+
+  /**
+   * Takes a row out of the result: a server row is marked for deletion (and can be
+   * restored), a new row is simply dropped.
+   */
+  deleteRow(id: string, index: number): boolean {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return false;
+    }
+    let done: boolean;
+    if (index >= stored.rows.length) {
+      done = stored.pending.removeInserted(index - stored.rows.length);
     } else {
-      stored.changes.set(row, cells);
+      const row = stored.rows[index];
+      done = row !== undefined;
+      if (row !== undefined) {
+        stored.pending.setDeleted(row, true);
+      }
     }
-    stored.revision += 1;
+    if (done) {
+      this.notify(stored.documentUri);
+    }
+    return done;
+  }
+
+  /** Takes the deletion mark off a server row. */
+  restoreRow(id: string, index: number): boolean {
+    const stored = this.results.get(id);
+    const row = stored?.rows[index];
+    if (stored === undefined || row === undefined) {
+      return false;
+    }
+    stored.pending.setDeleted(row, false);
     this.notify(stored.documentUri);
     return true;
   }
@@ -319,10 +384,12 @@ export class ResultStore {
 }
 
 function summaryOf(stored: StoredResult): ResultSummary {
-  const { rows: _rows, original: _original, changes, ...summary } = stored;
-  let changedCells = 0;
-  for (const cells of changes.values()) {
-    changedCells += cells.size;
-  }
-  return { ...summary, changedCells };
+  const { rows: _rows, original: _original, pending, ...summary } = stored;
+  return {
+    ...summary,
+    changedCells: pending.changedCells,
+    insertedRows: pending.insertedRows,
+    deletedRows: pending.deletedRows,
+    revision: pending.revision,
+  };
 }

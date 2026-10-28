@@ -62,6 +62,100 @@ describe('sameValue', () => {
   });
 });
 
+describe('ResultEditor rows', () => {
+  it('adds a row at the end and says where', () => {
+    const { store, id, editor } = setup();
+    expect(editor.rowAction(id, 'add', [])).toEqual({ ok: true, row: 2 });
+    expect(store.get(id)?.insertedRows).toBe(1);
+  });
+
+  it('lets the cells of a new row be typed in, and NULL be set on a nullable one', () => {
+    const { store, id, editor } = setup();
+    editor.rowAction(id, 'add', []);
+    expect(editor.editCell(id, 2, 1, { kind: 'text', text: 'carol' })).toEqual({ ok: true });
+    expect(editor.editCell(id, 2, 2, { kind: 'null' })).toEqual({ ok: true });
+    expect(store.changeAt(id, 2, 1)).toEqual({ kind: 'value', value: 'carol' });
+    expect(store.changeAt(id, 2, 2)).toEqual({ kind: 'value', value: null });
+    // Typing the same text a server row has is still a value for a new row.
+    expect(editor.editCell(id, 2, 2, { kind: 'text', text: '30' })).toEqual({ ok: true });
+    expect(store.changeAt(id, 2, 2)).toEqual({ kind: 'value', value: 30 });
+  });
+
+  it('refuses NULL on a NOT NULL column of a new row', () => {
+    const { id, editor } = setup();
+    editor.rowAction(id, 'add', []);
+    expect(editor.editCell(id, 2, 3, { kind: 'null' })).toEqual({ ok: false, error: 'not-null' });
+  });
+
+  it('duplicates rows, leaving the key and binary columns to the server', () => {
+    const { store, id, editor } = setup();
+    editor.editCell(id, 0, 1, { kind: 'text', text: 'edited' });
+    expect(editor.rowAction(id, 'duplicate', [0, 1])).toEqual({ ok: true, row: 2 });
+    const rows = store.window(id, 2, 2)?.rows;
+    // id (key) and photo (binary) are unset; the edited text is carried over.
+    expect(rows?.[0]).toEqual([null, 'edited', 30, 'new', null, null]);
+    expect(rows?.[1]).toEqual([null, null, null, 'paid', null, null]);
+    expect(store.get(id)?.insertedRows).toBe(2);
+  });
+
+  it('does not copy a value that is only a pending DEFAULT', () => {
+    const { store, id, editor } = setup();
+    editor.editCell(id, 0, 1, { kind: 'default' });
+    editor.rowAction(id, 'duplicate', [0]);
+    expect(store.changeAt(id, 2, 1)).toBeUndefined();
+  });
+
+  it('duplicates a row only once even if named twice', () => {
+    const { store, id, editor } = setup();
+    editor.rowAction(id, 'duplicate', [1, 1]);
+    expect(store.get(id)?.insertedRows).toBe(1);
+  });
+
+  it('deletes and restores server rows', () => {
+    const { store, id, editor } = setup();
+    expect(editor.rowAction(id, 'delete', [0, 1])).toEqual({ ok: true });
+    expect(store.get(id)?.deletedRows).toBe(2);
+    expect(editor.rowAction(id, 'restore', [0])).toEqual({ ok: true });
+    expect(store.get(id)?.deletedRows).toBe(1);
+  });
+
+  it('deletes new rows together with server rows, whatever the order', () => {
+    const { store, id, editor } = setup();
+    editor.rowAction(id, 'add', []);
+    editor.rowAction(id, 'add', []);
+    editor.rowAction(id, 'add', []);
+    // Rows 2, 3 and 4 are new; dropping 2 and 3 must not shift what 4 means.
+    expect(editor.rowAction(id, 'delete', [2, 3, 1])).toEqual({ ok: true });
+    expect(store.get(id)).toMatchObject({ insertedRows: 1, deletedRows: 1 });
+  });
+
+  it('does not edit a row that is marked for deletion', () => {
+    const { id, editor } = setup();
+    editor.rowAction(id, 'delete', [0]);
+    expect(editor.editCell(id, 0, 1, { kind: 'text', text: 'x' })).toEqual({
+      ok: false,
+      error: 'row-deleted',
+    });
+    editor.rowAction(id, 'restore', [0]);
+    expect(editor.editCell(id, 0, 1, { kind: 'text', text: 'x' })).toEqual({ ok: true });
+  });
+
+  it('refuses rows that are not there and read-only results', () => {
+    const { id, editor } = setup();
+    expect(editor.rowAction(id, 'delete', [99])).toEqual({ ok: false, error: 'no-such-row' });
+    expect(editor.rowAction(id, 'duplicate', [99])).toEqual({ ok: false, error: 'no-such-row' });
+    expect(editor.rowAction(id, 'restore', [99])).toEqual({ ok: false, error: 'no-such-row' });
+    const readOnly = setup({ edit: { editable: false, reason: 'no-key' } });
+    for (const action of ['add', 'duplicate', 'delete', 'restore'] as const) {
+      expect(readOnly.editor.rowAction(readOnly.id, action, [0])).toEqual({
+        ok: false,
+        error: 'not-editable',
+      });
+    }
+    expect(editor.rowAction('result-404', 'add', [])).toEqual({ ok: false, error: 'not-editable' });
+  });
+});
+
 describe('ResultEditor', () => {
   it('queues a typed value, parsed by the column type', () => {
     const { store, id, editor } = setup();

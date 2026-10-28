@@ -84,7 +84,7 @@ export const en = {
   'grid.readOnly.key-not-selected': 'select the key columns too, so each row can be identified',
   'grid.readOnly.columns-mismatch': 'the result columns do not match the table columns',
   'grid.readOnly.failed': 'the table structure could not be read',
-  'grid.editHint': 'Double-click or press Enter to edit · Delete sets NULL',
+  'grid.editHint': 'Double-click or Enter edits · Delete sets NULL · Ctrl+Delete removes rows',
   'grid.setNull': 'Set NULL',
   'grid.setDefault': 'Set DEFAULT',
   'grid.defaultLabel': 'DEFAULT',
@@ -103,6 +103,11 @@ export const en = {
   'grid.editError.invalid-enum': 'Choose one of the allowed values',
   'grid.editError.unsupported': 'This value cannot be edited as text yet',
   'grid.changedCells': '{0} unsaved changes',
+  'grid.addRow': 'Add row',
+  'grid.duplicateRows': 'Duplicate',
+  'grid.deleteRows': 'Delete',
+  'grid.restoreRows': 'Restore',
+  'grid.editError.row-deleted': 'The row is marked for deletion; restore it first',
 } as const;
 
 export type MessageKey = keyof typeof en;

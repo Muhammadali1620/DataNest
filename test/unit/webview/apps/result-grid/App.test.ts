@@ -24,6 +24,8 @@ function tab(overrides: Partial<ResultTab> = {}): ResultTab {
     truncated: false,
     durationMs: 7,
     changedCells: 0,
+    insertedRows: 0,
+    deletedRows: 0,
     revision: 0,
     ...overrides,
   };
@@ -71,6 +73,7 @@ function serveRows(host: HostPeer, rows = ROWS): ReturnType<typeof vi.fn> {
       rows: rows.slice(offset, offset + limit),
       rowCount: rows.length,
       changes: [],
+      states: [],
     }),
   );
   host.handle('rows', handler);
@@ -333,6 +336,7 @@ describe('result grid App', () => {
         rows: ROWS,
         rowCount: 10_000,
         changes: [],
+        states: [],
       }),
     );
     harness.host.handle('rows', handler);
@@ -368,6 +372,7 @@ describe('result grid App', () => {
         rows: Array.from({ length: limit }, (_, index) => [offset + index, 'x']),
         rowCount: 100_000,
         changes: [],
+        states: [],
       }));
       await flush();
       harness.host.emit('state', {

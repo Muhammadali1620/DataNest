@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_ACTION_ROWS,
   MAX_CLIPBOARD_CHARS,
   MAX_SEARCH_HITS,
   MAX_SEARCH_LENGTH,
@@ -41,19 +42,28 @@ describe('rows request', () => {
       rows: [[1, 'text', null, true, { kind: 'binary', size: 2, preview: 'ab' }]],
       rowCount: 1,
       changes: [{ row: 0, column: 2, kind: 'default' }],
+      states: [{ row: 0, state: 'inserted' }],
     };
     expect(rows.result.parse(result)).toEqual(result);
   });
 
   it('accepts an empty window, which means the result is gone', () => {
     expect(
-      rows.result.parse({ resultId: 'r', offset: 0, rows: [], rowCount: 0, changes: [] }),
+      rows.result.parse({
+        resultId: 'r',
+        offset: 0,
+        rows: [],
+        rowCount: 0,
+        changes: [],
+        states: [],
+      }),
     ).toEqual({
       resultId: 'r',
       offset: 0,
       rows: [],
       rowCount: 0,
       changes: [],
+      states: [],
     });
   });
 
@@ -80,6 +90,8 @@ describe('state event', () => {
     truncated: false,
     durationMs: 3,
     changedCells: 0,
+    insertedRows: 0,
+    deletedRows: 0,
     revision: 0,
   };
 
@@ -126,6 +138,7 @@ describe('protocol shape', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
       'editCell',
       'pageTo',
+      'rowAction',
       'rows',
       'search',
       'sort',
@@ -182,6 +195,41 @@ describe('editCell request', () => {
   });
 });
 
+describe('rowAction request', () => {
+  const { rowAction } = resultGridProtocol.host.requests;
+
+  it('accepts each action with the rows it names', () => {
+    for (const action of ['add', 'duplicate', 'delete', 'restore'] as const) {
+      const params = { resultId: 'result-1', action, rows: [0, 5] };
+      expect(rowAction.params.parse(params)).toEqual(params);
+    }
+    expect(rowAction.params.parse({ resultId: 'r', action: 'add', rows: [] }).rows).toEqual([]);
+  });
+
+  it('rejects an unknown action, a negative or fractional row and too many rows', () => {
+    expect(() => rowAction.params.parse({ resultId: 'r', action: 'drop', rows: [] })).toThrow();
+    expect(() => rowAction.params.parse({ resultId: 'r', action: 'delete', rows: [-1] })).toThrow();
+    expect(() =>
+      rowAction.params.parse({ resultId: 'r', action: 'delete', rows: [1.5] }),
+    ).toThrow();
+    expect(() =>
+      rowAction.params.parse({
+        resultId: 'r',
+        action: 'delete',
+        rows: Array.from({ length: MAX_ACTION_ROWS + 1 }, () => 0),
+      }),
+    ).toThrow();
+  });
+
+  it('answers ok with the first new row, or why it was refused', () => {
+    expect(rowAction.result.parse({ ok: true, row: 4 })).toEqual({ ok: true, row: 4 });
+    expect(rowAction.result.parse({ ok: false, error: 'row-deleted' })).toEqual({
+      ok: false,
+      error: 'row-deleted',
+    });
+  });
+});
+
 describe('editable tab state', () => {
   const tab = {
     id: 'result-1',
@@ -192,6 +240,8 @@ describe('editable tab state', () => {
     truncated: false,
     durationMs: 1,
     changedCells: 2,
+    insertedRows: 1,
+    deletedRows: 0,
     revision: 5,
   };
 
@@ -340,6 +390,8 @@ describe('sorted tab state', () => {
           truncated: false,
           durationMs: 1,
           changedCells: 0,
+          insertedRows: 0,
+          deletedRows: 0,
           revision: 0,
           sort: { column: 0, direction: 'desc' },
         },
@@ -362,6 +414,8 @@ describe('sorted tab state', () => {
             truncated: false,
             durationMs: 0,
             changedCells: 0,
+            insertedRows: 0,
+            deletedRows: 0,
             revision: 0,
             sort: { column: 0, direction: 'random' },
           },
@@ -401,6 +455,8 @@ describe('paged tab state', () => {
     truncated: false,
     durationMs: 1,
     changedCells: 0,
+    insertedRows: 0,
+    deletedRows: 0,
     revision: 0,
   };
 

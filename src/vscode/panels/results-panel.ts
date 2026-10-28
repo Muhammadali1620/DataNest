@@ -92,7 +92,7 @@ export class ResultsPanel implements vscode.Disposable {
       const window = this.deps.results.window(resultId, offset, limit);
       if (window === undefined) {
         // The result is gone (a newer run replaced it); an empty window is honest.
-        return { resultId, offset, rows: [], rowCount: 0, changes: [] };
+        return { resultId, offset, rows: [], rowCount: 0, changes: [], states: [] };
       }
       return {
         resultId,
@@ -100,8 +100,12 @@ export class ResultsPanel implements vscode.Disposable {
         rows: window.rows.map((row) => [...row]),
         rowCount: window.rowCount,
         changes: window.changes,
+        states: window.states,
       };
     });
+    this.rpc.handle('rowAction', ({ resultId, action, rows }) =>
+      this.deps.editor.rowAction(resultId, action, rows),
+    );
     this.rpc.handle('editCell', ({ resultId, row, column, input }) =>
       this.deps.editor.editCell(resultId, row, column, input),
     );

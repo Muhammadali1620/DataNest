@@ -123,6 +123,7 @@ describe('ResultStore', () => {
         rows: [[2], [3], [4]],
         rowCount: 10,
         changes: [],
+        states: [],
       });
     });
 
@@ -135,7 +136,13 @@ describe('ResultStore', () => {
     it('clamps an offset past the end to an empty window', () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      expect(store.window(id, 50, 10)).toEqual({ offset: 10, rows: [], rowCount: 10, changes: [] });
+      expect(store.window(id, 50, 10)).toEqual({
+        offset: 10,
+        rows: [],
+        rowCount: 10,
+        changes: [],
+        states: [],
+      });
     });
 
     it('treats a negative or fractional range sensibly', () => {
@@ -160,7 +167,7 @@ describe('ResultStore', () => {
 
     it('shows a changed value in the window and reports where it is', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       expect(store.setChange(id, 1, 1, { kind: 'value', value: 'B!' })).toBe(true);
       expect(store.window(id, 0, 3)).toEqual({
         offset: 0,
@@ -171,12 +178,13 @@ describe('ResultStore', () => {
         ],
         rowCount: 3,
         changes: [{ row: 1, column: 1, kind: 'value' }],
+        states: [],
       });
     });
 
     it('shows a DEFAULT as NULL and marks it as a default', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       store.setChange(id, 0, 1, { kind: 'default' });
       const window = store.window(id, 0, 1);
       expect(window?.rows).toEqual([[1, null]]);
@@ -185,7 +193,7 @@ describe('ResultStore', () => {
 
     it('does not touch the rows the server returned', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
       expect(store.rowAt(id, 0)).toEqual([1, 'a']);
       expect(store.allRows(id)).toEqual(rows);
@@ -193,7 +201,7 @@ describe('ResultStore', () => {
 
     it('keeps a change with its row when the result is sorted', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
       store.sort(id, 0, 'desc');
       const window = store.window(id, 0, 3);
@@ -207,7 +215,7 @@ describe('ResultStore', () => {
 
     it('counts changed cells, withdraws them and bumps the revision each time', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       expect(store.get(id)).toMatchObject({ changedCells: 0, revision: 0 });
       store.setChange(id, 0, 0, { kind: 'value', value: 9 });
       store.setChange(id, 0, 1, { kind: 'default' });
@@ -221,7 +229,7 @@ describe('ResultStore', () => {
 
     it('notifies listeners when a change is made', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       const seen: string[] = [];
       store.onDidChange((uri) => {
         seen.push(uri);
@@ -232,7 +240,7 @@ describe('ResultStore', () => {
 
     it('refuses a cell that does not exist', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       expect(store.setChange(id, 99, 0, { kind: 'default' })).toBe(false);
       expect(store.setChange(id, 0, 99, { kind: 'default' })).toBe(false);
       expect(store.setChange(id, 0, -1, { kind: 'default' })).toBe(false);
@@ -242,16 +250,128 @@ describe('ResultStore', () => {
 
     it('leaves a window without changes when nothing is pending', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       expect(store.window(id, 0, 3)?.changes).toEqual([]);
     });
 
     it('forgets changes with the result', () => {
       const store = new ResultStore();
-      const { id } = store.add(result({ rows }));
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       store.setChange(id, 0, 0, { kind: 'default' });
       store.clearDocument('untitled:Query-1.sql');
       expect(store.window(id, 0, 3)).toBeUndefined();
+    });
+  });
+
+  describe('pending rows', () => {
+    const rows = [
+      [1, 'a'],
+      [2, 'b'],
+      [3, 'c'],
+    ];
+    const edit = {
+      editable: true as const,
+      table: { name: 't' },
+      columnMap: ['id', 'v'],
+      columns: [
+        { name: 'id', dataType: 'int', nullable: false, kind: 'integer' as const },
+        { name: 'v', dataType: 'text', nullable: true, kind: 'text' as const },
+      ],
+      keyColumns: ['id'],
+      keyIndexes: [0],
+    };
+    function add() {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }], edit }));
+      return { store, id };
+    }
+
+    it('shows a new row after the server rows, with every cell a default', () => {
+      const { store, id } = add();
+      expect(store.addRow(id)).toBe(3);
+      const window = store.window(id, 0, 10);
+      expect(window?.rowCount).toBe(4);
+      expect(window?.rows[3]).toEqual([null, null]);
+      expect(window?.states).toEqual([{ row: 3, state: 'inserted' }]);
+      expect(window?.changes).toEqual([
+        { row: 3, column: 0, kind: 'default' },
+        { row: 3, column: 1, kind: 'default' },
+      ]);
+      expect(store.get(id)).toMatchObject({ insertedRows: 1, rowCount: 3 });
+    });
+
+    it('starts a new row from given cells', () => {
+      const { store, id } = add();
+      store.addRow(id, new Map([[1, { kind: 'value', value: 'hi' }]]));
+      expect(store.window(id, 3, 1)?.rows[0]).toEqual([null, 'hi']);
+      expect(store.isInsertedRow(id, 3)).toBe(true);
+      expect(store.isInsertedRow(id, 2)).toBe(false);
+      expect(store.isInsertedRow(id, 4)).toBe(false);
+    });
+
+    it('edits a cell of a new row, and a DEFAULT unsets it again', () => {
+      const { store, id } = add();
+      const index = store.addRow(id) ?? -1;
+      store.setChange(id, index, 1, { kind: 'value', value: 'x' });
+      expect(store.changeAt(id, index, 1)).toEqual({ kind: 'value', value: 'x' });
+      store.setChange(id, index, 1, { kind: 'default' });
+      expect(store.changeAt(id, index, 1)).toBeUndefined();
+      expect(store.get(id)?.changedCells).toBe(0);
+    });
+
+    it('marks a server row for deletion and restores it', () => {
+      const { store, id } = add();
+      expect(store.deleteRow(id, 1)).toBe(true);
+      expect(store.isDeletedRow(id, 1)).toBe(true);
+      expect(store.window(id, 0, 3)?.states).toEqual([{ row: 1, state: 'deleted' }]);
+      expect(store.get(id)?.deletedRows).toBe(1);
+      expect(store.restoreRow(id, 1)).toBe(true);
+      expect(store.isDeletedRow(id, 1)).toBe(false);
+      expect(store.get(id)?.deletedRows).toBe(0);
+    });
+
+    it('drops a new row outright when it is deleted', () => {
+      const { store, id } = add();
+      store.addRow(id);
+      expect(store.deleteRow(id, 3)).toBe(true);
+      expect(store.get(id)?.insertedRows).toBe(0);
+      expect(store.window(id, 0, 10)?.rowCount).toBe(3);
+    });
+
+    it('keeps a deleted row marked after sorting', () => {
+      const { store, id } = add();
+      store.deleteRow(id, 0);
+      store.sort(id, 0, 'desc');
+      expect(store.window(id, 0, 3)?.states).toEqual([{ row: 2, state: 'deleted' }]);
+    });
+
+    it('keeps new rows after the server rows when sorted', () => {
+      const { store, id } = add();
+      store.addRow(id, new Map([[0, { kind: 'value', value: 0 }]]));
+      store.sort(id, 0, 'desc');
+      expect(store.window(id, 0, 4)?.rows.map((row) => row[0])).toEqual([3, 2, 1, 0]);
+    });
+
+    it('refuses rows that are not there', () => {
+      const { store, id } = add();
+      expect(store.deleteRow(id, 9)).toBe(false);
+      expect(store.restoreRow(id, 9)).toBe(false);
+      expect(store.addRow('result-404')).toBeUndefined();
+      expect(store.deleteRow('result-404', 0)).toBe(false);
+      expect(store.restoreRow('result-404', 0)).toBe(false);
+    });
+
+    it('does not mark computed columns of a new row as defaults', () => {
+      const store = new ResultStore();
+      const { id } = store.add(
+        result({
+          rows,
+          columns: [{ name: 'id' }, { name: 'total' }],
+          edit: { ...edit, columns: [edit.columns[0] ?? null, null] },
+        }),
+      );
+      store.addRow(id);
+      expect(store.window(id, 3, 1)?.changes).toEqual([{ row: 3, column: 0, kind: 'default' }]);
     });
   });
 

@@ -86,7 +86,8 @@ export const ru: Record<MessageKey, string> = {
     'выберите и колонки ключа, чтобы каждую строку можно было определить',
   'grid.readOnly.columns-mismatch': 'колонки результата не совпадают с колонками таблицы',
   'grid.readOnly.failed': 'не удалось прочитать структуру таблицы',
-  'grid.editHint': 'Двойной щелчок или Enter — правка · Delete — NULL',
+  'grid.editHint':
+    'Двойной щелчок или Enter — правка · Delete — NULL · Ctrl+Delete — удалить строки',
   'grid.setNull': 'Поставить NULL',
   'grid.setDefault': 'Поставить DEFAULT',
   'grid.defaultLabel': 'DEFAULT',
@@ -105,4 +106,9 @@ export const ru: Record<MessageKey, string> = {
   'grid.editError.invalid-enum': 'Выберите одно из допустимых значений',
   'grid.editError.unsupported': 'Это значение пока нельзя править как текст',
   'grid.changedCells': 'Несохранённых изменений: {0}',
+  'grid.addRow': 'Добавить строку',
+  'grid.duplicateRows': 'Дублировать',
+  'grid.deleteRows': 'Удалить',
+  'grid.restoreRows': 'Вернуть',
+  'grid.editError.row-deleted': 'Строка помечена на удаление — сначала верните её',
 };

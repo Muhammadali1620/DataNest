@@ -157,3 +157,52 @@ describe('RowCache change marks', () => {
     expect(cache.changeAt(0, 0)).toBeUndefined();
   });
 });
+
+describe('RowCache row states', () => {
+  it('remembers new and deleted rows', () => {
+    const cache = new RowCache();
+    cache.reset(3);
+    cache.put(
+      0,
+      [[1], [2], [3]],
+      3,
+      [],
+      [
+        { row: 1, state: 'deleted' },
+        { row: 2, state: 'inserted' },
+      ],
+    );
+    expect(cache.stateAt(0)).toBeUndefined();
+    expect(cache.stateAt(1)).toBe('deleted');
+    expect(cache.stateAt(2)).toBe('inserted');
+  });
+
+  it('lets a newer window replace the states of its rows only', () => {
+    const cache = new RowCache();
+    cache.reset(4);
+    cache.put(
+      0,
+      [[1], [2], [3], [4]],
+      4,
+      [],
+      [
+        { row: 0, state: 'deleted' },
+        { row: 3, state: 'inserted' },
+      ],
+    );
+    cache.put(0, [[1], [2]], 4, [], []);
+    expect(cache.stateAt(0)).toBeUndefined();
+    expect(cache.stateAt(3)).toBe('inserted');
+  });
+
+  it('drops states past a result that shrank, and all on reset', () => {
+    const cache = new RowCache();
+    cache.reset(3);
+    cache.put(0, [[1], [2], [3]], 3, [], [{ row: 2, state: 'inserted' }]);
+    cache.put(0, [[1]], 1);
+    expect(cache.stateAt(2)).toBeUndefined();
+    cache.put(0, [[1]], 1, [], [{ row: 0, state: 'deleted' }]);
+    cache.reset(1);
+    expect(cache.stateAt(0)).toBeUndefined();
+  });
+});

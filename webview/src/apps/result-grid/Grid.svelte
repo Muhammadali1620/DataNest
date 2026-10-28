@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EditInput } from '../../../../src/shared/cell-input';
+  import type { RowAction } from '../../../../src/shared/row-action';
   import type { CellValue } from '../../../../src/shared/cell-value';
   import type { ResultColumnInfo } from '../../../../src/shared/protocols/result-grid';
   import type { Translate } from '../../lib/i18n';
@@ -19,6 +20,7 @@
     navigate,
     selectAll,
     selectCell,
+    selectionBox,
     type Selection,
   } from './selection';
   import { columnGeometry, columnLayout, rangeOf, rowGeometry } from './virtual';
@@ -48,6 +50,10 @@
     editColumns?: readonly (EditColumn | null)[] | undefined;
     /** How a cell was changed and not yet saved. */
     changeAt: (row: number, column: number) => 'value' | 'default' | undefined;
+    /** Whether a row is new or marked for deletion. */
+    stateAt: (row: number) => 'inserted' | 'deleted' | undefined;
+    /** Asks the host to add, duplicate, delete or restore rows. */
+    onRowAction: (action: RowAction, rows: number[]) => Promise<void>;
     /** Sends an edit to the host; resolves to the reason it was refused, if it was. */
     onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
     t: Translate;
@@ -67,7 +73,9 @@
     revealRow,
     editColumns,
     changeAt,
+    stateAt,
     onEdit,
+    onRowAction,
     t,
   }: Props = $props();
 
@@ -206,6 +214,32 @@
   const canSetNull = $derived(focusColumn?.nullable === true);
   const canSetDefault = $derived(focusColumn !== undefined);
 
+  /** The rows the selection touches, top to bottom. */
+  const selectedRows = $derived.by(() => {
+    if (selection === undefined) {
+      return [];
+    }
+    const box = selectionBox(selection);
+    return Array.from({ length: box.bottom - box.top + 1 }, (_, offset) => box.top + offset);
+  });
+  const canDelete = $derived(selectedRows.some((row) => stateAt(row) !== 'deleted'));
+  const canRestore = $derived(selectedRows.some((row) => stateAt(row) === 'deleted'));
+
+  function rowAction(action: RowAction): void {
+    const rows =
+      action === 'restore'
+        ? selectedRows.filter((row) => stateAt(row) === 'deleted')
+        : action === 'delete'
+          ? selectedRows.filter((row) => stateAt(row) !== 'deleted')
+          : action === 'duplicate'
+            ? selectedRows
+            : [];
+    if (action !== 'add' && rows.length === 0) {
+      return;
+    }
+    void onRowAction(action, rows);
+  }
+
   function startEdit(row: number, column: number): void {
     const info = editColumn(column);
     const cells = rowAt(row);
@@ -311,6 +345,16 @@
     if ((event.key === 'Enter' || event.key === 'F2') && selection !== undefined) {
       event.preventDefault();
       startEdit(selection.focus.row, selection.focus.column);
+      return;
+    }
+    if (editColumns !== undefined && event.key === 'Insert') {
+      event.preventDefault();
+      rowAction('add');
+      return;
+    }
+    if (editColumns !== undefined && modifier && event.key === 'Delete') {
+      event.preventDefault();
+      rowAction('delete');
       return;
     }
     if ((event.key === 'Delete' || event.key === 'Backspace') && selection !== undefined) {
@@ -460,6 +504,8 @@
       {@const cells = rowAt(index)}
       <div
         class="row"
+        class:inserted={stateAt(index) === 'inserted'}
+        class:deleted={stateAt(index) === 'deleted'}
         role="row"
         aria-rowindex={index + 1}
         style="top: {index * ROW_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
@@ -568,6 +614,24 @@
       }}
     >
       {t('grid.setDefault')}
+    </button>
+    <span class="divider"></span>
+    <button type="button" class="action" onclick={() => { rowAction('add'); }}>
+      {t('grid.addRow')}
+    </button>
+    <button
+      type="button"
+      class="action"
+      disabled={selectedRows.length === 0}
+      onclick={() => { rowAction('duplicate'); }}
+    >
+      {t('grid.duplicateRows')}
+    </button>
+    <button type="button" class="action" disabled={!canDelete} onclick={() => { rowAction('delete'); }}>
+      {t('grid.deleteRows')}
+    </button>
+    <button type="button" class="action" disabled={!canRestore} onclick={() => { rowAction('restore'); }}>
+      {t('grid.restoreRows')}
     </button>
     <span class="hint">{t('grid.editHint')}</span>
     {#if actionError !== undefined}
@@ -706,6 +770,21 @@
   .focused {
     outline: 1px solid var(--vscode-focusBorder);
     outline-offset: -1px;
+  }
+
+  .row.inserted {
+    background: var(--vscode-diffEditor-insertedLineBackground, rgba(80, 160, 80, 0.12));
+  }
+
+  .row.deleted .cell:not(.rownum) {
+    color: var(--vscode-disabledForeground);
+    text-decoration: line-through;
+    background: var(--vscode-diffEditor-removedLineBackground, rgba(200, 80, 80, 0.15));
+  }
+
+  .divider {
+    align-self: stretch;
+    border-left: 1px solid var(--vscode-panel-border);
   }
 
   .changed {

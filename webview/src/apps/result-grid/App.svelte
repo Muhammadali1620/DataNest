@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
   import type { EditInput } from '../../../../src/shared/cell-input';
+import type { RowAction } from '../../../../src/shared/row-action';
   import {
     MAX_WINDOW_ROWS,
     type ResultGridProtocol,
@@ -48,6 +49,36 @@
     return loaded >= 0 ? cache.get(index) : undefined;
   }
 
+  function stateAt(row: number): 'inserted' | 'deleted' | undefined {
+    return loaded >= 0 ? cache.stateAt(row) : undefined;
+  }
+
+  /** Rows the grid shows: the server's, then the ones waiting to be inserted. */
+  function displayCount(tab: ResultTab | undefined): number {
+    return tab === undefined ? 0 : tab.rowCount + tab.insertedRows;
+  }
+
+  /** Adds, duplicates, deletes or restores rows; scrolls to the first new row. */
+  async function onRowAction(action: RowAction, rows: number[]): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return;
+    }
+    failure = undefined;
+    try {
+      const answer = await rpc.request('rowAction', { resultId: tab.id, action, rows });
+      if (!answer.ok) {
+        failure = t(`grid.editError.${answer.error ?? 'not-editable'}`);
+      } else if (answer.row !== undefined) {
+        // Re-pointing at the same row must still scroll, so the value is cleared first.
+        revealRow = undefined;
+        revealRow = answer.row;
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.editFailed');
+    }
+  }
+
   function changeAt(row: number, column: number): 'value' | 'default' | undefined {
     return loaded >= 0 ? cache.changeAt(row, column) : undefined;
   }
@@ -75,7 +106,7 @@
   }
 
   async function fetchRows(tab: ResultTab, firstIndex: number, count: number): Promise<void> {
-    const range = windowFor(firstIndex, count, tab.rowCount);
+    const range = windowFor(firstIndex, count, displayCount(tab));
     if (range === undefined || cache.hasRange(range.offset, range.limit)) {
       return;
     }
@@ -93,7 +124,7 @@
       });
       // A late answer for another tab must not land in this one.
       if (window.resultId === gridState?.activeId) {
-        cache.put(window.offset, window.rows, window.rowCount, window.changes);
+        cache.put(window.offset, window.rows, window.rowCount, window.changes, window.states);
         if (window.offset === 0 && window.rows.length > 0) {
           // The first rows are what the column widths are measured from.
           widths = keepWidths(widths, tab.columns, window.rows);
@@ -118,7 +149,7 @@
 
   function resetFor(tab: ResultTab | undefined): void {
     cache = new RowCache();
-    cache.reset(tab?.rowCount ?? 0);
+    cache.reset(displayCount(tab));
     pending = undefined;
     failure = undefined;
     search = '';
@@ -261,7 +292,7 @@
       if (sameOrder && !sameResult) {
         // A pending change moved: the rows must be read again, but the widths and the
         // search belong to the same result and stay.
-        cache.reset(tab.rowCount);
+        cache.reset(displayCount(tab));
         pending = undefined;
         loaded += 1;
       } else if (!sameResult) {
@@ -368,9 +399,12 @@
         {#if activeTab.truncated}
           <span class="warn">{t('grid.truncated')}</span>
         {/if}
-        {#if activeTab.changedCells > 0}
+        {#if activeTab.changedCells + activeTab.insertedRows + activeTab.deletedRows > 0}
           <span class="warn" data-testid="changed-count">
-            {t('grid.changedCells', activeTab.changedCells)}
+            {t(
+              'grid.changedCells',
+              activeTab.changedCells + activeTab.insertedRows + activeTab.deletedRows,
+            )}
           </span>
         {/if}
         {#if activeTab.edit !== undefined}
@@ -443,7 +477,7 @@
           {onSort}
           {revealRow}
           columns={activeTab.columns}
-          rowCount={activeTab.rowCount}
+          rowCount={displayCount(activeTab)}
           {widths}
           {rowAt}
           {onVisible}
@@ -451,7 +485,9 @@
           {onCopy}
           {editColumns}
           {changeAt}
+          {stateAt}
           {onEdit}
+          {onRowAction}
           {t}
         />
       {/if}

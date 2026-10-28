@@ -26,6 +26,8 @@ const EDITABLE_TAB: ResultTab = {
   truncated: false,
   durationMs: 3,
   changedCells: 0,
+  insertedRows: 0,
+  deletedRows: 0,
   revision: 0,
   edit: {
     editable: true,
@@ -46,6 +48,7 @@ const ROWS: CellValue[][] = [
 interface Served {
   rows: CellValue[][];
   changes: { row: number; column: number; kind: 'value' | 'default' }[];
+  states: { row: number; state: 'inserted' | 'deleted' }[];
 }
 
 async function open(tab: ResultTab = EDITABLE_TAB, answer: EditAnswer = { ok: true }) {
@@ -60,7 +63,7 @@ async function open(tab: ResultTab = EDITABLE_TAB, answer: EditAnswer = { ok: tr
     remote: resultGridProtocol.host,
     transport: transports.webview,
   });
-  const served: Served = { rows: ROWS, changes: [] };
+  const served: Served = { rows: ROWS, changes: [], states: [] };
   const rowsHandler = vi.fn(
     ({ resultId, offset, limit }: { resultId: string; offset: number; limit: number }) => ({
       resultId,
@@ -68,18 +71,23 @@ async function open(tab: ResultTab = EDITABLE_TAB, answer: EditAnswer = { ok: tr
       rows: served.rows.slice(offset, offset + limit),
       rowCount: served.rows.length,
       changes: served.changes,
+      states: served.states,
     }),
   );
   const edits = vi.fn((_: unknown) => answer);
+  const rowActions = vi.fn((_: unknown): { ok: boolean; error?: 'row-deleted'; row?: number } => ({
+    ok: true,
+  }));
   host.handle('rows', rowsHandler);
   host.handle('editCell', edits);
+  host.handle('rowAction', rowActions);
   render(App, { props: { rpc, t: createTranslator('en') } });
   await flush();
   host.emit('state', { tabs: [tab], activeId: tab.id, running: false });
   await waitFor(() => {
     expect(cells().length).toBeGreaterThan(0);
   });
-  return { host, served, edits, rowsHandler, tab };
+  return { host, served, edits, rowActions, rowsHandler, tab };
 }
 
 function cells(): HTMLElement[] {
@@ -311,5 +319,132 @@ describe('result grid editing', () => {
     await flush();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  describe('rows', () => {
+    it('adds a row with the button, scrolling to the one the host made', async () => {
+      const { rowActions } = await open();
+      rowActions.mockReturnValueOnce({ ok: true, row: 2 });
+      await fireEvent.click(screen.getByRole('button', { name: 'Add row' }));
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({ resultId: 'result-1', action: 'add', rows: [] });
+      });
+    });
+
+    it('adds a row with the Insert key', async () => {
+      const { rowActions } = await open();
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'Insert' });
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({ resultId: 'result-1', action: 'add', rows: [] });
+      });
+    });
+
+    it('duplicates and deletes every row the selection touches', async () => {
+      const { rowActions } = await open();
+      await fireEvent.pointerDown(cell(0, 1), { button: 0 });
+      await fireEvent.pointerEnter(cell(1, 2));
+      await fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }));
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({
+          resultId: 'result-1',
+          action: 'duplicate',
+          rows: [0, 1],
+        });
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({
+          resultId: 'result-1',
+          action: 'delete',
+          rows: [0, 1],
+        });
+      });
+    });
+
+    it('deletes with Ctrl+Delete, while plain Delete still sets NULL', async () => {
+      const { rowActions, edits } = await open();
+      await fireEvent.pointerDown(cell(1, 1), { button: 0 });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'Delete', ctrlKey: true });
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({
+          resultId: 'result-1',
+          action: 'delete',
+          rows: [1],
+        });
+      });
+      expect(edits).not.toHaveBeenCalled();
+    });
+
+    it('shows deleted and new rows and offers Restore only for deleted ones', async () => {
+      const { host, served, rowActions, tab } = await open();
+      served.states = [{ row: 1, state: 'deleted' }];
+      host.emit('state', {
+        tabs: [{ ...tab, revision: 1, deletedRows: 1 }],
+        activeId: tab.id,
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').some((row) => row.classList.contains('deleted'))).toBe(
+          true,
+        );
+      });
+      await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+      await waitFor(() => {
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Restore' }).disabled).toBe(
+          true,
+        );
+      });
+      await fireEvent.pointerDown(cell(1, 0), { button: 0 });
+      await waitFor(() => {
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Restore' }).disabled).toBe(
+          false,
+        );
+      });
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Delete' }).disabled).toBe(true);
+      await fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+      await waitFor(() => {
+        expect(rowActions).toHaveBeenCalledWith({
+          resultId: 'result-1',
+          action: 'restore',
+          rows: [1],
+        });
+      });
+    });
+
+    it('grows the grid by the rows waiting to be inserted', async () => {
+      const { host, served, tab } = await open();
+      served.rows = [...ROWS, [null, null, null, null]];
+      served.states = [{ row: 2, state: 'inserted' }];
+      host.emit('state', {
+        tabs: [{ ...tab, revision: 1, insertedRows: 1 }],
+        activeId: tab.id,
+        running: false,
+      });
+      await waitFor(() => {
+        expect(
+          screen.getAllByRole('row').filter((row) => row.classList.contains('inserted')),
+        ).toHaveLength(1);
+      });
+      expect(screen.getByTestId('grid').getAttribute('aria-rowcount')).toBe('3');
+      expect(screen.getByTestId('changed-count').textContent.trim()).toBe('1 unsaved changes');
+    });
+
+    it('says why a row action was refused', async () => {
+      const { rowActions } = await open();
+      rowActions.mockReturnValueOnce({ ok: false, error: 'row-deleted' });
+      await fireEvent.click(screen.getByRole('button', { name: 'Add row' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toContain('marked for deletion');
+    });
+
+    it('offers no row actions on a read-only result', async () => {
+      const { edit: _edit, ...rest } = EDITABLE_TAB;
+      const { rowActions } = await open({ ...rest, edit: { editable: false, reason: 'view' } });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'Insert' });
+      await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'Delete', ctrlKey: true });
+      await flush();
+      expect(screen.queryByRole('button', { name: 'Add row' })).toBeNull();
+      expect(rowActions).not.toHaveBeenCalled();
+    });
   });
 });

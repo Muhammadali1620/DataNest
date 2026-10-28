@@ -14,6 +14,8 @@ function summary(overrides: Partial<ResultSummary> = {}): ResultSummary {
     truncated: false,
     durationMs: 4,
     changedCells: 0,
+    insertedRows: 0,
+    deletedRows: 0,
     revision: 0,
     ...overrides,
   };
@@ -33,6 +35,8 @@ describe('buildState', () => {
           truncated: false,
           durationMs: 4,
           changedCells: 0,
+          insertedRows: 0,
+          deletedRows: 0,
           revision: 0,
         },
       ],

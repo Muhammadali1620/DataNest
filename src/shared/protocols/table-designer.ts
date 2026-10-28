@@ -13,7 +13,14 @@ import {
   type Schema,
   string,
 } from '../schema';
-import { type ColumnDesign, DESIGN_LIMITS, type TableDesign } from '../table-design';
+import {
+  type ColumnDesign,
+  DESIGN_LIMITS,
+  type ForeignKeyDesign,
+  type IndexDesign,
+  REFERENTIAL_ACTIONS,
+  type TableDesign,
+} from '../table-design';
 
 const ID_LENGTH = 100;
 
@@ -30,11 +37,40 @@ export const columnDesignSchema: Schema<ColumnDesign> = object({
   comment: string({ maxLength: DESIGN_LIMITS.comment }),
 });
 
+const idSchema = string({ minLength: 1, maxLength: ID_LENGTH });
+const columnIdsSchema = array(idSchema, { maxLength: DESIGN_LIMITS.columns });
+
+export const indexDesignSchema: Schema<IndexDesign> = object({
+  id: idSchema,
+  original: optional(string({ maxLength: DESIGN_LIMITS.name })),
+  name: string({ maxLength: DESIGN_LIMITS.name }),
+  columns: columnIdsSchema,
+  unique: boolean(),
+});
+
+export const foreignKeyDesignSchema: Schema<ForeignKeyDesign> = object({
+  id: idSchema,
+  original: optional(string({ maxLength: DESIGN_LIMITS.name })),
+  name: string({ maxLength: DESIGN_LIMITS.name }),
+  columns: columnIdsSchema,
+  targetSchema: optional(string({ maxLength: DESIGN_LIMITS.name })),
+  targetTable: string({ maxLength: DESIGN_LIMITS.name }),
+  targetColumns: array(string({ maxLength: DESIGN_LIMITS.name }), {
+    maxLength: DESIGN_LIMITS.columns,
+  }),
+  onDelete: literal(...REFERENTIAL_ACTIONS),
+  onUpdate: literal(...REFERENTIAL_ACTIONS),
+});
+
 export const tableDesignSchema: Schema<TableDesign> = object({
   name: string({ maxLength: DESIGN_LIMITS.name }),
   comment: string({ maxLength: DESIGN_LIMITS.comment }),
   columns: array(columnDesignSchema, { maxLength: DESIGN_LIMITS.columns }),
+  indexes: array(indexDesignSchema, { maxLength: DESIGN_LIMITS.indexes }),
+  foreignKeys: array(foreignKeyDesignSchema, { maxLength: DESIGN_LIMITS.foreignKeys }),
 });
+
+const namesSchema = array(string({ maxLength: DESIGN_LIMITS.name }), { maxLength: 100_000 });
 
 const stateSchema = object({
   mode: literal('create', 'edit'),
@@ -60,6 +96,13 @@ export const tableDesignerProtocol = defineProtocol({
     requests: {
       /** The SQL that saving this design would run. */
       preview: { params: tableDesignSchema, result: previewSchema },
+      /** Tables a foreign key can point at: those of the designed table's scope. */
+      tables: { params: object({}), result: object({ tables: namesSchema }) },
+      /** Columns of one table of the scope, for the referenced columns of a key. */
+      columns: {
+        params: object({ table: string({ minLength: 1, maxLength: DESIGN_LIMITS.name }) }),
+        result: object({ columns: namesSchema }),
+      },
       /** Shows the SQL in a dialog and runs it if the user agrees. */
       save: {
         params: tableDesignSchema,

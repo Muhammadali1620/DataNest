@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   columnDesignSchema,
+  foreignKeyDesignSchema,
+  indexDesignSchema,
   tableDesignerProtocol,
   tableDesignSchema,
 } from '../../../../src/shared/protocols/table-designer';
@@ -71,5 +73,43 @@ describe('tableDesignerProtocol', () => {
       statements: ['CREATE TABLE t (id int)'],
     });
     expect(result.parse({ statements: [], error: 'no' })).toEqual({ statements: [], error: 'no' });
+  });
+});
+
+describe('index and key schemas', () => {
+  const key = {
+    id: 'k1',
+    name: 'fk',
+    columns: ['c1'],
+    targetTable: 'parents',
+    targetColumns: ['id'],
+    onDelete: 'CASCADE',
+    onUpdate: 'NO ACTION',
+  };
+
+  it('accepts an index and a key as the page sends them', () => {
+    const index = { id: 'i1', name: 'ix', columns: ['c1', 'c2'], unique: true };
+    expect(indexDesignSchema.parse(index)).toEqual(index);
+    expect(foreignKeyDesignSchema.parse(key)).toEqual(key);
+    expect(foreignKeyDesignSchema.parse({ ...key, targetSchema: 'crm' })).toMatchObject({
+      targetSchema: 'crm',
+    });
+  });
+
+  it('rejects an action that is not SQL', () => {
+    expect(() => foreignKeyDesignSchema.parse({ ...key, onDelete: 'DROP TABLE x' })).toThrow();
+  });
+
+  it('rejects an empty column id inside an index', () => {
+    expect(() =>
+      indexDesignSchema.parse({ id: 'i', name: 'ix', columns: [''], unique: false }),
+    ).toThrow();
+  });
+
+  it('describes the lookups of tables and columns', () => {
+    const { tables, columns } = tableDesignerProtocol.host.requests;
+    expect(tables.result.parse({ tables: ['a', 'b'] })).toEqual({ tables: ['a', 'b'] });
+    expect(columns.params.parse({ table: 'a' })).toEqual({ table: 'a' });
+    expect(() => columns.params.parse({ table: '' })).toThrow();
   });
 });

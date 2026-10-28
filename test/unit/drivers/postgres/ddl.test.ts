@@ -108,4 +108,59 @@ describe('postgres ddl', () => {
       expect(sql).toBe('CREATE TABLE "log" (\n  "id" integer NOT NULL\n)');
     });
   });
+
+  describe('createTable with indexes and keys', () => {
+    const partsDesign = (base: TableDesign): TableDesign => ({
+      ...base,
+      columns: [
+        ...base.columns,
+        {
+          id: 'p',
+          name: 'parent_id',
+          type: 'integer',
+          length: '',
+          nullable: true,
+          defaultValue: '',
+          autoIncrement: false,
+          primaryKey: false,
+          comment: '',
+        },
+      ],
+      indexes: [
+        { id: 'i1', name: 'ix_parent', columns: ['p'], unique: false },
+        { id: 'i2', name: 'uq_both', columns: ['new-1', 'p'], unique: true },
+      ],
+      foreignKeys: [
+        {
+          id: 'k1',
+          name: 'fk_parent',
+          columns: ['p'],
+          targetTable: 'parents',
+          targetColumns: ['id'],
+          onDelete: 'CASCADE',
+          onUpdate: 'NO ACTION',
+        },
+      ],
+    });
+
+    it('keeps keys inside and creates indexes after the table', () => {
+      const statements = ddl.createTable(table, partsDesign(newTableDesign('postgres', 'orders')));
+      expect(statements[0]).toContain(
+        '  CONSTRAINT "fk_parent" FOREIGN KEY ("parent_id") REFERENCES "sales"."parents" ("id") ON DELETE CASCADE\n)',
+      );
+      expect(statements.slice(1)).toEqual([
+        'CREATE INDEX "ix_parent" ON "sales"."orders" ("parent_id")',
+        'CREATE UNIQUE INDEX "uq_both" ON "sales"."orders" ("id", "parent_id")',
+      ]);
+    });
+
+    it('lets a key point into another schema', () => {
+      const design = partsDesign(newTableDesign('postgres', 'orders'));
+      const [sql] = ddl.createTable(table, {
+        ...design,
+        foreignKeys: design.foreignKeys.map((key) => ({ ...key, targetSchema: 'public' })),
+      });
+      expect(sql).toContain('REFERENCES "public"."parents" ("id")');
+    });
+  });
 });

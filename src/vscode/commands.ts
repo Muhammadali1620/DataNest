@@ -10,6 +10,7 @@ import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/r
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import { readDefinitionDocument } from '../services/object-definitions';
 import { SchemaActions } from '../services/schema-actions';
+import { browseSession } from '../services/browse-session';
 import { schemaCommandHandlers, schemaPerformer } from './tree/schema-commands';
 import { TableDesignerPanel } from './panels/table-designer-panel';
 import type { DocumentBinding } from './editor/document-bindings';
@@ -99,6 +100,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         connectionId,
         scope,
         driver: await deps.manager.driverOf(connectionId),
+        metadata: async () =>
+          deps.cache.wrap(
+            connectionId,
+            (await browseSession(deps.manager, connectionId, scope.database)).metadata,
+          ),
         texts: {
           createTable: (name) => schemaDeps.texts.createTable(name),
           create: schemaDeps.texts.create,

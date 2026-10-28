@@ -20,7 +20,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   database or a schema also asks for its name.
 - A table designer for new tables: columns with type, length, `NOT NULL`, default,
   primary key, auto numbering and comment, in any order, with the SQL it will run
-  shown as you type.
+  shown as you type. Indexes and foreign keys (with `ON DELETE` / `ON UPDATE`) are
+  designed in tabs of their own; a key may point at the new table itself.
 
 ### Fixed
 

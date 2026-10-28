@@ -3,7 +3,7 @@
 
 import { errorMessage } from '../../core/errors';
 import type { ObjectScope } from '../../core/model/objects';
-import type { Driver } from '../../drivers/driver';
+import type { Driver, MetadataReader } from '../../drivers/driver';
 import type {
   TableDesignerState,
   DesignPreview,
@@ -23,6 +23,8 @@ export interface TableDesignerModelDeps {
   readonly scope: ObjectScope;
   readonly driver: Pick<Driver, 'id' | 'dialect'>;
   readonly texts: TableDesignerTexts;
+  /** The structure of the table's scope, read through the metadata cache. */
+  readonly metadata: () => Promise<Pick<MetadataReader, 'listTables' | 'listColumns'>>;
   readonly perform: (
     connectionId: string,
     action: SchemaAction,
@@ -66,6 +68,20 @@ export class TableDesignerModel {
     } catch (error) {
       return { statements: [], error: errorMessage(error) };
     }
+  }
+
+  /** Tables of the scope a foreign key may point at, by name. */
+  async tables(): Promise<{ tables: string[] }> {
+    const metadata = await this.deps.metadata();
+    const tables = await metadata.listTables(this.deps.scope);
+    return { tables: tables.filter((table) => table.kind === 'table').map((table) => table.name) };
+  }
+
+  /** Columns of one table of the scope, for the referenced side of a key. */
+  async columns(table: string): Promise<{ columns: string[] }> {
+    const metadata = await this.deps.metadata();
+    const columns = await metadata.listColumns({ ...this.deps.scope, name: table });
+    return { columns: columns.map((column) => column.name) };
   }
 
   async save(design: TableDesign): Promise<SaveOutcome> {

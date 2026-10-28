@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
+import type { ObjectScope, TableRef } from '../../../../src/core/model/objects';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
 import type { DriverId } from '../../../../src/shared/connection';
 import { newTableDesign } from '../../../../src/shared/table-design';
@@ -9,6 +10,26 @@ import { TableDesignerModel } from '../../../../src/vscode/panels/table-designer
 import type { PerformOutcome } from '../../../../src/vscode/tree/schema-commands';
 
 const DIALECTS = { mysql: mysqlDialect, postgres: postgresDialect, sqlite: sqliteDialect };
+
+const metadata = {
+  listTables: vi.fn((scope: ObjectScope) =>
+    Promise.resolve(
+      scope.schema === 'empty'
+        ? []
+        : [
+            { name: 'customers', kind: 'table' as const },
+            { name: 'totals', kind: 'view' as const },
+          ],
+    ),
+  ),
+  listColumns: vi.fn((table: TableRef) =>
+    Promise.resolve(
+      table.name === 'customers'
+        ? [{ name: 'id', dataType: 'int', nullable: false, primaryKey: true }]
+        : [],
+    ),
+  ),
+};
 
 function model(driver: DriverId, scope = {}, outcome: PerformOutcome = 'ran') {
   const perform = vi.fn(
@@ -20,6 +41,7 @@ function model(driver: DriverId, scope = {}, outcome: PerformOutcome = 'ran') {
     scope,
     driver: { id: driver, dialect: DIALECTS[driver] },
     texts: { createTable: (name) => `create ${name}?`, create: 'Create' },
+    metadata: () => Promise.resolve(metadata),
     perform,
   });
   return { instance, perform };
@@ -88,5 +110,19 @@ describe('TableDesignerModel', () => {
     };
     expect(await instance.save(broken)).toEqual({ outcome: 'invalid' });
     expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('offers the tables of its scope, not views, as targets of a key', async () => {
+    const { instance } = model('postgres', { database: 'shop', schema: 'sales' });
+    expect(await instance.tables()).toEqual({ tables: ['customers'] });
+    expect(metadata.listTables).toHaveBeenLastCalledWith({ database: 'shop', schema: 'sales' });
+    expect(await model('postgres', { schema: 'empty' }).instance.tables()).toEqual({ tables: [] });
+  });
+
+  it('reads the columns of a target table in the same scope', async () => {
+    const { instance } = model('mysql', { database: 'shop' });
+    expect(await instance.columns('customers')).toEqual({ columns: ['id'] });
+    expect(metadata.listColumns).toHaveBeenLastCalledWith({ database: 'shop', name: 'customers' });
+    expect(await instance.columns('missing')).toEqual({ columns: [] });
   });
 });

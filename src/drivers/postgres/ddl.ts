@@ -4,7 +4,13 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef, RelationKind } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
-import { columnSql, createTableSql, primaryKeySql } from '../common/design-sql';
+import {
+  columnSql,
+  createIndexSql,
+  createTableSql,
+  foreignKeySql,
+  primaryKeySql,
+} from '../common/design-sql';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -73,8 +79,20 @@ export const postgresDdl: SchemaDdl = {
             `COMMENT ON COLUMN ${target}.${quoteIdentifier(column.name.trim())} IS ${quoteString(column.comment)}`,
         ),
     ];
+    const keys = design.foreignKeys.map((key) =>
+      foreignKeySql(
+        design,
+        key,
+        quoteIdentifier,
+        qualified({ schema: key.targetSchema ?? table.schema, name: key.targetTable.trim() }),
+      ),
+    );
+    const indexes = design.indexes.map((index) =>
+      createIndexSql(design, index, quoteIdentifier, target),
+    );
     return [
-      createTableSql(target, [...columns, ...primaryKeySql(design, quoteIdentifier)]),
+      createTableSql(target, [...columns, ...primaryKeySql(design, quoteIdentifier), ...keys]),
+      ...indexes,
       ...comments,
     ];
   },

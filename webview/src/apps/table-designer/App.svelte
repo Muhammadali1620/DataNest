@@ -11,8 +11,11 @@
     type TableDesign,
   } from '../../../../src/shared/table-design';
   import Field from '../../components/Field.svelte';
+  import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import ColumnsEditor from './ColumnsEditor.svelte';
+  import ForeignKeysEditor from './ForeignKeysEditor.svelte';
+  import IndexesEditor from './IndexesEditor.svelte';
 
   interface Props {
     rpc: RpcPeer<TableDesignerProtocol['webview'], TableDesignerProtocol['host']>;
@@ -23,7 +26,14 @@
 
   const { rpc, t, previewDelay = 250 }: Props = $props();
 
-  type Tab = 'columns' | 'sql';
+  type Tab = 'columns' | 'indexes' | 'keys' | 'sql';
+
+  const TABS: readonly { readonly id: Tab; readonly label: MessageKey }[] = [
+    { id: 'columns', label: 'designer.tabColumns' },
+    { id: 'indexes', label: 'designer.tabIndexes' },
+    { id: 'keys', label: 'designer.tabKeys' },
+    { id: 'sql', label: 'designer.tabSql' },
+  ];
 
   let designerState = $state<TableDesignerState | undefined>(undefined);
   let design = $state<TableDesign | undefined>(undefined);
@@ -34,6 +44,12 @@
   let notice = $state<string | undefined>(undefined);
   /** Empty names are not shown as errors until the first save attempt. */
   let showProblems = $state(false);
+  /** Tables a foreign key can point at; asked for when the keys tab first opens. */
+  let tables = $state<string[]>([]);
+  let targetColumns = $state<ReadonlyMap<string, readonly string[]>>(new Map());
+  /** Plain, not reactive: only remembers what was already asked for. */
+  const requested: string[] = [];
+  let tablesRequested = false;
 
   const problems = $derived(
     design === undefined || designerState === undefined
@@ -79,6 +95,40 @@
     } catch (error) {
       statements = [];
       previewError = messageOf(error);
+    }
+  }
+
+  async function loadTables(): Promise<void> {
+    if (tablesRequested) {
+      return;
+    }
+    tablesRequested = true;
+    try {
+      tables = (await rpc.request('tables', {})).tables;
+    } catch (error) {
+      notice = messageOf(error);
+    }
+  }
+
+  async function loadColumns(table: string): Promise<void> {
+    if (requested.includes(table)) {
+      return;
+    }
+    requested.push(table);
+    let columns: readonly string[] = [];
+    try {
+      columns = (await rpc.request('columns', { table })).columns;
+    } catch (error) {
+      notice = messageOf(error);
+    }
+    // Recorded even when empty, so the editor does not ask again.
+    targetColumns = new Map([...targetColumns, [table, columns]]);
+  }
+
+  function openTab(next: Tab): void {
+    tab = next;
+    if (next === 'keys') {
+      void loadTables();
     }
   }
 
@@ -178,22 +228,16 @@
     </div>
 
     <div class="tabs" role="tablist">
-      <button
-        role="tab"
-        class="tab"
-        aria-selected={tab === 'columns'}
-        onclick={() => {
-          tab = 'columns';
-        }}>{t('designer.tabColumns')}</button
-      >
-      <button
-        role="tab"
-        class="tab"
-        aria-selected={tab === 'sql'}
-        onclick={() => {
-          tab = 'sql';
-        }}>{t('designer.tabSql')}</button
-      >
+      {#each TABS as item (item.id)}
+        <button
+          role="tab"
+          class="tab"
+          aria-selected={tab === item.id}
+          onclick={() => {
+            openTab(item.id);
+          }}>{t(item.label)}</button
+        >
+      {/each}
     </div>
 
     {#if tab === 'columns'}
@@ -209,6 +253,19 @@
       {#if showProblems && tableProblems.some((problem) => problem.kind === 'no-columns')}
         <p class="error" role="alert">{t('designer.problem.noColumns')}</p>
       {/if}
+    {:else if tab === 'indexes'}
+      <IndexesEditor {design} {problems} {showProblems} {t} onchange={setColumns} />
+    {:else if tab === 'keys'}
+      <ForeignKeysEditor
+        {design}
+        {tables}
+        {targetColumns}
+        {problems}
+        {showProblems}
+        {t}
+        onchange={setColumns}
+        onneedcolumns={(table: string) => void loadColumns(table)}
+      />
     {:else}
       <section class="sql" aria-label={t('designer.tabSql')}>
         {#if previewError !== undefined}

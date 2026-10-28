@@ -2,12 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { newTableDesign, type TableDesign } from '../../../../../src/shared/table-design';
 import {
   addColumn,
+  addForeignKey,
+  addIndex,
   columnProblems,
+  indexProblems,
+  keyProblems,
   moveColumn,
   nextColumnId,
   problemMessage,
   removeColumn,
+  removeForeignKey,
+  removeIndex,
   updateColumn,
+  updateForeignKey,
+  updateIndex,
 } from '../../../../../webview/src/apps/table-designer/design-model';
 
 function three(): TableDesign {
@@ -35,7 +43,9 @@ describe('addColumn', () => {
     let design = three();
     design = removeColumn(design, 'new-2');
     expect(nextColumnId(design)).toBe('new-4');
-    expect(nextColumnId({ name: '', comment: '', columns: [] })).toBe('new-1');
+    expect(nextColumnId({ name: '', comment: '', columns: [], indexes: [], foreignKeys: [] })).toBe(
+      'new-1',
+    );
   });
 });
 
@@ -120,5 +130,92 @@ describe('problems', () => {
     ];
     expect(columnProblems(problems, 'b')).toEqual([{ kind: 'column-type', column: 'b' }]);
     expect(columnProblems(problems, 'z')).toEqual([]);
+  });
+});
+
+describe('indexes', () => {
+  it('names a new index after the table and never repeats a name or id', () => {
+    let design = addIndex(three());
+    design = addIndex(design);
+    expect(design.indexes.map((index) => [index.id, index.name])).toEqual([
+      ['index-1', 'ix_t_1'],
+      ['index-2', 'ix_t_2'],
+    ]);
+    design = removeIndex(design, 'index-1');
+    design = addIndex(design);
+    expect(design.indexes.map((index) => index.id)).toEqual(['index-2', 'index-3']);
+    expect(addIndex({ ...three(), name: ' my table ' }).indexes[0]?.name).toBe('ix_my_table_1');
+    expect(addIndex({ ...three(), name: '' }).indexes[0]?.name).toBe('ix_table_1');
+  });
+
+  it('updates one index', () => {
+    const design = updateIndex(addIndex(three()), 'index-1', { columns: ['new-2'], unique: true });
+    expect(design.indexes[0]).toMatchObject({ columns: ['new-2'], unique: true });
+  });
+});
+
+describe('foreign keys', () => {
+  it('adds a key with default actions', () => {
+    expect(addForeignKey(three()).foreignKeys[0]).toEqual({
+      id: 'key-1',
+      name: 'fk_t_1',
+      columns: [],
+      targetTable: '',
+      targetColumns: [],
+      onDelete: 'NO ACTION',
+      onUpdate: 'NO ACTION',
+    });
+  });
+
+  it('empties the referenced columns when the referenced table changes', () => {
+    let design = updateForeignKey(addForeignKey(three()), 'key-1', {
+      targetTable: 'a',
+      targetColumns: ['id'],
+    });
+    expect(design.foreignKeys[0]?.targetColumns).toEqual(['id']);
+    design = updateForeignKey(design, 'key-1', { targetTable: 'a', onDelete: 'CASCADE' });
+    expect(design.foreignKeys[0]).toMatchObject({ targetColumns: ['id'], onDelete: 'CASCADE' });
+    design = updateForeignKey(design, 'key-1', { targetTable: 'b' });
+    expect(design.foreignKeys[0]?.targetColumns).toEqual([]);
+  });
+
+  it('removes a key', () => {
+    expect(removeForeignKey(addForeignKey(three()), 'key-1').foreignKeys).toEqual([]);
+  });
+});
+
+describe('removing a column used by indexes and keys', () => {
+  it('takes it out of indexes and drops the paired referenced column of a key', () => {
+    let design = updateIndex(addIndex(three()), 'index-1', { columns: ['new-1', 'new-2'] });
+    design = updateForeignKey(addForeignKey(design), 'key-1', {
+      columns: ['new-2', 'new-3'],
+      targetTable: 'p',
+      targetColumns: ['x', 'y'],
+    });
+    design = removeColumn(design, 'new-2');
+    expect(design.indexes[0]?.columns).toEqual(['new-1']);
+    expect(design.foreignKeys[0]).toMatchObject({ columns: ['new-3'], targetColumns: ['y'] });
+  });
+});
+
+describe('problems of indexes and keys', () => {
+  it('has a message for each and picks them by id', () => {
+    const problems = [
+      { kind: 'index-name', index: 'i' } as const,
+      { kind: 'duplicate-key', key: 'k' } as const,
+      { kind: 'key-target', key: 'k' } as const,
+    ];
+    expect(indexProblems(problems, 'i')).toHaveLength(1);
+    expect(keyProblems(problems, 'k')).toHaveLength(2);
+    expect(problemMessage({ kind: 'index-name', index: 'i' })).toBe('designer.problem.indexName');
+    expect(problemMessage({ kind: 'key-name', key: 'k' })).toBe('designer.problem.indexName');
+    expect(problemMessage({ kind: 'duplicate-index', index: 'i' })).toBe(
+      'designer.problem.duplicateIndex',
+    );
+    expect(problemMessage({ kind: 'key-columns', key: 'k' })).toBe('designer.problem.indexColumns');
+    expect(problemMessage({ kind: 'key-target', key: 'k' })).toBe('designer.problem.keyTarget');
+    expect(problemMessage({ kind: 'key-target-columns', key: 'k' })).toBe(
+      'designer.problem.keyTargetColumns',
+    );
   });
 });

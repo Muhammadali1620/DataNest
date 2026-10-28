@@ -43,6 +43,12 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     previews.push(design);
     return { statements: [`CREATE TABLE ${design.name}`] };
   });
+  const askedColumns: string[] = [];
+  host.handle('tables', () => ({ tables: ['customers', 'products'] }));
+  host.handle('columns', ({ table }) => {
+    askedColumns.push(table);
+    return { columns: table === 'customers' ? ['id', 'email'] : [] };
+  });
   host.handle('save', (design) => {
     saves.push(design);
     return { outcome: saveOutcome };
@@ -63,6 +69,7 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     closed,
     previews,
     saves,
+    askedColumns,
     setOutcome: (outcome: typeof saveOutcome) => {
       saveOutcome = outcome;
     },
@@ -177,5 +184,113 @@ describe('table designer App', () => {
     await setup(state(), 'ru');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Новая таблица в shop');
     expect(screen.getByRole('button', { name: 'Добавить колонку' })).toBeTruthy();
+  });
+
+  it('adds an index over chosen columns in order', async () => {
+    const { saves } = await setup();
+    await fireEvent.input(screen.getByLabelText('Table name'), { target: { value: 'orders' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+    await fireEvent.input(input('Name of column #2'), { target: { value: 'email' } });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
+    expect(screen.getByText('No indexes besides the primary key')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Add index' }));
+    const add = screen.getByLabelText<HTMLSelectElement>('Add to Columns of ix_orders_1');
+    await fireEvent.change(add, { target: { value: 'new-2' } });
+    await fireEvent.change(screen.getByLabelText('Add to Columns of ix_orders_1'), {
+      target: { value: 'new-1' },
+    });
+    await fireEvent.click(input('Unique of ix_orders_1'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await flush();
+    expect(saves[0]?.indexes).toEqual([
+      { id: 'index-1', name: 'ix_orders_1', columns: ['new-2', 'new-1'], unique: true },
+    ]);
+  });
+
+  it('removes a column from an index with its chip', async () => {
+    await setup();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add index' }));
+    await fireEvent.change(screen.getByLabelText('Add to Columns of ix_table_1'), {
+      target: { value: 'new-1' },
+    });
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Remove id from Columns of ix_table_1' }),
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Remove id from Columns of ix_table_1' }),
+    ).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove index ix_table_1' }));
+    expect(screen.getByText('No indexes besides the primary key')).toBeTruthy();
+  });
+
+  it('builds a foreign key from the tables and columns the host knows', async () => {
+    const { saves, askedColumns } = await setup();
+    await fireEvent.input(screen.getByLabelText('Table name'), { target: { value: 'orders' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+    await fireEvent.input(input('Name of column #2'), { target: { value: 'customer_id' } });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Foreign keys' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add foreign key' }));
+    await fireEvent.change(screen.getByLabelText('Add to Columns of fk_orders_1'), {
+      target: { value: 'new-2' },
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText<HTMLSelectElement>('References table of fk_orders_1').options.length,
+      ).toBe(4);
+    });
+    await fireEvent.change(screen.getByLabelText('References table of fk_orders_1'), {
+      target: { value: 'customers' },
+    });
+    await waitFor(() => {
+      expect(askedColumns).toEqual(['customers']);
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText('Add to Referenced columns of fk_orders_1')).toBeTruthy();
+    });
+    await fireEvent.change(screen.getByLabelText('Add to Referenced columns of fk_orders_1'), {
+      target: { value: 'id' },
+    });
+    await fireEvent.change(screen.getByLabelText('On delete of fk_orders_1'), {
+      target: { value: 'CASCADE' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await flush();
+    expect(saves[0]?.foreignKeys).toEqual([
+      {
+        id: 'key-1',
+        name: 'fk_orders_1',
+        columns: ['new-2'],
+        targetTable: 'customers',
+        targetColumns: ['id'],
+        onDelete: 'CASCADE',
+        onUpdate: 'NO ACTION',
+      },
+    ]);
+  });
+
+  it('lets a key point at the table being designed, with its own columns', async () => {
+    const { askedColumns } = await setup();
+    await fireEvent.input(screen.getByLabelText('Table name'), { target: { value: 'nodes' } });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Foreign keys' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add foreign key' }));
+    const select = screen.getByLabelText<HTMLSelectElement>('References table of fk_nodes_1');
+    expect([...select.options].map((option) => option.textContent)).toContain('nodes (this table)');
+    await fireEvent.change(select, { target: { value: 'nodes' } });
+    const targets = screen.getByLabelText<HTMLSelectElement>(
+      'Add to Referenced columns of fk_nodes_1',
+    );
+    expect([...targets.options].map((option) => option.value)).toEqual(['', 'id']);
+    expect(askedColumns).toEqual([]);
+  });
+
+  it('shows key problems after a save attempt', async () => {
+    await setup();
+    await fireEvent.input(screen.getByLabelText('Table name'), { target: { value: 't' } });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Foreign keys' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add foreign key' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('Pick at least one column, each once')).toBeTruthy();
+    expect(screen.getByText('Pick the referenced table')).toBeTruthy();
   });
 });

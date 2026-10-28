@@ -1,8 +1,13 @@
 // Pieces of CREATE TABLE every dialect writes the same way; the dialect files add
 // what differs (auto numbering, comments, quoting).
 
-import type { ColumnDesign, TableDesign } from '../../shared/table-design';
-import { composeType } from '../../shared/table-design';
+import type {
+  ColumnDesign,
+  ForeignKeyDesign,
+  IndexDesign,
+  TableDesign,
+} from '../../shared/table-design';
+import { columnNames, composeType } from '../../shared/table-design';
 
 export interface ColumnSqlParts {
   /** `"id"` or `` `id` ``. */
@@ -49,4 +54,53 @@ export function createTableSql(
   options = '',
 ): string {
   return `CREATE TABLE ${quotedTable} (\n${items.map((item) => `  ${item}`).join(',\n')}\n)${options}`;
+}
+
+/** `("a", "b")`: the columns of an index or key by their current names. */
+export function columnList(
+  design: TableDesign,
+  ids: readonly string[],
+  quote: (name: string) => string,
+): string {
+  return `(${columnNames(design, ids)
+    .map((name) => quote(name))
+    .join(', ')})`;
+}
+
+/** ON DELETE / ON UPDATE, leaving out the default NO ACTION. */
+export function referentialActions(key: ForeignKeyDesign): string {
+  const parts: string[] = [];
+  if (key.onDelete !== 'NO ACTION') {
+    parts.push(`ON DELETE ${key.onDelete}`);
+  }
+  if (key.onUpdate !== 'NO ACTION') {
+    parts.push(`ON UPDATE ${key.onUpdate}`);
+  }
+  return parts.join(' ');
+}
+
+/** `CONSTRAINT "fk" FOREIGN KEY ("a") REFERENCES <target> ("id") [actions]`. */
+export function foreignKeySql(
+  design: TableDesign,
+  key: ForeignKeyDesign,
+  quote: (name: string) => string,
+  quotedTarget: string,
+): string {
+  const actions = referentialActions(key);
+  return [
+    `CONSTRAINT ${quote(key.name.trim())} FOREIGN KEY ${columnList(design, key.columns, quote)}`,
+    `REFERENCES ${quotedTarget} (${key.targetColumns.map((column) => quote(column.trim())).join(', ')})`,
+    ...(actions === '' ? [] : [actions]),
+  ].join(' ');
+}
+
+/** `CREATE [UNIQUE] INDEX "name" ON <table> ("a", "b")` for dialects that keep indexes apart. */
+export function createIndexSql(
+  design: TableDesign,
+  index: IndexDesign,
+  quote: (name: string) => string,
+  quotedTable: string,
+  quotedName: string = quote(index.name.trim()),
+): string {
+  return `CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${quotedName} ON ${quotedTable} ${columnList(design, index.columns, quote)}`;
 }

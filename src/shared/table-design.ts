@@ -11,6 +11,8 @@ export const DESIGN_LIMITS = {
   defaultValue: 4000,
   comment: 2000,
   columns: 1000,
+  indexes: 200,
+  foreignKeys: 200,
 } as const;
 
 export interface ColumnDesign {
@@ -31,10 +33,50 @@ export interface ColumnDesign {
   readonly comment: string;
 }
 
+/** An index of the table, over columns of this design. */
+export interface IndexDesign {
+  readonly id: string;
+  /** The index's name in the database before this edit; absent for a new index. */
+  readonly original?: string;
+  readonly name: string;
+  /** Column ids in key order, so a renamed column stays in its index. */
+  readonly columns: readonly string[];
+  readonly unique: boolean;
+}
+
+export const REFERENTIAL_ACTIONS = [
+  'NO ACTION',
+  'RESTRICT',
+  'CASCADE',
+  'SET NULL',
+  'SET DEFAULT',
+] as const;
+
+export type ReferentialAction = (typeof REFERENTIAL_ACTIONS)[number];
+
+/** A foreign key from columns of this design to another table (or this one). */
+export interface ForeignKeyDesign {
+  readonly id: string;
+  /** The constraint's name in the database before this edit; absent for a new key. */
+  readonly original?: string;
+  readonly name: string;
+  /** Column ids of this table, in key order. */
+  readonly columns: readonly string[];
+  /** The referenced table, in this table's database; a schema may be given. */
+  readonly targetSchema?: string;
+  readonly targetTable: string;
+  /** Column names of the referenced table, matched to `columns` by position. */
+  readonly targetColumns: readonly string[];
+  readonly onDelete: ReferentialAction;
+  readonly onUpdate: ReferentialAction;
+}
+
 export interface TableDesign {
   readonly name: string;
   readonly comment: string;
   readonly columns: readonly ColumnDesign[];
+  readonly indexes: readonly IndexDesign[];
+  readonly foreignKeys: readonly ForeignKeyDesign[];
 }
 
 /** What a driver's designer can do, so the page shows only what will work. */
@@ -107,6 +149,16 @@ export type DesignProblem =
   | { readonly kind: 'column-name'; readonly column: string }
   | { readonly kind: 'duplicate-column'; readonly column: string }
   | { readonly kind: 'column-type'; readonly column: string }
+  /** An index or key without a name, with a name taken twice, or without columns. */
+  | { readonly kind: 'index-name'; readonly index: string }
+  | { readonly kind: 'duplicate-index'; readonly index: string }
+  | { readonly kind: 'index-columns'; readonly index: string }
+  | { readonly kind: 'key-name'; readonly key: string }
+  | { readonly kind: 'duplicate-key'; readonly key: string }
+  | { readonly kind: 'key-columns'; readonly key: string }
+  | { readonly kind: 'key-target'; readonly key: string }
+  /** The referenced columns do not pair up with the key columns. */
+  | { readonly kind: 'key-target-columns'; readonly key: string }
   | {
       readonly kind: 'auto-increment';
       readonly column: string;
@@ -161,7 +213,74 @@ export function designProblems(design: TableDesign, driver: DriverId): DesignPro
     }
   }
   problems.push(...autoIncrementProblems(design, driver));
+  problems.push(...indexProblems(design));
+  problems.push(...foreignKeyProblems(design));
   return problems;
+}
+
+/** Column ids that exist in the design; a reference to anything else is broken. */
+function knownColumns(design: TableDesign): ReadonlySet<string> {
+  return new Set(design.columns.map((column) => column.id));
+}
+
+/** True when a list of column ids is empty, repeats one, or names a missing column. */
+function badColumnList(ids: readonly string[], known: ReadonlySet<string>): boolean {
+  return ids.length === 0 || new Set(ids).size !== ids.length || ids.some((id) => !known.has(id));
+}
+
+function indexProblems(design: TableDesign): DesignProblem[] {
+  const problems: DesignProblem[] = [];
+  const known = knownColumns(design);
+  const seen = new Set<string>();
+  for (const index of design.indexes) {
+    const name = index.name.trim().toLowerCase();
+    if (name === '') {
+      problems.push({ kind: 'index-name', index: index.id });
+    } else if (seen.has(name)) {
+      problems.push({ kind: 'duplicate-index', index: index.id });
+    }
+    seen.add(name);
+    if (badColumnList(index.columns, known)) {
+      problems.push({ kind: 'index-columns', index: index.id });
+    }
+  }
+  return problems;
+}
+
+function foreignKeyProblems(design: TableDesign): DesignProblem[] {
+  const problems: DesignProblem[] = [];
+  const known = knownColumns(design);
+  const seen = new Set<string>();
+  for (const key of design.foreignKeys) {
+    const name = key.name.trim().toLowerCase();
+    if (name === '') {
+      problems.push({ kind: 'key-name', key: key.id });
+    } else if (seen.has(name)) {
+      problems.push({ kind: 'duplicate-key', key: key.id });
+    }
+    seen.add(name);
+    if (badColumnList(key.columns, known)) {
+      problems.push({ kind: 'key-columns', key: key.id });
+    }
+    if (key.targetTable.trim() === '') {
+      problems.push({ kind: 'key-target', key: key.id });
+    } else if (
+      key.targetColumns.length !== key.columns.length ||
+      key.targetColumns.some((column) => column.trim() === '')
+    ) {
+      problems.push({ kind: 'key-target-columns', key: key.id });
+    }
+  }
+  return problems;
+}
+
+/** The current names of columns given by id, in that order; unknown ids are skipped. */
+export function columnNames(design: TableDesign, ids: readonly string[]): string[] {
+  const byId = new Map(design.columns.map((column) => [column.id, column.name.trim()]));
+  return ids.flatMap((id) => {
+    const name = byId.get(id);
+    return name === undefined ? [] : [name];
+  });
 }
 
 function autoIncrementProblems(design: TableDesign, driver: DriverId): DesignProblem[] {
@@ -205,5 +324,7 @@ export function newTableDesign(driver: DriverId, name = ''): TableDesign {
         comment: '',
       },
     ],
+    indexes: [],
+    foreignKeys: [],
   };
 }

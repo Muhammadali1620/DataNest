@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
-import { newTableDesign } from '../../../../src/shared/table-design';
+import { newTableDesign, type TableDesign } from '../../../../src/shared/table-design';
 
 const { ddl } = mysqlDialect;
 const table = { database: 'shop', name: 'orders' };
@@ -83,6 +83,59 @@ describe('mysql ddl', () => {
       expect(ddl.designer.types).toContain('enum');
       expect(ddl.designer.columnComments).toBe(true);
       expect(ddl.designer.tableComment).toBe(true);
+    });
+  });
+
+  describe('createTable with indexes and keys', () => {
+    const partsDesign = (base: TableDesign): TableDesign => ({
+      ...base,
+      columns: [
+        ...base.columns,
+        {
+          id: 'p',
+          name: 'parent_id',
+          type: 'integer',
+          length: '',
+          nullable: true,
+          defaultValue: '',
+          autoIncrement: false,
+          primaryKey: false,
+          comment: '',
+        },
+      ],
+      indexes: [
+        { id: 'i1', name: 'ix_parent', columns: ['p'], unique: false },
+        { id: 'i2', name: 'uq_both', columns: ['new-1', 'p'], unique: true },
+      ],
+      foreignKeys: [
+        {
+          id: 'k1',
+          name: 'fk_parent',
+          columns: ['p'],
+          targetTable: 'parents',
+          targetColumns: ['id'],
+          onDelete: 'CASCADE',
+          onUpdate: 'NO ACTION',
+        },
+      ],
+    });
+
+    it('keeps them inside CREATE TABLE', () => {
+      const [sql] = ddl.createTable(table, partsDesign(newTableDesign('mysql', 'orders')));
+      expect(sql).toContain('  KEY `ix_parent` (`parent_id`),');
+      expect(sql).toContain('  UNIQUE KEY `uq_both` (`id`, `parent_id`),');
+      expect(sql).toContain(
+        '  CONSTRAINT `fk_parent` FOREIGN KEY (`parent_id`) REFERENCES `shop`.`parents` (`id`) ON DELETE CASCADE\n)',
+      );
+    });
+
+    it('points a key into another database when one is given', () => {
+      const design = partsDesign(newTableDesign('mysql', 'orders'));
+      const [sql] = ddl.createTable(table, {
+        ...design,
+        foreignKeys: design.foreignKeys.map((key) => ({ ...key, targetSchema: 'crm' })),
+      });
+      expect(sql).toContain('REFERENCES `crm`.`parents` (`id`)');
     });
   });
 });

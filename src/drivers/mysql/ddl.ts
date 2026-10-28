@@ -2,7 +2,13 @@
 
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
-import { columnSql, createTableSql, primaryKeySql } from '../common/design-sql';
+import {
+  columnList,
+  columnSql,
+  createTableSql,
+  foreignKeySql,
+  primaryKeySql,
+} from '../common/design-sql';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -56,11 +62,28 @@ export const mysqlDdl: SchemaDdl = {
         trailer: (c) => (c.comment === '' ? '' : `COMMENT ${quoteString(c.comment)}`),
       }),
     );
+    // MySQL keeps indexes and keys inside CREATE TABLE.
+    const indexes = design.indexes.map(
+      (index) =>
+        `${index.unique ? 'UNIQUE KEY' : 'KEY'} ${quoteIdentifier(index.name.trim())} ${columnList(design, index.columns, quoteIdentifier)}`,
+    );
+    const keys = design.foreignKeys.map((key) =>
+      foreignKeySql(
+        design,
+        key,
+        quoteIdentifier,
+        quoteTable({
+          ...table,
+          ...(key.targetSchema === undefined ? {} : { database: key.targetSchema }),
+          name: key.targetTable.trim(),
+        }),
+      ),
+    );
     const comment = design.comment === '' ? '' : ` COMMENT = ${quoteString(design.comment)}`;
     return [
       createTableSql(
         quoteTable({ ...table, name: design.name.trim() }),
-        [...columns, ...primaryKeySql(design, quoteIdentifier)],
+        [...columns, ...primaryKeySql(design, quoteIdentifier), ...indexes, ...keys],
         comment,
       ),
     ];

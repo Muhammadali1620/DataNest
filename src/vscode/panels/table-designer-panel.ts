@@ -54,6 +54,8 @@ export class TableDesignerPanel implements vscode.Disposable {
       },
     });
     this.rpc.handle('preview', (design) => this.model.preview(design));
+    this.rpc.handle('tables', async () => await this.model.tables());
+    this.rpc.handle('columns', async ({ table }) => await this.model.columns(table));
     this.rpc.handle('save', async (design) => {
       const result = await this.model.save(design);
       if (result.outcome === 'ran') {

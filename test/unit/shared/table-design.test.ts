@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ColumnDesign,
+  columnNames,
   composeType,
+  type ForeignKeyDesign,
+  type IndexDesign,
   designProblems,
   newTableDesign,
   splitType,
@@ -24,7 +27,7 @@ function column(overrides: Partial<ColumnDesign> = {}): ColumnDesign {
 }
 
 function design(columns: ColumnDesign[], name = 't'): TableDesign {
-  return { name, comment: '', columns };
+  return { name, comment: '', columns, indexes: [], foreignKeys: [] };
 }
 
 describe('composeType', () => {
@@ -179,5 +182,98 @@ describe('newTableDesign', () => {
     ]);
     expect(newTableDesign('sqlite').columns[0]?.type).toBe('integer');
     expect(newTableDesign('postgres').name).toBe('');
+  });
+});
+
+describe('designProblems: indexes and keys', () => {
+  const a = column({ id: 'a', name: 'a' });
+  const b = column({ id: 'b', name: 'b' });
+  const index = (overrides: Partial<IndexDesign> = {}): IndexDesign => ({
+    id: 'i1',
+    name: 'ix_a',
+    columns: ['a'],
+    unique: false,
+    ...overrides,
+  });
+  const key = (overrides: Partial<ForeignKeyDesign> = {}): ForeignKeyDesign => ({
+    id: 'k1',
+    name: 'fk_a',
+    columns: ['a'],
+    targetTable: 'parents',
+    targetColumns: ['id'],
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION',
+    ...overrides,
+  });
+  const withParts = (indexes: IndexDesign[], foreignKeys: ForeignKeyDesign[]): TableDesign => ({
+    ...design([a, b]),
+    indexes,
+    foreignKeys,
+  });
+
+  it('accepts well-formed indexes and keys', () => {
+    expect(
+      designProblems(
+        withParts([index(), index({ id: 'i2', name: 'ix_ab', columns: ['a', 'b'] })], [key()]),
+        'mysql',
+      ),
+    ).toEqual([]);
+  });
+
+  it('needs index names, unique ones regardless of case', () => {
+    expect(
+      designProblems(
+        withParts(
+          [index({ name: ' ' }), index({ id: 'i2', name: 'IX' }), index({ id: 'i3', name: 'ix' })],
+          [],
+        ),
+        'mysql',
+      ),
+    ).toEqual([
+      { kind: 'index-name', index: 'i1' },
+      { kind: 'duplicate-index', index: 'i3' },
+    ]);
+  });
+
+  it('needs columns that exist, each once', () => {
+    for (const columns of [[], ['a', 'a'], ['zz']]) {
+      expect(designProblems(withParts([index({ columns })], []), 'postgres')).toEqual([
+        { kind: 'index-columns', index: 'i1' },
+      ]);
+    }
+  });
+
+  it('checks key names, columns, target and pairing', () => {
+    expect(
+      designProblems(
+        withParts(
+          [],
+          [
+            key({ name: '' }),
+            key({ id: 'k2', name: 'FK_A' }),
+            key({ id: 'k3', name: 'fk_a', columns: [], targetColumns: [] }),
+            key({ id: 'k4', name: 'k4', targetTable: ' ' }),
+            key({ id: 'k5', name: 'k5', columns: ['a', 'b'], targetColumns: ['id'] }),
+            key({ id: 'k6', name: 'k6', targetColumns: [' '] }),
+          ],
+        ),
+        'sqlite',
+      ),
+    ).toEqual([
+      { kind: 'key-name', key: 'k1' },
+      { kind: 'duplicate-key', key: 'k3' },
+      { kind: 'key-columns', key: 'k3' },
+      { kind: 'key-target', key: 'k4' },
+      { kind: 'key-target-columns', key: 'k5' },
+      { kind: 'key-target-columns', key: 'k6' },
+    ]);
+  });
+});
+
+describe('columnNames', () => {
+  it('maps ids to the current, trimmed names in the given order', () => {
+    const d = design([column({ id: 'a', name: ' first ' }), column({ id: 'b', name: 'second' })]);
+    expect(columnNames(d, ['b', 'a'])).toEqual(['second', 'first']);
+    expect(columnNames(d, ['gone', 'a'])).toEqual(['first']);
   });
 });

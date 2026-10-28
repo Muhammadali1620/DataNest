@@ -48,6 +48,53 @@ function col(name: string, overrides: Partial<ColumnDesign> = {}): ColumnDesign 
   };
 }
 
+/** `design_child` with an index, a unique index and a key to `design_parent`. */
+function childDesign(): TableDesign {
+  return {
+    name: 'design_child',
+    comment: '',
+    columns: [
+      col('id', { type: 'integer', nullable: false, primaryKey: true }),
+      col('parent_id', { type: 'integer' }),
+      col('code', { type: 'varchar', length: '20' }),
+    ],
+    indexes: [
+      { id: 'i1', name: 'ix_design_child_parent', columns: ['parent_id'], unique: false },
+      { id: 'i2', name: 'uq_design_child_code', columns: ['code', 'parent_id'], unique: true },
+    ],
+    foreignKeys: [
+      {
+        id: 'k1',
+        name: 'fk_design_child_parent',
+        columns: ['parent_id'],
+        targetTable: 'design_parent',
+        targetColumns: ['id'],
+        onDelete: 'CASCADE',
+        onUpdate: 'NO ACTION',
+      },
+    ],
+  };
+}
+
+/** Rows of the child follow the key: unknown parents are refused, deleted ones cascade. */
+async function checkKey(session: Session, prefix = ''): Promise<void> {
+  await runAll(session, `INSERT INTO ${prefix}design_parent (id) VALUES (1)`);
+  await runAll(
+    session,
+    `INSERT INTO ${prefix}design_child (id, parent_id, code) VALUES (1, 1, 'a')`,
+  );
+  await expect(
+    runAll(session, `INSERT INTO ${prefix}design_child (id, parent_id) VALUES (2, 99)`),
+  ).rejects.toMatchObject({ code: 'constraint' });
+  await expect(
+    runAll(session, `INSERT INTO ${prefix}design_child (id, parent_id, code) VALUES (3, 1, 'a')`),
+  ).rejects.toMatchObject({ code: 'constraint' });
+  await runAll(session, `DELETE FROM ${prefix}design_parent WHERE id = 1`);
+  expect((await runAll(session, `SELECT COUNT(*) FROM ${prefix}design_child`)).rows[0]?.[0]).toBe(
+    0,
+  );
+}
+
 async function create(
   session: Session,
   driver: Driver,
@@ -66,12 +113,33 @@ describe.each(['mysql', 'mariadb'] as const)('designed tables on %s', (serverId)
 
   beforeAll(async () => {
     session = await mysqlDriver.openSession(serverConfig(serverId, 'mysql'));
-    await runAll(session, 'DROP TABLE IF EXISTS design_probe');
+    await runAll(session, 'DROP TABLE IF EXISTS design_probe, design_child, design_parent');
   });
 
   afterAll(async () => {
-    await runAll(session, 'DROP TABLE IF EXISTS design_probe');
+    await runAll(session, 'DROP TABLE IF EXISTS design_probe, design_child, design_parent');
     await session.close();
+  });
+
+  it('creates indexes and a cascading foreign key', async () => {
+    await runAll(session, 'CREATE TABLE design_parent (id INT PRIMARY KEY)');
+    await create(session, mysqlDriver, childDesign(), { database });
+    const indexes = await session.metadata.listIndexes({ database, name: 'design_child' });
+    expect(indexes.map((index) => [index.name, index.columns, index.unique])).toEqual(
+      expect.arrayContaining([
+        ['ix_design_child_parent', ['parent_id'], false],
+        ['uq_design_child_code', ['code', 'parent_id'], true],
+      ]),
+    );
+    const keys = await session.metadata.listForeignKeys({ database, name: 'design_child' });
+    expect(keys).toEqual([
+      expect.objectContaining({
+        name: 'fk_design_child_parent',
+        columns: ['parent_id'],
+        targetColumns: ['id'],
+      }),
+    ]);
+    await checkKey(session);
   });
 
   it('creates every kind of column the designer offers', async () => {
@@ -80,6 +148,8 @@ describe.each(['mysql', 'mariadb'] as const)('designed tables on %s', (serverId)
       mysqlDriver,
       {
         name: 'design_probe',
+        indexes: [],
+        foreignKeys: [],
         comment: "probe's table",
         columns: [
           col('id', {
@@ -126,7 +196,13 @@ describe.each(['mysql', 'mariadb'] as const)('designed tables on %s', (serverId)
       create(
         session,
         mysqlDriver,
-        { name: 'design_bad', comment: '', columns: [col('a', { type: 'no_such_type' })] },
+        {
+          name: 'design_bad',
+          comment: '',
+          columns: [col('a', { type: 'no_such_type' })],
+          indexes: [],
+          foreignKeys: [],
+        },
         { database },
       ),
     ).rejects.toMatchObject({ code: 'syntax' });
@@ -138,12 +214,34 @@ describe('designed tables on postgres', () => {
 
   beforeAll(async () => {
     session = await postgresDriver.openSession(serverConfig('postgres', 'postgres'));
-    await runAll(session, 'DROP TABLE IF EXISTS inventory.design_probe, design_pair');
+    await runAll(
+      session,
+      'DROP TABLE IF EXISTS inventory.design_probe, design_pair, design_child, design_parent',
+    );
   });
 
   afterAll(async () => {
-    await runAll(session, 'DROP TABLE IF EXISTS inventory.design_probe, design_pair');
+    await runAll(
+      session,
+      'DROP TABLE IF EXISTS inventory.design_probe, design_pair, design_child, design_parent',
+    );
     await session.close();
+  });
+
+  it('creates indexes and a cascading foreign key', async () => {
+    await runAll(session, 'CREATE TABLE design_parent (id integer PRIMARY KEY)');
+    await create(session, postgresDriver, childDesign(), { schema: 'public' });
+    const indexes = await session.metadata.listIndexes({ name: 'design_child' });
+    expect(indexes.map((index) => [index.name, index.columns, index.unique])).toEqual([
+      ['design_child_pkey', ['id'], true],
+      ['ix_design_child_parent', ['parent_id'], false],
+      ['uq_design_child_code', ['code', 'parent_id'], true],
+    ]);
+    const keys = await session.metadata.listForeignKeys({ name: 'design_child' });
+    expect(keys).toEqual([
+      expect.objectContaining({ name: 'fk_design_child_parent', columns: ['parent_id'] }),
+    ]);
+    await checkKey(session);
   });
 
   it('creates identity, timestamps, arrays and comments in another schema', async () => {
@@ -152,6 +250,8 @@ describe('designed tables on postgres', () => {
       postgresDriver,
       {
         name: 'design_probe',
+        indexes: [],
+        foreignKeys: [],
         comment: 'probe',
         columns: [
           col('id', { type: 'bigint', nullable: false, autoIncrement: true, primaryKey: true }),
@@ -187,6 +287,8 @@ describe('designed tables on postgres', () => {
   it('creates a composite key', async () => {
     await create(session, postgresDriver, {
       name: 'design_pair',
+      indexes: [],
+      foreignKeys: [],
       comment: '',
       columns: [
         col('a', { type: 'integer', primaryKey: true }),
@@ -225,6 +327,8 @@ describe('designed tables on sqlite', () => {
   it('creates an AUTOINCREMENT key and defaults', async () => {
     await create(session, driver, {
       name: 'notes',
+      indexes: [],
+      foreignKeys: [],
       comment: '',
       columns: [
         col('id', { type: 'integer', nullable: false, autoIncrement: true, primaryKey: true }),
@@ -245,6 +349,8 @@ describe('designed tables on sqlite', () => {
   it('creates a composite key at the end', async () => {
     await create(session, driver, {
       name: 'pairs',
+      indexes: [],
+      foreignKeys: [],
       comment: '',
       columns: [
         col('a', { type: 'integer', primaryKey: true }),
@@ -253,5 +359,21 @@ describe('designed tables on sqlite', () => {
     });
     const columns = await session.metadata.listColumns({ name: 'pairs' });
     expect(columns.map((c) => c.primaryKey)).toEqual([true, true]);
+  });
+
+  it('creates indexes and a cascading foreign key', async () => {
+    // SQLite checks foreign keys only when asked to, per connection.
+    await runAll(session, 'PRAGMA foreign_keys = ON');
+    await runAll(session, 'CREATE TABLE design_parent (id INTEGER PRIMARY KEY)');
+    await create(session, driver, childDesign());
+    const indexes = await session.metadata.listIndexes({ name: 'design_child' });
+    expect(indexes.map((index) => [index.name, index.columns, index.unique])).toEqual([
+      ['ix_design_child_parent', ['parent_id'], false],
+      ['uq_design_child_code', ['code', 'parent_id'], true],
+    ]);
+    expect(await session.metadata.listForeignKeys({ name: 'design_child' })).toEqual([
+      expect.objectContaining({ columns: ['parent_id'], targetColumns: ['id'] }),
+    ]);
+    await checkKey(session);
   });
 });

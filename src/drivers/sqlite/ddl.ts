@@ -4,7 +4,13 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
-import { columnSql, createTableSql, primaryKeySql } from '../common/design-sql';
+import {
+  columnSql,
+  createIndexSql,
+  createTableSql,
+  foreignKeySql,
+  primaryKeySql,
+} from '../common/design-sql';
 import { quoteIdentifier, quoteTable } from './quote';
 
 const TYPES = ['integer', 'real', 'text', 'blob', 'numeric'];
@@ -21,11 +27,27 @@ export const sqliteDdl: SchemaDdl = {
         trailer: () => '',
       }),
     );
+    const target = quoteTable({ ...table, name: design.name.trim() });
+    // A foreign key in SQLite can only point into the same database file.
+    const keys = design.foreignKeys.map((key) =>
+      foreignKeySql(design, key, quoteIdentifier, quoteIdentifier(key.targetTable.trim())),
+    );
     return [
-      createTableSql(quoteTable({ ...table, name: design.name.trim() }), [
+      createTableSql(target, [
         ...columns,
         ...(inlineKey ? [] : primaryKeySql(design, quoteIdentifier)),
+        ...keys,
       ]),
+      // An attached database names the index, not the table: "aux"."ix" ON "t".
+      ...design.indexes.map((index) =>
+        createIndexSql(
+          design,
+          index,
+          quoteIdentifier,
+          quoteIdentifier(design.name.trim()),
+          quoteTable({ ...table, name: index.name.trim() }),
+        ),
+      ),
     ];
   },
   dropRelation: (table, kind) => `DROP ${kind === 'table' ? 'TABLE' : 'VIEW'} ${quoteTable(table)}`,

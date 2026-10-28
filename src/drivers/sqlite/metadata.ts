@@ -1,8 +1,15 @@
 import { DbError } from '../../core/errors';
-import type { ColumnInfo, ForeignKey, TableInfo, TableRef } from '../../core/model/objects';
+import type {
+  ColumnInfo,
+  ForeignKey,
+  ObjectRef,
+  TableInfo,
+  TableRef,
+} from '../../core/model/objects';
 import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
 import { groupForeignKeys, groupKeys } from '../common/keys';
+import { quoteIdentifier } from './dialect';
 import type { SqliteParam } from './protocol';
 
 /** What metadata needs from the session, kept narrow for tests. */
@@ -98,6 +105,38 @@ export class SqliteMetadata implements MetadataReader {
       });
     }
     return groupForeignKeys(resolved).map((key, index) => ({ ...key, name: `fk_${index + 1}` }));
+  }
+
+  /**
+   * SQLite keeps the original CREATE text of every object. A table brings its
+   * indexes and triggers along; indexes behind keys have no text and need none.
+   */
+  async getDefinition(object: ObjectRef): Promise<string[]> {
+    if (object.kind !== 'table' && object.kind !== 'view' && object.kind !== 'trigger') {
+      throw new DbError('unsupported', `SQLite has no ${object.kind}s`);
+    }
+    const master =
+      object.database === undefined
+        ? 'sqlite_master'
+        : `${quoteIdentifier(object.database)}.sqlite_master`;
+    const own = await this.session.queryRows(
+      `SELECT sql FROM ${master} WHERE type = ? AND name = ? AND sql IS NOT NULL`,
+      [object.kind, object.name],
+    );
+    const first = asText(own[0]?.[0]);
+    if (first === undefined) {
+      throw new DbError('not-found', `${object.name} does not exist`);
+    }
+    if (object.kind === 'trigger') {
+      return [first];
+    }
+    const related = await this.session.queryRows(
+      `SELECT sql FROM ${master}
+       WHERE type IN ('index', 'trigger') AND tbl_name = ? AND sql IS NOT NULL
+       ORDER BY type, name`,
+      [object.name],
+    );
+    return [first, ...related.map((row) => asText(row[0]) ?? '').filter((sql) => sql !== '')];
   }
 }
 

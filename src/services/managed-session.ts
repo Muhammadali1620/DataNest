@@ -6,6 +6,7 @@ import { toDbError } from '../core/errors';
 import type {
   ColumnInfo,
   ForeignKey,
+  ObjectRef,
   ObjectScope,
   TableInfo,
   TableRef,
@@ -93,6 +94,10 @@ class ManagedMetadata implements MetadataReader {
 
   async listForeignKeys(table: TableRef): Promise<ForeignKey[]> {
     return await this.guard(() => this.inner.listForeignKeys(table));
+  }
+
+  async getDefinition(object: ObjectRef): Promise<string[]> {
+    return await this.guard(() => this.inner.getDefinition(object));
   }
 
   private async guard<T>(call: () => Promise<T>): Promise<T> {

@@ -5,6 +5,7 @@ import type { DriverId, ResolvedConnectionConfig } from '../shared/connection';
 import type {
   ColumnInfo,
   ForeignKey,
+  ObjectRef,
   ObjectScope,
   TableInfo,
   TableRef,
@@ -98,6 +99,13 @@ export interface MetadataReader {
   listUniqueKeys(table: TableRef): Promise<string[][]>;
   /** Foreign keys that start in this table, so a cell can lead to the row it points at. */
   listForeignKeys(table: TableRef): Promise<ForeignKey[]>;
+  /**
+   * The statements that create an object as it is now, without trailing semicolons:
+   * a table with its indexes, comments and triggers, a view, a routine, …
+   * Throws `not-found` when the object does not exist and `permission-denied`
+   * when the server hides its definition from this user.
+   */
+  getDefinition(object: ObjectRef): Promise<string[]>;
 }
 
 /**

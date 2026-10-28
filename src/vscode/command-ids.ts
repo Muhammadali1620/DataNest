@@ -29,6 +29,8 @@ export const COMMAND_IDS = {
   showResults: 'datanest.results.show',
   /** Opens a table or view from the tree as a paged result. */
   openTable: 'datanest.table.open',
+  /** Opens the DDL of a tree object in a new SQL editor. */
+  showDefinition: 'datanest.object.showDefinition',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

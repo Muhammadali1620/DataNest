@@ -3,12 +3,14 @@ import { DbError } from '../../core/errors';
 import type {
   ColumnInfo,
   ForeignKey,
+  ObjectRef,
   ObjectScope,
   TableInfo,
   TableRef,
 } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
 import { groupForeignKeys, groupKeys } from '../common/keys';
+import { readMysqlDefinition } from './definitions';
 import { toMysqlDbError } from './errors';
 
 /** Reads structure from information_schema; shares the session's connection. */
@@ -105,6 +107,10 @@ export class MysqlMetadata implements MetadataReader {
       ...key,
       target: key.target.database === '' ? { name: key.target.name } : key.target,
     }));
+  }
+
+  async getDefinition(object: ObjectRef): Promise<string[]> {
+    return await readMysqlDefinition(async (sql, params) => await this.query(sql, params), object);
   }
 
   private async query(sql: string, params: unknown[] = []): Promise<unknown[][]> {

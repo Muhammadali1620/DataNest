@@ -172,6 +172,12 @@
         "icon": "$(history)"
       },
       {
+        "command": "datanest.object.showDefinition",
+        "title": "%commands.object.showDefinition.title%",
+        "category": "DataNest",
+        "icon": "$(file-code)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -189,6 +195,10 @@
         },
         {
           "command": "datanest.table.open",
+          "when": "false"
+        },
+        {
+          "command": "datanest.object.showDefinition",
           "when": "false"
         }
       ],
@@ -289,6 +299,11 @@
           "command": "datanest.table.open",
           "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
           "group": "0_query@0"
+        },
+        {
+          "command": "datanest.object.showDefinition",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "0_query@2"
         }
       ],
       "editor/title": [

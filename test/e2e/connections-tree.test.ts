@@ -44,6 +44,7 @@ describe('connections view', () => {
       'datanest.tree.refresh',
       'datanest.tree.copyName',
       'datanest.table.open',
+      'datanest.object.showDefinition',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -52,6 +53,12 @@ describe('connections view', () => {
   it('opening a table without a node does nothing', async () => {
     // The command is driven by the tree; from the palette there is no table.
     await vscode.commands.executeCommand('datanest.table.open');
+  });
+
+  it('showing DDL without a node does nothing and opens no editor', async () => {
+    const before = vscode.workspace.textDocuments.length;
+    await vscode.commands.executeCommand('datanest.object.showDefinition');
+    assert.equal(vscode.workspace.textDocuments.length, before);
   });
 
   it('refreshing the whole tree works without a selected node', async () => {
@@ -110,6 +117,11 @@ describe('tree over a real SQLite database', () => {
 
       // A file database has no databases to list: the tree shows groups directly.
       assert.deepEqual(await session.metadata.listDatabases(), []);
+
+      // "Show DDL" reads through the shipped bundle as well.
+      assert.deepEqual(await session.metadata.getDefinition({ kind: 'view', name: 'active' }), [
+        'CREATE VIEW active AS SELECT id FROM customers',
+      ]);
     } finally {
       await session.close();
     }
@@ -124,6 +136,7 @@ interface SqliteSessionLike {
     listColumns(
       table: Record<string, unknown>,
     ): Promise<{ name: string; dataType: string; nullable: boolean; primaryKey: boolean }[]>;
+    getDefinition(object: Record<string, unknown>): Promise<string[]>;
   };
   close(): Promise<void>;
 }

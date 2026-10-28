@@ -33,6 +33,11 @@ export interface SqlSyntax {
   readonly nestedBlockComments: boolean;
   /** The client `DELIMITER` command changes the statement terminator (MySQL). */
   readonly delimiterCommand: boolean;
+  /**
+   * `CREATE TRIGGER … BEGIN … END` holds semicolons in its body, and the server
+   * expects the whole thing as one statement without a delimiter switch (SQLite).
+   */
+  readonly triggerBodies: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -43,6 +48,7 @@ const MYSQL: SqlSyntax = {
   dollarQuotes: false,
   nestedBlockComments: false,
   delimiterCommand: true,
+  triggerBodies: false,
 };
 
 const POSTGRES: SqlSyntax = {
@@ -53,6 +59,7 @@ const POSTGRES: SqlSyntax = {
   dollarQuotes: true,
   nestedBlockComments: true,
   delimiterCommand: false,
+  triggerBodies: false,
 };
 
 const SQLITE: SqlSyntax = {
@@ -63,6 +70,7 @@ const SQLITE: SqlSyntax = {
   dollarQuotes: false,
   nestedBlockComments: false,
   delimiterCommand: false,
+  triggerBodies: true,
 };
 
 const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
@@ -83,6 +91,7 @@ export function syntaxOf(driver?: DriverId): SqlSyntax {
       dollarQuotes: true,
       nestedBlockComments: false,
       delimiterCommand: true,
+      triggerBodies: false,
     };
   }
   return BY_DRIVER[driver];

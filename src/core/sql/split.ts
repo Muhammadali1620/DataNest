@@ -28,11 +28,14 @@ export function splitStatements(sql: string, driver?: DriverId): SqlStatement[] 
   let from = 0;
   let index = 0;
 
+  const body = new TriggerBody(sql, syntax.triggerBodies);
+
   const push = (start: number, end: number): void => {
     const statement = trimmed(sql, start, end);
     if (statement) {
       statements.push(statement);
     }
+    body.reset();
   };
 
   while (index < tokens.length) {
@@ -50,7 +53,8 @@ export function splitStatements(sql: string, driver?: DriverId): SqlStatement[] 
       index = command.nextToken;
       continue;
     }
-    const terminator = matchDelimiter(sql, token, delimiter);
+    body.see(token);
+    const terminator = body.open ? undefined : matchDelimiter(sql, token, delimiter);
     if (terminator !== undefined) {
       push(from, token.start);
       from = terminator;
@@ -171,6 +175,55 @@ function readDelimiterCommand(
     nextToken++;
   }
   return { delimiter, end, nextToken };
+}
+
+/**
+ * Follows `CREATE [TEMP] TRIGGER … BEGIN … END` in dialects that run it as one
+ * statement. Inside, `CASE … END` nests too, so both count as blocks; a terminator
+ * ends the statement only when every block is closed.
+ */
+class TriggerBody {
+  private words: string[] = [];
+  private inTrigger = false;
+  private depth = 0;
+
+  constructor(
+    private readonly sql: string,
+    private readonly enabled: boolean,
+  ) {}
+
+  get open(): boolean {
+    return this.depth > 0;
+  }
+
+  see(token: Token): void {
+    if (!this.enabled || token.kind !== 'word') {
+      return;
+    }
+    const word = textOf(this.sql, token).toUpperCase();
+    if (this.words.length < 4) {
+      this.words.push(word);
+      const [first, second, third] = this.words;
+      this.inTrigger =
+        first === 'CREATE' &&
+        (second === 'TRIGGER' ||
+          ((second === 'TEMP' || second === 'TEMPORARY') && third === 'TRIGGER'));
+    }
+    if (!this.inTrigger) {
+      return;
+    }
+    if (word === 'BEGIN' || word === 'CASE') {
+      this.depth += 1;
+    } else if (word === 'END' && this.depth > 0) {
+      this.depth -= 1;
+    }
+  }
+
+  reset(): void {
+    this.words = [];
+    this.inTrigger = false;
+    this.depth = 0;
+  }
 }
 
 /** True when nothing but trivia stands between the statement start and this token. */

@@ -8,6 +8,7 @@ import { runCommandHandlers } from './editor/run-query';
 import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
+import { readDefinitionDocument } from '../services/object-definitions';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, type CommandId } from './command-ids';
@@ -62,6 +63,15 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     tree: deps.tree,
     cache: deps.cache,
     openTable: deps.openTable,
+    showDefinition: async (connectionId, object) => {
+      const text = await readDefinitionDocument(deps.manager, connectionId, object);
+      await deps.editors.newQuery(
+        object.database === undefined
+          ? { connectionId }
+          : { connectionId, database: object.database },
+        text,
+      );
+    },
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
   });
@@ -79,6 +89,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,
     [COMMAND_IDS.copyName]: treeCommands.copyName,
     [COMMAND_IDS.openTable]: treeCommands.openTable,
+    [COMMAND_IDS.showDefinition]: treeCommands.showDefinition,
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;
       const panel =

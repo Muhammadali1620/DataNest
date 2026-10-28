@@ -2,12 +2,14 @@ import type pg from 'pg';
 import type {
   ColumnInfo,
   ForeignKey,
+  ObjectRef,
   ObjectScope,
   TableInfo,
   TableRef,
 } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
 import { groupForeignKeys, groupKeys } from '../common/keys';
+import { readPgDefinition } from './definitions';
 import { toPgDbError } from './errors';
 
 const DEFAULT_SCHEMA = 'public';
@@ -127,6 +129,10 @@ export class PostgresMetadata implements MetadataReader {
         };
       }),
     );
+  }
+
+  async getDefinition(object: ObjectRef): Promise<string[]> {
+    return await readPgDefinition(async (sql, params) => await this.query(sql, params), object);
   }
 
   private async query(text: string, values: unknown[] = []): Promise<unknown[][]> {

@@ -6,6 +6,7 @@ import type { DriverId, ResolvedConnectionConfig } from '../../src/shared/connec
 import type {
   ColumnInfo,
   ForeignKey,
+  ObjectRef,
   ObjectScope,
   TableInfo,
   TableRef,
@@ -41,6 +42,8 @@ export class FakeMetadata implements MetadataReader {
   columns: ColumnInfo[] = [{ name: 'id', dataType: 'int', nullable: false, primaryKey: true }];
   uniqueKeys: string[][] = [];
   foreignKeys: ForeignKey[] = [];
+  /** Definitions by `kind:name`; a missing one is reported as not found. */
+  definitions = new Map<string, string[]>();
   /** Thrown by every reader when set. */
   error: Error | undefined;
   readonly calls: string[] = [];
@@ -67,6 +70,16 @@ export class FakeMetadata implements MetadataReader {
 
   listUniqueKeys(table: TableRef): Promise<string[][]> {
     return this.answer(`listUniqueKeys:${table.name}`, this.uniqueKeys);
+  }
+
+  getDefinition(object: ObjectRef): Promise<string[]> {
+    const key = `${object.kind}:${object.name}`;
+    const found = this.definitions.get(key);
+    if (found === undefined && this.error === undefined) {
+      this.calls.push(`getDefinition:${key}`);
+      return Promise.reject(new DbError('not-found', `${object.name} does not exist`));
+    }
+    return this.answer(`getDefinition:${key}`, found ?? []);
   }
 
   private answer<T>(call: string, value: T): Promise<T> {
@@ -213,6 +226,7 @@ export class FakeDriver implements Driver {
     session.metadata.columns = [...this.sessionMetadata.columns];
     session.metadata.uniqueKeys = [...this.sessionMetadata.uniqueKeys];
     session.metadata.foreignKeys = [...this.sessionMetadata.foreignKeys];
+    session.metadata.definitions = new Map(this.sessionMetadata.definitions);
     session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);

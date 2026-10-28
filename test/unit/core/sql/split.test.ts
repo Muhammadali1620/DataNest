@@ -135,6 +135,66 @@ describe('splitStatements', () => {
     });
   });
 
+  describe('SQLite trigger bodies', () => {
+    const trigger = [
+      'CREATE TRIGGER t AFTER INSERT ON x BEGIN',
+      '  UPDATE x SET a = 1 WHERE id = NEW.id;',
+      '  DELETE FROM y WHERE id = NEW.id;',
+      'END',
+    ].join('\n');
+
+    it('keeps a trigger with several statements in its body as one statement', () => {
+      expect(texts(`${trigger};\nSELECT 1;`, 'sqlite')).toEqual([trigger, 'SELECT 1']);
+    });
+
+    it('understands TEMP and TEMPORARY triggers', () => {
+      for (const temp of ['TEMP', 'temporary']) {
+        const sql = trigger.replace('CREATE TRIGGER', `CREATE ${temp} TRIGGER`);
+        expect(texts(`${sql}; SELECT 2`, 'sqlite')).toEqual([sql, 'SELECT 2']);
+      }
+    });
+
+    it('counts CASE … END inside the body, so it does not close the trigger early', () => {
+      const sql = [
+        'CREATE TRIGGER t BEFORE UPDATE ON x BEGIN',
+        "  UPDATE x SET a = CASE WHEN NEW.b > 0 THEN 'p' ELSE 'n' END;",
+        '  SELECT 1;',
+        'END',
+      ].join('\n');
+      expect(texts(`${sql};SELECT 3`, 'sqlite')).toEqual([sql, 'SELECT 3']);
+    });
+
+    it('counts a CASE in the WHEN clause before the body', () => {
+      const sql =
+        'CREATE TRIGGER t AFTER UPDATE ON x WHEN CASE WHEN NEW.a THEN 1 END BEGIN SELECT 1; END';
+      expect(texts(`${sql}; SELECT 4`, 'sqlite')).toEqual([sql, 'SELECT 4']);
+    });
+
+    it('ignores BEGIN and END words in strings and comments of the body', () => {
+      const sql = "CREATE TRIGGER t AFTER INSERT ON x BEGIN\n  -- END;\n  SELECT 'END;';\nEND";
+      expect(texts(`${sql}; SELECT 5`, 'sqlite')).toEqual([sql, 'SELECT 5']);
+    });
+
+    it('leaves BEGIN as a transaction statement outside triggers', () => {
+      expect(texts('BEGIN; INSERT INTO x VALUES (1); END;', 'sqlite')).toEqual([
+        'BEGIN',
+        'INSERT INTO x VALUES (1)',
+        'END',
+      ]);
+    });
+
+    it('keeps an unfinished trigger body as one statement to the end', () => {
+      const sql = 'CREATE TRIGGER t AFTER INSERT ON x BEGIN SELECT 1; SELECT 2;';
+      expect(texts(sql, 'sqlite')).toEqual([
+        'CREATE TRIGGER t AFTER INSERT ON x BEGIN SELECT 1; SELECT 2;',
+      ]);
+    });
+
+    it('is not used in other dialects, where bodies need a delimiter or quotes', () => {
+      expect(texts(`${trigger};`, 'postgres')).toHaveLength(3);
+    });
+  });
+
   it('exports the default delimiter it starts with', () => {
     expect(DEFAULT_DELIMITER).toBe(';');
   });

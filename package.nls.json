@@ -37,5 +37,6 @@
   "configuration.safeMode.description": "What DataNest does before running a `DELETE` or `UPDATE` without `WHERE`, `DROP` or `TRUNCATE`.",
   "configuration.safeMode.confirm": "Ask for confirmation first.",
   "configuration.safeMode.block": "Refuse to run such statements.",
-  "configuration.safeMode.off": "Run them without asking."
+  "configuration.safeMode.off": "Run them without asking.",
+  "commands.object.showDefinition.title": "Show DDL"
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   describeColumn,
   nodeId,
+  objectRefOf,
   scopeOf,
   tableRefOf,
   type TreeNode,
@@ -125,6 +126,48 @@ describe('tableRefOf', () => {
         tableKind: 'table',
       }),
     ).toEqual({ database: 'app', schema: 'public', name: 'orders' });
+  });
+});
+
+describe('objectRefOf', () => {
+  it('points at a table or a view by kind, scope and name', () => {
+    expect(
+      objectRefOf({
+        kind: 'table',
+        connectionId: 'c1',
+        scope: { database: 'app', schema: 'public' },
+        name: 'orders',
+        tableKind: 'table',
+      }),
+    ).toEqual({ database: 'app', schema: 'public', kind: 'table', name: 'orders' });
+    expect(
+      objectRefOf({
+        kind: 'table',
+        connectionId: 'c1',
+        scope: {},
+        name: 'totals',
+        tableKind: 'view',
+      }),
+    ).toEqual({ kind: 'view', name: 'totals' });
+  });
+
+  it('has nothing for nodes that hold no definition', () => {
+    const nodes: TreeNode[] = [
+      { kind: 'connection', connectionId: 'c1' },
+      { kind: 'database', connectionId: 'c1', database: 'app' },
+      { kind: 'schema', connectionId: 'c1', schema: 'public' },
+      { kind: 'group', group: 'tables', connectionId: 'c1', scope: {} },
+      {
+        kind: 'column',
+        connectionId: 'c1',
+        table: { name: 't' },
+        column: { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+      },
+      { kind: 'message', text: 'x' },
+    ];
+    for (const node of nodes) {
+      expect(objectRefOf(node)).toBeUndefined();
+    }
   });
 });
 

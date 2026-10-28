@@ -1,7 +1,13 @@
 // The shape of the connections tree. Free of `vscode` so the structure and the
 // identity rules are covered by unit tests (ARCHITECTURE.md §11).
 
-import type { ColumnInfo, ObjectScope, TableKind, TableRef } from '../../core/model/objects';
+import type {
+  ColumnInfo,
+  ObjectRef,
+  ObjectScope,
+  TableKind,
+  TableRef,
+} from '../../core/model/objects';
 
 /** The view id the tree is registered under; `package.json` must declare the same. */
 export const CONNECTIONS_VIEW_ID = 'datanest.connections';
@@ -195,6 +201,21 @@ export function nameOf(node: TreeNode): string | undefined {
 /** The table a node points at, for "open table" and column lookups. */
 export function tableRefOf(node: TableNode): TableRef {
   return { ...node.scope, name: node.name };
+}
+
+/** The object whose definition a node stands for; folders and columns have none. */
+export function objectRefOf(node: TreeNode): ObjectRef | undefined {
+  switch (node.kind) {
+    case 'table':
+      return { ...node.scope, kind: node.tableKind, name: node.name };
+    case 'connection':
+    case 'database':
+    case 'schema':
+    case 'group':
+    case 'column':
+    case 'message':
+      return undefined;
+  }
 }
 
 /** One-line summary of a column: type, key and nullability. */

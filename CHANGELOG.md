@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Added
+
+- “Show DDL” on tables and views opens the definition in a new SQL editor bound to
+  the same connection, ready to run: MySQL and MariaDB print it themselves, PostgreSQL
+  gets a full `CREATE TABLE` with constraints, indexes, comments and triggers, SQLite
+  shows the original text with the table's indexes and triggers.
+
+### Fixed
+
+- A SQLite `CREATE TRIGGER … BEGIN … END` with several statements in its body is no
+  longer split into pieces when it runs.
+
 ## [0.2.0] - 2026-10-28
 
 Working with data: edit rows in place, filter and page tables on the server, copy

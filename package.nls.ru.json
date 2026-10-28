@@ -37,5 +37,6 @@
   "configuration.safeMode.description": "Что делает DataNest перед `DELETE` или `UPDATE` без `WHERE`, `DROP` и `TRUNCATE`.",
   "configuration.safeMode.confirm": "Сначала спросить подтверждение.",
   "configuration.safeMode.block": "Не выполнять такие запросы.",
-  "configuration.safeMode.off": "Выполнять без вопросов."
+  "configuration.safeMode.off": "Выполнять без вопросов.",
+  "commands.object.showDefinition.title": "Показать DDL"
 }

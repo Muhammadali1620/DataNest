@@ -6,7 +6,8 @@ import type { Logger } from '../../core/logging/logger';
 import type { ObjectScope } from '../../core/model/objects';
 import { withoutSystemDatabases, withoutSystemSchemas } from '../../core/model/system-objects';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
-import { ConnectionManager } from '../../services/connection-manager';
+import { browseSession } from '../../services/browse-session';
+import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { DriverId } from '../../shared/connection';
@@ -191,18 +192,9 @@ export class TreeModel {
     return (await this.deps.manager.driverOf(connectionId)).capabilities;
   }
 
-  /**
-   * The tree shares one session per connection. The database is part of the target
-   * only for drivers whose session cannot look outside its own database (PostgreSQL);
-   * elsewhere one session serves every database and is never reopened while browsing.
-   */
+  /** The tree shares the browsing session of a connection (`browseSession`). */
   private async metadataOf(connectionId: string, database?: string): Promise<MetadataReader> {
-    const capabilities = await this.capabilitiesOf(connectionId);
-    const scoped = capabilities.databaseScopedSessions && database !== undefined;
-    const session = await this.deps.manager.acquire(
-      ConnectionManager.treeOwner(connectionId, scoped ? database : undefined),
-      scoped ? { connectionId, database } : { connectionId },
-    );
+    const session = await browseSession(this.deps.manager, connectionId, database);
     return this.deps.cache.wrap(connectionId, session.metadata);
   }
 }

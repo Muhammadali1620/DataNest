@@ -38,3 +38,48 @@ export interface ForeignKey {
   /** The referenced columns, in the same order as `columns`. */
   readonly targetColumns: readonly string[];
 }
+
+/** Objects other than tables and views that a database can hold. */
+export type RoutineKind = 'function' | 'procedure';
+
+/** Every kind of object the tree lists and whose definition can be read. */
+export type ObjectKind = TableKind | RoutineKind | 'trigger' | 'sequence' | 'event';
+
+/** Kinds listed with `listObjects`; tables and views have `listTables`. */
+export type ListedObjectKind = Exclude<ObjectKind, TableKind>;
+
+/** One object of a listed kind. */
+export interface ObjectInfo {
+  readonly name: string;
+  readonly kind: ListedObjectKind;
+  /**
+   * Argument types that tell overloads apart (PostgreSQL), e.g. `integer, text`.
+   * Absent where a name alone identifies the routine.
+   */
+  readonly signature?: string;
+  /** The table a trigger belongs to. */
+  readonly table?: string;
+}
+
+/** Points at one object, e.g. to read its definition or drop it. */
+export interface ObjectRef extends ObjectScope {
+  readonly kind: ObjectKind;
+  readonly name: string;
+  /** See `ObjectInfo.signature`. */
+  readonly signature?: string;
+  /** See `ObjectInfo.table`. */
+  readonly table?: string;
+}
+
+/** An index of a table, including the ones behind primary and unique keys. */
+export interface IndexInfo {
+  readonly name: string;
+  /** Key parts in order: column names, or expressions for expression indexes. */
+  readonly columns: readonly string[];
+  readonly unique: boolean;
+  readonly primary: boolean;
+  /** Index method where the database has several: BTREE, HASH, FULLTEXT, gin, … */
+  readonly method?: string;
+  /** The condition of a partial index. */
+  readonly where?: string;
+}

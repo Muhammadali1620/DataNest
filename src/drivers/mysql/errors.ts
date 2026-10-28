@@ -22,9 +22,12 @@ const BY_ERRNO: Readonly<Record<number, DbErrorCode>> = {
   1146: 'not-found', // ER_NO_SUCH_TABLE
   1205: 'timeout', // ER_LOCK_WAIT_TIMEOUT
   1213: 'constraint', // ER_LOCK_DEADLOCK
+  1305: 'not-found', // ER_SP_DOES_NOT_EXIST
   1317: 'cancelled', // ER_QUERY_INTERRUPTED
+  1360: 'not-found', // ER_TRG_DOES_NOT_EXIST
   1451: 'constraint', // ER_ROW_IS_REFERENCED_2
   1452: 'constraint', // ER_NO_REFERENCED_ROW_2
+  1539: 'not-found', // ER_EVENT_DOES_NOT_EXIST
   1644: 'constraint', // ER_SIGNAL_EXCEPTION (triggers)
   3024: 'timeout', // ER_QUERY_TIMEOUT
   3819: 'constraint', // ER_CHECK_CONSTRAINT_VIOLATED

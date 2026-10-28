@@ -11,15 +11,26 @@ function setup() {
   const invalidate = vi.fn();
   const writeText = vi.fn(() => Promise.resolve());
   const openTable = vi.fn(() => Promise.resolve());
+  const showDefinition = vi.fn(() => Promise.resolve());
   const handlers = treeCommandHandlers({
     manager: { connect, disconnect } as never,
     tree: { refresh },
     cache: { invalidate },
     openTable,
+    showDefinition,
     clipboard: { writeText },
     noTargetMessage: NO_TARGET,
   });
-  return { handlers, connect, disconnect, refresh, invalidate, writeText, openTable };
+  return {
+    handlers,
+    connect,
+    disconnect,
+    refresh,
+    invalidate,
+    writeText,
+    openTable,
+    showDefinition,
+  };
 }
 
 const connectionNode: TreeNode = { kind: 'connection', connectionId: 'c1' };
@@ -65,6 +76,7 @@ describe('connect', () => {
       tree: { refresh },
       cache: { invalidate: () => undefined },
       openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.resolve(),
       clipboard: { writeText: () => Promise.resolve() },
       noTargetMessage: NO_TARGET,
     });
@@ -125,6 +137,7 @@ describe('refresh', () => {
         },
       },
       openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.resolve(),
       clipboard: { writeText: () => Promise.resolve() },
       noTargetMessage: NO_TARGET,
     });
@@ -194,5 +207,61 @@ describe('openTable', () => {
     await handlers.openTable();
     await handlers.openTable('c1');
     expect(openTable).not.toHaveBeenCalled();
+  });
+});
+
+describe('showDefinition', () => {
+  it('opens the definition of a table with its scope', async () => {
+    const { handlers, showDefinition } = setup();
+    await handlers.showDefinition(tableNode);
+    expect(showDefinition).toHaveBeenCalledWith('c1', {
+      database: 'app',
+      kind: 'table',
+      name: 'orders',
+    });
+  });
+
+  it('asks for a view as a view', async () => {
+    const { handlers, showDefinition } = setup();
+    await handlers.showDefinition({
+      ...tableNode,
+      scope: { database: 'shop', schema: 'sales' },
+      name: 'totals',
+      tableKind: 'view',
+    });
+    expect(showDefinition).toHaveBeenCalledWith('c1', {
+      database: 'shop',
+      schema: 'sales',
+      kind: 'view',
+      name: 'totals',
+    });
+  });
+
+  it('ignores nodes without a definition and calls without a node', async () => {
+    const { handlers, showDefinition } = setup();
+    await handlers.showDefinition(connectionNode);
+    await handlers.showDefinition({ kind: 'group', group: 'views', connectionId: 'c1', scope: {} });
+    await handlers.showDefinition({
+      kind: 'column',
+      connectionId: 'c1',
+      table: { name: 'orders' },
+      column: { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+    });
+    await handlers.showDefinition();
+    await handlers.showDefinition('c1');
+    expect(showDefinition).not.toHaveBeenCalled();
+  });
+
+  it('lets a failure reach the command guard', async () => {
+    const handlers = treeCommandHandlers({
+      manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
+      tree: { refresh: () => undefined },
+      cache: { invalidate: () => undefined },
+      openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.reject(new Error('no rights')),
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+    });
+    await expect(handlers.showDefinition(tableNode)).rejects.toThrow('no rights');
   });
 });

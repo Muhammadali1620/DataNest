@@ -70,6 +70,8 @@ export class MetadataCache {
           `unique:${scopeKey(table)}:${table.name}`,
           async () => await reader.listUniqueKeys(table),
         ),
+      // A definition is read when the user asks for it and must be the current one.
+      getDefinition: async (object) => await reader.getDefinition(object),
     };
   }
 

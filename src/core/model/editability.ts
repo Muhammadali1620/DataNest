@@ -2,9 +2,22 @@
 // exactly which table row each result row is, so the rule is strict: one table, no
 // aggregation, and a key (primary or unique, never NULL) present in the result.
 
+import { enumOptions, type InputKind, inputKindOf } from '../../shared/cell-input';
 import type { ReadOnlyReason } from '../../shared/read-only-reason';
 import type { SelectItem } from '../sql/select-source';
 import type { ColumnInfo, TableKind, TableRef } from './objects';
+
+/** What the grid needs to edit one result column. */
+export interface EditableColumn {
+  /** The table column behind it. */
+  readonly name: string;
+  readonly dataType: string;
+  readonly nullable: boolean;
+  /** Which editor it gets. */
+  readonly kind: InputKind;
+  /** Allowed values of an enum column. */
+  readonly options?: readonly string[];
+}
 
 export interface EditableResult {
   readonly editable: true;
@@ -12,6 +25,8 @@ export interface EditableResult {
   readonly table: TableRef;
   /** Table column behind each result column; null for computed ones. */
   readonly columnMap: readonly (string | null)[];
+  /** Per result column: how to edit it, or null for a computed one. */
+  readonly columns: readonly (EditableColumn | null)[];
   /** Key column names, and where each one sits in the result. */
   readonly keyColumns: readonly string[];
   readonly keyIndexes: readonly number[];
@@ -127,5 +142,19 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
     }
     keyIndexes.push(index);
   }
-  return { editable: true, table: input.table, columnMap, keyColumns: key, keyIndexes };
+  const columns = columnMap.map((name): EditableColumn | null => {
+    const info = name === null ? undefined : findByName(input.columns, name);
+    if (info === undefined) {
+      return null;
+    }
+    const options = enumOptions(info.dataType);
+    return {
+      name: info.name,
+      dataType: info.dataType,
+      nullable: info.nullable,
+      kind: inputKindOf(info.dataType),
+      ...(options === undefined ? {} : { options }),
+    };
+  });
+  return { editable: true, table: input.table, columnMap, columns, keyColumns: key, keyIndexes };
 }

@@ -118,7 +118,12 @@ describe('ResultStore', () => {
     it('returns the asked-for slice with the total count', () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      expect(store.window(id, 2, 3)).toEqual({ offset: 2, rows: [[2], [3], [4]], rowCount: 10 });
+      expect(store.window(id, 2, 3)).toEqual({
+        offset: 2,
+        rows: [[2], [3], [4]],
+        rowCount: 10,
+        changes: [],
+      });
     });
 
     it('stops at the end of the result', () => {
@@ -130,7 +135,7 @@ describe('ResultStore', () => {
     it('clamps an offset past the end to an empty window', () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      expect(store.window(id, 50, 10)).toEqual({ offset: 10, rows: [], rowCount: 10 });
+      expect(store.window(id, 50, 10)).toEqual({ offset: 10, rows: [], rowCount: 10, changes: [] });
     });
 
     it('treats a negative or fractional range sensibly', () => {
@@ -143,6 +148,110 @@ describe('ResultStore', () => {
 
     it('returns nothing for an unknown result', () => {
       expect(new ResultStore().window('result-404', 0, 10)).toBeUndefined();
+    });
+  });
+
+  describe('pending changes', () => {
+    const rows = [
+      [1, 'a'],
+      [2, 'b'],
+      [3, 'c'],
+    ];
+
+    it('shows a changed value in the window and reports where it is', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      expect(store.setChange(id, 1, 1, { kind: 'value', value: 'B!' })).toBe(true);
+      expect(store.window(id, 0, 3)).toEqual({
+        offset: 0,
+        rows: [
+          [1, 'a'],
+          [2, 'B!'],
+          [3, 'c'],
+        ],
+        rowCount: 3,
+        changes: [{ row: 1, column: 1, kind: 'value' }],
+      });
+    });
+
+    it('shows a DEFAULT as NULL and marks it as a default', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.setChange(id, 0, 1, { kind: 'default' });
+      const window = store.window(id, 0, 1);
+      expect(window?.rows).toEqual([[1, null]]);
+      expect(window?.changes).toEqual([{ row: 0, column: 1, kind: 'default' }]);
+    });
+
+    it('does not touch the rows the server returned', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
+      expect(store.rowAt(id, 0)).toEqual([1, 'a']);
+      expect(store.allRows(id)).toEqual(rows);
+    });
+
+    it('keeps a change with its row when the result is sorted', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
+      store.sort(id, 0, 'desc');
+      const window = store.window(id, 0, 3);
+      expect(window?.rows).toEqual([
+        [3, 'c'],
+        [2, 'b'],
+        [1, 'z'],
+      ]);
+      expect(window?.changes).toEqual([{ row: 2, column: 1, kind: 'value' }]);
+    });
+
+    it('counts changed cells, withdraws them and bumps the revision each time', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      expect(store.get(id)).toMatchObject({ changedCells: 0, revision: 0 });
+      store.setChange(id, 0, 0, { kind: 'value', value: 9 });
+      store.setChange(id, 0, 1, { kind: 'default' });
+      store.setChange(id, 2, 1, { kind: 'value', value: 'q' });
+      expect(store.get(id)).toMatchObject({ changedCells: 3, revision: 3 });
+      store.setChange(id, 0, 0, undefined);
+      expect(store.get(id)).toMatchObject({ changedCells: 2, revision: 4 });
+      expect(store.changeAt(id, 0, 0)).toBeUndefined();
+      expect(store.changeAt(id, 0, 1)).toEqual({ kind: 'default' });
+    });
+
+    it('notifies listeners when a change is made', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      const seen: string[] = [];
+      store.onDidChange((uri) => {
+        seen.push(uri);
+      });
+      store.setChange(id, 0, 0, { kind: 'value', value: 9 });
+      expect(seen).toEqual(['untitled:Query-1.sql']);
+    });
+
+    it('refuses a cell that does not exist', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      expect(store.setChange(id, 99, 0, { kind: 'default' })).toBe(false);
+      expect(store.setChange(id, 0, 99, { kind: 'default' })).toBe(false);
+      expect(store.setChange(id, 0, -1, { kind: 'default' })).toBe(false);
+      expect(store.setChange('result-404', 0, 0, { kind: 'default' })).toBe(false);
+      expect(store.get(id)?.changedCells).toBe(0);
+    });
+
+    it('leaves a window without changes when nothing is pending', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      expect(store.window(id, 0, 3)?.changes).toEqual([]);
+    });
+
+    it('forgets changes with the result', () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows }));
+      store.setChange(id, 0, 0, { kind: 'default' });
+      store.clearDocument('untitled:Query-1.sql');
+      expect(store.window(id, 0, 3)).toBeUndefined();
     });
   });
 

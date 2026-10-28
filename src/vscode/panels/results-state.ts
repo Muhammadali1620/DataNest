@@ -28,8 +28,24 @@ export function buildState(
     ...(summary.edit === undefined
       ? {}
       : summary.edit.editable
-        ? { edit: { editable: true } }
+        ? {
+            edit: {
+              editable: true,
+              columns: summary.edit.columns.map((column) =>
+                column === null
+                  ? null
+                  : {
+                      dataType: column.dataType,
+                      kind: column.kind,
+                      nullable: column.nullable,
+                      ...(column.options === undefined ? {} : { options: [...column.options] }),
+                    },
+              ),
+            },
+          }
         : { edit: { editable: false, reason: summary.edit.reason } }),
+    changedCells: summary.changedCells,
+    revision: summary.revision,
   }));
   // The newest tab is the one the user just produced, unless they picked another.
   const active =

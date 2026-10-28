@@ -14,6 +14,7 @@ import {
   extensionOf,
   suggestedFileName,
 } from './services/result-export';
+import { ResultEditor } from './services/result-editor';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
@@ -114,9 +115,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     void vscode.window.showInformationMessage(vscode.l10n.t('Exported {0} rows', rows.length));
   };
 
+  const editor = new ResultEditor(results);
+
   const showResults = (documentUri: string): void => {
     ResultsPanel.show(
-      { extensionUri: context.extensionUri, results, runner, pageTo, exportResult, logger },
+      { extensionUri: context.extensionUri, results, runner, editor, pageTo, exportResult, logger },
       documentUri,
     );
   };

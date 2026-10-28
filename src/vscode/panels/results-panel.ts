@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
 import type { ExportFormat } from '../../services/result-export';
+import type { ResultEditor } from '../../services/result-editor';
 import type { ResultStore } from '../../services/result-store';
 import {
   MAX_SEARCH_HITS,
@@ -16,6 +17,7 @@ export interface ResultsPanelDeps {
   readonly extensionUri: vscode.Uri;
   readonly results: ResultStore;
   readonly runner: QueryRunner;
+  readonly editor: ResultEditor;
   /** Shows another page of a table view; absent where paging makes no sense. */
   readonly pageTo?: (resultId: string, offset: number) => Promise<boolean>;
   /** Writes a result to a file the user picks. */
@@ -90,15 +92,19 @@ export class ResultsPanel implements vscode.Disposable {
       const window = this.deps.results.window(resultId, offset, limit);
       if (window === undefined) {
         // The result is gone (a newer run replaced it); an empty window is honest.
-        return { resultId, offset, rows: [], rowCount: 0 };
+        return { resultId, offset, rows: [], rowCount: 0, changes: [] };
       }
       return {
         resultId,
         offset: window.offset,
         rows: window.rows.map((row) => [...row]),
         rowCount: window.rowCount,
+        changes: window.changes,
       };
     });
+    this.rpc.handle('editCell', ({ resultId, row, column, input }) =>
+      this.deps.editor.editCell(resultId, row, column, input),
+    );
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
     this.rpc.handle('sort', ({ resultId, column, direction }) => {
       const sorted = this.deps.results.sort(resultId, column, direction);

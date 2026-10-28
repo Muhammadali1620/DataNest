@@ -13,6 +13,8 @@ function summary(overrides: Partial<ResultSummary> = {}): ResultSummary {
     rowCount: 1,
     truncated: false,
     durationMs: 4,
+    changedCells: 0,
+    revision: 0,
     ...overrides,
   };
 }
@@ -30,6 +32,8 @@ describe('buildState', () => {
           rowCount: 1,
           truncated: false,
           durationMs: 4,
+          changedCells: 0,
+          revision: 0,
         },
       ],
       activeId: 'result-1',
@@ -45,6 +49,7 @@ describe('buildState', () => {
             editable: true,
             table: { name: 't' },
             columnMap: ['one'],
+            columns: [null],
             keyColumns: ['one'],
             keyIndexes: [0],
           },
@@ -56,7 +61,7 @@ describe('buildState', () => {
       false,
     );
     expect(state.tabs.map((tab) => tab.edit)).toEqual([
-      { editable: true },
+      { editable: true, columns: [null] },
       { editable: false, reason: 'no-key' },
       undefined,
     ]);

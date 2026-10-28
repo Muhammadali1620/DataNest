@@ -1,8 +1,10 @@
 <script lang="ts">
+  import type { EditInput } from '../../../../src/shared/cell-input';
   import type { CellValue } from '../../../../src/shared/cell-value';
   import type { ResultColumnInfo } from '../../../../src/shared/protocols/result-grid';
   import type { Translate } from '../../lib/i18n';
   import { displayOf } from './cells';
+  import { controlFor, type EditColumn, type EditorControl, initialText, isEditableColumn } from './edit-model';
   import {
     MIN_COLUMN_WIDTH,
     ROW_NUMBER_WIDTH,
@@ -42,6 +44,12 @@
     onSort: (column: number) => void;
     /** Row to scroll to and select, e.g. the next search hit. */
     revealRow?: number | undefined;
+    /** How each column is edited; undefined means the whole result is read-only. */
+    editColumns?: readonly (EditColumn | null)[] | undefined;
+    /** How a cell was changed and not yet saved. */
+    changeAt: (row: number, column: number) => 'value' | 'default' | undefined;
+    /** Sends an edit to the host; resolves to the reason it was refused, if it was. */
+    onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
     t: Translate;
   }
 
@@ -57,6 +65,9 @@
     sort,
     onSort,
     revealRow,
+    editColumns,
+    changeAt,
+    onEdit,
     t,
   }: Props = $props();
 
@@ -172,6 +183,96 @@
     reveal(revealRow);
   });
 
+  interface Editing {
+    readonly row: number;
+    readonly column: number;
+    readonly control: EditorControl;
+    text: string;
+    error: string | undefined;
+  }
+
+  /** The cell being typed into, if any. */
+  let editing = $state<Editing | undefined>(undefined);
+  /** Why the last NULL/DEFAULT action failed. */
+  let actionError = $state<string | undefined>(undefined);
+
+  function editColumn(column: number): EditColumn | undefined {
+    const info = editColumns?.[column];
+    return isEditableColumn(info) ? info : undefined;
+  }
+
+  const focusCell = $derived(selection?.focus);
+  const focusColumn = $derived(focusCell === undefined ? undefined : editColumn(focusCell.column));
+  const canSetNull = $derived(focusColumn?.nullable === true);
+  const canSetDefault = $derived(focusColumn !== undefined);
+
+  function startEdit(row: number, column: number): void {
+    const info = editColumn(column);
+    const cells = rowAt(row);
+    if (info === undefined || cells === undefined) {
+      return;
+    }
+    actionError = undefined;
+    editing = {
+      row,
+      column,
+      control: controlFor(info),
+      text: initialText(cells[column] ?? null),
+      error: undefined,
+    };
+  }
+
+  function cancelEdit(): void {
+    editing = undefined;
+    viewport?.focus();
+  }
+
+  async function commitEdit(): Promise<void> {
+    const current = editing;
+    if (current === undefined) {
+      return;
+    }
+    const problem = await onEdit(current.row, current.column, { kind: 'text', text: current.text });
+    if (problem === undefined) {
+      // Only close the editor this very edit opened; the user may have moved on.
+      if (editing === current) {
+        editing = undefined;
+        viewport?.focus();
+      }
+    } else if (editing === current) {
+      current.error = problem;
+    }
+  }
+
+  function onEditorKey(event: KeyboardEvent): void {
+    // The editor owns the keyboard; the grid's navigation and copy must not see it.
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void commitEdit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelEdit();
+    }
+  }
+
+  async function setFocused(input: EditInput): Promise<void> {
+    const focus = selection?.focus;
+    if (focus === undefined || editColumn(focus.column) === undefined) {
+      return;
+    }
+    actionError = await onEdit(focus.row, focus.column, input);
+    viewport?.focus();
+  }
+
+  /** Puts the caret in a freshly shown editor. */
+  function focusOnMount(element: HTMLElement): void {
+    element.focus();
+    if (element instanceof HTMLInputElement && element.type === 'text') {
+      element.select();
+    }
+  }
+
   function startSelect(event: PointerEvent, row: number, column: number): void {
     if (event.button !== 0) {
       return;
@@ -205,6 +306,16 @@
     if (modifier && (event.key === 'a' || event.key === 'A')) {
       event.preventDefault();
       selection = selectAll(bounds);
+      return;
+    }
+    if ((event.key === 'Enter' || event.key === 'F2') && selection !== undefined) {
+      event.preventDefault();
+      startEdit(selection.focus.row, selection.focus.column);
+      return;
+    }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selection !== undefined) {
+      event.preventDefault();
+      void setFocused({ kind: 'null' });
       return;
     }
     if (!isNavigationKey(event.key)) {
@@ -364,6 +475,8 @@
         {:else}
           {#each columnIndexes as column (column)}
             {@const cell = displayOf(cells[column] ?? null)}
+            {@const mark = changeAt(index, column)}
+            {@const editor = editing?.row === index && editing.column === column ? editing : undefined}
             <div
               class="cell"
               role="gridcell"
@@ -374,16 +487,58 @@
               class:numeric={cell.numeric}
               class:selected={isSelected(selection, index, column)}
               class:focused={isFocused(selection, index, column)}
+              class:changed={mark !== undefined}
+              class:defaulted={mark === 'default'}
+              class:editing={editor !== undefined}
               style="width: {widthOf(column)}px;"
               title={cell.truncated || cell.flattened ? cell.text : undefined}
               onpointerdown={(event) => {
-                startSelect(event, index, column);
+                if (editor === undefined) {
+                  startSelect(event, index, column);
+                }
               }}
               onpointerenter={() => {
                 overCell(index, column);
               }}
+              ondblclick={() => {
+                startEdit(index, column);
+              }}
             >
-              {cell.text}
+              {#if editor === undefined}
+                {mark === 'default' ? t('grid.defaultLabel') : cell.text}
+              {:else if editor.control.type === 'select'}
+                <select
+                  class="editor"
+                  use:focusOnMount
+                  bind:value={editor.text}
+                  onkeydown={onEditorKey}
+                  onchange={() => {
+                    void commitEdit();
+                  }}
+                  onblur={cancelEdit}
+                >
+                  {#if editor.text === '' || !editor.control.options.includes(editor.text)}
+                    <option value={editor.text} disabled>{editor.text}</option>
+                  {/if}
+                  {#each editor.control.options as option (option)}
+                    <option value={option}>{option}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  class="editor"
+                  type={editor.control.inputType}
+                  placeholder={editor.control.placeholder}
+                  use:focusOnMount
+                  bind:value={editor.text}
+                  onkeydown={onEditorKey}
+                  onblur={cancelEdit}
+                  aria-invalid={editor.error !== undefined}
+                />
+              {/if}
+              {#if editor?.error !== undefined}
+                <span class="tip" role="alert" data-testid="edit-error">{editor.error}</span>
+              {/if}
             </div>
           {/each}
         {/if}
@@ -391,6 +546,35 @@
     {/each}
   </div>
 </div>
+
+{#if editColumns !== undefined}
+  <div class="editbar" data-testid="editbar">
+    <button
+      type="button"
+      class="action"
+      disabled={!canSetNull}
+      onclick={() => {
+        void setFocused({ kind: 'null' });
+      }}
+    >
+      {t('grid.setNull')}
+    </button>
+    <button
+      type="button"
+      class="action"
+      disabled={!canSetDefault}
+      onclick={() => {
+        void setFocused({ kind: 'default' });
+      }}
+    >
+      {t('grid.setDefault')}
+    </button>
+    <span class="hint">{t('grid.editHint')}</span>
+    {#if actionError !== undefined}
+      <span class="problem" role="alert" data-testid="action-error">{actionError}</span>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .viewport {
@@ -522,6 +706,75 @@
   .focused {
     outline: 1px solid var(--vscode-focusBorder);
     outline-offset: -1px;
+  }
+
+  .changed {
+    background: var(--vscode-diffEditor-insertedTextBackground, rgba(80, 160, 80, 0.25));
+  }
+
+  .defaulted {
+    font-style: italic;
+  }
+
+  .cell.editing {
+    position: relative;
+    overflow: visible;
+    padding: 0;
+    z-index: 3;
+  }
+
+  .editor {
+    width: 100%;
+    height: 100%;
+    padding: 0 6px;
+    color: var(--vscode-input-foreground);
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-focusBorder);
+    box-sizing: border-box;
+    font: inherit;
+  }
+
+  .tip {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 4;
+    padding: 2px 8px;
+    color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
+    background: var(--vscode-inputValidation-errorBackground);
+    border: 1px solid var(--vscode-inputValidation-errorBorder);
+    white-space: nowrap;
+  }
+
+  .editbar {
+    display: flex;
+    flex: none;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 8px;
+    border-top: 1px solid var(--vscode-panel-border);
+  }
+
+  .action {
+    padding: 1px 8px;
+    color: var(--vscode-button-secondaryForeground);
+    background: var(--vscode-button-secondaryBackground);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .action:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .hint {
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .problem {
+    color: var(--vscode-errorForeground);
   }
 
   .pending {

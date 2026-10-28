@@ -40,22 +40,32 @@ describe('rows request', () => {
       offset: 0,
       rows: [[1, 'text', null, true, { kind: 'binary', size: 2, preview: 'ab' }]],
       rowCount: 1,
+      changes: [{ row: 0, column: 2, kind: 'default' }],
     };
     expect(rows.result.parse(result)).toEqual(result);
   });
 
   it('accepts an empty window, which means the result is gone', () => {
-    expect(rows.result.parse({ resultId: 'r', offset: 0, rows: [], rowCount: 0 })).toEqual({
+    expect(
+      rows.result.parse({ resultId: 'r', offset: 0, rows: [], rowCount: 0, changes: [] }),
+    ).toEqual({
       resultId: 'r',
       offset: 0,
       rows: [],
       rowCount: 0,
+      changes: [],
     });
   });
 
   it('rejects a window with a bad cell', () => {
     expect(() =>
-      rows.result.parse({ resultId: 'r', offset: 0, rows: [[undefined]], rowCount: 1 }),
+      rows.result.parse({
+        resultId: 'r',
+        offset: 0,
+        rows: [[undefined]],
+        rowCount: 1,
+        changes: [],
+      }),
     ).toThrow();
   });
 });
@@ -69,6 +79,8 @@ describe('state event', () => {
     rowCount: 1,
     truncated: false,
     durationMs: 3,
+    changedCells: 0,
+    revision: 0,
   };
 
   it('describes the tabs and which one is active', () => {
@@ -112,6 +124,7 @@ describe('state event', () => {
 describe('protocol shape', () => {
   it('lets the host answer rows, paging, sorting and searching', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
+      'editCell',
       'pageTo',
       'rows',
       'search',
@@ -135,6 +148,84 @@ describe('protocol shape', () => {
   it('keeps the overscan smaller than one window', () => {
     expect(WINDOW_OVERSCAN).toBeGreaterThan(0);
     expect(WINDOW_OVERSCAN * 2).toBeLessThan(MAX_WINDOW_ROWS);
+  });
+});
+
+describe('editCell request', () => {
+  const { editCell } = resultGridProtocol.host.requests;
+  const base = { resultId: 'result-1', row: 0, column: 1 };
+
+  it('accepts typed text, NULL and DEFAULT', () => {
+    for (const input of [
+      { kind: 'text', text: 'x' },
+      { kind: 'text', text: '' },
+      { kind: 'null' },
+      { kind: 'default' },
+    ]) {
+      expect(editCell.params.parse({ ...base, input })).toEqual({ ...base, input });
+    }
+  });
+
+  it('rejects an unknown input kind, a missing text and negative positions', () => {
+    expect(() => editCell.params.parse({ ...base, input: { kind: 'drop-table' } })).toThrow();
+    expect(() => editCell.params.parse({ ...base, input: { kind: 'text' } })).toThrow();
+    expect(() => editCell.params.parse({ ...base, row: -1, input: { kind: 'null' } })).toThrow();
+  });
+
+  it('answers ok, or the reason it was refused', () => {
+    expect(editCell.result.parse({ ok: true })).toEqual({ ok: true });
+    expect(editCell.result.parse({ ok: false, error: 'not-null' })).toEqual({
+      ok: false,
+      error: 'not-null',
+    });
+    expect(() => editCell.result.parse({ ok: false, error: 'whatever' })).toThrow();
+  });
+});
+
+describe('editable tab state', () => {
+  const tab = {
+    id: 'result-1',
+    title: 't',
+    statement: 'SELECT * FROM t',
+    columns: [{ name: 'id' }, { name: 'total' }],
+    rowCount: 1,
+    truncated: false,
+    durationMs: 1,
+    changedCells: 2,
+    revision: 5,
+  };
+
+  it('carries how each column is edited, with null for a computed one', () => {
+    const payload = {
+      tabs: [
+        {
+          ...tab,
+          edit: {
+            editable: true,
+            columns: [
+              { dataType: 'enum', kind: 'enum', nullable: false, options: ['a', 'b'] },
+              null,
+            ],
+          },
+        },
+      ],
+      running: false,
+    };
+    expect(state.parse(payload)).toEqual(payload);
+  });
+
+  it('rejects an editor kind the page does not know', () => {
+    expect(() =>
+      state.parse({
+        tabs: [
+          {
+            ...tab,
+            edit: { editable: true, columns: [{ dataType: 'x', kind: 'wat', nullable: true }] },
+          },
+        ],
+        running: false,
+      }),
+    ).toThrow();
   });
 });
 
@@ -248,6 +339,8 @@ describe('sorted tab state', () => {
           rowCount: 1,
           truncated: false,
           durationMs: 1,
+          changedCells: 0,
+          revision: 0,
           sort: { column: 0, direction: 'desc' },
         },
       ],
@@ -268,6 +361,8 @@ describe('sorted tab state', () => {
             rowCount: 0,
             truncated: false,
             durationMs: 0,
+            changedCells: 0,
+            revision: 0,
             sort: { column: 0, direction: 'random' },
           },
         ],
@@ -305,6 +400,8 @@ describe('paged tab state', () => {
     rowCount: 2,
     truncated: false,
     durationMs: 1,
+    changedCells: 0,
+    revision: 0,
   };
 
   it('carries the page and the row count of a table view', () => {

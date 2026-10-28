@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
+  import type { EditInput } from '../../../../src/shared/cell-input';
   import {
     MAX_WINDOW_ROWS,
     type ResultGridProtocol,
@@ -47,6 +48,32 @@
     return loaded >= 0 ? cache.get(index) : undefined;
   }
 
+  function changeAt(row: number, column: number): 'value' | 'default' | undefined {
+    return loaded >= 0 ? cache.changeAt(row, column) : undefined;
+  }
+
+  /** Per column, how to edit it; undefined when the whole result is read-only. */
+  const editColumns = $derived(
+    activeTab?.edit?.editable === true ? (activeTab.edit.columns ?? []) : undefined,
+  );
+
+  /**
+   * Sends one edit to the host. Resolves to what went wrong, or undefined when the
+   * change was queued; the host then re-sends the state and the rows are re-read.
+   */
+  async function onEdit(row: number, column: number, input: EditInput): Promise<string | undefined> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return t('grid.editFailed');
+    }
+    try {
+      const answer = await rpc.request('editCell', { resultId: tab.id, row, column, input });
+      return answer.ok ? undefined : t(`grid.editError.${answer.error ?? 'not-editable'}`);
+    } catch (error) {
+      return error instanceof Error ? error.message : t('grid.editFailed');
+    }
+  }
+
   async function fetchRows(tab: ResultTab, firstIndex: number, count: number): Promise<void> {
     const range = windowFor(firstIndex, count, tab.rowCount);
     if (range === undefined || cache.hasRange(range.offset, range.limit)) {
@@ -66,7 +93,7 @@
       });
       // A late answer for another tab must not land in this one.
       if (window.resultId === gridState?.activeId) {
-        cache.put(window.offset, window.rows, window.rowCount);
+        cache.put(window.offset, window.rows, window.rowCount, window.changes);
         if (window.offset === 0 && window.rows.length > 0) {
           // The first rows are what the column widths are measured from.
           widths = keepWidths(widths, tab.columns, window.rows);
@@ -224,13 +251,20 @@
       const tab = next.tabs.find((candidate) => candidate.id === next.activeId);
       // Rows are kept only while the very same result in the very same order is
       // still on screen; sorting changes which row sits at which index.
-      const sameResult =
+      const sameOrder =
         tab !== undefined &&
         previous?.id === tab.id &&
         previous.rowCount === tab.rowCount &&
         previous.sort?.column === tab.sort?.column &&
         previous.sort?.direction === tab.sort?.direction;
-      if (!sameResult) {
+      const sameResult = sameOrder && previous.revision === tab.revision;
+      if (sameOrder && !sameResult) {
+        // A pending change moved: the rows must be read again, but the widths and the
+        // search belong to the same result and stay.
+        cache.reset(tab.rowCount);
+        pending = undefined;
+        loaded += 1;
+      } else if (!sameResult) {
         // The same result in a new order keeps the search; another tab starts fresh.
         const text = tab !== undefined && previous?.id === tab.id ? search : '';
         resetFor(tab);
@@ -334,6 +368,11 @@
         {#if activeTab.truncated}
           <span class="warn">{t('grid.truncated')}</span>
         {/if}
+        {#if activeTab.changedCells > 0}
+          <span class="warn" data-testid="changed-count">
+            {t('grid.changedCells', activeTab.changedCells)}
+          </span>
+        {/if}
         {#if activeTab.edit !== undefined}
           {#if activeTab.edit.editable}
             <span class="badge" data-testid="edit-badge">{t('grid.editable')}</span>
@@ -410,6 +449,9 @@
           {onVisible}
           {onResize}
           {onCopy}
+          {editColumns}
+          {changeAt}
+          {onEdit}
           {t}
         />
       {/if}

@@ -76,6 +76,11 @@ describe('resolveEditability', () => {
       editable: true,
       table: { name: 'users' },
       columnMap: ['id', 'Name', 'email'],
+      columns: [
+        { name: 'id', dataType: 'int', nullable: false, kind: 'integer' },
+        { name: 'Name', dataType: 'int', nullable: true, kind: 'integer' },
+        { name: 'email', dataType: 'int', nullable: false, kind: 'integer' },
+      ],
       keyColumns: ['id'],
       keyIndexes: [0],
     });

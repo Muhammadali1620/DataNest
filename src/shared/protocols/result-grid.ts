@@ -2,9 +2,21 @@
 // show (ARCHITECTURE.md D6), so a million-row result costs the webview nothing.
 
 import { resultRowSchema } from '../cell-value';
+import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
 import { defineProtocol } from '../rpc';
-import { array, boolean, type Infer, literal, number, object, optional, string } from '../schema';
+import {
+  array,
+  boolean,
+  type Infer,
+  literal,
+  nullable,
+  number,
+  object,
+  optional,
+  string,
+  union,
+} from '../schema';
 
 /** Rows the page may ask for in one request. */
 export const MAX_WINDOW_ROWS = 2000;
@@ -61,8 +73,26 @@ const tabSchema = object({
     object({
       editable: boolean(),
       reason: optional(literal(...READ_ONLY_REASONS)),
+      /** Per result column how to edit it; null for a computed column. */
+      columns: optional(
+        array(
+          nullable(
+            object({
+              dataType: name,
+              kind: literal(...INPUT_KINDS),
+              nullable: boolean(),
+              options: optional(array(string({ maxLength: 1000 }), { maxLength: 1000 })),
+            }),
+          ),
+          { maxLength: 10_000 },
+        ),
+      ),
     }),
   ),
+  /** Cells with a pending change. */
+  changedCells: number({ integer: true, min: 0 }),
+  /** Grows with every pending-change update; a page reloads its rows when it moves. */
+  revision: number({ integer: true, min: 0 }),
   /** How the result is ordered right now; absent means the server's own order. */
   sort: optional(
     object({
@@ -86,7 +116,39 @@ const windowSchema = object({
   rows: array(resultRowSchema, { maxLength: MAX_WINDOW_ROWS }),
   /** Total rows the result holds, so the page can size its scrollbar. */
   rowCount: number({ integer: true, min: 0 }),
+  /** Cells in this window with a pending change; the rows already show their new values. */
+  changes: array(
+    object({
+      row: number({ integer: true, min: 0 }),
+      column: number({ integer: true, min: 0 }),
+      kind: literal('value', 'default'),
+    }),
+    { maxLength: MAX_WINDOW_ROWS * 100 },
+  ),
 });
+
+const editInput = union(
+  object({ kind: literal('text'), text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
+  object({ kind: literal('null') }),
+  object({ kind: literal('default') }),
+);
+
+/** Why an edit was refused; the page turns each into a sentence. */
+export const EDIT_ERRORS = [
+  'not-editable',
+  'no-such-row',
+  'read-only-column',
+  'not-null',
+  'invalid-integer',
+  'invalid-number',
+  'invalid-boolean',
+  'invalid-date',
+  'invalid-time',
+  'invalid-datetime',
+  'invalid-json',
+  'invalid-enum',
+  'unsupported',
+] as const;
 
 export const resultGridProtocol = defineProtocol({
   host: {
@@ -116,6 +178,16 @@ export const resultGridProtocol = defineProtocol({
           rows: array(number({ integer: true, min: 0 }), { maxLength: MAX_SEARCH_HITS }),
           total: number({ integer: true, min: 0 }),
         }),
+      },
+      /** Page → host: change one cell; the change is queued, not saved. */
+      editCell: {
+        params: object({
+          resultId,
+          row: number({ integer: true, min: 0 }),
+          column: number({ integer: true, min: 0 }),
+          input: editInput,
+        }),
+        result: object({ ok: boolean(), error: optional(literal(...EDIT_ERRORS)) }),
       },
       /** Page → host: the rows of a visible range. */
       rows: {

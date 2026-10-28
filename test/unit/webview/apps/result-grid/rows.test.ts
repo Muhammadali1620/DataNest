@@ -120,3 +120,40 @@ describe('RowCache', () => {
     });
   });
 });
+
+describe('RowCache change marks', () => {
+  it('remembers which cells have a pending change', () => {
+    const cache = new RowCache();
+    cache.reset(3);
+    cache.put(0, [[1], [2], [3]], 3, [
+      { row: 1, column: 0, kind: 'value' },
+      { row: 2, column: 0, kind: 'default' },
+    ]);
+    expect(cache.changeAt(0, 0)).toBeUndefined();
+    expect(cache.changeAt(1, 0)).toBe('value');
+    expect(cache.changeAt(2, 0)).toBe('default');
+  });
+
+  it('lets a newer window replace the marks of its rows, and only those', () => {
+    const cache = new RowCache();
+    cache.reset(4);
+    cache.put(0, [[1], [2], [3], [4]], 4, [
+      { row: 0, column: 0, kind: 'value' },
+      { row: 3, column: 0, kind: 'value' },
+    ]);
+    cache.put(0, [[1], [2]], 4, []);
+    expect(cache.changeAt(0, 0)).toBeUndefined();
+    expect(cache.changeAt(3, 0)).toBe('value');
+  });
+
+  it('drops marks past a result that shrank, and all of them on reset', () => {
+    const cache = new RowCache();
+    cache.reset(3);
+    cache.put(0, [[1], [2], [3]], 3, [{ row: 2, column: 0, kind: 'value' }]);
+    cache.put(0, [[1]], 1);
+    expect(cache.changeAt(2, 0)).toBeUndefined();
+    cache.put(0, [[1]], 1, [{ row: 0, column: 0, kind: 'default' }]);
+    cache.reset(1);
+    expect(cache.changeAt(0, 0)).toBeUndefined();
+  });
+});

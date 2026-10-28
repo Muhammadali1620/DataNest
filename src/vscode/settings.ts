@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DEFAULT_SAFE_MODE, isSafeMode, type SafeMode } from '../services/safe-mode';
 import { DEFAULT_HISTORY_LIMIT } from '../services/history';
+import { DEFAULT_FORMAT_STYLE, type FormatStyle } from '../services/sql-format';
 import { CONFIG_KEYS, CONFIG_SECTION } from './command-ids';
 import type { TreeSettings } from './tree/tree-model';
 
@@ -65,6 +66,44 @@ export function readSafeMode(): SafeMode {
     .getConfiguration(CONFIG_SECTION)
     .get<string>(CONFIG_KEYS.safeMode, DEFAULT_SAFE_MODE);
   return isSafeMode(value) ? value : DEFAULT_SAFE_MODE;
+}
+
+/** One of `allowed`, or the fallback when the setting holds something else. */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.find((option) => option === value) ?? fallback;
+}
+
+/** The format settings; indentation comes from the editor, not from here. */
+export function readFormatStyle(indent: {
+  readonly tabSize: number;
+  readonly insertSpaces: boolean;
+}): FormatStyle {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const cases = ['preserve', 'upper', 'lower'] as const;
+  const width = config.get<number>(
+    CONFIG_KEYS.formatExpressionWidth,
+    DEFAULT_FORMAT_STYLE.expressionWidth,
+  );
+  const d = DEFAULT_FORMAT_STYLE;
+  return {
+    keywordCase: oneOf(config.get(CONFIG_KEYS.formatKeywordCase), cases, d.keywordCase),
+    dataTypeCase: oneOf(config.get(CONFIG_KEYS.formatDataTypeCase), cases, d.dataTypeCase),
+    functionCase: oneOf(config.get(CONFIG_KEYS.formatFunctionCase), cases, d.functionCase),
+    indentStyle: oneOf(
+      config.get(CONFIG_KEYS.formatIndentStyle),
+      ['standard', 'tabularLeft', 'tabularRight'] as const,
+      d.indentStyle,
+    ),
+    logicalOperatorNewline: oneOf(
+      config.get(CONFIG_KEYS.formatLogicalOperatorNewline),
+      ['before', 'after'] as const,
+      d.logicalOperatorNewline,
+    ),
+    expressionWidth: Number.isInteger(width) && width > 0 ? width : d.expressionWidth,
+    denseOperators: config.get<boolean>(CONFIG_KEYS.formatDenseOperators, d.denseOperators),
+    tabWidth: indent.tabSize > 0 ? indent.tabSize : d.tabWidth,
+    useTabs: !indent.insertSpaces,
+  };
 }
 
 /** True when a configuration change touches one of our settings. */

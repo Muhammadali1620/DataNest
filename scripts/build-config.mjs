@@ -57,6 +57,18 @@ export function findDriverEntries(rootDir) {
 }
 
 /**
+ * Code that is large and needed only for one feature, bundled apart and loaded on
+ * first use like a driver: sql-formatter (dist/formatter.js).
+ *
+ * @param {string} rootDir project root
+ * @returns {Record<string, string>} esbuild entry name → source path
+ */
+export function findLazyEntries(rootDir) {
+  const formatter = join(rootDir, 'src', 'services', 'formatter', 'index.ts');
+  return existsSync(formatter) ? { formatter } : {};
+}
+
+/**
  * @param {{ rootDir: string; outDir?: string; production?: boolean }} options
  * @returns {import('esbuild').BuildOptions}
  */
@@ -66,6 +78,7 @@ export function createHostBuildOptions({ rootDir, outDir, production = false }) 
     entryPoints: {
       extension: join(rootDir, 'src', 'extension.ts'),
       ...findDriverEntries(rootDir),
+      ...findLazyEntries(rootDir),
     },
     outdir: outDir ?? join(rootDir, 'dist'),
     bundle: true,

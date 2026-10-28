@@ -31,6 +31,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   “Apply” replaces it. MySQL first tries the new text out under a scratch name, so
   a typo or a missing privilege never drops the original; PostgreSQL and SQLite
   replace it in one transaction.
+- Format Document and Format Selection for SQL, in the dialect of the bound
+  connection, with `datanest.format.*` settings for keyword, type and function case,
+  indentation style, `AND`/`OR` placement, expression width and dense operators.
+  `DELIMITER` commands and statements the formatter cannot read stay as they are.
 
 ### Fixed
 

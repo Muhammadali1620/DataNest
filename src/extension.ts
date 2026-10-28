@@ -28,6 +28,8 @@ import { ObjectEditRegistry } from './vscode/editor/object-edit';
 import { ObjectEditors } from './vscode/editor/object-editors';
 import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/completion';
 import { RunCodeLensProvider } from './vscode/editor/run-query';
+import { SqlFormattingProvider } from './vscode/editor/formatting';
+import { createBundleFormatterLoader } from './services/sql-format';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
 import {
@@ -84,6 +86,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       new SqlCompletionProvider({ editors, store, manager, cache, logger }),
       ...TRIGGER_CHARACTERS,
     ),
+  );
+  const formatting = new SqlFormattingProvider({
+    bindings: editors.bindings,
+    store,
+    // sql-formatter is a bundle of its own, loaded on the first format (§7).
+    loadFormatter: createBundleFormatterLoader(__filename),
+    logger,
+  });
+  context.subscriptions.push(
+    vscode.languages.registerDocumentFormattingEditProvider({ language: 'sql' }, formatting),
+    vscode.languages.registerDocumentRangeFormattingEditProvider({ language: 'sql' }, formatting),
   );
   const tables = new TableViewer({
     manager,

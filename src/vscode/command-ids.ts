@@ -83,4 +83,12 @@ export const CONFIG_KEYS = {
   historyLimit: 'historyLimit',
   /** What happens before a statement that can destroy data runs: confirm, block or off. */
   safeMode: 'safeMode',
+  // How Format Document writes SQL (sql-formatter options).
+  formatKeywordCase: 'format.keywordCase',
+  formatDataTypeCase: 'format.dataTypeCase',
+  formatFunctionCase: 'format.functionCase',
+  formatIndentStyle: 'format.indentStyle',
+  formatLogicalOperatorNewline: 'format.logicalOperatorNewline',
+  formatExpressionWidth: 'format.expressionWidth',
+  formatDenseOperators: 'format.denseOperators',
 } as const;

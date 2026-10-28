@@ -620,6 +620,98 @@
           ],
           "markdownDescription": "%configuration.safeMode.description%",
           "scope": "window"
+        },
+        "datanest.format.keywordCase": {
+          "type": "string",
+          "enum": [
+            "upper",
+            "lower",
+            "preserve"
+          ],
+          "default": "upper",
+          "enumDescriptions": [
+            "%configuration.format.case.upper%",
+            "%configuration.format.case.lower%",
+            "%configuration.format.case.preserve%"
+          ],
+          "markdownDescription": "%configuration.format.keywordCase.description%",
+          "scope": "resource"
+        },
+        "datanest.format.dataTypeCase": {
+          "type": "string",
+          "enum": [
+            "upper",
+            "lower",
+            "preserve"
+          ],
+          "default": "preserve",
+          "enumDescriptions": [
+            "%configuration.format.case.upper%",
+            "%configuration.format.case.lower%",
+            "%configuration.format.case.preserve%"
+          ],
+          "markdownDescription": "%configuration.format.dataTypeCase.description%",
+          "scope": "resource"
+        },
+        "datanest.format.functionCase": {
+          "type": "string",
+          "enum": [
+            "upper",
+            "lower",
+            "preserve"
+          ],
+          "default": "preserve",
+          "enumDescriptions": [
+            "%configuration.format.case.upper%",
+            "%configuration.format.case.lower%",
+            "%configuration.format.case.preserve%"
+          ],
+          "markdownDescription": "%configuration.format.functionCase.description%",
+          "scope": "resource"
+        },
+        "datanest.format.indentStyle": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "tabularLeft",
+            "tabularRight"
+          ],
+          "default": "standard",
+          "enumDescriptions": [
+            "%configuration.format.indentStyle.standard%",
+            "%configuration.format.indentStyle.tabularLeft%",
+            "%configuration.format.indentStyle.tabularRight%"
+          ],
+          "markdownDescription": "%configuration.format.indentStyle.description%",
+          "scope": "resource"
+        },
+        "datanest.format.logicalOperatorNewline": {
+          "type": "string",
+          "enum": [
+            "before",
+            "after"
+          ],
+          "default": "before",
+          "enumDescriptions": [
+            "%configuration.format.logicalOperatorNewline.before%",
+            "%configuration.format.logicalOperatorNewline.after%"
+          ],
+          "markdownDescription": "%configuration.format.logicalOperatorNewline.description%",
+          "scope": "resource"
+        },
+        "datanest.format.expressionWidth": {
+          "type": "integer",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 1000,
+          "markdownDescription": "%configuration.format.expressionWidth.description%",
+          "scope": "resource"
+        },
+        "datanest.format.denseOperators": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%configuration.format.denseOperators.description%",
+          "scope": "resource"
         }
       }
     },
@@ -679,6 +771,7 @@
     "ovsx": "1.3.0",
     "pg": "8.23.1",
     "prettier": "3.9.10",
+    "sql-formatter": "15.9.0",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",
     "typescript": "6.0.3",

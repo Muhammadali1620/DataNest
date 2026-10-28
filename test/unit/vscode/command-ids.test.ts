@@ -281,7 +281,7 @@ describe('settings', () => {
   });
 
   it('bounds the numeric settings, so a typo cannot break a query', () => {
-    for (const key of ['rowLimit', 'pageSize', 'queryTimeout']) {
+    for (const key of ['rowLimit', 'pageSize', 'queryTimeout', 'format.expressionWidth']) {
       const property = properties[`${CONFIG_SECTION}.${key}`];
       expect(property?.minimum, `${key} has no minimum`).toBeDefined();
       expect(property?.maximum, `${key} has no maximum`).toBeDefined();
@@ -291,6 +291,17 @@ describe('settings', () => {
   it('keeps the row limit and the page size at least one row', () => {
     expect(properties[`${CONFIG_SECTION}.rowLimit`]?.minimum).toBe(1);
     expect(properties[`${CONFIG_SECTION}.pageSize`]?.minimum).toBe(1);
+  });
+
+  it('formats with upper-case keywords by default and offers only known cases', () => {
+    expect(properties[`${CONFIG_SECTION}.format.keywordCase`]?.default).toBe('upper');
+    for (const key of ['keywordCase', 'dataTypeCase', 'functionCase']) {
+      expect(properties[`${CONFIG_SECTION}.format.${key}`]?.enum).toEqual([
+        'upper',
+        'lower',
+        'preserve',
+      ]);
+    }
   });
 
   it('lets the query timeout be turned off with zero', () => {

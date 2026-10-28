@@ -50,5 +50,20 @@
   "commands.object.drop.title": "Удалить…",
   "commands.table.design.title": "Изменить таблицу…",
   "commands.object.edit.title": "Изменить определение…",
-  "commands.object.apply.title": "Применить определение"
+  "commands.object.apply.title": "Применить определение",
+  "configuration.format.keywordCase.description": "Регистр ключевых слов SQL (`SELECT`, `FROM`, …) при форматировании.",
+  "configuration.format.dataTypeCase.description": "Регистр типов данных (`varchar`, `INTEGER`, …) при форматировании.",
+  "configuration.format.functionCase.description": "Регистр имён функций (`count`, `NOW`, …) при форматировании.",
+  "configuration.format.case.upper": "ВЕРХНИЙ регистр.",
+  "configuration.format.case.lower": "нижний регистр.",
+  "configuration.format.case.preserve": "Как написано.",
+  "configuration.format.indentStyle.description": "Как выравниваются части запроса при форматировании SQL.",
+  "configuration.format.indentStyle.standard": "Каждая часть с новой строки, её содержимое — с отступом ниже.",
+  "configuration.format.indentStyle.tabularLeft": "Ключевые слова столбцом слева, содержимое после них.",
+  "configuration.format.indentStyle.tabularRight": "Ключевые слова столбцом с выравниванием вправо, содержимое после них.",
+  "configuration.format.logicalOperatorNewline.description": "Куда ставить `AND` и `OR`, когда условие разбито на строки.",
+  "configuration.format.logicalOperatorNewline.before": "В начале следующей строки.",
+  "configuration.format.logicalOperatorNewline.after": "В конце строки.",
+  "configuration.format.expressionWidth.description": "Выражение в скобках короче стольких символов остаётся в одной строке.",
+  "configuration.format.denseOperators.description": "Писать операторы без пробелов вокруг: `a+b` вместо `a + b`."
 }

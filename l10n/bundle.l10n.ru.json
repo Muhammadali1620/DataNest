@@ -129,5 +129,6 @@
   "$(check) Apply to {0} {1}": "$(check) Применить к {0} {1}",
   "Replace \"{0}\" with the edited definition?": "Заменить «{0}» отредактированным определением?",
   "This editor does not edit a database object: open one with \"Edit Definition…\" in the DataNest view": "Этот редактор не редактирует объект базы: откройте его через «Изменить определение…» в панели DataNest",
-  "Nothing to apply: the editor is empty": "Применять нечего: редактор пуст"
+  "Nothing to apply: the editor is empty": "Применять нечего: редактор пуст",
+  "DataNest: {0} statement(s) could not be read and were left as they are": "DataNest: не удалось разобрать операторов: {0}, они оставлены как есть"
 }

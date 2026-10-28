@@ -10,6 +10,7 @@ import {
   EXTERNALS,
   findE2eTests,
   findDriverEntries,
+  findLazyEntries,
   findWebviewApps,
   MIN_EDITOR,
   NODE_TARGET,
@@ -147,6 +148,18 @@ describe('build-config', () => {
       expect(options.minify).toBe(true);
       expect(options.keepNames).toBe(true);
       expect(options.define?.['process.env.NODE_ENV']).toBe('"production"');
+    });
+
+    it('bundles the formatter apart, to load it on first use', () => {
+      expect(findLazyEntries(tmp.path)).toEqual({});
+      write(tmp.path, 'src/services/formatter/index.ts', '');
+      expect(findLazyEntries(tmp.path)).toEqual({
+        formatter: join(tmp.path, 'src', 'services', 'formatter', 'index.ts'),
+      });
+      expect(Object.keys(createHostBuildOptions({ rootDir: tmp.path }).entryPoints ?? {})).toEqual([
+        'extension',
+        'formatter',
+      ]);
     });
 
     it('adds driver bundles as separate entry points', () => {

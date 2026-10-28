@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - The tree lists functions, procedures, sequences (PostgreSQL) and events (MySQL,
   MariaDB) next to tables and views, and every table has Indexes, Foreign Keys and
   Triggers folders. PostgreSQL overloads show their arguments.
+- Create and drop databases and schemas, create, rename, empty and drop tables and
+  views, and drop functions, procedures, triggers, sequences and events from the
+  tree. Every action shows its SQL first, with “Run” and “Open in Editor”; dropping a
+  database or a schema also asks for its name.
 
 ### Fixed
 

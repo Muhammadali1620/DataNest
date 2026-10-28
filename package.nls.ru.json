@@ -38,5 +38,14 @@
   "configuration.safeMode.confirm": "Сначала спросить подтверждение.",
   "configuration.safeMode.block": "Не выполнять такие запросы.",
   "configuration.safeMode.off": "Выполнять без вопросов.",
-  "commands.object.showDefinition.title": "Показать DDL"
+  "commands.object.showDefinition.title": "Показать DDL",
+  "commands.database.create.title": "Новая база данных…",
+  "commands.database.drop.title": "Удалить базу данных…",
+  "commands.schema.create.title": "Новая схема…",
+  "commands.schema.drop.title": "Удалить схему…",
+  "commands.table.create.title": "Новая таблица…",
+  "commands.table.drop.title": "Удалить…",
+  "commands.table.rename.title": "Переименовать…",
+  "commands.table.truncate.title": "Очистить таблицу (TRUNCATE)…",
+  "commands.object.drop.title": "Удалить…"
 }

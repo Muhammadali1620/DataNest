@@ -188,6 +188,7 @@ export class TreeModel {
       scope,
       name: table.name,
       tableKind: table.kind,
+      ...(table.materialized === true ? { materialized: true } : {}),
     }));
   }
 

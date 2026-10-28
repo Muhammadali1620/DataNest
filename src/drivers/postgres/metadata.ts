@@ -47,10 +47,14 @@ export class PostgresMetadata implements MetadataReader {
        ORDER BY c.relname`,
       [scope.schema ?? DEFAULT_SCHEMA],
     );
-    return rows.map((row) => ({
-      name: asText(row[0]) ?? '',
-      kind: ['v', 'm'].includes(asText(row[1]) ?? '') ? ('view' as const) : ('table' as const),
-    }));
+    return rows.map((row) => {
+      const relkind = asText(row[1]) ?? '';
+      return {
+        name: asText(row[0]) ?? '',
+        kind: relkind === 'v' || relkind === 'm' ? ('view' as const) : ('table' as const),
+        ...(relkind === 'm' ? { materialized: true } : {}),
+      };
+    });
   }
 
   async listColumns(table: TableRef): Promise<ColumnInfo[]> {

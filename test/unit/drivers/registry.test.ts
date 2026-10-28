@@ -16,6 +16,13 @@ function fakeDriver(id: DriverId): Driver {
       likeText: () => '',
       defaultKeyword: true,
       insertDefaultRow: () => '',
+      ddl: {
+        createTableStub: () => '',
+        dropRelation: () => '',
+        renameRelation: () => '',
+        truncateTable: () => '',
+        dropObject: () => '',
+      },
     },
     capabilities: {
       databases: true,

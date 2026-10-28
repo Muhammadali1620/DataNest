@@ -36,6 +36,17 @@ export const fakeDialect: Dialect = {
   paginate: (sql, limit, offset) => `${sql} LIMIT ${limit} OFFSET ${offset}`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
+  ddl: {
+    createDatabase: (name) => `CREATE DATABASE "${name}"`,
+    dropDatabase: (name) => `DROP DATABASE "${name}"`,
+    createSchema: (name) => `CREATE SCHEMA "${name}"`,
+    dropSchema: (name, cascade) => `DROP SCHEMA "${name}"${cascade ? ' CASCADE' : ''}`,
+    createTableStub: (table) => `CREATE TABLE "${table.name}" (id)`,
+    dropRelation: (table, kind) => `DROP ${kind.toUpperCase()} "${table.name}"`,
+    renameRelation: (table, _kind, newName) => `RENAME "${table.name}" TO "${newName}"`,
+    truncateTable: (table) => `TRUNCATE "${table.name}"`,
+    dropObject: (object) => `DROP ${object.kind.toUpperCase()} "${object.name}"`,
+  },
 };
 
 export class FakeMetadata implements MetadataReader {

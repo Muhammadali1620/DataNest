@@ -178,6 +178,60 @@
         "icon": "$(file-code)"
       },
       {
+        "command": "datanest.database.create",
+        "title": "%commands.database.create.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.database.drop",
+        "title": "%commands.database.drop.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.schema.create",
+        "title": "%commands.schema.create.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.schema.drop",
+        "title": "%commands.schema.drop.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.table.create",
+        "title": "%commands.table.create.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.table.drop",
+        "title": "%commands.table.drop.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.table.rename",
+        "title": "%commands.table.rename.title%",
+        "category": "DataNest",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "datanest.table.truncate",
+        "title": "%commands.table.truncate.title%",
+        "category": "DataNest",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "datanest.object.drop",
+        "title": "%commands.object.drop.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -199,6 +253,42 @@
         },
         {
           "command": "datanest.object.showDefinition",
+          "when": "false"
+        },
+        {
+          "command": "datanest.database.create",
+          "when": "false"
+        },
+        {
+          "command": "datanest.database.drop",
+          "when": "false"
+        },
+        {
+          "command": "datanest.schema.create",
+          "when": "false"
+        },
+        {
+          "command": "datanest.schema.drop",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.create",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.drop",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.rename",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.truncate",
+          "when": "false"
+        },
+        {
+          "command": "datanest.object.drop",
           "when": "false"
         }
       ],
@@ -287,7 +377,7 @@
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.folder)",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.folder)",
           "group": "1_state@1"
         },
         {
@@ -309,6 +399,56 @@
           "command": "datanest.object.showDefinition",
           "when": "view == datanest.connections && (viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.sequence || viewItem == datanest.event)",
           "group": "inline@0"
+        },
+        {
+          "command": "datanest.database.create",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.database)",
+          "group": "4_structure@1"
+        },
+        {
+          "command": "datanest.schema.create",
+          "when": "view == datanest.connections && viewItem == datanest.database",
+          "group": "4_structure@2"
+        },
+        {
+          "command": "datanest.table.create",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables)",
+          "group": "4_structure@3"
+        },
+        {
+          "command": "datanest.table.create",
+          "when": "view == datanest.connections && viewItem == datanest.group.tables",
+          "group": "inline@0"
+        },
+        {
+          "command": "datanest.table.rename",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "4_structure@4"
+        },
+        {
+          "command": "datanest.table.truncate",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.table.drop",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "8_destroy@2"
+        },
+        {
+          "command": "datanest.object.drop",
+          "when": "view == datanest.connections && (viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.sequence || viewItem == datanest.event)",
+          "group": "8_destroy@2"
+        },
+        {
+          "command": "datanest.schema.drop",
+          "when": "view == datanest.connections && viewItem == datanest.schema",
+          "group": "8_destroy@2"
+        },
+        {
+          "command": "datanest.database.drop",
+          "when": "view == datanest.connections && viewItem == datanest.database",
+          "group": "8_destroy@2"
         }
       ],
       "editor/title": [

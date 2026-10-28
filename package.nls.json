@@ -38,5 +38,14 @@
   "configuration.safeMode.confirm": "Ask for confirmation first.",
   "configuration.safeMode.block": "Refuse to run such statements.",
   "configuration.safeMode.off": "Run them without asking.",
-  "commands.object.showDefinition.title": "Show DDL"
+  "commands.object.showDefinition.title": "Show DDL",
+  "commands.database.create.title": "New Database…",
+  "commands.database.drop.title": "Drop Database…",
+  "commands.schema.create.title": "New Schema…",
+  "commands.schema.drop.title": "Drop Schema…",
+  "commands.table.create.title": "New Table…",
+  "commands.table.drop.title": "Drop…",
+  "commands.table.rename.title": "Rename…",
+  "commands.table.truncate.title": "Empty Table (TRUNCATE)…",
+  "commands.object.drop.title": "Drop…"
 }

@@ -1,26 +1,10 @@
 import { KEYWORDS } from '../../core/sql/keywords';
-import type { TableRef } from '../../core/model/objects';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
+import { quoteIdentifier, quoteTable } from './quote';
+import { mysqlDdl } from './ddl';
 
-export function quoteIdentifier(name: string): string {
-  if (name === '') {
-    throw new Error('Identifier must not be empty');
-  }
-  if (name.includes('\u0000')) {
-    throw new Error('Identifier must not contain NUL');
-  }
-  return `\`${name.replaceAll('`', '``')}\``;
-}
-
-export function quoteTable(table: TableRef): string {
-  const parts: string[] = [];
-  if (table.database !== undefined) {
-    parts.push(quoteIdentifier(table.database));
-  }
-  parts.push(quoteIdentifier(table.name));
-  return parts.join('.');
-}
+export { quoteIdentifier, quoteTable };
 
 /**
  * Renders a value as a MySQL literal. Only for generated SQL the user previews;
@@ -83,4 +67,5 @@ export const mysqlDialect: Dialect = {
     `CAST(${quotedColumn} AS CHAR) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} () VALUES ()`,
+  ddl: mysqlDdl,
 };

@@ -16,7 +16,12 @@ export type TableKind = 'table' | 'view';
 export interface TableInfo {
   readonly name: string;
   readonly kind: TableKind;
+  /** A PostgreSQL materialized view: a view that DDL names with its own words. */
+  readonly materialized?: boolean;
 }
+
+/** What DDL calls a table or a view. */
+export type RelationKind = 'table' | 'view' | 'materialized-view';
 
 export interface ColumnInfo {
   readonly name: string;

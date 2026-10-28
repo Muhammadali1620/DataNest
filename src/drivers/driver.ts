@@ -10,6 +10,7 @@ import type {
   ObjectInfo,
   ObjectRef,
   ObjectScope,
+  RelationKind,
   TableInfo,
   TableRef,
 } from '../core/model/objects';
@@ -34,6 +35,28 @@ export interface DriverCapabilities {
    * in the order the tree shows their folders. Triggers belong to tables instead.
    */
   readonly objectKinds: readonly ListedObjectKind[];
+}
+
+/**
+ * Statements that change the structure. Names always go through quoting; a method
+ * that is absent means the database has no such thing (a SQLite file has no
+ * databases to create), and one that throws `unsupported` cannot do it for this
+ * particular object.
+ */
+export interface SchemaDdl {
+  readonly createDatabase?: (name: string) => string;
+  readonly dropDatabase?: (name: string) => string;
+  readonly createSchema?: (name: string) => string;
+  readonly dropSchema?: (name: string, cascade: boolean) => string;
+  /** A new table with an auto-numbered primary key `id`, to fill in later. */
+  createTableStub(table: TableRef): string;
+  dropRelation(table: TableRef, kind: RelationKind): string;
+  /** Renames within the same database or schema; `newName` is a bare name. */
+  renameRelation(table: TableRef, kind: RelationKind, newName: string): string;
+  /** Removes every row; where there is no TRUNCATE, a DELETE without WHERE. */
+  truncateTable(table: TableRef): string;
+  /** Drops a function, procedure, trigger, sequence or event. */
+  dropObject(object: ObjectRef): string;
 }
 
 /** Everything that differs between SQL dialects. UI builds SQL only through this. */
@@ -64,6 +87,8 @@ export interface Dialect {
   readonly defaultKeyword: boolean;
   /** An INSERT that fills every column with its default; the table is already quoted. */
   insertDefaultRow(quotedTable: string): string;
+  /** Structure changes: databases, schemas, tables and other objects. */
+  readonly ddl: SchemaDdl;
 }
 
 export interface ResultColumn {

@@ -9,6 +9,9 @@ import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode } from './tree/nodes';
 import { readDefinitionDocument } from '../services/object-definitions';
+import { SchemaActions } from '../services/schema-actions';
+import { schemaCommandHandlers } from './tree/schema-commands';
+import { schemaTexts, schemaUi } from './tree/schema-ui';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, type CommandId } from './command-ids';
@@ -75,6 +78,14 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     clipboard: vscode.env.clipboard,
     noTargetMessage: vscode.l10n.t('Pick a connection in the DataNest view first'),
   });
+  const schemaCommands = schemaCommandHandlers({
+    actions: new SchemaActions({ manager: deps.manager, cache: deps.cache, logger: deps.logger }),
+    manager: deps.manager,
+    ui: schemaUi(),
+    texts: schemaTexts(),
+    tree: deps.tree,
+    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
+  });
   let pings: PingPanel[] = [];
   const handlers: Record<CommandId, (target?: CommandTarget) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
@@ -90,6 +101,15 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.copyName]: treeCommands.copyName,
     [COMMAND_IDS.openTable]: treeCommands.openTable,
     [COMMAND_IDS.showDefinition]: treeCommands.showDefinition,
+    [COMMAND_IDS.createDatabase]: schemaCommands.createDatabase,
+    [COMMAND_IDS.dropDatabase]: schemaCommands.dropDatabase,
+    [COMMAND_IDS.createSchema]: schemaCommands.createSchema,
+    [COMMAND_IDS.dropSchema]: schemaCommands.dropSchema,
+    [COMMAND_IDS.createTable]: schemaCommands.createTable,
+    [COMMAND_IDS.dropTable]: schemaCommands.dropTable,
+    [COMMAND_IDS.renameTable]: schemaCommands.renameTable,
+    [COMMAND_IDS.truncateTable]: schemaCommands.truncateTable,
+    [COMMAND_IDS.dropObject]: schemaCommands.dropObject,
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;
       const panel =

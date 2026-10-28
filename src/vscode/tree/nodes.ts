@@ -8,6 +8,7 @@ import type {
   ListedObjectKind,
   ObjectRef,
   ObjectScope,
+  RelationKind,
   TableKind,
   TableRef,
 } from '../../core/model/objects';
@@ -25,6 +26,8 @@ export const TREE_CONTEXT = {
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
+  /** The Tables folder, where a new table can be created. */
+  tablesGroup: 'datanest.group.tables',
   table: 'datanest.table',
   view: 'datanest.view',
   column: 'datanest.column',
@@ -97,6 +100,8 @@ export interface TableNode {
   readonly scope: ObjectScope;
   readonly name: string;
   readonly tableKind: TableKind;
+  /** A PostgreSQL materialized view. */
+  readonly materialized?: boolean;
 }
 
 export interface ColumnNode {
@@ -324,6 +329,14 @@ export function nameOf(node: TreeNode): string | undefined {
   }
 }
 
+/** What DDL calls the relation of a table node. */
+export function relationKindOf(node: TableNode): RelationKind {
+  if (node.tableKind === 'table') {
+    return 'table';
+  }
+  return node.materialized === true ? 'materialized-view' : 'view';
+}
+
 /** The table a node points at, for "open table" and column lookups. */
 export function tableRefOf(node: TableNode): TableRef {
   return { ...node.scope, name: node.name };
@@ -347,42 +360,4 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'message':
       return undefined;
   }
-}
-
-/** One-line summary of an index: its kind and key parts. */
-export function describeIndex(index: IndexInfo): string {
-  const kind = index.primary ? 'PRIMARY KEY' : index.unique ? 'UNIQUE' : '';
-  const method = index.method === undefined ? '' : index.method.toLowerCase();
-  const head = [kind, method === 'btree' ? '' : method].filter((part) => part !== '').join(' ');
-  const parts = `(${index.columns.join(', ')})`;
-  const where = index.where === undefined ? '' : ` WHERE ${index.where}`;
-  return head === '' ? `${parts}${where}` : `${head} ${parts}${where}`;
-}
-
-/** One-line summary of a foreign key: its columns and where they point. */
-export function describeForeignKey(key: ForeignKey): string {
-  const target = [key.target.database, key.target.schema, key.target.name]
-    .filter((part) => part !== undefined)
-    .join('.');
-  return `(${key.columns.join(', ')}) → ${target} (${key.targetColumns.join(', ')})`;
-}
-
-/** The label of a routine: overloads show their arguments. */
-export function objectLabel(object: ObjectRef): string {
-  return object.signature === undefined ? object.name : `${object.name}(${object.signature})`;
-}
-
-/** One-line summary of a column: type, key and nullability. */
-export function describeColumn(column: ColumnInfo): string {
-  const parts = [column.dataType];
-  if (column.primaryKey) {
-    parts.push('PK');
-  }
-  if (!column.nullable) {
-    parts.push('NOT NULL');
-  }
-  if (column.defaultValue !== undefined) {
-    parts.push(`DEFAULT ${column.defaultValue}`);
-  }
-  return parts.join(', ');
 }

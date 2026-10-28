@@ -31,6 +31,16 @@ export const COMMAND_IDS = {
   openTable: 'datanest.table.open',
   /** Opens the DDL of a tree object in a new SQL editor. */
   showDefinition: 'datanest.object.showDefinition',
+  // Structure changes from the tree; each shows its SQL before it runs.
+  createDatabase: 'datanest.database.create',
+  dropDatabase: 'datanest.database.drop',
+  createSchema: 'datanest.schema.create',
+  dropSchema: 'datanest.schema.drop',
+  createTable: 'datanest.table.create',
+  dropTable: 'datanest.table.drop',
+  renameTable: 'datanest.table.rename',
+  truncateTable: 'datanest.table.truncate',
+  dropObject: 'datanest.object.drop',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

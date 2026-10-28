@@ -5,13 +5,10 @@ import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import { describeTarget } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
+import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
   CONNECTIONS_VIEW_ID,
-  describeColumn,
-  describeForeignKey,
-  describeIndex,
   nodeId,
-  objectLabel,
   TREE_CONTEXT,
   type ObjectGroup,
   type ObjectNode,

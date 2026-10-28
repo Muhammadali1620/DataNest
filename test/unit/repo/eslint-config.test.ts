@@ -13,8 +13,9 @@ async function ruleLevel(file: string, rule: string): Promise<unknown> {
   return config.rules[rule]?.[0];
 }
 
-// Type-aware linting loads whole TS programs, which is slow on the first call.
-describe('eslint.config.mjs', { timeout: 30_000 }, () => {
+// Type-aware linting loads whole TS programs, which is slow on the first call; a busy
+// macOS runner under coverage needed more than 30 s for the Svelte one.
+describe('eslint.config.mjs', { timeout: 120_000 }, () => {
   it.each([
     ['src/core/sql/split.ts'],
     ['src/shared/protocol.ts'],

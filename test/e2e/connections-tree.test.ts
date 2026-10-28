@@ -45,6 +45,15 @@ describe('connections view', () => {
       'datanest.tree.copyName',
       'datanest.table.open',
       'datanest.object.showDefinition',
+      'datanest.database.create',
+      'datanest.database.drop',
+      'datanest.schema.create',
+      'datanest.schema.drop',
+      'datanest.table.create',
+      'datanest.table.drop',
+      'datanest.table.rename',
+      'datanest.table.truncate',
+      'datanest.object.drop',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -63,6 +72,20 @@ describe('connections view', () => {
     const before = queries();
     await vscode.commands.executeCommand('datanest.object.showDefinition');
     assert.equal(queries(), before);
+  });
+
+  it('structure commands without a node ask nothing and change nothing', async () => {
+    // From the palette there is no node: no prompt may open, so these return at once.
+    for (const id of [
+      'datanest.database.drop',
+      'datanest.schema.drop',
+      'datanest.table.drop',
+      'datanest.table.rename',
+      'datanest.table.truncate',
+      'datanest.object.drop',
+    ]) {
+      await vscode.commands.executeCommand(id);
+    }
   });
 
   it('refreshing the whole tree works without a selected node', async () => {

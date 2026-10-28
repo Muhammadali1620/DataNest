@@ -1,26 +1,10 @@
 import { KEYWORDS } from '../../core/sql/keywords';
-import type { TableRef } from '../../core/model/objects';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
+import { quoteIdentifier, quoteTable } from './quote';
+import { postgresDdl } from './ddl';
 
-export function quoteIdentifier(name: string): string {
-  if (name === '') {
-    throw new Error('Identifier must not be empty');
-  }
-  if (name.includes('\u0000')) {
-    throw new Error('Identifier must not contain NUL');
-  }
-  return `"${name.replaceAll('"', '""')}"`;
-}
-
-export function quoteTable(table: TableRef): string {
-  const parts: string[] = [];
-  if (table.schema !== undefined) {
-    parts.push(quoteIdentifier(table.schema));
-  }
-  parts.push(quoteIdentifier(table.name));
-  return parts.join('.');
-}
+export { quoteIdentifier, quoteTable };
 
 /**
  * Renders a value as a PostgreSQL literal. Only for generated SQL the user previews;
@@ -82,4 +66,5 @@ export const postgresDialect: Dialect = {
     `CAST(${quotedColumn} AS TEXT) ILIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
+  ddl: postgresDdl,
 };

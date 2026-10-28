@@ -13,7 +13,19 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import type { Translate } from '../../lib/i18n';
   import type { TableFilter } from '../../../../src/shared/table-filter';
   import { toTsv } from '../../../../src/shared/tsv';
-  import { keepWidths } from './columns';
+  import { fitColumnWidth, initialWidths, keepWidths } from './columns';
+  import {
+    type ColumnView,
+    displayOrder,
+    isCustomized,
+    isHidden,
+    isPinned,
+    NO_VIEW,
+    showAll,
+    toggleHidden,
+    togglePinned,
+    viewKey,
+  } from './column-view';
   import Grid from './Grid.svelte';
   import { COPY_FORMATS, type CopyFormat } from '../../../../src/shared/copy-format';
   import type { MessageKey } from '../../l10n/en';
@@ -30,7 +42,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import RecordPanel from './RecordPanel.svelte';
   import ValuePanel from './ValuePanel.svelte';
   import { RowCache, windowFor } from './rows';
-  import { type CellRef, selectionBox, type Selection } from './selection';
+  import { type CellRef, type SelectionInfo } from './selection';
 
   /** Export formats beyond the CSV and JSON buttons. */
   const MORE_EXPORTS = ['sql', 'markdown', 'xlsx'] as const;
@@ -51,13 +63,58 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let hitIndex = $state(0);
   let revealRow = $state<number | undefined>(undefined);
   /** The selected cells, which "Copy as" renders; the whole result when nothing is selected. */
-  let selected = $state<Selection | undefined>(undefined);
+  let selected = $state<SelectionInfo | undefined>(undefined);
   /** What the last "Copy as" did, until the selection changes. */
   let copyNote = $state<string | undefined>(undefined);
   /** The filter bar of a table view, the columns it offers and whether a request is out. */
   let filterOpen = $state(false);
   let filterColumns = $state<string[]>([]);
   let filtering = $state(false);
+  /** Which columns are hidden or pinned, per kind of result (the same columns share a view). */
+  let views = $state<Record<string, ColumnView>>({});
+  let columnsOpen = $state(false);
+  /** Widths the user chose, per kind of result; not reactive: only `widths` is drawn. */
+  const savedWidths: Record<string, number[]> = {};
+  /** True once a width was dragged or fitted, so later rows do not re-measure over it. */
+  let userSized = false;
+  /** The rows on screen, so "fit to content" measures what the user is looking at. */
+  let visibleRange = { first: 0, count: 0 };
+  function changeView(next: ColumnView): void {
+    views = { ...views, [viewId]: next };
+  }
+
+  function rememberWidths(next: number[]): void {
+    widths = next;
+    userSized = true;
+    savedWidths[viewId] = next;
+  }
+
+  /** The rows that are loaded and on screen. */
+  function rowsOnScreen(): (readonly CellValue[])[] {
+    return Array.from({ length: visibleRange.count }, (_, offset) =>
+      rowAt(visibleRange.first + offset),
+    ).filter((row): row is readonly CellValue[] => row !== undefined);
+  }
+
+  function fit(index: number, rows: readonly (readonly CellValue[])[]): void {
+    const column = activeTab?.columns[index];
+    if (column === undefined) {
+      return;
+    }
+    const next = [...widths];
+    next[index] = fitColumnWidth(column, index, rows);
+    rememberWidths(next);
+  }
+
+  function fitAll(): void {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return;
+    }
+    const rows = rowsOnScreen();
+    rememberWidths(tab.columns.map((column, index) => fitColumnWidth(column, index, rows)));
+  }
+
   /** The value panel beside the grid, and the cell it follows. */
   let valueOpen = $state(false);
   /** The record card; it takes the same place, so only one of the two is open. */
@@ -98,6 +155,13 @@ import type { RowAction } from '../../../../src/shared/row-action';
   const activeTab = $derived<ResultTab | undefined>(
     gridState?.tabs.find((tab) => tab.id === gridState?.activeId),
   );
+
+  const viewId = $derived(
+    activeTab === undefined ? '' : viewKey(activeTab.columns.map((column) => column.name)),
+  );
+  const columnView = $derived(views[viewId] ?? NO_VIEW);
+  const display = $derived(displayOrder(activeTab?.columns.length ?? 0, columnView));
+
 
   function rowAt(index: number): readonly CellValue[] | undefined {
     // Reading `loaded` ties the grid's cells to the rows that have arrived.
@@ -272,14 +336,14 @@ import type { RowAction } from '../../../../src/shared/row-action';
     }
     failure = undefined;
     copyNote = undefined;
-    const box = selected === undefined ? undefined : selectionBox(selected);
+    // What is on screen is what is copied: hidden columns stay out, pinned ones come first.
+    const columns = selected?.columns ?? (isCustomized(columnView) ? display.order : undefined);
     try {
       const answer = await rpc.request('copyAs', {
         resultId: tab.id,
         format,
-        ...(box === undefined
-          ? {}
-          : { top: box.top, bottom: box.bottom, left: box.left, right: box.right }),
+        ...(selected === undefined ? {} : { top: selected.top, bottom: selected.bottom }),
+        ...(columns === undefined ? {} : { columns: [...columns] }),
       });
       if (answer.ok) {
         copyNote = t('grid.copied', answer.rows ?? 0);
@@ -342,8 +406,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
       if (window.resultId === gridState?.activeId) {
         cache.put(window.offset, window.rows, window.rowCount, window.changes, window.states);
         if (window.offset === 0 && window.rows.length > 0) {
-          // The first rows are what the column widths are measured from.
-          widths = keepWidths(widths, tab.columns, window.rows);
+          // The first rows are what the column widths are measured from, unless the
+          // user has already sized them.
+          if (!userSized) {
+            widths = initialWidths(tab.columns, window.rows);
+          }
         }
         loaded += 1;
       }
@@ -357,6 +424,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   function onVisible(firstIndex: number, count: number): void {
+    visibleRange = { first: firstIndex, count };
     const tab = activeTab;
     if (tab !== undefined && tab.error === undefined) {
       void fetchRows(tab, firstIndex, count);
@@ -374,7 +442,12 @@ import type { RowAction } from '../../../../src/shared/row-action';
     hitTotal = 0;
     hitIndex = 0;
     revealRow = undefined;
-    widths = tab === undefined ? [] : keepWidths([], tab.columns);
+    const saved =
+      tab === undefined
+        ? undefined
+        : savedWidths[viewKey(tab.columns.map((column) => column.name))];
+    widths = tab === undefined ? [] : (saved ?? keepWidths([], tab.columns));
+    userSized = saved !== undefined;
     loaded += 1;
   }
 
@@ -388,28 +461,27 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   /** Copies the selected cells as TSV, fetching whatever is not loaded yet. */
-  async function copySelection(tab: ResultTab, selection: Selection): Promise<void> {
-    const box = selectionBox(selection);
-    const count = box.bottom - box.top + 1;
+  async function copySelection(tab: ResultTab, selection: SelectionInfo): Promise<void> {
+    const count = selection.bottom - selection.top + 1;
     failure = undefined;
     try {
       const window = await rpc.request('rows', {
         resultId: tab.id,
-        offset: box.top,
+        offset: selection.top,
         limit: Math.min(count, MAX_WINDOW_ROWS),
       });
       if (window.resultId !== gridState?.activeId) {
         return;
       }
       // Only the selected cells travel: headers are a separate action (V2.8).
-      const rows = window.rows.map((row) => row.slice(box.left, box.right + 1));
+      const rows = window.rows.map((row) => selection.columns.map((column) => row[column] ?? null));
       rpc.emit('copyText', { text: toTsv(rows) });
     } catch (error) {
       failure = error instanceof Error ? error.message : t('grid.copyFailed');
     }
   }
 
-  function onCopy(selection: Selection): void {
+  function onCopy(selection: SelectionInfo): void {
     const tab = activeTab;
     if (tab !== undefined && tab.error === undefined) {
       void copySelection(tab, selection);
@@ -489,7 +561,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   function onResize(index: number, width: number): void {
     const next = [...widths];
     next[index] = width;
-    widths = next;
+    rememberWidths(next);
   }
 
   onMount(() => {
@@ -557,6 +629,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
       {/each}
       <span class="spacer"></span>
       {#if activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
+        <button
+          type="button"
+          class="cancel"
+          aria-pressed={columnsOpen}
+          title={t('columns.hint')}
+          data-testid="columns-toggle"
+          onclick={() => {
+            columnsOpen = !columnsOpen;
+          }}
+        >
+          {columnView.hidden.length > 0
+            ? t('columns.titleHidden', columnView.hidden.length)
+            : t('columns.title')}
+        </button>
         <select
           class="cancel"
           aria-label={t('grid.copyAs')}
@@ -671,6 +757,72 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </select>
       {/if}
     </div>
+
+    {#if columnsOpen && activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
+      <div class="columns-menu" data-testid="columns-menu" role="group" aria-label={t('columns.title')}>
+        <div class="columns-actions">
+          <button
+            type="button"
+            class="cancel"
+            data-testid="columns-show-all"
+            disabled={columnView.hidden.length === 0}
+            onclick={() => {
+              changeView(showAll(columnView));
+            }}
+          >
+            {t('columns.showAll')}
+          </button>
+          <button
+            type="button"
+            class="cancel"
+            data-testid="columns-fit-all"
+            onclick={fitAll}
+          >
+            {t('columns.fitAll')}
+          </button>
+          <button
+            type="button"
+            class="cancel"
+            data-testid="columns-reset"
+            disabled={!isCustomized(columnView)}
+            onclick={() => {
+              changeView(NO_VIEW);
+            }}
+          >
+            {t('columns.reset')}
+          </button>
+        </div>
+        <ul class="columns-list">
+          {#each activeTab.columns as column, index (index)}
+            <li class="columns-item" data-testid="columns-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!isHidden(columnView, index)}
+                  onchange={() => {
+                    changeView(toggleHidden(columnView, index, activeTab.columns.length));
+                  }}
+                />
+                {column.name === '' ? `#${index + 1}` : column.name}
+              </label>
+              <button
+                type="button"
+                class="pin-toggle"
+                aria-pressed={isPinned(columnView, index)}
+                aria-label={t('columns.pin', column.name)}
+                title={t('columns.pinHint')}
+                disabled={isHidden(columnView, index)}
+                onclick={() => {
+                  changeView(togglePinned(columnView, index));
+                }}
+              >
+                📌
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
 
     {#if activeTab?.page !== undefined && filterOpen}
       {#key activeTab.id}
@@ -833,7 +985,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
         <div class="body">
           <div class="grid-area">
         <Grid
-          resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}`}
+          resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}:${display.order.join(',')}`}
+          order={display.order}
+          pinnedCount={display.pinnedCount}
+          onFit={fit}
           sort={activeTab.sort}
           {onSort}
           {revealRow}
@@ -850,7 +1005,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {onEdit}
           {onRowAction}
           {onSave}
-          onSelectionChange={(next: Selection | undefined) => {
+          onSelectionChange={(next: SelectionInfo | undefined) => {
             selected = next;
             copyNote = undefined;
           }}
@@ -1163,6 +1318,64 @@ import type { RowAction } from '../../../../src/shared/row-action';
     align-items: center;
     padding: 4px 8px;
     border-top: 1px solid var(--vscode-panel-border);
+  }
+
+  .columns-menu {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 40vh;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+  }
+
+  .columns-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .columns-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 2px 12px;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+  }
+
+  .columns-item {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .columns-item label {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pin-toggle {
+    padding: 0 4px;
+    background: none;
+    border: none;
+    opacity: 0.4;
+    cursor: pointer;
+  }
+
+  .pin-toggle[aria-pressed='true'] {
+    opacity: 1;
+  }
+
+  .pin-toggle:disabled {
+    opacity: 0.2;
+    cursor: default;
   }
 
   .note {

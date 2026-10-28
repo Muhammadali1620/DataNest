@@ -4,7 +4,7 @@
 import { MAX_BINARY_VIEW_BYTES } from '../binary-bytes';
 import { COPY_ERRORS, COPY_FORMATS } from '../copy-format';
 import { LINK_ERRORS } from '../link-error';
-import { resultRowSchema } from '../cell-value';
+import { MAX_COLUMNS, resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
 import { tableFilterSchema } from '../table-filter';
@@ -259,8 +259,8 @@ export const resultGridProtocol = defineProtocol({
           format: literal(...COPY_FORMATS),
           top: optional(number({ integer: true, min: 0 })),
           bottom: optional(number({ integer: true, min: 0 })),
-          left: optional(number({ integer: true, min: 0 })),
-          right: optional(number({ integer: true, min: 0 })),
+          /** The result columns to copy, in the order they are on screen. */
+          columns: optional(array(number({ integer: true, min: 0 }), { maxLength: MAX_COLUMNS })),
         }),
         result: object({
           ok: boolean(),

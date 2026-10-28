@@ -26,6 +26,33 @@ const CELL_PADDING = 18;
 /** How many rows are measured for the first guess. */
 export const SAMPLE_ROWS = 50;
 
+/** Widest "fit to content" goes; a longer value is cut by the cell anyway. */
+export const MAX_FIT_WIDTH = 800;
+
+/** Rows measured by "fit to content", which is an explicit request and may look further. */
+export const FIT_ROWS = 500;
+
+/** Pixel width a header and the given rows need, measured by their longest first line. */
+function measure(
+  name: string,
+  index: number,
+  rows: readonly (readonly CellValue[] | undefined)[],
+  maxChars: number,
+  maxWidth: number,
+): number {
+  let longest = name.length;
+  for (const row of rows) {
+    const value = row?.[index];
+    if (value !== undefined) {
+      // Only the first line matters: a cell shows one line.
+      const text = cellText(value, { nullText: 'NULL' });
+      const firstLine = text.split('\n', 1)[0] ?? '';
+      longest = Math.max(longest, Math.min(firstLine.length, maxChars));
+    }
+  }
+  return clamp(Math.round(longest * CHAR_WIDTH + CELL_PADDING), MIN_COLUMN_WIDTH, maxWidth);
+}
+
 /**
  * A first width per column, from the header text and the first rows. Measuring
  * every row of a large result would cost more than it is worth, so only a sample
@@ -36,20 +63,19 @@ export function initialWidths(
   rows: readonly (readonly CellValue[] | undefined)[] = [],
 ): number[] {
   const sample = rows.slice(0, SAMPLE_ROWS);
-  return columns.map((column, index) => {
-    let longest = column.name.length;
-    for (const row of sample) {
-      const value = row?.[index];
-      if (value !== undefined) {
-        // Only the first line matters: a cell shows one line.
-        const text = cellText(value, { nullText: 'NULL' });
-        const firstLine = text.split('\n', 1)[0] ?? '';
-        longest = Math.max(longest, Math.min(firstLine.length, 200));
-      }
-    }
-    const width = Math.round(longest * CHAR_WIDTH + CELL_PADDING);
-    return clamp(width, MIN_COLUMN_WIDTH, MAX_AUTO_WIDTH);
-  });
+  return columns.map((column, index) => measure(column.name, index, sample, 200, MAX_AUTO_WIDTH));
+}
+
+/**
+ * The width that shows a column's longest value in the rows given, up to
+ * `MAX_FIT_WIDTH`: what "fit to content" does on request.
+ */
+export function fitColumnWidth(
+  column: ResultColumnInfo,
+  index: number,
+  rows: readonly (readonly CellValue[] | undefined)[],
+): number {
+  return measure(column.name, index, rows.slice(0, FIT_ROWS), 400, MAX_FIT_WIDTH);
 }
 
 export function clamp(value: number, min: number, max: number): number {

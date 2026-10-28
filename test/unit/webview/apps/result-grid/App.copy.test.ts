@@ -113,7 +113,7 @@ describe('result grid "Copy as"', () => {
       expect(copy).toHaveBeenCalledOnce();
     });
     const sent = copy.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(sent).toMatchObject({ resultId: 'result-1', format: 'json', top: 0, left: 1 });
+    expect(sent).toMatchObject({ resultId: 'result-1', format: 'json', top: 0, columns: [1, 2] });
   });
 
   it('says how many rows were copied', async () => {

@@ -17,9 +17,8 @@ export interface CopyInput {
   readonly columns: readonly ResultColumn[];
   /** The rows to copy, full width: UPDATE needs the key even when it is not selected. */
   readonly rows: readonly (readonly CellValue[])[];
-  /** First and last selected column, inclusive. */
-  readonly left: number;
-  readonly right: number;
+  /** The result columns to copy, in the order they were on screen. */
+  readonly selected: readonly number[];
   /** Needed for SQL output; absent when the result's connection is unknown. */
   readonly dialect?: Dialect | undefined;
   readonly edit?: ResultEdit | undefined;
@@ -32,7 +31,7 @@ export type CopyOutcome =
 export const PLACEHOLDER_TABLE = 'table_name';
 
 export function copyAs(input: CopyInput): CopyOutcome {
-  const indexes = Array.from({ length: input.right - input.left + 1 }, (_, i) => input.left + i);
+  const indexes = input.selected;
   switch (input.format) {
     case 'tsv':
       return text(
@@ -188,7 +187,7 @@ function inList(input: CopyInput, dialect: Dialect): CopyOutcome {
   const seen = new Set<string>();
   const items: string[] = [];
   for (const row of input.rows) {
-    const cell = row[input.left] ?? null;
+    const cell = row[input.selected[0] ?? 0] ?? null;
     if (cell === null) {
       continue;
     }

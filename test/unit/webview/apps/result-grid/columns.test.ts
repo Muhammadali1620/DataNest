@@ -3,9 +3,12 @@ import type { CellValue } from '../../../../../src/shared/cell-value';
 import {
   clamp,
   DEFAULT_COLUMN_WIDTH,
+  FIT_ROWS,
+  fitColumnWidth,
   initialWidths,
   keepWidths,
   MAX_AUTO_WIDTH,
+  MAX_FIT_WIDTH,
   MIN_COLUMN_WIDTH,
   resizedWidths,
   SAMPLE_ROWS,
@@ -122,5 +125,43 @@ describe('DEFAULT_COLUMN_WIDTH', () => {
   it('sits between the bounds', () => {
     expect(DEFAULT_COLUMN_WIDTH).toBeGreaterThan(MIN_COLUMN_WIDTH);
     expect(DEFAULT_COLUMN_WIDTH).toBeLessThan(MAX_AUTO_WIDTH);
+  });
+});
+
+describe('fitColumnWidth', () => {
+  const column = { name: 'note' };
+
+  it('fits the longest value in the rows, beyond the automatic maximum', () => {
+    const narrow = fitColumnWidth(column, 0, [['short']]);
+    const wide = fitColumnWidth(column, 0, [['x'.repeat(100)]]);
+    expect(wide).toBeGreaterThan(narrow);
+    expect(wide).toBeGreaterThan(MAX_AUTO_WIDTH);
+  });
+
+  it('stops at the widest a fit goes', () => {
+    expect(fitColumnWidth(column, 0, [['x'.repeat(5000)]])).toBe(MAX_FIT_WIDTH);
+  });
+
+  it('is never narrower than the header or the minimum', () => {
+    expect(fitColumnWidth({ name: 'a_rather_long_header' }, 0, [['x']])).toBeGreaterThan(
+      MIN_COLUMN_WIDTH,
+    );
+    expect(fitColumnWidth({ name: '' }, 0, [])).toBe(MIN_COLUMN_WIDTH);
+  });
+
+  it('measures the column it is asked about and only its first line', () => {
+    const rows = [['x'.repeat(300), 'tiny\n' + 'y'.repeat(500)]];
+    expect(fitColumnWidth(column, 1, rows)).toBe(fitColumnWidth(column, 1, [['', 'tiny']]));
+  });
+
+  it('copes with rows that have not arrived and with short rows', () => {
+    expect(fitColumnWidth(column, 3, [undefined, ['a']])).toBe(MIN_COLUMN_WIDTH);
+  });
+
+  it('looks at no more rows than a fit is allowed to', () => {
+    const rows = Array.from({ length: FIT_ROWS + 10 }, (_, i) => [
+      i < FIT_ROWS ? 'a' : 'z'.repeat(80),
+    ]);
+    expect(fitColumnWidth(column, 0, rows)).toBe(fitColumnWidth(column, 0, [['a']]));
   });
 });

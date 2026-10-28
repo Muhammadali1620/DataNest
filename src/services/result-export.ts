@@ -58,8 +58,7 @@ export function exportBytes(input: ExportInput, format: ExportFormat): ExportOut
         format: format === 'sql' ? 'insert' : 'markdown',
         columns: input.columns,
         rows: input.rows,
-        left: 0,
-        right: last,
+        selected: Array.from({ length: last + 1 }, (_, index) => index),
         dialect: input.dialect,
         edit: input.edit,
       });

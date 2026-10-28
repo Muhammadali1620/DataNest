@@ -10,11 +10,11 @@ import type { ResultStore } from './result-store';
 export interface CopyRequest {
   readonly resultId: string;
   readonly format: CopyFormat;
-  /** Rows and columns, inclusive; the whole result when absent. */
+  /** Rows, inclusive; all of them when absent. */
   readonly top?: number | undefined;
   readonly bottom?: number | undefined;
-  readonly left?: number | undefined;
-  readonly right?: number | undefined;
+  /** The result columns to copy, in order; all of them when absent. */
+  readonly columns?: readonly number[] | undefined;
 }
 
 export type CopyReply =
@@ -38,8 +38,16 @@ export class ResultCopier {
     const lastColumn = summary.columns.length - 1;
     const top = clamp(request.top ?? 0, 0, Math.max(0, total - 1));
     const bottom = clamp(request.bottom ?? total - 1, top, Math.max(0, total - 1));
-    const left = clamp(request.left ?? 0, 0, lastColumn);
-    const right = clamp(request.right ?? lastColumn, left, lastColumn);
+    // Columns that do not exist and repeats are dropped, not trusted.
+    const selected =
+      request.columns === undefined
+        ? Array.from({ length: lastColumn + 1 }, (_, index) => index)
+        : [...new Set(request.columns)].filter(
+            (index) => Number.isInteger(index) && index >= 0 && index <= lastColumn,
+          );
+    if (selected.length === 0) {
+      return { ok: false, error: 'no-rows' };
+    }
     if (total === 0) {
       return { ok: false, error: 'no-rows' };
     }
@@ -59,8 +67,7 @@ export class ResultCopier {
       format: request.format,
       columns: summary.columns,
       rows: window.rows,
-      left,
-      right,
+      selected,
       dialect,
       edit: summary.edit,
     });

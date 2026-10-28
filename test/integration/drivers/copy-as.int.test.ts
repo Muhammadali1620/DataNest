@@ -214,7 +214,7 @@ describe('copy as', () => {
     it('writes an IN list that finds the same rows', async () => {
       await seed();
       const id = await load();
-      const list = await copier.render({ resultId: id, format: 'in', left: 1, right: 1 });
+      const list = await copier.render({ resultId: id, format: 'in', columns: [1] });
       if (!list.ok) {
         throw new Error(list.error);
       }

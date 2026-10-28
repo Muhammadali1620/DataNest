@@ -23,6 +23,7 @@
     selectCell,
     selectionBox,
     type Selection,
+    type SelectionInfo,
   } from './selection';
   import { columnGeometry, columnLayout, rangeOf, rowGeometry } from './virtual';
 
@@ -38,7 +39,7 @@
     /** Called while a column separator is dragged, with the new width. */
     onResize: (index: number, width: number) => void;
     /** Called when the user asks to copy the selection. */
-    onCopy: (selection: Selection) => void;
+    onCopy: (selection: SelectionInfo) => void;
     /** Changes whenever a different result is shown; the selection then starts over. */
     resetKey: string;
     /** How the result is ordered, so the header can show it. */
@@ -64,7 +65,13 @@
     /** Called when the focused cell changes, e.g. so the value panel can follow it. */
     onFocusChange?: ((cell: CellRef | undefined) => void) | undefined;
     /** Called when the selected cells change, so "Copy as" knows what to copy. */
-    onSelectionChange?: ((selection: Selection | undefined) => void) | undefined;
+    onSelectionChange?: ((selection: SelectionInfo | undefined) => void) | undefined;
+    /** Result columns in the order they are drawn, hidden ones left out; all of them by default. */
+    order?: readonly number[] | undefined;
+    /** How many of the leading `order` columns stay put while the rest scrolls. */
+    pinnedCount?: number | undefined;
+    /** Called to fit a column to its content, with the rows that are on screen. */
+    onFit?: ((index: number, rows: readonly (readonly CellValue[])[]) => void) | undefined;
     /** Called for F4, which opens or closes the value panel. */
     onToggleValue?: (() => void) | undefined;
     /** The table a foreign key column leads to, or undefined when the column is not a key. */
@@ -97,6 +104,9 @@
     onSave,
     onFocusChange,
     onSelectionChange,
+    order: orderProp,
+    pinnedCount,
+    onFit,
     onToggleValue,
     onToggleRecord,
     linkTarget,
@@ -122,11 +132,25 @@
 
   const height = $derived(viewportHeight > 0 ? viewportHeight : ASSUMED_HEIGHT);
   const width = $derived(viewportWidth > 0 ? viewportWidth : ASSUMED_WIDTH);
-  const layout = $derived(columnLayout(widths));
+  /** Result columns in drawing order; every one of them unless the user hid some. */
+  const order = $derived<readonly number[]>(orderProp ?? columns.map((_, index) => index));
+  const pinned = $derived(Math.max(0, Math.min(pinnedCount ?? 0, order.length)));
+  /** The result column drawn at a position. */
+  function orig(position: number): number {
+    return order[position] ?? position;
+  }
+  const layout = $derived(columnLayout(order.map((index) => widths[index] ?? MIN_COLUMN_WIDTH)));
   const rows = $derived(rowGeometry(scrollTop, height, ROW_HEIGHT, rowCount));
   const visibleColumns = $derived(columnGeometry(scrollLeft, width, layout));
   const rowIndexes = $derived(rangeOf(rows.firstIndex, rows.lastIndex));
-  const columnIndexes = $derived(rangeOf(visibleColumns.firstIndex, visibleColumns.lastIndex));
+  /** Pinned columns are always drawn; the others only while they are near the viewport. */
+  const pinnedPositions = $derived(rangeOf(0, pinned - 1));
+  const scrollStart = $derived(Math.max(visibleColumns.firstIndex, pinned));
+  const scrollPositions = $derived(rangeOf(scrollStart, visibleColumns.lastIndex));
+  /** Empty space between the pinned columns and the first scrolled one. */
+  const scrollPadding = $derived(
+    Math.max(0, (layout.offsets[scrollStart] ?? 0) - (layout.offsets[pinned] ?? 0)),
+  );
 
   // Asking for rows is a side effect of what is on screen, not of rendering.
   $effect(() => {
@@ -183,7 +207,7 @@
   /** True while the pointer is down on a cell, which extends the selection. */
   let selecting = $state(false);
 
-  const bounds = $derived({ rowCount, columnCount: columns.length });
+  const bounds = $derived({ rowCount, columnCount: order.length });
   const pageRows = $derived(Math.max(1, Math.floor(height / ROW_HEIGHT) - 1));
 
   /** A different result means different cells, so the old selection is dropped. */
@@ -205,9 +229,10 @@
     if (row === undefined) {
       return;
     }
+    const wanted = untrack(() => revealColumn);
     const cell = selectCell(
-      { row, column: untrack(() => revealColumn) ?? 0 },
-      { rowCount, columnCount: columns.length },
+      { row, column: wanted === undefined ? 0 : Math.max(0, untrack(() => order).indexOf(wanted)) },
+      { rowCount, columnCount: untrack(() => order).length },
     );
     selection = cell;
     if (cell !== undefined) {
@@ -237,7 +262,12 @@
     return isEditableColumn(info) ? info : undefined;
   }
 
-  const focusCell = $derived(selection?.focus);
+  /** The focused cell in the result's own column numbers. */
+  const focusCell = $derived(
+    selection === undefined
+      ? undefined
+      : { row: selection.focus.row, column: orig(selection.focus.column) },
+  );
   // The callback only writes the parent's state, so this effect never reads what it sets.
   $effect(() => {
     const cell = focusCell;
@@ -249,9 +279,21 @@
   $effect(() => {
     const current = selection;
     untrack(() => {
-      onSelectionChange?.(current);
+      onSelectionChange?.(current === undefined ? undefined : infoOf(current));
     });
   });
+
+  /** The selection as rows and the result columns it covers, hidden ones excluded. */
+  function infoOf(current: Selection): SelectionInfo {
+    const box = selectionBox(current);
+    return {
+      top: box.top,
+      bottom: box.bottom,
+      columns: Array.from({ length: box.right - box.left + 1 }, (_, offset) =>
+        orig(box.left + offset),
+      ),
+    };
+  }
 
   const focusColumn = $derived(focusCell === undefined ? undefined : editColumn(focusCell.column));
   const canSetNull = $derived(focusColumn?.nullable === true);
@@ -336,7 +378,7 @@
   }
 
   async function setFocused(input: EditInput): Promise<void> {
-    const focus = selection?.focus;
+    const focus = focusCell;
     if (focus === undefined || editColumn(focus.column) === undefined) {
       return;
     }
@@ -352,19 +394,20 @@
     }
   }
 
-  function startSelect(event: PointerEvent, row: number, column: number): void {
+  /** `position` is where the cell is drawn; the result's own column number is `orig(position)`. */
+  function startSelect(event: PointerEvent, row: number, position: number): void {
     if (event.button !== 0) {
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && follow(row, column)) {
-      selection = selectCell({ row, column }, bounds);
+    if ((event.ctrlKey || event.metaKey) && follow(row, orig(position))) {
+      selection = selectCell({ row, column: position }, bounds);
       viewport?.focus();
       return;
     }
     selecting = true;
     selection = event.shiftKey
-      ? extendTo(selection, { row, column }, bounds)
-      : selectCell({ row, column }, bounds);
+      ? extendTo(selection, { row, column: position }, bounds)
+      : selectCell({ row, column: position }, bounds);
     viewport?.focus();
   }
 
@@ -378,9 +421,9 @@
     return true;
   }
 
-  function overCell(row: number, column: number): void {
+  function overCell(row: number, position: number): void {
     if (selecting) {
-      selection = extendTo(selection, { row, column }, bounds);
+      selection = extendTo(selection, { row, column: position }, bounds);
     }
   }
 
@@ -392,7 +435,7 @@
     const modifier = event.ctrlKey || event.metaKey;
     if (event.key === 'F12' && selection !== undefined) {
       event.preventDefault();
-      follow(selection.focus.row, selection.focus.column);
+      follow(focusCell?.row ?? 0, focusCell?.column ?? 0);
       return;
     }
     if (event.key === 'F4' && event.shiftKey && onToggleRecord !== undefined) {
@@ -408,7 +451,7 @@
     if (modifier && (event.key === 'c' || event.key === 'C')) {
       if (selection !== undefined) {
         event.preventDefault();
-        onCopy(selection);
+        onCopy(infoOf(selection));
       }
       return;
     }
@@ -424,7 +467,7 @@
     }
     if ((event.key === 'Enter' || event.key === 'F2') && selection !== undefined) {
       event.preventDefault();
-      startEdit(selection.focus.row, selection.focus.column);
+      startEdit(focusCell?.row ?? 0, focusCell?.column ?? 0);
       return;
     }
     if (editColumns !== undefined && event.key === 'Insert') {
@@ -474,10 +517,15 @@
       // The header covers one row's worth at the top of the viewport.
       viewport.scrollTop = bottom - height + ROW_HEIGHT;
     }
+    if (focus.column < pinned) {
+      // Pinned columns never scroll out of sight.
+      return;
+    }
+    const pinnedWidth = layout.offsets[pinned] ?? 0;
     const left = layout.offsets[focus.column] ?? 0;
     const right = layout.offsets[focus.column + 1] ?? left;
-    if (left < viewport.scrollLeft) {
-      viewport.scrollLeft = left;
+    if (left - pinnedWidth < viewport.scrollLeft) {
+      viewport.scrollLeft = left - pinnedWidth;
     } else if (right > viewport.scrollLeft + width - ROW_NUMBER_WIDTH) {
       viewport.scrollLeft = right - width + ROW_NUMBER_WIDTH;
     }
@@ -512,8 +560,16 @@
     drag = undefined;
   }
 
-  /** Double-clicking the separator makes the column fit its header again. */
+  /** Double-clicking the separator fits the column to what is on screen. */
   function autoFit(index: number): void {
+    if (onFit !== undefined) {
+      const rowsOnScreen = rowIndexes.flatMap((row) => {
+        const cells = rowAt(row);
+        return cells === undefined ? [] : [cells];
+      });
+      onFit(index, rowsOnScreen);
+      return;
+    }
     const name = columns[index]?.name ?? '';
     onResize(index, Math.max(MIN_COLUMN_WIDTH, Math.round(name.length * 7.2 + 18)));
   }
@@ -535,48 +591,12 @@
   <div class="canvas" style="height: {rows.totalHeight}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
     <div class="header" role="row" style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
       <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader">#</div>
-      <div class="spacer" style="width: {visibleColumns.leftPadding}px;"></div>
-      {#each columnIndexes as index (index)}
-        <div
-          class="cell head"
-          role="columnheader"
-          aria-colindex={index + 1}
-          aria-sort={sort?.column === index
-            ? sort.direction === 'asc'
-              ? 'ascending'
-              : 'descending'
-            : 'none'}
-          style="width: {widthOf(index)}px;"
-          title={columns[index]?.dataType ?? columns[index]?.name ?? ''}
-        >
-          <button
-            type="button"
-            class="name"
-            onclick={() => {
-              onSort(index);
-            }}
-          >
-            {columns[index]?.name ?? ''}
-            {#if sort?.column === index}
-              <span class="arrow" aria-hidden="true">{sort.direction === 'asc' ? '▲' : '▼'}</span>
-            {/if}
-          </button>
-          <span
-            class="grip"
-            role="separator"
-            aria-label={t('grid.resize', columns[index]?.name ?? '')}
-            aria-orientation="vertical"
-            onpointerdown={(event) => {
-              startResize(event, index);
-            }}
-            onpointermove={moveResize}
-            onpointerup={endResize}
-            onpointercancel={endResize}
-            ondblclick={() => {
-              autoFit(index);
-            }}
-          ></span>
-        </div>
+      {#each pinnedPositions as position (position)}
+        {@render headCell(position)}
+      {/each}
+      <div class="spacer" style="width: {scrollPadding}px;"></div>
+      {#each scrollPositions as position (position)}
+        {@render headCell(position)}
       {/each}
     </div>
 
@@ -593,90 +613,145 @@
         <div class="cell rownum" style="width: {ROW_NUMBER_WIDTH}px;" role="rowheader">
           {index + 1}
         </div>
-        <div class="spacer" style="width: {visibleColumns.leftPadding}px;"></div>
         {#if cells === undefined}
-          <div class="cell pending" style="width: {layout.totalWidth - visibleColumns.leftPadding}px;" role="gridcell">
+          <div class="cell pending" style="width: {layout.totalWidth}px;" role="gridcell">
             {t('grid.loading')}
           </div>
         {:else}
-          {#each columnIndexes as column (column)}
-            {@const cell = displayOf(cells[column] ?? null)}
-            {@const mark = changeAt(index, column)}
-            {@const editor = editing?.row === index && editing.column === column ? editing : undefined}
-            <div
-              class="cell"
-              role="gridcell"
-              aria-colindex={column + 1}
-              aria-selected={isSelected(selection, index, column)}
-              tabindex={-1}
-              class:null={cell.isNull}
-              class:numeric={cell.numeric}
-              class:selected={isSelected(selection, index, column)}
-              class:focused={isFocused(selection, index, column)}
-              class:changed={mark !== undefined}
-              class:defaulted={mark === 'default'}
-              class:editing={editor !== undefined}
-              class:link={!cell.isNull && linkTarget?.(column) !== undefined}
-              style="width: {widthOf(column)}px;"
-              title={!cell.isNull && linkTarget?.(column) !== undefined
-                ? t('grid.followLink', linkTarget(column) ?? '')
-                : cell.truncated || cell.flattened
-                  ? cell.text
-                  : undefined}
-              onpointerdown={(event) => {
-                if (editor === undefined) {
-                  startSelect(event, index, column);
-                }
-              }}
-              onpointerenter={() => {
-                overCell(index, column);
-              }}
-              ondblclick={() => {
-                startEdit(index, column);
-              }}
-            >
-              {#if editor === undefined}
-                {mark === 'default' ? t('grid.defaultLabel') : cell.text}
-              {:else if editor.control.type === 'select'}
-                <select
-                  class="editor"
-                  use:focusOnMount
-                  bind:value={editor.text}
-                  onkeydown={onEditorKey}
-                  onchange={() => {
-                    void commitEdit();
-                  }}
-                  onblur={cancelEdit}
-                >
-                  {#if editor.text === '' || !editor.control.options.includes(editor.text)}
-                    <option value={editor.text} disabled>{editor.text}</option>
-                  {/if}
-                  {#each editor.control.options as option (option)}
-                    <option value={option}>{option}</option>
-                  {/each}
-                </select>
-              {:else}
-                <input
-                  class="editor"
-                  type={editor.control.inputType}
-                  placeholder={editor.control.placeholder}
-                  use:focusOnMount
-                  bind:value={editor.text}
-                  onkeydown={onEditorKey}
-                  onblur={cancelEdit}
-                  aria-invalid={editor.error !== undefined}
-                />
-              {/if}
-              {#if editor?.error !== undefined}
-                <span class="tip" role="alert" data-testid="edit-error">{editor.error}</span>
-              {/if}
-            </div>
+          {#each pinnedPositions as position (position)}
+            {@render dataCell(index, cells, position)}
+          {/each}
+          <div class="spacer" style="width: {scrollPadding}px;"></div>
+          {#each scrollPositions as position (position)}
+            {@render dataCell(index, cells, position)}
           {/each}
         {/if}
       </div>
     {/each}
   </div>
 </div>
+
+{#snippet headCell(position: number)}
+  {@const index = orig(position)}
+  <div
+    class="cell head"
+    class:pinned={position < pinned}
+    role="columnheader"
+    aria-colindex={index + 1}
+    aria-sort={sort?.column === index ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+    style="width: {widthOf(index)}px;{position < pinned
+      ? ` left: ${ROW_NUMBER_WIDTH + (layout.offsets[position] ?? 0)}px;`
+      : ''}"
+    title={columns[index]?.dataType ?? columns[index]?.name ?? ''}
+  >
+    <button
+      type="button"
+      class="name"
+      onclick={() => {
+        onSort(index);
+      }}
+    >
+      {#if position < pinned}<span class="pin" aria-hidden="true">📌</span>{/if}
+      {columns[index]?.name ?? ''}
+      {#if sort?.column === index}
+        <span class="arrow" aria-hidden="true">{sort.direction === 'asc' ? '▲' : '▼'}</span>
+      {/if}
+    </button>
+    <span
+      class="grip"
+      role="separator"
+      aria-label={t('grid.resize', columns[index]?.name ?? '')}
+      aria-orientation="vertical"
+      onpointerdown={(event) => {
+        startResize(event, index);
+      }}
+      onpointermove={moveResize}
+      onpointerup={endResize}
+      onpointercancel={endResize}
+      ondblclick={() => {
+        autoFit(index);
+      }}
+    ></span>
+  </div>
+{/snippet}
+
+{#snippet dataCell(index: number, cells: readonly CellValue[], position: number)}
+  {@const column = orig(position)}
+  {@const cell = displayOf(cells[column] ?? null)}
+  {@const mark = changeAt(index, column)}
+  {@const editor = editing?.row === index && editing.column === column ? editing : undefined}
+  <div
+    class="cell"
+    role="gridcell"
+    aria-colindex={column + 1}
+    aria-selected={isSelected(selection, index, position)}
+    tabindex={-1}
+    class:null={cell.isNull}
+    class:numeric={cell.numeric}
+    class:selected={isSelected(selection, index, position)}
+    class:focused={isFocused(selection, index, position)}
+    class:changed={mark !== undefined}
+    class:defaulted={mark === 'default'}
+    class:editing={editor !== undefined}
+    class:pinned={position < pinned}
+    class:link={!cell.isNull && linkTarget?.(column) !== undefined}
+    style="width: {widthOf(column)}px;{position < pinned
+      ? ` left: ${ROW_NUMBER_WIDTH + (layout.offsets[position] ?? 0)}px;`
+      : ''}"
+    title={!cell.isNull && linkTarget?.(column) !== undefined
+      ? t('grid.followLink', linkTarget(column) ?? '')
+      : cell.truncated || cell.flattened
+        ? cell.text
+        : undefined}
+    onpointerdown={(event) => {
+      if (editor === undefined) {
+        startSelect(event, index, position);
+      }
+    }}
+    onpointerenter={() => {
+      overCell(index, position);
+    }}
+    ondblclick={() => {
+      startEdit(index, column);
+    }}
+  >
+    {#if editor === undefined}
+      {mark === 'default' ? t('grid.defaultLabel') : cell.text}
+    {:else if editor.control.type === 'select'}
+      <select
+        class="editor"
+        use:focusOnMount
+        bind:value={editor.text}
+        onkeydown={onEditorKey}
+        onchange={() => {
+          void commitEdit();
+        }}
+        onblur={cancelEdit}
+      >
+        {#if editor.text === '' || !editor.control.options.includes(editor.text)}
+          <option value={editor.text} disabled>{editor.text}</option>
+        {/if}
+        {#each editor.control.options as option (option)}
+          <option value={option}>{option}</option>
+        {/each}
+      </select>
+    {:else}
+      <input
+        class="editor"
+        type={editor.control.inputType}
+        placeholder={editor.control.placeholder}
+        use:focusOnMount
+        bind:value={editor.text}
+        onkeydown={onEditorKey}
+        onblur={cancelEdit}
+        aria-invalid={editor.error !== undefined}
+      />
+    {/if}
+    {#if editor?.error !== undefined}
+      <span class="tip" role="alert" data-testid="edit-error">{editor.error}</span>
+    {/if}
+  </div>
+{/snippet}
 
 {#if editColumns !== undefined}
   <div class="editbar" data-testid="editbar">
@@ -833,6 +908,29 @@
     text-align: right;
     background: var(--vscode-editor-background);
     user-select: none;
+  }
+
+  .cell.pinned {
+    position: sticky;
+    z-index: 1;
+    background: var(--vscode-editor-background);
+  }
+
+  .head.pinned {
+    z-index: 2;
+    background: var(--vscode-editorGroupHeader-tabsBackground);
+  }
+
+  .row:hover .cell.pinned {
+    background: var(--vscode-list-hoverBackground);
+  }
+
+  .row.inserted .cell.pinned {
+    background: var(--vscode-diffEditor-insertedLineBackground, rgba(80, 160, 80, 0.12));
+  }
+
+  .pin {
+    font-size: 0.75em;
   }
 
   .head.rownum {

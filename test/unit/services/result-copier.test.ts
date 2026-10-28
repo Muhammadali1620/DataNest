@@ -51,10 +51,27 @@ describe('ResultCopier', () => {
       format: 'csv',
       top: 1,
       bottom: 99,
-      left: 1,
-      right: 99,
+      columns: [1, 99, 1, -3],
     });
     expect(reply).toEqual({ ok: true, text: 'name\r\nb\r\nc\r\n', rows: 2 });
+  });
+
+  it('copies the columns it is given in that order, and drops ones that do not exist or repeat', async () => {
+    const { id } = add(ctx.results, [[1, 'a']]);
+    const reply = await ctx.copier.render({ resultId: id, format: 'csv', columns: [1, 0, 1, 7] });
+    expect(reply).toEqual({ ok: true, text: 'name,id\r\na,1\r\n', rows: 1 });
+  });
+
+  it('has nothing to copy when none of the columns exists', async () => {
+    const { id } = add(ctx.results, [[1, 'a']]);
+    expect(await ctx.copier.render({ resultId: id, format: 'csv', columns: [8, -1] })).toEqual({
+      ok: false,
+      error: 'no-rows',
+    });
+    expect(await ctx.copier.render({ resultId: id, format: 'csv', columns: [] })).toEqual({
+      ok: false,
+      error: 'no-rows',
+    });
   });
 
   it('swaps a reversed rectangle into order instead of failing', async () => {

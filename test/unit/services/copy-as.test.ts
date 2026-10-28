@@ -28,8 +28,7 @@ function input(overrides: Partial<CopyInput>): CopyInput {
     format: 'csv',
     columns: COLUMNS,
     rows: ROWS,
-    left: 0,
-    right: 2,
+    selected: [0, 1, 2],
     dialect: sqliteDialect,
     edit: EDIT,
     ...overrides,
@@ -46,16 +45,16 @@ function text(overrides: Partial<CopyInput>): string {
 
 describe('copyAs text formats', () => {
   it('writes TSV and CSV with a header for the selected columns only', () => {
-    expect(text({ format: 'tsv', left: 1, right: 2, rows: [ROWS[0] ?? []] })).toBe(
+    expect(text({ format: 'tsv', selected: [1, 2], rows: [ROWS[0] ?? []] })).toBe(
       'name\tprice\r\nalice\t9.90',
     );
-    expect(text({ format: 'csv', left: 0, right: 1, rows: [ROWS[1] ?? []] })).toBe(
+    expect(text({ format: 'csv', selected: [0, 1], rows: [ROWS[1] ?? []] })).toBe(
       "id,name\r\n2,o'brien\r\n",
     );
   });
 
   it('quotes CSV fields that need it', () => {
-    expect(text({ format: 'csv', left: 1, right: 1, rows: [ROWS[2] ?? []] })).toBe(
+    expect(text({ format: 'csv', selected: [1], rows: [ROWS[2] ?? []] })).toBe(
       'name\r\n"a|b\nc"\r\n',
     );
   });
@@ -74,8 +73,7 @@ describe('copyAs text formats', () => {
         format: 'json',
         columns: [{ name: 'a' }, { name: 'a' }],
         rows: [[1, 2]],
-        left: 0,
-        right: 1,
+        selected: [0, 1],
       }),
     ) as Record<string, unknown>[];
     expect(parsed[0]).toEqual({ a: 1, a_2: 2 });
@@ -94,13 +92,34 @@ describe('copyAs text formats', () => {
   });
 
   it('does not right-align a column that is all NULL', () => {
-    expect(text({ format: 'markdown', columns: [{ name: 'x' }], rows: [[null]], right: 0 })).toBe(
-      '| x |\n| --- |\n| NULL |',
-    );
+    expect(
+      text({ format: 'markdown', columns: [{ name: 'x' }], rows: [[null]], selected: [0] }),
+    ).toBe('| x |\n| --- |\n| NULL |');
   });
 
   it('copes with a selection wider than the rows', () => {
-    expect(text({ format: 'tsv', rows: [[1]], left: 0, right: 2 })).toContain('id\tname\tprice');
+    expect(text({ format: 'tsv', rows: [[1]], selected: [0, 1, 2] })).toContain('id\tname\tprice');
+  });
+});
+
+describe('copyAs column choice', () => {
+  it('follows the columns it is given, in that order, even when they are not neighbours', () => {
+    expect(text({ format: 'csv', selected: [2, 0], rows: ROWS.slice(0, 1) })).toBe(
+      'price,id\r\n9.90,1\r\n',
+    );
+  });
+
+  it('writes INSERT and UPDATE for the chosen columns only', () => {
+    expect(text({ format: 'insert', selected: [2, 1], rows: ROWS.slice(0, 1) })).toBe(
+      `INSERT INTO "items" ("price", "name") VALUES (9.90, 'alice');`,
+    );
+    expect(text({ format: 'update', selected: [2], rows: ROWS.slice(0, 1) })).toBe(
+      `UPDATE "items" SET "price" = 9.90 WHERE "id" = 1;`,
+    );
+  });
+
+  it('takes the first chosen column for an IN list', () => {
+    expect(text({ format: 'in', selected: [1, 0] })).toBe(`('alice', 'o''brien', 'a|b\nc')`);
   });
 });
 
@@ -138,8 +157,7 @@ describe('copyAs INSERT', () => {
     expect(
       text({
         format: 'insert',
-        left: 1,
-        right: 1,
+        selected: [1],
         rows: [ROWS[0] ?? []],
         edit: { ...EDIT, columnMap: ['id', 'real_name', 'price'] },
       }),
@@ -149,7 +167,7 @@ describe('copyAs INSERT', () => {
   it('skips computed columns, and refuses when nothing is left', () => {
     const edit: EditableResult = { ...EDIT, columnMap: ['id', null, 'price'] };
     expect(text({ format: 'insert', rows: [ROWS[0] ?? []], edit })).toContain('("id", "price")');
-    expect(copyAs(input({ format: 'insert', left: 1, right: 1, edit }))).toEqual({
+    expect(copyAs(input({ format: 'insert', selected: [1], edit }))).toEqual({
       ok: false,
       error: 'nothing-to-write',
     });
@@ -182,7 +200,7 @@ describe('copyAs INSERT', () => {
 
 describe('copyAs UPDATE', () => {
   it('sets the selected non-key columns and finds the row by its key', () => {
-    expect(text({ format: 'update', left: 1, right: 2, rows: ROWS.slice(0, 2) })).toBe(
+    expect(text({ format: 'update', selected: [1, 2], rows: ROWS.slice(0, 2) })).toBe(
       [
         `UPDATE "items" SET "name" = 'alice', "price" = 9.90 WHERE "id" = 1;`,
         `UPDATE "items" SET "name" = 'o''brien', "price" = NULL WHERE "id" = 2;`,
@@ -191,7 +209,7 @@ describe('copyAs UPDATE', () => {
   });
 
   it('takes the key from the row even when it is not selected, and leaves it out of SET', () => {
-    const sql = text({ format: 'update', left: 0, right: 1, rows: [ROWS[0] ?? []] });
+    const sql = text({ format: 'update', selected: [0, 1], rows: [ROWS[0] ?? []] });
     expect(sql).toBe(`UPDATE "items" SET "name" = 'alice' WHERE "id" = 1;`);
   });
 
@@ -201,7 +219,7 @@ describe('copyAs UPDATE', () => {
       keyColumns: ['id', 'name'],
       keyIndexes: [0, 1],
     };
-    expect(text({ format: 'update', left: 2, right: 2, rows: [ROWS[0] ?? []], edit })).toBe(
+    expect(text({ format: 'update', selected: [2], rows: [ROWS[0] ?? []], edit })).toBe(
       `UPDATE "items" SET "price" = 9.90 WHERE "id" = 1 AND "name" = 'alice';`,
     );
   });
@@ -220,7 +238,7 @@ describe('copyAs UPDATE', () => {
   });
 
   it('refuses when only the key is selected', () => {
-    expect(copyAs(input({ format: 'update', left: 0, right: 0 }))).toEqual({
+    expect(copyAs(input({ format: 'update', selected: [0] }))).toEqual({
       ok: false,
       error: 'nothing-to-write',
     });
@@ -229,22 +247,22 @@ describe('copyAs UPDATE', () => {
 
 describe('copyAs IN list', () => {
   it('lists the first selected column as literals', () => {
-    expect(text({ format: 'in', left: 0, right: 0 })).toBe('(1, 2, 3)');
-    expect(text({ format: 'in', left: 1, right: 2 })).toBe(`('alice', 'o''brien', 'a|b\nc')`);
+    expect(text({ format: 'in', selected: [0] })).toBe('(1, 2, 3)');
+    expect(text({ format: 'in', selected: [1, 2] })).toBe(`('alice', 'o''brien', 'a|b\nc')`);
   });
 
   it('drops NULLs and repeated values', () => {
-    expect(text({ format: 'in', left: 0, right: 0, rows: [[1], [null], [1], [2], [null]] })).toBe(
+    expect(text({ format: 'in', selected: [0], rows: [[1], [null], [1], [2], [null]] })).toBe(
       '(1, 2)',
     );
   });
 
   it("keeps 1 and '1' apart", () => {
-    expect(text({ format: 'in', left: 0, right: 0, rows: [[1], ['1']] })).toBe("(1, '1')");
+    expect(text({ format: 'in', selected: [0], rows: [[1], ['1']] })).toBe("(1, '1')");
   });
 
   it('refuses a column of NULLs', () => {
-    expect(copyAs(input({ format: 'in', left: 0, right: 0, rows: [[null], [null]] }))).toEqual({
+    expect(copyAs(input({ format: 'in', selected: [0], rows: [[null], [null]] }))).toEqual({
       ok: false,
       error: 'no-values',
     });

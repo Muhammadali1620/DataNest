@@ -169,3 +169,15 @@ export function isNavigationKey(key: string): key is NavigationKey {
     key === 'PageDown'
   );
 }
+
+/**
+ * A selection as the page outside the grid sees it: whole rows by number and the
+ * result columns it covers. The columns are listed because, with hidden and pinned
+ * columns, a rectangle on screen is not a contiguous range of the result's columns.
+ */
+export interface SelectionInfo {
+  readonly top: number;
+  readonly bottom: number;
+  /** Result column numbers, left to right as drawn. */
+  readonly columns: readonly number[];
+}

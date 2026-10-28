@@ -1,8 +1,11 @@
+import { connect } from 'node:net';
+import { checkServerIdentity, type TLSSocket } from 'node:tls';
 import * as mysql from 'mysql2';
 import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
 import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
+import { sniName, tlsFailure, type TlsMaterial, tlsMaterial } from '../common/tls';
 import type { ExecuteEvent, ExecuteOptions, ResultColumn, Session } from '../driver';
 import { toMysqlDbError } from './errors';
 import { MysqlMetadata } from './metadata';
@@ -15,10 +18,32 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 
 const QUERY_INTERRUPTED = 1317; // ER_QUERY_INTERRUPTED
 
-function connectionOptions(config: ResolvedConnectionConfig): mysql.ConnectionOptions {
+/** mysql2's TLS options for a mode; it checks the name itself when it can send SNI. */
+export function mysqlSsl(tls: TlsMaterial): mysql.SslOptions {
   return {
-    host: config.host,
-    port: effectivePort(config),
+    ...(tls.ca === undefined ? {} : { ca: tls.ca }),
+    ...(tls.cert === undefined ? {} : { cert: tls.cert }),
+    ...(tls.key === undefined ? {} : { key: tls.key }),
+    rejectUnauthorized: tls.mode !== 'require',
+    verifyIdentity: tls.mode === 'verify-full' && sniName(tls.serverName) !== undefined,
+  };
+}
+
+export function connectionOptions(
+  config: ResolvedConnectionConfig,
+  tls: TlsMaterial | undefined,
+): mysql.ConnectionOptions {
+  const port = effectivePort(config);
+  // Through a tunnel mysql2 must still know the server's real name, because it checks
+  // the certificate against `host`; the socket itself goes to the local tunnel port.
+  const tunnel = config.tlsServerName;
+  return {
+    host: tunnel ?? config.host,
+    port,
+    ...(tunnel === undefined
+      ? {}
+      : { stream: () => connect({ host: config.host ?? '127.0.0.1', port: port ?? 0 }) }),
+    ...(tls === undefined ? {} : { ssl: mysqlSsl(tls) }),
     user: config.user,
     password: config.password,
     database: config.database,
@@ -34,17 +59,38 @@ function connectionOptions(config: ResolvedConnectionConfig): mysql.ConnectionOp
 }
 
 export async function openMysqlSession(config: ResolvedConnectionConfig): Promise<Session> {
-  const raw = mysql.createConnection(connectionOptions(config));
+  const tls = await tlsMaterial(config);
+  const raw = mysql.createConnection(connectionOptions(config, tls));
   // Fatal errors between queries (e.g. a dropped socket) must not crash the host;
   // the next statement surfaces them as a normal failure.
   raw.on('error', () => undefined);
   try {
     await raw.promise().connect();
+    verifyIpIdentity(raw, tls);
   } catch (error) {
     raw.destroy();
-    throw toMysqlDbError(error);
+    throw tlsFailure(error, tls?.serverName ?? '') ?? toMysqlDbError(error);
   }
-  return new MysqlSession(raw, config);
+  return new MysqlSession(raw, config, tls);
+}
+
+/**
+ * mysql2 checks the name only when it can send SNI, which is never for an IP
+ * address; `verify-full` to an IP is checked here instead, before any statement.
+ */
+function verifyIpIdentity(raw: mysql.Connection, tls: TlsMaterial | undefined): void {
+  if (tls?.mode !== 'verify-full' || sniName(tls.serverName) !== undefined) {
+    return;
+  }
+  const socket = (raw as unknown as { stream?: Partial<TLSSocket> }).stream;
+  const cert = socket?.getPeerCertificate?.();
+  const problem =
+    cert === undefined
+      ? new Error('The server did not present a certificate')
+      : checkServerIdentity(tls.serverName, cert);
+  if (problem !== undefined) {
+    throw problem;
+  }
 }
 
 /** The slice of a field packet the driver reads. */
@@ -58,14 +104,20 @@ class MysqlSession implements Session {
   readonly metadata: MysqlMetadata;
   private readonly conn: mysql.Connection;
   private readonly config: ResolvedConnectionConfig;
+  private readonly tls: TlsMaterial | undefined;
   private cancelling: Promise<void> | undefined;
   private closed = false;
   /** Identity of the statement currently on the wire; undefined between statements. */
   private active: object | undefined;
 
-  constructor(conn: mysql.Connection, config: ResolvedConnectionConfig) {
+  constructor(
+    conn: mysql.Connection,
+    config: ResolvedConnectionConfig,
+    tls: TlsMaterial | undefined,
+  ) {
     this.conn = conn;
     this.config = config;
+    this.tls = tls;
     this.metadata = new MysqlMetadata(conn.promise());
   }
 
@@ -196,7 +248,7 @@ class MysqlSession implements Session {
 
   private async kill(token: object): Promise<void> {
     const control = mysql
-      .createConnection({ ...connectionOptions(this.config), database: undefined })
+      .createConnection({ ...connectionOptions(this.config, this.tls), database: undefined })
       .promise();
     try {
       await control.connect();

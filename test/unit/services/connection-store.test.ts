@@ -407,3 +407,28 @@ describe('ConnectionStore', () => {
     });
   });
 });
+
+describe('ConnectionStore SSL', () => {
+  it('keeps the mode and trimmed files, and drops SSL for file databases', async () => {
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+    const config = await store.add({
+      ...mysqlInput,
+      ssl: { mode: 'verify-ca', ca: ' /etc/ca.crt ', cert: '', key: ' ' },
+    });
+    expect(config.ssl).toEqual({ mode: 'verify-ca', ca: '/etc/ca.crt' });
+    const file = await store.add({
+      name: 'f',
+      driver: 'sqlite',
+      file: '/db',
+      ssl: { mode: 'require' },
+    });
+    expect(file.ssl).toBeUndefined();
+    await expect(
+      store.add({ ...mysqlInput, ssl: { mode: 'require', cert: '/c' } }),
+    ).rejects.toThrow('ssl-cert-without-key');
+  });
+});

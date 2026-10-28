@@ -155,6 +155,31 @@ describe('SSH in the draft', () => {
   });
 });
 
+describe('SSL in the draft', () => {
+  const save = connectionFormProtocol.host.requests.save;
+
+  it('accepts the modes and file paths, and nothing else', () => {
+    const draft = {
+      input: { name: 'x', driver: 'postgres', host: 'db', ssl: { mode: 'verify-full', ca: '/ca' } },
+      password: { kind: 'keep' },
+    };
+    expect(save.params.parse(draft)).toEqual(draft);
+    expect(() =>
+      save.params.parse({ ...draft, input: { ...draft.input, ssl: { mode: 'prefer' } } }),
+    ).toThrow('mode');
+    expect(() =>
+      save.params.parse({
+        ...draft,
+        input: { ...draft.input, ssl: { mode: 'require', passphrase: 'x' } },
+      }),
+    ).toThrow('unexpected field');
+  });
+
+  it('lets the page ask for a certificate file', () => {
+    expect(Object.keys(connectionFormProtocol.host.requests)).toContain('pickTlsFile');
+  });
+});
+
 describe('state event', () => {
   it('describes a saved connection without carrying its password', () => {
     const payload = {
@@ -200,6 +225,7 @@ describe('protocol shape', () => {
     expect(Object.keys(connectionFormProtocol.host.requests).sort()).toEqual([
       'pickFile',
       'pickKeyFile',
+      'pickTlsFile',
       'save',
       'test',
     ]);

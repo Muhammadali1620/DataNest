@@ -13,6 +13,7 @@
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Field from '../../components/Field.svelte';
   import SshHopEditor from './SshHopEditor.svelte';
+  import TlsEditor from './TlsEditor.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import {
@@ -137,6 +138,20 @@
   function move(index: number, by: -1 | 1): void {
     if (fields) {
       moveJump(fields.jumps, index, by);
+    }
+  }
+
+  type TlsFile = 'sslCa' | 'sslCert' | 'sslKey';
+
+  async function browseTls(field: TlsFile): Promise<void> {
+    try {
+      const { file } = await rpc.request('pickTlsFile', {});
+      if (file !== undefined && fields) {
+        fields[field] = file;
+        notice = undefined;
+      }
+    } catch (error) {
+      notice = { kind: 'error', text: messageOf(error) };
     }
   }
 
@@ -301,6 +316,16 @@
             autocomplete="off"
           />
         </Field>
+
+        <fieldset class="section">
+          <TlsEditor
+            {fields}
+            {t}
+            certError={errorFor('ssl-key-without-cert')}
+            keyError={errorFor('ssl-cert-without-key')}
+            onBrowse={(field: TlsFile) => void browseTls(field)}
+          />
+        </fieldset>
 
         <fieldset class="section">
           <legend>

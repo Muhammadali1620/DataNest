@@ -12,6 +12,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   connection to a server shows its key fingerprint to trust, and a changed key is
   refused.
 - Jump hosts: pass through up to five SSH servers on the way, each with its own login.
+- SSL/TLS for MySQL, MariaDB and PostgreSQL: encrypt only, check the issuer, or check the
+  issuer and the host name; your own CA certificate and a client certificate with its key.
+  The host name is checked against the real server even through an SSH tunnel.
 
 ## [0.3.0] - 2026-10-28
 

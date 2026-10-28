@@ -3,6 +3,7 @@ import { AsyncQueue } from '../../core/async-queue';
 import { DbError } from '../../core/errors';
 import { effectivePort, type ResolvedConnectionConfig } from '../../shared/connection';
 import type { CellValue } from '../../shared/cell-value';
+import { identityCheck, sniName, tlsFailure, type TlsMaterial, tlsMaterial } from '../common/tls';
 import type { ExecuteEvent, ExecuteOptions, ResultColumn, Session } from '../driver';
 import { toPgDbError } from './errors';
 import { PostgresMetadata } from './metadata';
@@ -18,8 +19,25 @@ const QUERY_CANCELLED = '57014';
 /** Our parsers keep precision-critical values as text (ARCHITECTURE.md §5). */
 const RAW_TYPES = { getTypeParser: pgTypeParser };
 
-function clientConfig(config: ResolvedConnectionConfig): pg.ClientConfig {
+/** pg hands these to tls.connect; the name is checked against the real server. */
+export function postgresSsl(tls: TlsMaterial): pg.ClientConfig['ssl'] {
+  const servername = sniName(tls.serverName);
   return {
+    ...(tls.ca === undefined ? {} : { ca: tls.ca }),
+    ...(tls.cert === undefined ? {} : { cert: tls.cert }),
+    ...(tls.key === undefined ? {} : { key: tls.key }),
+    rejectUnauthorized: tls.mode !== 'require',
+    ...(servername === undefined ? {} : { servername }),
+    checkServerIdentity: identityCheck(tls),
+  };
+}
+
+export function clientConfig(
+  config: ResolvedConnectionConfig,
+  tls: TlsMaterial | undefined,
+): pg.ClientConfig {
+  return {
+    ...(tls === undefined ? {} : { ssl: postgresSsl(tls) }),
     host: config.host,
     port: effectivePort(config),
     user: config.user,
@@ -32,17 +50,18 @@ function clientConfig(config: ResolvedConnectionConfig): pg.ClientConfig {
 }
 
 export async function openPostgresSession(config: ResolvedConnectionConfig): Promise<Session> {
-  const client = new pg.Client(clientConfig(config));
+  const tls = await tlsMaterial(config);
+  const client = new pg.Client(clientConfig(config, tls));
   try {
     await client.connect();
   } catch (error) {
     client.end().catch(() => undefined);
-    throw toPgDbError(error);
+    throw tlsFailure(error, tls?.serverName ?? '') ?? toPgDbError(error);
   }
   // Fatal errors between queries (e.g. a dropped socket) must not crash the host;
   // the next statement surfaces them as a normal failure.
   client.on('error', () => undefined);
-  return new PostgresSession(client, config);
+  return new PostgresSession(client, config, tls);
 }
 
 /** The slice of pg's field descriptors the driver reads. */
@@ -63,14 +82,16 @@ class PostgresSession implements Session {
   readonly metadata: PostgresMetadata;
   private readonly client: pg.Client;
   private readonly config: ResolvedConnectionConfig;
+  private readonly tls: TlsMaterial | undefined;
   private cancelling: Promise<void> | undefined;
   private closed = false;
   /** Identity of the statement currently on the wire; undefined between statements. */
   private active: object | undefined;
 
-  constructor(client: pg.Client, config: ResolvedConnectionConfig) {
+  constructor(client: pg.Client, config: ResolvedConnectionConfig, tls: TlsMaterial | undefined) {
     this.client = client;
     this.config = config;
+    this.tls = tls;
     this.metadata = new PostgresMetadata(client);
   }
 
@@ -212,7 +233,7 @@ class PostgresSession implements Session {
     if (typeof pid !== 'number') {
       throw new DbError('unsupported', 'The server did not report a backend pid');
     }
-    const control = new pg.Client(clientConfig(this.config));
+    const control = new pg.Client(clientConfig(this.config, this.tls));
     try {
       await control.connect();
       // Re-check after the control connection is up: the statement may be done by now.

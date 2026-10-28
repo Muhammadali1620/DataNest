@@ -16,6 +16,10 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+00:00
+      # TLS with the test CA in docker/tls (V4.3); plain connections still work.
+      - --ssl-ca=/etc/datanest-tls/ca.crt
+      - --ssl-cert=/etc/datanest-tls/server.crt
+      - --ssl-key=/etc/datanest-tls/server.key
     environment:
       MYSQL_ROOT_PASSWORD: datanest_root
       MYSQL_DATABASE: datanest_test
@@ -23,8 +27,13 @@ services:
       MYSQL_PASSWORD: datanest
     ports:
       - 127.0.0.1:7306:3306
+    networks:
+      default:
+        # A name the server certificate does not cover, for verify-full tests.
+        aliases: [mysql-alias]
     volumes:
       - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+      - ./tls:/etc/datanest-tls:ro
     tmpfs:
       - /var/lib/mysql
     healthcheck:
@@ -48,6 +57,9 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+00:00
+      - --ssl-ca=/etc/datanest-tls/ca.crt
+      - --ssl-cert=/etc/datanest-tls/server.crt
+      - --ssl-key=/etc/datanest-tls/server.key
     environment:
       MARIADB_ROOT_PASSWORD: datanest_root
       MARIADB_DATABASE: datanest_test
@@ -57,6 +69,7 @@ services:
       - 127.0.0.1:7307:3306
     volumes:
       - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+      - ./tls:/etc/datanest-tls:ro
     tmpfs:
       - /var/lib/mysql
     healthcheck:
@@ -75,6 +88,20 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: datanest-postgres
+    # PostgreSQL wants its TLS key owned by itself and private, which a bind mount
+    # from the host cannot be; copy it into place first, then start as usual.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        install -d -o postgres -m 700 /var/lib/postgresql/tls &&
+        install -o postgres -m 600 /etc/datanest-tls/server.key /var/lib/postgresql/tls/ &&
+        install -o postgres -m 644 /etc/datanest-tls/server.crt /etc/datanest-tls/ca.crt
+        /var/lib/postgresql/tls/ &&
+        exec docker-entrypoint.sh postgres -c ssl=on
+        -c ssl_cert_file=/var/lib/postgresql/tls/server.crt
+        -c ssl_key_file=/var/lib/postgresql/tls/server.key
+        -c ssl_ca_file=/var/lib/postgresql/tls/ca.crt
     environment:
       POSTGRES_USER: datanest
       POSTGRES_PASSWORD: datanest
@@ -83,8 +110,12 @@ services:
       PGTZ: UTC
     ports:
       - 127.0.0.1:7432:5432
+    networks:
+      default:
+        aliases: [postgres-alias]
     volumes:
       - ./seed/postgres:/docker-entrypoint-initdb.d:ro
+      - ./tls:/etc/datanest-tls:ro
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:

@@ -237,3 +237,23 @@ describe('jump hosts', () => {
     ]);
   });
 });
+
+describe('SSL settings', () => {
+  const input = { name: 'a', driver: 'postgres' as const, host: 'db' };
+
+  it('accepts a mode alone or with a full client certificate', () => {
+    expect(connectionProblems({ ...input, ssl: { mode: 'require' } })).toEqual([]);
+    expect(
+      connectionProblems({ ...input, ssl: { mode: 'verify-full', cert: '/c', key: '/k' } }),
+    ).toEqual([]);
+  });
+
+  it('wants the certificate and its key together', () => {
+    expect(connectionProblems({ ...input, ssl: { mode: 'require', cert: '/c' } })).toEqual([
+      'ssl-cert-without-key',
+    ]);
+    expect(
+      connectionProblems({ ...input, ssl: { mode: 'require', key: '/k', cert: ' ' } }),
+    ).toEqual(['ssl-key-without-cert']);
+  });
+});

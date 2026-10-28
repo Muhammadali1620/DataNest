@@ -1,0 +1,17 @@
+[req]
+distinguished_name = dn
+prompt = no
+[dn]
+CN = placeholder
+[server]
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = DNS:localhost, DNS:mysql, DNS:postgres, IP:127.0.0.1
+[client]
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+[ca]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, keyCertSign, cRLSign

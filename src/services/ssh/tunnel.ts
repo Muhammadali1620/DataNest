@@ -3,12 +3,11 @@
 // file (and the bundle entry next to it) imports ssh2.
 
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
-import { homedir } from 'node:os';
 import type { Duplex } from 'node:stream';
 import { Client, type ConnectConfig } from 'ssh2';
 import { DbError, errorMessage } from '../../core/errors';
+import { expandHome, readUserFile } from '../../drivers/common/files';
 import type { Logger } from '../../core/logging/logger';
 import type { HostKeyInfo, Tunnel, TunnelHop, TunnelSpec } from '../tunnels';
 
@@ -28,14 +27,6 @@ export function defaultAgentSocket(
     return socket;
   }
   return platform === 'win32' ? WINDOWS_AGENT_PIPE : undefined;
-}
-
-/** `~/…` paths are what people copy from their SSH config. */
-export function expandHome(path: string, home: string = homedir()): string {
-  if (path === '~') {
-    return home;
-  }
-  return path.startsWith('~/') || path.startsWith('~\\') ? home + path.slice(1) : path;
 }
 
 /** OpenSSH-style fingerprint and the algorithm named inside the key blob. */
@@ -73,13 +64,7 @@ export async function connectConfig(
       // Many servers ask for the password through keyboard-interactive instead.
       return { ...base, password: hop.password ?? '', tryKeyboard: true };
     case 'key': {
-      const file = expandHome(hop.keyFile ?? '');
-      let privateKey: Buffer;
-      try {
-        privateKey = await readFile(file);
-      } catch (error) {
-        throw new DbError('not-found', `Cannot read the SSH key file "${file}"`, { cause: error });
-      }
+      const privateKey = await readUserFile(hop.keyFile ?? '', 'the SSH key file');
       return {
         ...base,
         privateKey,

@@ -89,6 +89,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
     this.rpc.handle('save', async (draft) => ({ connectionId: await this.save(draft) }));
     this.rpc.handle('pickFile', async ({ create }) => await pickDatabaseFile(create));
     this.rpc.handle('pickKeyFile', async () => await pickKeyFile());
+    this.rpc.handle('pickTlsFile', async () => await pickTlsFile());
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
     this.rpc.on('ready', () => {
       this.sendState();
@@ -216,6 +217,19 @@ async function pickKeyFile(): Promise<{ file?: string }> {
     title: vscode.l10n.t('SSH Private Key'),
     canSelectMany: false,
     defaultUri: ssh,
+  });
+  const first = chosen?.[0];
+  return first === undefined ? {} : { file: first.fsPath };
+}
+
+async function pickTlsFile(): Promise<{ file?: string }> {
+  const chosen = await vscode.window.showOpenDialog({
+    title: vscode.l10n.t('Certificate or Key'),
+    canSelectMany: false,
+    filters: {
+      [vscode.l10n.t('Certificates and keys')]: ['pem', 'crt', 'cer', 'key'],
+      [vscode.l10n.t('All files')]: ['*'],
+    },
   });
   const first = chosen?.[0];
   return first === undefined ? {} : { file: first.fsPath };

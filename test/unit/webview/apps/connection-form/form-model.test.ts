@@ -16,6 +16,7 @@ import {
   secretChange,
   toHop,
   moveJump,
+  toSsl,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { en } from '../../../../../webview/src/l10n/en';
 
@@ -34,6 +35,10 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     useSsh: false,
     ssh: newHopFields('hop1'),
     jumps: [],
+    sslMode: 'off',
+    sslCa: '',
+    sslCert: '',
+    sslKey: '',
     ...overrides,
   };
 }
@@ -68,6 +73,10 @@ describe('fieldsFrom', () => {
       useSsh: false,
       ssh: expect.objectContaining({ host: '', auth: 'password' }) as unknown,
       jumps: [],
+      sslMode: 'off',
+      sslCa: '',
+      sslCert: '',
+      sslKey: '',
     });
   });
 
@@ -392,5 +401,54 @@ describe('jump hosts', () => {
     moveJump(list, 0, -1);
     moveJump(list, 2, 1);
     expect(list.map((hop) => hop.id)).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('SSL fields', () => {
+  it('reads saved TLS settings, off when there are none', () => {
+    const state = {
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    };
+    expect(
+      fieldsFrom({ ...state, input: { name: 'a', driver: 'postgres', host: 'h' } }).sslMode,
+    ).toBe('off');
+    const result = fieldsFrom({
+      ...state,
+      input: {
+        name: 'a',
+        driver: 'postgres',
+        host: 'h',
+        ssl: { mode: 'verify-ca', ca: '/ca', cert: '/c', key: '/k' },
+      },
+    });
+    expect([result.sslMode, result.sslCa, result.sslCert, result.sslKey]).toEqual([
+      'verify-ca',
+      '/ca',
+      '/c',
+      '/k',
+    ]);
+  });
+
+  it('sends TLS only when it is on, with trimmed files', () => {
+    expect(toSsl(fields({ sslCa: '/ca' }))).toBeUndefined();
+    expect(toInput(fields())).not.toHaveProperty('ssl');
+    expect(toSsl(fields({ sslMode: 'require', sslCa: ' /ca ', sslCert: ' ' }))).toEqual({
+      mode: 'require',
+      ca: '/ca',
+    });
+    expect(toInput(fields({ sslMode: 'verify-full' })).ssl).toEqual({ mode: 'verify-full' });
+    expect(
+      toInput(fields({ driver: 'sqlite', file: '/f', sslMode: 'require' })),
+    ).not.toHaveProperty('ssl');
+  });
+
+  it('blocks saving with half a client certificate', () => {
+    expect(problemsOf(fields({ sslMode: 'require', sslCert: '/c' }))).toEqual([
+      'ssl-cert-without-key',
+    ]);
+    expect(en[PROBLEM_MESSAGES['ssl-cert-without-key']]).toBeTruthy();
+    expect(en[PROBLEM_MESSAGES['ssl-key-without-cert']]).toBeTruthy();
   });
 });

@@ -15,6 +15,7 @@ import {
   type SshHopSecrets,
   sshHopsOf,
   type SshTunnelConfig,
+  type SslSettings,
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
 import { array, literal, object, type Schema, string } from '../shared/schema';
@@ -304,12 +305,25 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     database: file ? undefined : trim(input.database),
     file: file ? trim(input.file) : undefined,
     ssh: file || input.ssh === undefined ? undefined : normalizeTunnel(input.ssh),
+    ssl: file || input.ssl === undefined ? undefined : normalizeSsl(input.ssl),
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
     throw new DbError('unsupported', `Invalid connection: ${problems.join(', ')}`);
   }
   return normalized;
+}
+
+function normalizeSsl(ssl: SslSettings): SslSettings {
+  const ca = ssl.ca?.trim();
+  const cert = ssl.cert?.trim();
+  const key = ssl.key?.trim();
+  return {
+    mode: ssl.mode,
+    ...(ca === undefined || ca === '' ? {} : { ca }),
+    ...(cert === undefined || cert === '' ? {} : { cert }),
+    ...(key === undefined || key === '' ? {} : { key }),
+  };
 }
 
 function normalizeTunnel(ssh: SshTunnelConfig): SshTunnelConfig {

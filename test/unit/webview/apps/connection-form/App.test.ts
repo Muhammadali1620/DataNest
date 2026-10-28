@@ -558,4 +558,73 @@ describe('connection form App', () => {
       expect(save).not.toHaveBeenCalled();
     });
   });
+
+  describe('SSL / TLS', () => {
+    it('shows the certificate files only once TLS is on', async () => {
+      await withState();
+      expect(screen.queryByLabelText('CA certificate')).toBeNull();
+      await fireEvent.change(screen.getByLabelText('SSL / TLS'), {
+        target: { value: 'verify-full' },
+      });
+      await waitFor(() => {
+        expect(screen.queryByLabelText('CA certificate')).not.toBeNull();
+      });
+      expect(screen.getByText('Empty: the system’s trusted CAs')).toBeTruthy();
+    });
+
+    it('fills a file from the dialog and sends the settings', async () => {
+      const { host } = await withState();
+      host.handle('pickTlsFile', () => ({ file: '/certs/ca.pem' }));
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Secure' } });
+      await fireEvent.change(screen.getByLabelText('SSL / TLS'), {
+        target: { value: 'verify-ca' },
+      });
+      await waitFor(() => {
+        expect(screen.queryByLabelText('CA certificate')).not.toBeNull();
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'CA certificate: Browse…' }));
+      await waitFor(() => {
+        expect(field('CA certificate').value).toBe('/certs/ca.pem');
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.ssl).toEqual({ mode: 'verify-ca', ca: '/certs/ca.pem' });
+    });
+
+    it('marks the missing half of a client certificate', async () => {
+      const { host } = await withState();
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.input(field('Name'), { target: { value: 'Secure' } });
+      await fireEvent.change(screen.getByLabelText('SSL / TLS'), { target: { value: 'require' } });
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Client certificate')).not.toBeNull();
+      });
+      await fireEvent.input(field('Client certificate'), { target: { value: '/c.crt' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByText('Choose the key of the client certificate')).toBeTruthy();
+      });
+      expect(field('Client key').getAttribute('aria-invalid')).toBe('true');
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('shows saved TLS settings', async () => {
+      await withState(
+        newState({
+          connectionId: 'c1',
+          input: { name: 'S', driver: 'postgres', host: 'db', ssl: { mode: 'require', ca: '/ca' } },
+        }),
+      );
+      expect(screen.getByLabelText<HTMLSelectElement>('SSL / TLS').value).toBe('require');
+      expect(field('CA certificate').value).toBe('/ca');
+    });
+  });
 });

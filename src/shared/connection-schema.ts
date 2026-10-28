@@ -8,6 +8,8 @@ import {
   SSH_AUTH_METHODS,
   type SshHop,
   type SshTunnelConfig,
+  SSL_MODES,
+  type SslSettings,
 } from './connection';
 import { array, literal, number, object, optional, type Schema, string } from './schema';
 
@@ -31,6 +33,13 @@ export const sshTunnelSchema: Schema<SshTunnelConfig> = object({
   jumps: optional(array(sshHopSchema, { maxLength: 20 })),
 });
 
+export const sslSchema: Schema<SslSettings> = object({
+  mode: literal(...SSL_MODES),
+  ca: optional(string({ maxLength: CONNECTION_LIMITS.file })),
+  cert: optional(string({ maxLength: CONNECTION_LIMITS.file })),
+  key: optional(string({ maxLength: CONNECTION_LIMITS.file })),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -41,6 +50,7 @@ export const connectionInputShape = {
   database: optional(string({ maxLength: CONNECTION_LIMITS.field })),
   file: optional(string({ maxLength: CONNECTION_LIMITS.file })),
   ssh: optional(sshTunnelSchema),
+  ssl: optional(sslSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

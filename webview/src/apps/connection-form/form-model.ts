@@ -13,6 +13,7 @@ import {
   type SshHop,
   type SshProblem,
   sshHopProblems,
+  type SslMode,
 } from '../../../../src/shared/connection';
 import type {
   ConnectionDraft,
@@ -93,6 +94,11 @@ export interface FormFields {
   ssh: HopFields;
   /** Servers to pass through before `ssh`, in order. */
   jumps: HopFields[];
+  /** `off` leaves TLS to the driver's default, which is a plain connection. */
+  sslMode: SslMode | 'off';
+  sslCa: string;
+  sslCert: string;
+  sslKey: string;
 }
 
 export function fieldsFrom(state: ConnectionFormState): FormFields {
@@ -111,6 +117,26 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     useSsh: input.ssh !== undefined,
     ssh: input.ssh === undefined ? newHopFields() : hopFieldsFrom(input.ssh),
     jumps: (input.ssh?.jumps ?? []).map(hopFieldsFrom),
+    sslMode: input.ssl?.mode ?? 'off',
+    sslCa: input.ssl?.ca ?? '',
+    sslCert: input.ssl?.cert ?? '',
+    sslKey: input.ssl?.key ?? '',
+  };
+}
+
+/** The TLS settings to send; none when TLS is off. Files are kept as typed, trimmed. */
+export function toSsl(fields: FormFields): ConnectionInput['ssl'] {
+  if (fields.sslMode === 'off') {
+    return undefined;
+  }
+  const ca = trim(fields.sslCa);
+  const cert = trim(fields.sslCert);
+  const key = trim(fields.sslKey);
+  return {
+    mode: fields.sslMode,
+    ...(ca === undefined ? {} : { ca }),
+    ...(cert === undefined ? {} : { cert }),
+    ...(key === undefined ? {} : { key }),
   };
 }
 
@@ -162,6 +188,7 @@ export function toInput(fields: FormFields): ConnectionInput {
   }
   const host = trim(fields.host);
   const port = parsePort(fields.port);
+  const ssl = toSsl(fields);
   const user = trim(fields.user);
   const database = trim(fields.database);
   return {
@@ -179,6 +206,7 @@ export function toInput(fields: FormFields): ConnectionInput {
           },
         }
       : {}),
+    ...(ssl === undefined ? {} : { ssl }),
   };
 }
 
@@ -273,6 +301,8 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'ssh-key-empty': 'form.ssh.error.keyEmpty',
   'ssh-id-invalid': 'form.unknownError',
   'ssh-too-many-jumps': 'form.ssh.error.tooManyJumps',
+  'ssl-cert-without-key': 'form.ssl.error.keyMissing',
+  'ssl-key-without-cert': 'form.ssl.error.certMissing',
 };
 
 export { DEFAULT_SSH_PORT };

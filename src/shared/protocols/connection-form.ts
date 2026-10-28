@@ -75,6 +75,11 @@ export const connectionFormProtocol = defineProtocol({
         params: object({ create: boolean() }),
         result: object({ file: optional(string({ maxLength: CONNECTION_LIMITS.file })) }),
       },
+      /** Shows the editor's file dialog for a certificate or its key. */
+      pickTlsFile: {
+        params: object({}),
+        result: object({ file: optional(string({ maxLength: CONNECTION_LIMITS.file })) }),
+      },
       /** Shows the editor's file dialog for a private key; the result is its path. */
       pickKeyFile: {
         params: object({}),

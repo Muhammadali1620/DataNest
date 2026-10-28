@@ -31,6 +31,25 @@ export const CONNECTION_LIMITS = {
   hopId: 64,
 } as const;
 
+/**
+ * TLS to the database server. `require` encrypts but trusts any certificate;
+ * `verify-ca` checks it was issued by a trusted CA; `verify-full` also checks it was
+ * issued for this host (the names follow PostgreSQL's sslmode).
+ */
+export const SSL_MODES = ['require', 'verify-ca', 'verify-full'] as const;
+
+export type SslMode = (typeof SSL_MODES)[number];
+
+/** Certificate files are paths; their contents are read at connect time. */
+export interface SslSettings {
+  readonly mode: SslMode;
+  /** CA certificate(s) to trust instead of the system's. */
+  readonly ca?: string;
+  /** Client certificate and its (unencrypted) key, for servers that ask for one. */
+  readonly cert?: string;
+  readonly key?: string;
+}
+
 /** How DataNest proves who it is to an SSH server. */
 export const SSH_AUTH_METHODS = ['password', 'key', 'agent'] as const;
 
@@ -91,6 +110,8 @@ export interface ConnectionInput {
   readonly file?: string;
   /** Reach the server through an SSH tunnel; network drivers only. */
   readonly ssh?: SshTunnelConfig;
+  /** Encrypt the connection; absent means the driver's plain default. */
+  readonly ssl?: SslSettings;
 }
 
 export interface ConnectionConfig extends ConnectionInput {
@@ -136,7 +157,13 @@ export function effectivePort(config: ConnectionInput): number | undefined {
  * An empty array means the config is valid.
  */
 export type ConnectionProblem =
-  'name-empty' | 'host-empty' | 'port-invalid' | 'file-empty' | SshProblem;
+  | 'name-empty'
+  | 'host-empty'
+  | 'port-invalid'
+  | 'file-empty'
+  | 'ssl-cert-without-key'
+  | 'ssl-key-without-cert'
+  | SshProblem;
 
 /** What is wrong with one SSH hop. */
 export type SshProblem =
@@ -202,6 +229,15 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     }
     if ((input.ssh?.jumps?.length ?? 0) > MAX_SSH_JUMPS) {
       problems.push('ssh-too-many-jumps');
+    }
+    // A client certificate is useless without its key, and the other way round.
+    const hasCert = (input.ssl?.cert ?? '').trim() !== '';
+    const hasKey = (input.ssl?.key ?? '').trim() !== '';
+    if (hasCert && !hasKey) {
+      problems.push('ssl-cert-without-key');
+    }
+    if (hasKey && !hasCert) {
+      problems.push('ssl-key-without-cert');
     }
   }
   return problems;

@@ -8,7 +8,6 @@ import {
   connectConfig,
   defaultAgentSocket,
   describeHostKey,
-  expandHome,
   openSshTunnel,
   sshError,
   WINDOWS_AGENT_PIPE,
@@ -44,16 +43,6 @@ describe('defaultAgentSocket', () => {
     expect(defaultAgentSocket('win32', {})).toBe(WINDOWS_AGENT_PIPE);
     expect(defaultAgentSocket('darwin', { SSH_AUTH_SOCK: '' })).toBeUndefined();
     expect(defaultAgentSocket('linux', {})).toBeUndefined();
-  });
-});
-
-describe('expandHome', () => {
-  it('expands a leading tilde and leaves other paths alone', () => {
-    expect(expandHome('~', '/home/me')).toBe('/home/me');
-    expect(expandHome('~/.ssh/id', '/home/me')).toBe('/home/me/.ssh/id');
-    expect(expandHome('~\\.ssh\\id', 'C:\\Users\\me')).toBe('C:\\Users\\me\\.ssh\\id');
-    expect(expandHome('/etc/key', '/home/me')).toBe('/etc/key');
-    expect(expandHome('~other/key', '/home/me')).toBe('~other/key');
   });
 });
 

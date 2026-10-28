@@ -166,6 +166,12 @@
         "icon": "$(export)"
       },
       {
+        "command": "datanest.history.show",
+        "title": "%commands.history.show.title%",
+        "category": "DataNest",
+        "icon": "$(history)"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -310,6 +316,11 @@
           "command": "datanest.results.export",
           "when": "editorLangId == sql",
           "group": "navigation@4"
+        },
+        {
+          "command": "datanest.history.show",
+          "when": "editorLangId == sql",
+          "group": "navigation@5"
         }
       ],
       "editor/context": [
@@ -379,6 +390,14 @@
           "minimum": 0,
           "maximum": 86400,
           "markdownDescription": "%configuration.queryTimeout.description%",
+          "scope": "window"
+        },
+        "datanest.historyLimit": {
+          "type": "integer",
+          "default": 500,
+          "minimum": 0,
+          "maximum": 10000,
+          "markdownDescription": "%configuration.historyLimit.description%",
           "scope": "window"
         }
       }

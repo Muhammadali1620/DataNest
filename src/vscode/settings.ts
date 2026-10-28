@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DEFAULT_HISTORY_LIMIT } from '../services/history';
 import { CONFIG_KEYS, CONFIG_SECTION } from './command-ids';
 import type { TreeSettings } from './tree/tree-model';
 
@@ -47,6 +48,14 @@ export function readQueryTimeoutMs(): number {
     return 0;
   }
   return Math.round(seconds * 1000);
+}
+
+/** Executed statements the query history keeps. */
+export function readHistoryLimit(): number {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<number>(CONFIG_KEYS.historyLimit, DEFAULT_HISTORY_LIMIT);
+  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_HISTORY_LIMIT;
 }
 
 /** True when a configuration change touches one of our settings. */

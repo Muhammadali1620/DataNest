@@ -112,6 +112,13 @@ describe('running queries', () => {
     await vscode.commands.executeCommand('datanest.query.cancel');
   });
 
+  it('opens the query history even when it is empty, and closes it again', async () => {
+    assert.ok((await vscode.commands.getCommands(true)).includes('datanest.history.show'));
+    await vscode.commands.executeCommand('datanest.history.show');
+    await sleep(200);
+    await vscode.commands.executeCommand('workbench.action.closeQuickOpen');
+  });
+
   it('runs a statement end to end through the shipped SQLite driver', async () => {
     // The command path needs a saved connection, which this test cannot create
     // without the form; it checks the pieces the command relies on instead.

@@ -4,7 +4,7 @@ import { ConnectionManager, type SessionTarget } from './services/connection-man
 import { ConnectionStore } from './services/connection-store';
 import { MetadataCache } from './services/metadata-cache';
 import type { TableRef } from './core/model/objects';
-import { CONTEXT_KEYS } from './vscode/command-ids';
+import { CONFIG_KEYS, CONFIG_SECTION, CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
@@ -18,6 +18,7 @@ import {
 import { ResultCopier } from './services/result-copier';
 import { ResultEditor } from './services/result-editor';
 import { ResultSaver } from './services/result-saver';
+import { QueryHistory } from './services/history';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
@@ -25,7 +26,13 @@ import { SqlCompletionProvider, TRIGGER_CHARACTERS } from './vscode/editor/compl
 import { RunCodeLensProvider } from './vscode/editor/run-query';
 import { ResultsPanel } from './vscode/panels/results-panel';
 import { RunStatus } from './vscode/editor/run-status';
-import { createSettings, readPageSize, readQueryTimeoutMs, readRowLimit } from './vscode/settings';
+import {
+  createSettings,
+  readHistoryLimit,
+  readPageSize,
+  readQueryTimeoutMs,
+  readRowLimit,
+} from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 import type { TableNode } from './vscode/tree/nodes';
 
@@ -51,8 +58,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const editors = new QueryEditors({ store, manager, logger });
   context.subscriptions.push(editors);
 
+  const history = new QueryHistory({
+    state: context.globalState,
+    logger,
+    limit: () => readHistoryLimit(),
+    nameOf: (connectionId) => store.get(connectionId)?.name,
+  });
   const results = new ResultStore();
   const runner = new QueryRunner({
+    history,
     manager,
     results,
     cache,
@@ -193,9 +207,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       cache,
       editors,
       runner,
+      history,
       showResults,
       openTable,
       exportResult,
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      // A smaller limit takes effect now, not at the next statement.
+      if (event.affectsConfiguration(`${CONFIG_SECTION}.${CONFIG_KEYS.historyLimit}`)) {
+        history.enforceLimit();
+      }
     }),
   );
 

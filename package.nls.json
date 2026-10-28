@@ -31,5 +31,7 @@
   "commands.table.open.title": "Open Table",
   "configuration.pageSize.description": "Rows shown on one page when a table is opened from the tree.",
   "commands.results.export.title": "Export Result",
-  "configuration.queryTimeout.description": "Seconds a statement may run before DataNest cancels it. `0` means no limit."
+  "configuration.queryTimeout.description": "Seconds a statement may run before DataNest cancels it. `0` means no limit.",
+  "commands.history.show.title": "Query History",
+  "configuration.historyLimit.description": "Number of executed statements kept in the query history. `0` turns the history off. Passwords in `IDENTIFIED BY '...'`, `password = ...` and similar are masked before saving."
 }

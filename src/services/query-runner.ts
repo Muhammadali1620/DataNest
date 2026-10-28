@@ -11,6 +11,7 @@ import type { ResultColumn, Session } from '../drivers/driver';
 import { analyzeEditability } from './result-editability';
 import { ConnectionManager, type SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
+import type { HistoryRecorder } from './history';
 import type { ResultStore, ResultSummary, ResultRow } from './result-store';
 
 /** Limits the user controls through settings (V1.25). */
@@ -26,6 +27,8 @@ export interface QueryRunnerDeps {
   readonly results: ResultStore;
   readonly cache: MetadataCache;
   readonly limits: QueryLimits;
+  /** Where finished statements are noted for the query history. */
+  readonly history?: HistoryRecorder;
   readonly logger: Logger;
 }
 
@@ -162,6 +165,24 @@ export class QueryRunner {
     );
   }
 
+  /** Notes a finished statement; the history must never be able to fail a query. */
+  private remember(
+    request: RunRequest,
+    sql: string,
+    outcome: { durationMs: number; rows?: number; affected?: number; error?: string },
+  ): void {
+    try {
+      this.deps.history?.record({
+        sql,
+        connectionId: request.target.connectionId,
+        database: request.target.database,
+        ...outcome,
+      });
+    } catch (error) {
+      this.logger.warn('Could not record the statement in the history', error);
+    }
+  }
+
   private notify(documentUri: string): void {
     for (const listener of [...this.listeners]) {
       try {
@@ -219,6 +240,11 @@ export class QueryRunner {
         columns.length === 0
           ? undefined
           : await this.editabilityOf(request, session, statement.text, columns);
+      this.remember(request, statement.text, {
+        durationMs: Date.now() - started,
+        ...(columns.length > 0 ? { rows: rows.length } : {}),
+        ...(affectedRows === undefined ? {} : { affected: affectedRows }),
+      });
       return this.deps.results.add({
         documentUri: request.documentUri,
         statement: statement.text,
@@ -238,6 +264,10 @@ export class QueryRunner {
       // A cancel the timeout asked for is reported as a timeout, which is the
       // difference the user cares about.
       const timedOut = run.timedOut && (dbError.code === 'cancelled' || dbError.code === 'timeout');
+      this.remember(request, statement.text, {
+        durationMs: Date.now() - started,
+        error: timedOut ? 'Timed out' : dbError.message,
+      });
       return this.deps.results.add({
         documentUri: request.documentUri,
         statement: statement.text,

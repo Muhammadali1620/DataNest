@@ -31,5 +31,7 @@
   "commands.table.open.title": "Открыть таблицу",
   "configuration.pageSize.description": "Сколько строк показывать на одной странице при открытии таблицы из дерева.",
   "commands.results.export.title": "Экспортировать результат",
-  "configuration.queryTimeout.description": "Сколько секунд запрос может выполняться, прежде чем DataNest его отменит. `0` — без ограничения."
+  "configuration.queryTimeout.description": "Сколько секунд запрос может выполняться, прежде чем DataNest его отменит. `0` — без ограничения.",
+  "commands.history.show.title": "История запросов",
+  "configuration.historyLimit.description": "Сколько выполненных запросов хранить в истории. `0` выключает историю. Пароли в `IDENTIFIED BY '...'`, `password = ...` и подобном маскируются перед сохранением."
 }

@@ -14,6 +14,8 @@ import { COMMAND_IDS, type CommandId } from './command-ids';
 import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
+import type { QueryHistory } from '../services/history';
+import { showHistory } from './history/history-picker';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 
@@ -27,6 +29,7 @@ export interface CommandDeps {
   readonly cache: MetadataCache;
   readonly editors: QueryEditors;
   readonly runner: QueryRunner;
+  readonly history: QueryHistory;
   readonly showResults: (documentUri: string) => void;
   /** Opens a table from the tree as a paged result. */
   readonly openTable: (node: TableNode) => Promise<void>;
@@ -95,6 +98,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       }
       await deps.exportResult(resultId, format);
       return undefined;
+    },
+    [COMMAND_IDS.showHistory]: () => {
+      showHistory({ history: deps.history, store: deps.store, editors: deps.editors });
     },
     [COMMAND_IDS.newQuery]: async (target?: CommandTarget) => {
       // From the tree the query starts on the clicked connection and database.

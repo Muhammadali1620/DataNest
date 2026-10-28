@@ -65,10 +65,10 @@ export class QueryEditors implements vscode.Disposable {
   }
 
   /** Opens a new SQL document bound to the given connection, if any. */
-  async newQuery(binding?: DocumentBinding): Promise<vscode.TextDocument> {
+  async newQuery(binding?: DocumentBinding, content = ''): Promise<vscode.TextDocument> {
     const document = await vscode.workspace.openTextDocument({
       language: SQL_LANGUAGE_ID,
-      content: '',
+      content,
     });
     if (binding !== undefined) {
       this.bindings.bind(document.uri.toString(), binding);

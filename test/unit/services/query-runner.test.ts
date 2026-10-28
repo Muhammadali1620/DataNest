@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { splitStatements } from '../../../src/core/sql/split';
+import { QueryHistory } from '../../../src/services/history';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import { MetadataCache } from '../../../src/services/metadata-cache';
@@ -34,6 +35,7 @@ describe('QueryRunner', () => {
   let rowLimit: number;
   let timeoutMs: number;
   let connection: ConnectionConfig;
+  let history: QueryHistory;
 
   beforeEach(async () => {
     logger = new RecordingLogger();
@@ -48,7 +50,14 @@ describe('QueryRunner', () => {
     results = new ResultStore();
     rowLimit = 1000;
     timeoutMs = 0;
+    history = new QueryHistory({
+      state: new FakeMemento(),
+      logger,
+      limit: () => 100,
+      nameOf: (id) => store.get(id)?.name,
+    });
     runner = new QueryRunner({
+      history,
       manager,
       results,
       cache,
@@ -408,6 +417,72 @@ describe('QueryRunner', () => {
       timeoutMs = -5;
       const outcome = await runner.run(request('SELECT 1'));
       expect(outcome.results[0]?.error).toBeUndefined();
+    });
+  });
+
+  describe('history', () => {
+    it('notes every statement with its connection and outcome', async () => {
+      drivers.driver('mysql').sessionRows = [[1], [2]];
+      await runner.run({
+        ...request('SELECT 1; SELECT 2'),
+        target: { connectionId: connection.id, database: 'app' },
+      });
+      expect(
+        history.list().map((entry) => [entry.sql, entry.rows, entry.database, entry.ok]),
+      ).toEqual(
+        [
+          ['SELECT 2;', 2, 'app', true],
+          ['SELECT 1;', 2, 'app', true],
+        ].map(([sql, ...rest]) => [(sql as string).replace(';', ''), ...rest]),
+      );
+      expect(history.list()[0]?.connectionName).toBe('Local');
+    });
+
+    it('notes a failure with its message', async () => {
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql.includes('BAD');
+      await runner.run(request('SELECT BAD'));
+      expect(history.list()[0]).toMatchObject({ ok: false });
+      expect(history.list()[0]?.error).toContain('Not allowed');
+    });
+
+    it('notes a timeout as one', async () => {
+      const driver = drivers.driver('mysql');
+      driver.holdExecute = true;
+      timeoutMs = 20;
+      const done = runner.run(request('SELECT SLEEP(9)'));
+      await until(() => driver.lastSession?.cancelCount === 1);
+      driver.releaseExecute();
+      await done;
+      expect(history.list()[0]).toMatchObject({ ok: false, error: 'Timed out' });
+    });
+
+    it('does not fail a query when the history cannot record it', async () => {
+      const broken = new QueryRunner({
+        history: {
+          record: () => {
+            throw new Error('history is broken');
+          },
+        },
+        manager,
+        results,
+        cache,
+        limits: { rowLimit: () => 1000 },
+        logger,
+      });
+      const outcome = await broken.run(request('SELECT 1'));
+      expect(outcome.results[0]?.error).toBeUndefined();
+      expect(logger.entries.some((entry) => entry.message.includes('history'))).toBe(true);
+    });
+
+    it('works without a history', async () => {
+      const plain = new QueryRunner({
+        manager,
+        results,
+        cache,
+        limits: { rowLimit: () => 1000 },
+        logger,
+      });
+      expect((await plain.run(request('SELECT 1'))).results).toHaveLength(1);
     });
   });
 });

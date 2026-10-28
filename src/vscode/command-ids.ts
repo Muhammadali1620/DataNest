@@ -31,6 +31,8 @@ export const COMMAND_IDS = {
   openTable: 'datanest.table.open',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
+  /** Browses the history of executed statements. */
+  showHistory: 'datanest.history.show',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;
@@ -57,4 +59,6 @@ export const CONFIG_KEYS = {
   pageSize: 'pageSize',
   /** Seconds a statement may run before it is cancelled; 0 means no limit. */
   queryTimeout: 'queryTimeout',
+  /** How many executed statements the history keeps; 0 turns it off. */
+  historyLimit: 'historyLimit',
 } as const;

@@ -29,13 +29,27 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - The server's own databases and schemas are hidden until you ask for them.
 - “Open Table” shows a table page by page with the total row count.
 
+**Database structure**
+
+- Functions, procedures, triggers, indexes, foreign keys, sequences and events in the tree.
+- Show the DDL of any object; edit views, routines and triggers as SQL and apply them safely.
+- A table designer for new and existing tables — columns, keys, indexes and foreign keys —
+  that turns your changes into `CREATE` or `ALTER TABLE` and shows the SQL before it runs.
+- Create, rename, empty and drop tables; create and drop databases and schemas.
+- Find any table, view or routine across all connected connections.
+
 **Writing SQL**
 
 - Queries run in a normal editor tab, so your keybindings, themes and extensions work.
 - `Ctrl+Enter` runs the statement under the cursor or the selection,
   `Ctrl+Shift+Enter` runs the whole file, and a “▶ Run” lens sits above every statement.
 - The statement splitter understands strings, comments, `$$ … $$` and MySQL's `DELIMITER`.
-- Completion offers dialect keywords, tables and columns, including after `alias.`.
+- Completion knows aliases, the columns of every joined table, CTEs and subqueries,
+  dialect functions and statement snippets.
+- Hover over a table or column for its type, keys and comment; F12 opens its DDL.
+- Format Document in the dialect of the connection, with style settings.
+- Errors from the server are underlined right where they happened.
+- Generate `SELECT`, `INSERT`, `UPDATE` and `DELETE` templates for a table.
 - A running query shows its elapsed time and can be cancelled.
 
 **Results**
@@ -79,6 +93,11 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 | `datanest.showSystemObjects` | `false` | Show the server's own databases and schemas. |
 | `datanest.historyLimit` | `500` | Statements kept in the query history; `0` turns it off. |
 | `datanest.safeMode` | `confirm` | Before a destructive statement: `confirm`, `block` or `off`. |
+| `datanest.format.keywordCase` | `upper` | Keyword case when formatting; also `dataTypeCase`, `functionCase`. |
+| `datanest.format.indentStyle` | `standard` | `standard`, `tabularLeft` or `tabularRight`. |
+| `datanest.format.logicalOperatorNewline` | `before` | Put `AND`/`OR` at the start or the end of a line. |
+| `datanest.format.expressionWidth` | `50` | Shorter parenthesized expressions stay on one line. |
+| `datanest.format.denseOperators` | `false` | Write `a+b` instead of `a + b`. |
 | `datanest.logLevel` | `info` | How much goes to the DataNest output channel. |
 
 ## Privacy

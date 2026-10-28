@@ -5,60 +5,64 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
+Database structure: read and change the schema without writing DDL by hand, and a
+smarter SQL editor.
+
 ### Added
 
-- “Show DDL” on tables and views opens the definition in a new SQL editor bound to
-  the same connection, ready to run: MySQL and MariaDB print it themselves, PostgreSQL
-  gets a full `CREATE TABLE` with constraints, indexes, comments and triggers, SQLite
-  shows the original text with the table's indexes and triggers.
-- The tree lists functions, procedures, sequences (PostgreSQL) and events (MySQL,
-  MariaDB) next to tables and views, and every table has Indexes, Foreign Keys and
-  Triggers folders. PostgreSQL overloads show their arguments.
-- Create and drop databases and schemas, create, rename, empty and drop tables and
-  views, and drop functions, procedures, triggers, sequences and events from the
-  tree. Every action shows its SQL first, with “Run” and “Open in Editor”; dropping a
-  database or a schema also asks for its name.
-- A table designer for new tables: columns with type, length, `NOT NULL`, default,
-  primary key, auto numbering and comment, in any order, with the SQL it will run
-  shown as you type. Indexes and foreign keys (with `ON DELETE` / `ON UPDATE`) are
-  designed in tabs of their own; a key may point at the new table itself.
-- “Edit Table…” opens an existing table in the designer and turns the difference
-  into `ALTER TABLE`: renames stay renames, MySQL rewrites only the columns that
-  changed or moved, PostgreSQL applies everything in one transaction, SQLite changes
-  what it can in place and otherwise rebuilds the table, keeping rows, indexes,
-  triggers and views. Indexes the designer cannot express are kept as they are.
+**Structure in the tree**
+
+- Functions, procedures, sequences (PostgreSQL) and events (MySQL, MariaDB) next to
+  tables and views; every table has Indexes, Foreign Keys and Triggers folders, and
+  PostgreSQL overloads show their arguments.
+- “Show DDL” on any object opens its definition in a new SQL editor bound to the same
+  connection, ready to run: MySQL and MariaDB print it themselves, PostgreSQL gets a
+  full `CREATE TABLE` with constraints, indexes, comments and triggers, SQLite shows
+  the original text with the table's indexes and triggers.
+- Create and drop databases and schemas; create, rename, empty and drop tables and
+  views; drop functions, procedures, triggers, sequences and events. Every action
+  shows its SQL first, with “Run” and “Open in Editor”; dropping a database or a
+  schema also asks for its name.
+- “Find Database Object…” searches the tables, views, routines, sequences and events
+  of every connected connection in one list; choosing one opens its data or its DDL.
+
+**Table designer**
+
+- Columns with type, length, `NOT NULL`, default, primary key, auto numbering and
+  comment, in any order; indexes and foreign keys (with `ON DELETE` / `ON UPDATE`)
+  in tabs of their own; the SQL it will run is shown as you type.
+- “Edit Table…” opens an existing table and turns the difference into
+  `ALTER TABLE`: renames stay renames, MySQL rewrites only the columns that changed
+  or moved, PostgreSQL applies everything in one transaction, SQLite changes what it
+  can in place and otherwise rebuilds the table, keeping rows, indexes, triggers and
+  views. Indexes the designer cannot express are kept as they are.
+
+**Views, routines and triggers**
+
 - “Edit Definition…” opens a view, function, procedure, trigger or event as SQL;
-  “Apply” replaces it. MySQL first tries the new text out under a scratch name, so
-  a typo or a missing privilege never drops the original; PostgreSQL and SQLite
+  “Apply” replaces it. MySQL first tries the new text out under a scratch name, so a
+  typo or a missing privilege never drops the original; PostgreSQL and SQLite
   replace it in one transaction.
-- Format Document and Format Selection for SQL, in the dialect of the bound
-  connection, with `datanest.format.*` settings for keyword, type and function case,
-  indentation style, `AND`/`OR` placement, expression width and dense operators.
-  `DELIMITER` commands and statements the formatter cannot read stay as they are.
+- “Generate SELECT / INSERT / UPDATE / DELETE” on a table writes the statement with
+  its real columns and key into a new editor, with tab stops for the values.
+
+**SQL editor**
+
+- Format Document and Format Selection, in the dialect of the bound connection,
+  with `datanest.format.*` settings for keyword, type and function case, indentation
+  style, `AND`/`OR` placement, expression width and dense operators. `DELIMITER`
+  commands and statements the formatter cannot read stay as they are.
 - Smarter completion: columns of every joined table labelled with their alias,
   aliases themselves, CTEs and subqueries in `FROM` with the columns of their select
   list (`*` included), dialect functions inserted as calls with argument
   placeholders, and statement snippets (`sel`, `join`, `ins`, `upd`, `cte`, `upsert`…).
-
 - Hover over a table or a column shows its type, `NOT NULL`, key, default, where a
   foreign key points and the comment; over a CTE, its columns. Go to Definition (F12)
   on a table, view, column or routine call opens its DDL, read-only.
-
 - A failed statement shows its error as a squiggle in the editor and in Problems, on
-  the word the server complained about. MySQL and SQLite positions are now read from
-  their messages, so “jump to the error” is exact there too.
-
-- “Find Database Object…” searches the tables, views, routines, sequences and
-  events of every connected connection in one list; choosing one opens its data or
-  its DDL, and a not-yet-connected connection can be searched with one more click.
-
-- “Generate SELECT / INSERT / UPDATE / DELETE” on a table writes the statement with
-  its real columns and key into a new editor, with tab stops for the values.
-
-### Fixed (completion)
-
-- After a `;` completion treats the cursor as the start of a new statement.
-- `FROM schema.` offers the tables of that schema.
+  the word the server complained about.
 
 ### Fixed
 
@@ -66,10 +70,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   longer split into pieces when it runs.
 - SQLite results with two columns of the same name (`SELECT a.id, b.id …`) showed
   the last value in both; each column now keeps its own.
-- MariaDB sequences no longer appear among the tables.
-- MariaDB's “Unknown data type” error is reported as a syntax error.
+- MySQL and SQLite error positions are read from their messages, so “jump to the
+  error” in the results panel is exact there too.
+- After a `;` completion treats the cursor as the start of a new statement, and
+  `FROM schema.` offers the tables of that schema.
+- MariaDB sequences no longer appear among the tables; MariaDB's “Unknown data type”
+  is reported as a syntax error.
 
 ## [0.2.0] - 2026-10-28
+
+> 0.2.0 was prepared but not published on its own; its changes ship with 0.3.0.
 
 Working with data: edit rows in place, filter and page tables on the server, copy
 and export in many formats, and keep a history of what ran.

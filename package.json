@@ -256,6 +256,26 @@
         "icon": "$(search)"
       },
       {
+        "command": "datanest.table.generateSelect",
+        "title": "%commands.table.generateSelect.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.table.generateInsert",
+        "title": "%commands.table.generateInsert.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.table.generateUpdate",
+        "title": "%commands.table.generateUpdate.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.table.generateDelete",
+        "title": "%commands.table.generateDelete.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
@@ -326,6 +346,22 @@
         {
           "command": "datanest.object.apply",
           "when": "datanest.objectEditor"
+        },
+        {
+          "command": "datanest.table.generateSelect",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.generateInsert",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.generateUpdate",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.generateDelete",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -500,6 +536,26 @@
           "command": "datanest.object.edit",
           "when": "view == datanest.connections && (viewItem == datanest.view || viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.event)",
           "group": "4_structure@0"
+        },
+        {
+          "command": "datanest.table.generateSelect",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "6_generate@1"
+        },
+        {
+          "command": "datanest.table.generateInsert",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "6_generate@2"
+        },
+        {
+          "command": "datanest.table.generateUpdate",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "6_generate@3"
+        },
+        {
+          "command": "datanest.table.generateDelete",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "6_generate@4"
         }
       ],
       "editor/title": [

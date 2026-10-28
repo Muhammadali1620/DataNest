@@ -39,6 +39,11 @@ export const COMMAND_IDS = {
   createTable: 'datanest.table.create',
   /** Opens an existing table in the table designer. */
   designTable: 'datanest.table.design',
+  // Statement templates for a table, opened in a new editor.
+  generateSelect: 'datanest.table.generateSelect',
+  generateInsert: 'datanest.table.generateInsert',
+  generateUpdate: 'datanest.table.generateUpdate',
+  generateDelete: 'datanest.table.generateDelete',
   dropTable: 'datanest.table.drop',
   renameTable: 'datanest.table.rename',
   truncateTable: 'datanest.table.truncate',

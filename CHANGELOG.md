@@ -52,6 +52,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   events of every connected connection in one list; choosing one opens its data or
   its DDL, and a not-yet-connected connection can be searched with one more click.
 
+- “Generate SELECT / INSERT / UPDATE / DELETE” on a table writes the statement with
+  its real columns and key into a new editor, with tab stops for the values.
+
 ### Fixed (completion)
 
 - After a `;` completion treats the cursor as the start of a new statement.

@@ -66,5 +66,9 @@
   "configuration.format.logicalOperatorNewline.after": "В конце строки.",
   "configuration.format.expressionWidth.description": "Выражение в скобках короче стольких символов остаётся в одной строке.",
   "configuration.format.denseOperators.description": "Писать операторы без пробелов вокруг: `a+b` вместо `a + b`.",
-  "commands.objects.search.title": "Найти объект базы…"
+  "commands.objects.search.title": "Найти объект базы…",
+  "commands.table.generateSelect.title": "Сгенерировать SELECT",
+  "commands.table.generateInsert.title": "Сгенерировать INSERT",
+  "commands.table.generateUpdate.title": "Сгенерировать UPDATE",
+  "commands.table.generateDelete.title": "Сгенерировать DELETE"
 }

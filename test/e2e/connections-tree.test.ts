@@ -57,6 +57,10 @@ describe('connections view', () => {
       'datanest.object.drop',
       'datanest.object.edit',
       'datanest.object.apply',
+      'datanest.table.generateSelect',
+      'datanest.table.generateInsert',
+      'datanest.table.generateUpdate',
+      'datanest.table.generateDelete',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -88,6 +92,8 @@ describe('connections view', () => {
       'datanest.table.design',
       'datanest.object.drop',
       'datanest.object.edit',
+      'datanest.table.generateSelect',
+      'datanest.table.generateDelete',
     ]) {
       await vscode.commands.executeCommand(id);
     }

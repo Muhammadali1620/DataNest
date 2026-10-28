@@ -27,6 +27,7 @@ import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
 import { showObjectSearch } from './search/object-search';
+import { templateCommandHandlers } from './tree/template-commands';
 import { createSettings } from './settings';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
@@ -155,6 +156,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       nothingToApply: vscode.l10n.t('Nothing to apply: the editor is empty'),
     },
   });
+  const generate = templateCommandHandlers({
+    dialectOf: async (connectionId) => (await deps.manager.driverOf(connectionId)).dialect,
+    metadataOf: async (connectionId, database) =>
+      deps.cache.wrap(
+        connectionId,
+        (await browseSession(deps.manager, connectionId, database)).metadata,
+      ),
+    openSnippet: async (binding, snippet) => {
+      await deps.editors.newQuery(binding);
+      await vscode.window.activeTextEditor?.insertSnippet(new vscode.SnippetString(snippet));
+    },
+  });
   let pings: PingPanel[] = [];
   const handlers: Record<CommandId, (target?: CommandTarget) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
@@ -176,6 +189,10 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.dropSchema]: schemaCommands.dropSchema,
     [COMMAND_IDS.createTable]: schemaCommands.createTable,
     [COMMAND_IDS.designTable]: schemaCommands.designTable,
+    [COMMAND_IDS.generateSelect]: generate('select'),
+    [COMMAND_IDS.generateInsert]: generate('insert'),
+    [COMMAND_IDS.generateUpdate]: generate('update'),
+    [COMMAND_IDS.generateDelete]: generate('delete'),
     [COMMAND_IDS.dropTable]: schemaCommands.dropTable,
     [COMMAND_IDS.renameTable]: schemaCommands.renameTable,
     [COMMAND_IDS.truncateTable]: schemaCommands.truncateTable,

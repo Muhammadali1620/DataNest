@@ -6,7 +6,8 @@ import { errorMessage, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { TableRef } from '../core/model/objects';
 import { syntaxOf } from '../core/sql/tokenizer';
-import type { ResultColumn, Session } from '../drivers/driver';
+import type { CellValue } from '../shared/cell-value';
+import type { Dialect, ResultColumn, Session } from '../drivers/driver';
 import type { ConnectionManager, SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import { analyzeEditability } from './result-editability';
@@ -19,6 +20,12 @@ export interface TableViewLimits {
   /** Rows one page of a table view holds. */
   pageSize(): number;
 }
+
+/**
+ * Up to this many rows a table is simply counted; beyond it the server's estimate is
+ * shown first, because COUNT(*) on a big table can take minutes.
+ */
+export const EXACT_COUNT_LIMIT = 100_000;
 
 export interface TableViewerDeps {
   readonly manager: ConnectionManager;
@@ -35,6 +42,12 @@ export interface OpenTableRequest {
   readonly offset?: number;
   /** Known row count, so paging does not count again. */
   readonly totalRows?: number;
+  /** True when `totalRows` is the server's estimate, not a count. */
+  readonly approximate?: boolean;
+  /** Rows per page; the setting's value by default. */
+  readonly pageSize?: number;
+  /** Count exactly even where an estimate would do. */
+  readonly exactCount?: boolean;
   /** Server-side conditions; the count then covers only the matching rows. */
   readonly filter?: TableFilter;
   /** Server-side order. */
@@ -44,6 +57,10 @@ export interface OpenTableRequest {
 /** What `reload` may change about an open table view; absent fields stay as they are. */
 export interface TableChange {
   readonly offset?: number;
+  /** Rows per page; the view then starts again from the first page. */
+  readonly pageSize?: number;
+  /** Replace an estimated row count with a real one. */
+  readonly exactCount?: boolean;
   /** `null` removes the filter. */
   readonly filter?: TableFilter | null;
   /** `null` restores the table's own order. */
@@ -92,13 +109,20 @@ export class TableViewer {
     const filter = change.filter === undefined ? request.filter : (change.filter ?? undefined);
     const sort = change.sort === undefined ? request.sort : (change.sort ?? undefined);
     const refiltered = change.filter !== undefined;
-    const total = refiltered ? undefined : summary.page.totalRows;
+    const total = refiltered || change.exactCount === true ? undefined : summary.page.totalRows;
     const resorted = change.sort !== undefined;
+    const pageSize = change.pageSize ?? request.pageSize;
     await this.open({
       target: request.target,
       table: request.table,
-      offset: refiltered || resorted ? 0 : (change.offset ?? summary.page.offset),
+      offset:
+        refiltered || resorted || change.pageSize !== undefined
+          ? 0
+          : (change.offset ?? summary.page.offset),
       ...(total === undefined ? {} : { totalRows: total }),
+      ...(total !== undefined && summary.page.approximate === true ? { approximate: true } : {}),
+      ...(change.exactCount === true ? { exactCount: true } : {}),
+      ...(pageSize === undefined ? {} : { pageSize }),
       ...(filter === undefined ? {} : { filter }),
       ...(sort === undefined ? {} : { sort }),
     });
@@ -113,8 +137,9 @@ export class TableViewer {
       table: request.table,
       ...(filter === undefined ? {} : { filter }),
       ...(request.sort === undefined ? {} : { sort: request.sort }),
+      ...(request.pageSize === undefined ? {} : { pageSize: request.pageSize }),
     });
-    const pageSize = Math.max(1, Math.trunc(this.deps.limits.pageSize()));
+    const pageSize = Math.max(1, Math.trunc(request.pageSize ?? this.deps.limits.pageSize()));
     const offset = Math.max(0, Math.trunc(request.offset ?? 0));
     const started = Date.now();
     // Kept outside the try so a failure before the SQL exists still has something
@@ -137,8 +162,11 @@ export class TableViewer {
       );
       const { columns, rows } = await readAll(session, sql, pageSize);
       // Counting is a separate statement, and a failure there must not lose the page.
-      const totalRows =
-        request.totalRows ?? (await this.countRows(session, `${quoted}${whereSql}`));
+      const counted =
+        request.totalRows === undefined
+          ? await this.total(session, driver.dialect, request, quoted, whereSql)
+          : { totalRows: request.totalRows, approximate: request.approximate === true };
+      const totalRows = counted.totalRows;
       const edit = await analyzeEditability(
         {
           metadata: this.deps.cache.wrap(request.target.connectionId, session.metadata),
@@ -167,6 +195,7 @@ export class TableViewer {
           offset,
           pageSize,
           ...(totalRows === undefined ? {} : { totalRows }),
+          ...(counted.approximate ? { approximate: true } : {}),
         },
       });
     } catch (error) {
@@ -187,19 +216,43 @@ export class TableViewer {
     }
   }
 
+  /**
+   * The row count to show. A big unfiltered table gets the server's estimate (marked
+   * approximate) instead of a slow COUNT(*); everything else is counted exactly.
+   */
+  private async total(
+    session: Session,
+    dialect: Dialect,
+    request: OpenTableRequest,
+    quoted: string,
+    whereSql: string,
+  ): Promise<{ totalRows: number | undefined; approximate: boolean }> {
+    if (whereSql === '' && request.exactCount !== true && dialect.estimateRowsSql !== undefined) {
+      const estimate = await this.estimateRows(session, dialect.estimateRowsSql(request.table));
+      if (estimate !== undefined && estimate > EXACT_COUNT_LIMIT) {
+        return { totalRows: estimate, approximate: true };
+      }
+    }
+    return { totalRows: await this.countRows(session, `${quoted}${whereSql}`), approximate: false };
+  }
+
+  /** The estimate, or undefined when the server has none (NULL, -1) or the query fails. */
+  private async estimateRows(session: Session, sql: string): Promise<number | undefined> {
+    try {
+      const { rows } = await readAll(session, sql, 1);
+      const parsed = numberOf(rows[0]?.[0]);
+      return parsed !== undefined && parsed >= 0 ? Math.round(parsed) : undefined;
+    } catch (error) {
+      this.logger.debug(`Estimating rows failed: ${errorMessage(error)}`);
+      return undefined;
+    }
+  }
+
   /** `undefined` when the server would not count, e.g. no permission on the table. */
   private async countRows(session: Session, quotedTable: string): Promise<number | undefined> {
     try {
       const { rows } = await readAll(session, `SELECT COUNT(*) FROM ${quotedTable}`, 1);
-      const value = rows[0]?.[0];
-      if (typeof value === 'number') {
-        return value;
-      }
-      if (typeof value === 'object' && value !== null && 'text' in value) {
-        const parsed = Number(value.text);
-        return Number.isFinite(parsed) ? parsed : undefined;
-      }
-      return undefined;
+      return numberOf(rows[0]?.[0]);
     } catch (error) {
       this.logger.debug(`Counting rows failed: ${errorMessage(error)}`);
       return undefined;
@@ -217,6 +270,22 @@ function sortOf(
   }
   const column = columns.findIndex((candidate) => candidate.name === sort.column);
   return column < 0 ? undefined : { column, direction: sort.direction };
+}
+
+/** A count as the drivers return it: a number, or text for values beyond 2^53. */
+function numberOf(value: CellValue | undefined): number | undefined {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'object' && value !== null && 'text' in value) {
+    const parsed = Number(value.text);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 interface Collected {

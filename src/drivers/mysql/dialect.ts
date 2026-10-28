@@ -75,6 +75,10 @@ export const mysqlDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  estimateRowsSql: (table) =>
+    `SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${
+      table.database === undefined ? 'DATABASE()' : quoteString(table.database)
+    } AND TABLE_NAME = ${quoteString(table.name)}`,
   likeText: (quotedColumn, quotedPattern) =>
     `CAST(${quotedColumn} AS CHAR) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,

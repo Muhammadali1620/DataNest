@@ -102,7 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     manager,
     results,
     isBusy: (documentUri) => runner.isRunning(documentUri),
-    rowLimit: (summary) => (summary.page === undefined ? readRowLimit() : readPageSize()),
+    rowLimit: (summary) => summary.page?.pageSize ?? readRowLimit(),
     logger,
   });
 

@@ -45,5 +45,8 @@
   "Pick a format": "Выберите формат",
   "Changes were saved, but the rows could not be read again. Run the query again.": "Изменения сохранены, но строки не удалось перечитать. Выполните запрос заново.",
   "Discard": "Отменить",
-  "Discard {0} unsaved changes?": "Отменить несохранённые изменения: {0}?"
+  "Discard {0} unsaved changes?": "Отменить несохранённые изменения: {0}?",
+  "Load": "Загрузить",
+  "Load all {0} rows? This can be slow and use a lot of memory.": "Загрузить все строки: {0}? Это может быть медленно и займёт много памяти.",
+  "Load the whole table? It may hold a very large number of rows (up to {0}), which can be slow and use a lot of memory.": "Загрузить всю таблицу? В ней может быть очень много строк (до {0}), это может быть медленно и займёт много памяти."
 }

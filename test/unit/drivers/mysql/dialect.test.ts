@@ -102,3 +102,18 @@ describe('mysqlDialect.likeText', () => {
     expect(mysqlDialect.likeText(q, "'%x%'")).toBe(`CAST(${q} AS CHAR) LIKE '%x%' ESCAPE '!'`);
   });
 });
+
+describe('mysqlDialect.estimateRowsSql', () => {
+  it('reads TABLE_ROWS of the current database, or of the named one', () => {
+    expect(mysqlDialect.estimateRowsSql?.({ name: 'orders' })).toBe(
+      "SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders'",
+    );
+    expect(mysqlDialect.estimateRowsSql?.({ database: 'app', name: 'orders' })).toContain(
+      "TABLE_SCHEMA = 'app'",
+    );
+  });
+
+  it('escapes quotes in names', () => {
+    expect(mysqlDialect.estimateRowsSql?.({ name: "o'brien" })).toContain("'o''brien'");
+  });
+});

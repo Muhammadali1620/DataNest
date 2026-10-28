@@ -17,6 +17,14 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import Grid from './Grid.svelte';
   import FilterBar from './FilterBar.svelte';
   import { activeCount } from './filter-model';
+  import {
+    currentPage,
+    hasNextPage,
+    isWholeTable,
+    offsetOfPage,
+    pageCount,
+    pageSizeChoices,
+  } from './pager-model';
   import ValuePanel from './ValuePanel.svelte';
   import { RowCache, windowFor } from './rows';
   import { type CellRef, selectionBox, type Selection } from './selection';
@@ -180,6 +188,25 @@ import type { RowAction } from '../../../../src/shared/row-action';
    * Sends one edit to the host. Resolves to what went wrong, or undefined when the
    * change was queued; the host then re-sends the state and the rows are re-read.
    */
+  /** True while a page-size, load-all or count request is out. */
+  let paging = $state(false);
+
+  async function runPaging(request: () => Promise<unknown>): Promise<void> {
+    if (paging) {
+      return;
+    }
+    paging = true;
+    failure = undefined;
+    try {
+      // The host answers by re-sending the state with the new page as a new tab.
+      await request();
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.pageFailed');
+    } finally {
+      paging = false;
+    }
+  }
+
   async function onApplyFilter(filter: TableFilter | null): Promise<void> {
     const tab = activeTab;
     if (tab === undefined || filtering) {
@@ -717,6 +744,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
         {@const page = activeTab.page}
         {@const from = activeTab.rowCount === 0 ? 0 : page.offset + 1}
         {@const to = page.offset + activeTab.rowCount}
+        {@const pages = pageCount(page)}
         <div class="pager" data-testid="pager">
           <button
             type="button"
@@ -728,22 +756,91 @@ import type { RowAction } from '../../../../src/shared/row-action';
           >
             {t('grid.previousPage')}
           </button>
-          <span class="range">
+          <span class="range" data-testid="range">
             {page.totalRows === undefined
               ? t('grid.rangeUnknown', from, to)
-              : t('grid.range', from, to, page.totalRows)}
+              : page.approximate === true
+                ? t('grid.rangeApproximate', from, to, page.totalRows)
+                : t('grid.range', from, to, page.totalRows)}
           </span>
+          {#if page.approximate === true}
+            <button
+              type="button"
+              class="button secondary"
+              title={t('grid.countExactlyHint')}
+              data-testid="count-exactly"
+              disabled={paging}
+              onclick={() => {
+                void runPaging(() => rpc.request('countRows', { resultId: activeTab.id }));
+              }}
+            >
+              {t('grid.countExactly')}
+            </button>
+          {/if}
           <button
             type="button"
             class="button secondary"
-            disabled={page.totalRows !== undefined
-              ? to >= page.totalRows
-              : activeTab.rowCount < page.pageSize}
+            disabled={!hasNextPage(page, activeTab.rowCount)}
             onclick={() => {
               void goToPage(page.offset + page.pageSize);
             }}
           >
             {t('grid.nextPage')}
+          </button>
+          <span class="spacer"></span>
+          <label class="field">
+            {t('grid.pageNumber')}
+            <input
+              class="control number"
+              type="number"
+              min="1"
+              max={pages}
+              data-testid="page-number"
+              value={currentPage(page.offset, page.pageSize)}
+              onkeydown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const offset = offsetOfPage(event.currentTarget.valueAsNumber, page);
+                  if (offset !== undefined) {
+                    void goToPage(offset);
+                  }
+                }
+              }}
+            />
+            {#if pages !== undefined}
+              {t('grid.ofPages', pages)}
+            {/if}
+          </label>
+          <label class="field">
+            {t('grid.pageSize')}
+            <select
+              class="control"
+              data-testid="page-size"
+              disabled={paging}
+              value={page.pageSize}
+              onchange={(event) => {
+                const size = Number(event.currentTarget.value);
+                void runPaging(() =>
+                  rpc.request('pageSize', { resultId: activeTab.id, pageSize: size }),
+                );
+              }}
+            >
+              {#each pageSizeChoices(page.pageSize) as size (size)}
+                <option value={size}>{size}</option>
+              {/each}
+            </select>
+          </label>
+          <button
+            type="button"
+            class="button secondary"
+            title={t('grid.loadAllHint')}
+            data-testid="load-all"
+            disabled={paging || isWholeTable(page, activeTab.rowCount)}
+            onclick={() => {
+              void runPaging(() => rpc.request('loadAll', { resultId: activeTab.id }));
+            }}
+          >
+            {t('grid.loadAll')}
           </button>
         </div>
       {/if}
@@ -897,6 +994,25 @@ import type { RowAction } from '../../../../src/shared/row-action';
     align-items: center;
     padding: 4px 8px;
     border-top: 1px solid var(--vscode-panel-border);
+  }
+
+  .field {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .control {
+    padding: 1px 4px;
+    color: var(--vscode-input-foreground);
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border, transparent);
+    font: inherit;
+  }
+
+  .control.number {
+    width: 5em;
   }
 
   .range {

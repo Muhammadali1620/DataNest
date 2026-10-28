@@ -76,3 +76,15 @@ describe('postgresDialect.likeText', () => {
     expect(postgresDialect.likeText(q, "'%x%'")).toBe(`CAST(${q} AS TEXT) ILIKE '%x%' ESCAPE '!'`);
   });
 });
+
+describe('postgresDialect.estimateRowsSql', () => {
+  it('reads reltuples through a quoted regclass name', () => {
+    expect(postgresDialect.estimateRowsSql?.({ schema: 'public', name: 'orders' })).toBe(
+      `SELECT reltuples::bigint FROM pg_class WHERE oid = '"public"."orders"'::regclass`,
+    );
+  });
+
+  it('keeps a quote in a name from ending the literal', () => {
+    expect(postgresDialect.estimateRowsSql?.({ name: "o'x" })).toContain(`'"o''x"'::regclass`);
+  });
+});

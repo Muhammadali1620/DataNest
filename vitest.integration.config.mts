@@ -9,5 +9,8 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 60_000,
     restoreMocks: true,
+    // The files share the databases (the seed test lists their tables while others
+    // create and drop theirs), so they must not overlap.
+    fileParallelism: false,
   },
 });

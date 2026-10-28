@@ -21,6 +21,7 @@ export const fakeDialect: Dialect = {
   quoteIdentifier: (name) => `"${name}"`,
   quoteTable: (table) => `"${table.name}"`,
   literal: () => 'NULL',
+  estimateRowsSql: (table) => `ESTIMATE ${table.name}`,
   likeText: (column, pattern) => `${column} LIKE ${pattern} ESCAPE '!'`,
   paginate: (sql, limit, offset) => `${sql} LIMIT ${limit} OFFSET ${offset}`,
   defaultKeyword: true,
@@ -79,6 +80,8 @@ export class FakeSession implements Session {
   failOnCancel = true;
   /** Rows every execute() yields. */
   rows: CellValue[][] = [[1]];
+  /** Rows for particular statements; falls back to `rows`. */
+  rowsFor: ((sql: string) => CellValue[][] | undefined) | undefined;
   /** Columns every execute() reports. */
   columns: ResultColumn[] = [{ name: 'one' }];
   /** Awaited before the first event, so a test can keep a statement running. */
@@ -119,7 +122,7 @@ export class FakeSession implements Session {
       throw new DbError('permission-denied', `Not allowed: ${sql}`);
     }
     yield { kind: 'columns', columns: this.columns };
-    yield { kind: 'rows', rows: this.rows };
+    yield { kind: 'rows', rows: this.rowsFor?.(sql) ?? this.rows };
     yield { kind: 'done' };
   }
 }
@@ -146,6 +149,8 @@ export class FakeDriver implements Driver {
   readonly sessionMetadata = new FakeMetadata();
   /** Rows each new session yields from execute(). */
   sessionRows: CellValue[][] = [[1]];
+  /** Rows for particular statements in each new session. */
+  sessionRowsFor: ((sql: string) => CellValue[][] | undefined) | undefined;
   /** Columns each new session reports from execute(). */
   sessionColumns: ResultColumn[] = [{ name: 'one' }];
   /** While true, every statement waits for `releaseExecute()`. */
@@ -189,6 +194,7 @@ export class FakeDriver implements Driver {
     session.failExecuteWhen = this.failExecuteWhen;
     session.rows = [...this.sessionRows];
     session.columns = [...this.sessionColumns];
+    session.rowsFor = this.sessionRowsFor;
     session.gate = () => this.waitGate();
     session.metadata.databases = [...this.sessionMetadata.databases];
     session.metadata.schemas = [...this.sessionMetadata.schemas];

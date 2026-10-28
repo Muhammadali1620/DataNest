@@ -20,6 +20,12 @@ import {
   union,
 } from '../schema';
 
+/** Most rows one page of a table view may hold, which is also what "load all" is capped at. */
+export const MAX_PAGE_SIZE = 1_000_000;
+
+/** "Load all" asks the user to confirm above this many rows. */
+export const LOAD_ALL_WARNING_ROWS = 50_000;
+
 /** Rows the page may ask for in one request. */
 export const MAX_WINDOW_ROWS = 2000;
 
@@ -71,6 +77,8 @@ const tabSchema = object({
       offset: number({ integer: true, min: 0 }),
       pageSize: number({ integer: true, min: 1 }),
       totalRows: optional(number({ integer: true, min: 0 })),
+      /** True when `totalRows` is the server's estimate, not a count. */
+      approximate: optional(boolean()),
     }),
   ),
   /** The server-side filter a table view is read with. */
@@ -183,6 +191,27 @@ export const resultGridProtocol = defineProtocol({
           column: number({ integer: true, min: 0 }),
           direction: optional(literal('asc', 'desc')),
         }),
+        result: object({ resultId, applied: boolean() }),
+      },
+      /** Page → host: change how many rows a page of a table view holds. */
+      pageSize: {
+        params: object({
+          resultId,
+          pageSize: number({ integer: true, min: 1, max: MAX_PAGE_SIZE }),
+        }),
+        result: object({ resultId, applied: boolean() }),
+      },
+      /**
+       * Page → host: put the whole table on one page. The host asks the user first
+       * when that is a lot of rows, and `applied` is false when they decline.
+       */
+      loadAll: {
+        params: object({ resultId }),
+        result: object({ resultId, applied: boolean() }),
+      },
+      /** Page → host: replace an estimated row count with a real one. */
+      countRows: {
+        params: object({ resultId }),
         result: object({ resultId, applied: boolean() }),
       },
       /** Page → host: show another page of a table view. */

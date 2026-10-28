@@ -75,3 +75,9 @@ describe('sqliteDialect.likeText', () => {
     expect(sqliteDialect.likeText(q, "'%x%'")).toBe(`CAST(${q} AS TEXT) LIKE '%x%' ESCAPE '!'`);
   });
 });
+
+describe('sqliteDialect.estimateRowsSql', () => {
+  it('has none: SQLite keeps no row statistics, so it always counts', () => {
+    expect('estimateRowsSql' in sqliteDialect).toBe(false);
+  });
+});

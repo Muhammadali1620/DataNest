@@ -75,6 +75,9 @@ export const postgresDialect: Dialect = {
   quoteTable,
   literal,
   paginate,
+  // reltuples is -1 until the table is first analyzed; the caller treats that as unknown.
+  estimateRowsSql: (table) =>
+    `SELECT reltuples::bigint FROM pg_class WHERE oid = ${literal(quoteTable(table))}::regclass`,
   likeText: (quotedColumn, quotedPattern) =>
     `CAST(${quotedColumn} AS TEXT) ILIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,

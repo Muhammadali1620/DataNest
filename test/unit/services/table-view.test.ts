@@ -77,7 +77,8 @@ describe('TableViewer', () => {
     const summary = await viewer.open({ target: target(), table: { name: 'orders' } });
     expect(summary.page).toEqual({ offset: 0, pageSize: 100, totalRows: 1 });
     expect(driver.lastSession?.executed[0]).toBe('SELECT * FROM "orders" LIMIT 100 OFFSET 0');
-    expect(driver.lastSession?.executed[1]).toBe('SELECT COUNT(*) FROM "orders"');
+    expect(driver.lastSession?.executed[1]).toBe('ESTIMATE orders');
+    expect(driver.lastSession?.executed[2]).toBe('SELECT COUNT(*) FROM "orders"');
   });
 
   it('marks the page editable when the table has a key', async () => {
@@ -360,6 +361,107 @@ describe('TableViewer', () => {
         expect(await viewer.reload(plain.id, { offset: 10 })).toBe(false);
         expect(await viewer.reload('result-nope', { offset: 10 })).toBe(false);
       });
+    });
+  });
+
+  describe('paging', () => {
+    const table = { name: 'orders' };
+
+    function executed(): string[] {
+      return drivers.driver('mysql').lastSession?.executed ?? [];
+    }
+
+    /** Answers the estimate and the count; everything else gets one row. */
+    function serve(estimate: number | null, count: number): void {
+      drivers.driver('mysql').sessionRowsFor = (sql) =>
+        sql.startsWith('ESTIMATE')
+          ? [[estimate]]
+          : sql.startsWith('SELECT COUNT')
+            ? [[count]]
+            : undefined;
+    }
+
+    it('counts a small table exactly, even when an estimate is available', async () => {
+      serve(500, 480);
+      const summary = await viewer.open({ target: target(), table });
+      expect(summary.page).toEqual({ offset: 0, pageSize: 100, totalRows: 480 });
+      expect(executed().some((sql) => sql.startsWith('SELECT COUNT'))).toBe(true);
+    });
+
+    it('shows the estimate of a big table without counting it', async () => {
+      serve(2_500_000, 2_400_000);
+      const summary = await viewer.open({ target: target(), table });
+      expect(summary.page).toEqual({
+        offset: 0,
+        pageSize: 100,
+        totalRows: 2_500_000,
+        approximate: true,
+      });
+      expect(executed().some((sql) => sql.startsWith('SELECT COUNT'))).toBe(false);
+    });
+
+    it('counts a filtered view exactly, since a table estimate says nothing about it', async () => {
+      serve(2_500_000, 12);
+      const summary = await viewer.open({
+        target: target(),
+        table,
+        filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+      });
+      expect(summary.page).toEqual({ offset: 0, pageSize: 100, totalRows: 12 });
+      expect(executed().some((sql) => sql.startsWith('ESTIMATE'))).toBe(false);
+    });
+
+    it.each([null, -1, 0])('falls back to counting when the estimate is %s', async (estimate) => {
+      serve(estimate, 77);
+      expect((await viewer.open({ target: target(), table })).page?.totalRows).toBe(77);
+    });
+
+    it('falls back to counting when the estimate query fails', async () => {
+      serve(2_500_000, 79);
+      drivers.driver('mysql').failExecuteWhen = (sql) => sql.startsWith('ESTIMATE');
+      expect((await viewer.open({ target: target(), table })).page).toEqual({
+        offset: 0,
+        pageSize: 100,
+        totalRows: 79,
+      });
+    });
+
+    it('keeps the estimate while paging, and replaces it when asked to count', async () => {
+      serve(2_500_000, 2_400_000);
+      const first = await viewer.open({ target: target(), table });
+      await viewer.reload(first.id, { offset: 100 });
+      let latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+      expect(latest?.page).toMatchObject({ offset: 100, totalRows: 2_500_000, approximate: true });
+      await viewer.reload(latest?.id ?? '', { exactCount: true });
+      latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+      expect(latest?.page).toEqual({ offset: 100, pageSize: 100, totalRows: 2_400_000 });
+    });
+
+    it('changes the page size, starts again from the first page and remembers it', async () => {
+      const first = await viewer.open({ target: target(), table, offset: 300, totalRows: 1000 });
+      await viewer.reload(first.id, { pageSize: 500 });
+      let latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+      expect(latest?.page).toEqual({ offset: 0, pageSize: 500, totalRows: 1000 });
+      expect(executed().at(-1)).toBe('SELECT * FROM "orders" LIMIT 500 OFFSET 0');
+      // Paging afterwards keeps the new size, not the setting's.
+      await viewer.reload(latest?.id ?? '', { offset: 500 });
+      latest = results.forDocument(tableDocumentUri(target(), table)).at(-1);
+      expect(latest?.page).toMatchObject({ offset: 500, pageSize: 500 });
+    });
+
+    it('keeps the chosen page size when the filter changes', async () => {
+      const first = await viewer.open({ target: target(), table, pageSize: 25 });
+      await viewer.reload(first.id, {
+        filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+      });
+      expect(results.forDocument(tableDocumentUri(target(), table)).at(-1)?.page?.pageSize).toBe(
+        25,
+      );
+    });
+
+    it('treats a nonsense page size as at least one row', async () => {
+      const summary = await viewer.open({ target: target(), table, pageSize: 0 });
+      expect(summary.page?.pageSize).toBe(1);
     });
   });
 });

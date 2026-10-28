@@ -8,6 +8,8 @@ import type { TableChange } from '../../services/table-view';
 import type { ResultStore } from '../../services/result-store';
 import { retainedBytes } from '../../shared/binary-bytes';
 import {
+  LOAD_ALL_WARNING_ROWS,
+  MAX_PAGE_SIZE,
   MAX_SEARCH_HITS,
   resultGridProtocol,
   type ResultGridProtocol,
@@ -183,6 +185,47 @@ export class ResultsPanel implements vscode.Disposable {
     });
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
+      return { resultId, applied };
+    });
+    this.rpc.handle('pageSize', async ({ resultId, pageSize }) => {
+      const applied = (await this.deps.reloadTable?.(resultId, { pageSize })) ?? false;
+      return { resultId, applied };
+    });
+    this.rpc.handle('countRows', async ({ resultId }) => {
+      const applied = (await this.deps.reloadTable?.(resultId, { exactCount: true })) ?? false;
+      return { resultId, applied };
+    });
+    this.rpc.handle('loadAll', async ({ resultId }) => {
+      const page = this.deps.results.get(resultId)?.page;
+      if (page === undefined) {
+        return { resultId, applied: false };
+      }
+      // An estimate may be short, so it cannot size the page; the cap is the limit then.
+      const rows =
+        page.totalRows === undefined || page.approximate === true
+          ? MAX_PAGE_SIZE
+          : Math.min(Math.max(page.totalRows, 1), MAX_PAGE_SIZE);
+      if (rows > LOAD_ALL_WARNING_ROWS) {
+        // The rows all live in memory, so a big table deserves a second thought.
+        const load = vscode.l10n.t('Load');
+        const choice = await vscode.window.showWarningMessage(
+          page.totalRows === undefined || page.approximate === true
+            ? vscode.l10n.t(
+                'Load the whole table? It may hold a very large number of rows (up to {0}), which can be slow and use a lot of memory.',
+                MAX_PAGE_SIZE.toLocaleString(),
+              )
+            : vscode.l10n.t(
+                'Load all {0} rows? This can be slow and use a lot of memory.',
+                rows.toLocaleString(),
+              ),
+          { modal: true },
+          load,
+        );
+        if (choice !== load) {
+          return { resultId, applied: false };
+        }
+      }
+      const applied = (await this.deps.reloadTable?.(resultId, { pageSize: rows })) ?? false;
       return { resultId, applied };
     });
     this.rpc.handle('filterTable', async ({ resultId, filter }) => {

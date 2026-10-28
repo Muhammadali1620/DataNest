@@ -29,6 +29,8 @@ export interface ResultPage {
   readonly pageSize: number;
   /** Rows the whole table has, when counting succeeded. */
   readonly totalRows?: number;
+  /** True when `totalRows` is the server's estimate, not a count. */
+  readonly approximate?: boolean;
 }
 
 /** How a result is currently ordered; absent means "as the server returned it". */

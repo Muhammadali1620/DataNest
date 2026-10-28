@@ -39,6 +39,12 @@ export interface Dialect {
    * to text first, because PostgreSQL has no LIKE for numbers.
    */
   likeText(quotedColumn: string, quotedPattern: string): string;
+  /**
+   * A cheap query that returns the server's own estimate of a table's row count in
+   * its first cell, or undefined where the database keeps no such statistic. The
+   * number may be off, or absent (NULL, -1) for a table never analyzed.
+   */
+  readonly estimateRowsSql?: (table: TableRef) => string;
   /** True where `UPDATE … SET column = DEFAULT` works; SQLite has no such keyword. */
   readonly defaultKeyword: boolean;
   /** An INSERT that fills every column with its default; the table is already quoted. */

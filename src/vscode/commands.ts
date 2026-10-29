@@ -32,6 +32,7 @@ import { scriptCommandHandlers } from './script-commands';
 import { dumpCommandHandlers } from './dump-commands';
 import { importCommandHandlers } from './import-commands';
 import { DataImportPanel } from './panels/data-import-panel';
+import { TestDataPanel } from './panels/test-data-panel';
 import { SqlDumper } from '../services/sql-dump';
 import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
@@ -117,6 +118,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   });
   const imports = importCommandHandlers({
     extensionUri: deps.extensionUri,
+    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
     store: deps.store,
     manager: deps.manager,
     cache: deps.cache,
@@ -304,6 +306,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       ),
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.importData]: (target) => imports.importData(target),
+    [COMMAND_IDS.generateData]: (target) => imports.generateData(target),
     [COMMAND_IDS.exportData]: (target) => deps.exportTable(target),
     [COMMAND_IDS.dumpSql]: (target, ...rest: unknown[]) => dumps.dump(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportResult]: async () => {
@@ -395,6 +398,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         ConnectionFormPanel.disposeAll();
         TableDesignerPanel.disposeAll();
         DataImportPanel.disposeAll();
+        TestDataPanel.disposeAll();
         ResultsPanel.disposeAll();
       },
     },

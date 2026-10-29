@@ -94,5 +94,6 @@
   "commands.script.run.title": "Выполнить SQL-файл…",
   "commands.dump.create.title": "Дамп в SQL-файл…",
   "commands.table.importData.title": "Импортировать данные из файла…",
-  "commands.table.exportData.title": "Экспортировать данные…"
+  "commands.table.exportData.title": "Экспортировать данные…",
+  "commands.table.generateData.title": "Сгенерировать тестовые данные…"
 }

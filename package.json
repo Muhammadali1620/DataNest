@@ -271,6 +271,11 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.table.generateData",
+        "title": "%commands.table.generateData.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.results.export",
         "title": "%commands.results.export.title%",
         "category": "DataNest",
@@ -488,6 +493,10 @@
         },
         {
           "command": "datanest.table.exportData",
+          "when": "false"
+        },
+        {
+          "command": "datanest.table.generateData",
           "when": "false"
         }
       ],
@@ -788,6 +797,11 @@
           "command": "datanest.table.importData",
           "when": "view == datanest.connections && viewItem == datanest.table",
           "group": "7_export@3"
+        },
+        {
+          "command": "datanest.table.generateData",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "7_export@4"
         }
       ],
       "editor/title": [

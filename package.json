@@ -404,6 +404,24 @@
         "command": "datanest.dev.openPing",
         "title": "%commands.dev.openPing.title%",
         "category": "DataNest"
+      },
+      {
+        "command": "datanest.redis.loadMoreKeys",
+        "title": "%commands.redis.loadMoreKeys.title%",
+        "category": "DataNest",
+        "icon": "$(ellipsis)"
+      },
+      {
+        "command": "datanest.redis.filterKeys",
+        "title": "%commands.redis.filterKeys.title%",
+        "category": "DataNest",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "datanest.redis.findKey",
+        "title": "%commands.redis.findKey.title%",
+        "category": "DataNest",
+        "icon": "$(search)"
       }
     ],
     "menus": {
@@ -506,6 +524,10 @@
         },
         {
           "command": "datanest.table.generateData",
+          "when": "false"
+        },
+        {
+          "command": "datanest.redis.loadMoreKeys",
           "when": "false"
         }
       ],
@@ -679,12 +701,12 @@
         },
         {
           "command": "datanest.tree.copyName",
-          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.sequence || viewItem == datanest.event || viewItem == datanest.index || viewItem == datanest.foreignKey)",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.sequence || viewItem == datanest.event || viewItem == datanest.index || viewItem == datanest.foreignKey || viewItem == datanest.redisFolder || viewItem == datanest.redisKey)",
           "group": "5_copy@1"
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.folder)",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.folder || viewItem == datanest.redisDatabase || viewItem == datanest.redisFolder)",
           "group": "1_state@1"
         },
         {
@@ -816,6 +838,31 @@
           "command": "datanest.table.generateData",
           "when": "view == datanest.connections && viewItem == datanest.table",
           "group": "7_export@4"
+        },
+        {
+          "command": "datanest.redis.findKey",
+          "when": "view == datanest.connections && (viewItem == datanest.redisDatabase || viewItem == datanest.redisFolder)",
+          "group": "inline@0"
+        },
+        {
+          "command": "datanest.redis.filterKeys",
+          "when": "view == datanest.connections && viewItem == datanest.redisDatabase",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.redis.findKey",
+          "when": "view == datanest.connections && (viewItem == datanest.redisDatabase || viewItem == datanest.redisFolder || viewItem == datanest.redisConnection.connected || viewItem == datanest.projectRedisConnection.connected)",
+          "group": "1_keys@1"
+        },
+        {
+          "command": "datanest.redis.filterKeys",
+          "when": "view == datanest.connections && viewItem == datanest.redisDatabase",
+          "group": "1_keys@2"
+        },
+        {
+          "command": "datanest.redis.loadMoreKeys",
+          "when": "view == datanest.connections && viewItem == datanest.redisMore",
+          "group": "1_keys@3"
         }
       ],
       "editor/title": [
@@ -1066,6 +1113,21 @@
           "default": false,
           "markdownDescription": "%configuration.format.denseOperators.description%",
           "scope": "resource"
+        },
+        "datanest.redis.keySeparator": {
+          "type": "string",
+          "default": ":",
+          "maxLength": 16,
+          "markdownDescription": "%configuration.redis.keySeparator.description%",
+          "scope": "window"
+        },
+        "datanest.redis.keysPerLoad": {
+          "type": "integer",
+          "default": 5000,
+          "minimum": 100,
+          "maximum": 100000,
+          "markdownDescription": "%configuration.redis.keysPerLoad.description%",
+          "scope": "window"
         }
       }
     },

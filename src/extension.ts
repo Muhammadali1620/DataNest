@@ -38,6 +38,7 @@ import { RunStatus } from './vscode/editor/run-status';
 import { TransactionModes } from './vscode/editor/transaction-modes';
 import { TransactionStatus } from './vscode/editor/transaction-status';
 import {
+  createRedisKeySettings,
   createSettings,
   readHistoryLimit,
   readPageSize,
@@ -46,6 +47,7 @@ import {
   readTransactionMode,
 } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
+import { RedisKeyBrowser } from './services/redis/key-browser';
 import type { TableNode } from './vscode/tree/nodes';
 import { ConnectionDecorations } from './vscode/tree/connection-decorations';
 import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
@@ -246,15 +248,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const settings = createSettings();
   const decorations = new ConnectionDecorations(store);
   context.subscriptions.push(decorations);
-  const tree = new ConnectionsTreeProvider({ store, projects, manager, cache, settings, logger });
+  const redisKeySettings = createRedisKeySettings();
+  const redisKeys = new RedisKeyBrowser({ manager, settings: redisKeySettings, logger });
+  const tree = new ConnectionsTreeProvider({
+    store,
+    projects,
+    manager,
+    cache,
+    settings,
+    logger,
+    redisKeys,
+    redisKeySeparator: () => redisKeySettings.separator(),
+  });
+  const treeView = vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
+    treeDataProvider: tree,
+    showCollapseAll: true,
+    canSelectMany: true,
+    dragAndDropController: new ConnectionsDragAndDrop(store, logger),
+  });
   context.subscriptions.push(
     tree,
-    vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
-      treeDataProvider: tree,
-      showCollapseAll: true,
-      canSelectMany: true,
-      dragAndDropController: new ConnectionsDragAndDrop(store, logger),
-    }),
+    treeView,
     vscode.window.registerFileDecorationProvider(decorations),
   );
 
@@ -282,6 +296,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       reloadProjects: () => projects.reloadAll(),
       transactions,
       transactionModes,
+      redisKeys,
+      treeView,
+      redisKeySeparator: () => redisKeySettings.separator(),
     }),
   );
 

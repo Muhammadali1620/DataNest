@@ -11,6 +11,8 @@ import type {
   RedisReply,
   RedisSession,
   ResolvedRedisConfig,
+  ScanOptions,
+  ScanStep,
 } from '../redis-driver';
 import { isReplyError, toRedisDbError } from './errors';
 import { redisTarget } from './options';
@@ -121,6 +123,34 @@ class IoredisSession implements RedisSession {
     } catch (error) {
       throw this.failure(error);
     }
+  }
+
+  async scanStep(master: number, cursor: string, options: ScanOptions): Promise<ScanStep> {
+    const nodes = this.client instanceof Cluster ? this.client.nodes('master') : [this.client];
+    const node = nodes[master];
+    if (node === undefined) {
+      return { cursor: '0', keys: [], masters: nodes.length };
+    }
+    const args = [
+      cursor,
+      ...(options.match === undefined ? [] : ['MATCH', options.match]),
+      'COUNT',
+      String(options.count),
+    ];
+    let reply: unknown;
+    try {
+      reply = await node.callBuffer('SCAN', ...args);
+    } catch (error) {
+      throw this.failure(error);
+    }
+    const [next, keys] = Array.isArray(reply) ? (reply as unknown[]) : [];
+    return {
+      cursor: next instanceof Uint8Array ? Buffer.from(next).toString('latin1') : '0',
+      keys: Array.isArray(keys)
+        ? keys.filter((key): key is Buffer => key instanceof Uint8Array)
+        : [],
+      masters: nodes.length,
+    };
   }
 
   async close(): Promise<void> {

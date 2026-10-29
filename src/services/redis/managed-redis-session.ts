@@ -4,7 +4,13 @@
 // a quiet spell (V4.9) — `SELECT 1` would switch the database in Redis.
 
 import { toDbError } from '../../core/errors';
-import type { RedisCommand, RedisReply, RedisSession } from '../../drivers/redis-driver';
+import type {
+  RedisCommand,
+  RedisReply,
+  RedisSession,
+  ScanOptions,
+  ScanStep,
+} from '../../drivers/redis-driver';
 import type { RedisMode } from '../../shared/connection';
 
 export interface ManagedRedisSessionHooks {
@@ -52,6 +58,10 @@ export class ManagedRedisSession implements RedisSession {
 
   async onMasters(command: RedisCommand): Promise<RedisReply[]> {
     return await this.watch(() => this.inner.onMasters(command));
+  }
+
+  async scanStep(master: number, cursor: string, options: ScanOptions): Promise<ScanStep> {
+    return await this.watch(() => this.inner.scanStep(master, cursor, options));
   }
 
   async close(): Promise<void> {

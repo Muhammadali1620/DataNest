@@ -3,6 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
+import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import { PROJECT_FILE_PATH } from '../../services/project-connections';
 import { type ConnectionConfig, describeTarget, describeTunnel } from '../../shared/connection';
 import { affectsDataNest } from '../settings';
@@ -25,6 +26,10 @@ export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
 export interface ConnectionsTreeDeps {
   readonly store: ConnectionStore;
+  /** The loaded keys of Redis databases (V7.2). */
+  readonly redisKeys?: RedisKeyBrowser;
+  /** `datanest.redis.keySeparator`. */
+  readonly redisKeySeparator?: () => string;
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
   readonly settings: TreeSettings;
@@ -50,6 +55,10 @@ export class ConnectionsTreeProvider
       ...(deps.projects === undefined ? {} : { projects: deps.projects }),
       manager: deps.manager,
       cache: deps.cache,
+      ...(deps.redisKeys === undefined ? {} : { redisKeys: deps.redisKeys }),
+      ...(deps.redisKeySeparator === undefined
+        ? {}
+        : { redisKeySeparator: deps.redisKeySeparator }),
       settings: deps.settings,
       logger: deps.logger,
       texts: {
@@ -70,6 +79,10 @@ export class ConnectionsTreeProvider
         noViews: vscode.l10n.t('No views'),
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
+        noKeys: (pattern) =>
+          pattern === undefined
+            ? vscode.l10n.t('No keys')
+            : vscode.l10n.t('No keys match {0}', pattern),
         redisKeys: (count) =>
           count === 1 ? vscode.l10n.t('1 key') : vscode.l10n.t('{0} keys', count.toLocaleString()),
         hiddenByFilter: (count) => vscode.l10n.t('{0} more hidden by the filter', count),
@@ -99,6 +112,12 @@ export class ConnectionsTreeProvider
       deps.manager.onDidChangeState((connectionId) => {
         // A connection that dropped or reconnected may have a different structure.
         deps.cache.invalidate(connectionId);
+        // Keys loaded over a link that is gone may be stale; a connect itself keeps
+        // them, or the first expansion would load twice.
+        const status = deps.manager.getState(connectionId).status;
+        if (status === 'disconnected' || status === 'error') {
+          deps.redisKeys?.reset(connectionId);
+        }
         // Status decorations live on connection items, which sit at the root.
         this.refresh();
       }),
@@ -194,12 +213,58 @@ export class ConnectionsTreeProvider
       case 'redisDatabase': {
         const item = new vscode.TreeItem(
           `db${node.database}`,
-          vscode.TreeItemCollapsibleState.None,
+          vscode.TreeItemCollapsibleState.Collapsed,
         );
         item.id = nodeId(node);
         item.iconPath = new vscode.ThemeIcon('database');
         item.contextValue = TREE_CONTEXT.redisDatabase;
-        item.description = this.model.redisKeysText(node.keys);
+        const pattern = this.deps.redisKeys?.patternOf(node.connectionId, node.database);
+        const count = this.model.redisKeysText(node.keys);
+        item.description = pattern === undefined ? count : `${count} · ${pattern}`;
+        item.tooltip =
+          pattern === undefined ? undefined : vscode.l10n.t('Only keys that match {0}', pattern);
+        return item;
+      }
+      case 'redisFolder': {
+        // An empty segment (`a::b`) would leave the item without a label.
+        const name = node.path.at(-1) ?? '';
+        const item = new vscode.TreeItem(
+          name === '' ? '""' : name,
+          vscode.TreeItemCollapsibleState.Collapsed,
+        );
+        item.id = nodeId(node);
+        item.iconPath = vscode.ThemeIcon.Folder;
+        item.description = node.count.toLocaleString();
+        item.tooltip = vscode.l10n.t('{0} keys loaded under {1}', node.count, node.prefix);
+        item.contextValue = TREE_CONTEXT.redisFolder;
+        return item;
+      }
+      case 'redisKey': {
+        const item = new vscode.TreeItem(
+          node.name === '' ? node.key.text : node.name,
+          vscode.TreeItemCollapsibleState.None,
+        );
+        item.id = nodeId(node);
+        item.iconPath = new vscode.ThemeIcon(redisTypeIcon(node.keyType));
+        item.description = node.keyType;
+        item.tooltip = node.key.text;
+        item.contextValue = TREE_CONTEXT.redisKey;
+        return item;
+      }
+      case 'redisMore': {
+        const item = new vscode.TreeItem(
+          vscode.l10n.t('Load more keys…'),
+          vscode.TreeItemCollapsibleState.None,
+        );
+        item.id = nodeId(node);
+        item.iconPath = new vscode.ThemeIcon('ellipsis');
+        item.description = vscode.l10n.t('{0} loaded', node.loaded.toLocaleString());
+        item.contextValue = TREE_CONTEXT.redisMore;
+        item.command = {
+          command: 'datanest.redis.loadMoreKeys',
+          title: vscode.l10n.t('Load more keys'),
+          arguments: [node],
+        };
         return item;
       }
       case 'message': {
@@ -219,6 +284,11 @@ export class ConnectionsTreeProvider
 
   async getChildren(node?: TreeNode): Promise<TreeNode[]> {
     return node === undefined ? this.model.roots() : await this.model.children(node);
+  }
+
+  /** Lets a found Redis key be revealed (V7.2). */
+  getParent(node: TreeNode): TreeNode | undefined {
+    return this.model.parentOf(node);
   }
 
   dispose(): void {
@@ -313,6 +383,28 @@ function connectionIcon(
       return new vscode.ThemeIcon('database', new vscode.ThemeColor('list.errorForeground'));
     case 'disconnected':
       return new vscode.ThemeIcon('database');
+  }
+}
+
+/** Codicons per Redis type; a module's own type (JSON, time series) gets a generic one. */
+function redisTypeIcon(type: string | undefined): string {
+  switch (type) {
+    case 'string':
+      return 'symbol-string';
+    case 'hash':
+      return 'symbol-structure';
+    case 'list':
+      return 'list-ordered';
+    case 'set':
+      return 'symbol-array';
+    case 'zset':
+      return 'list-filter';
+    case 'stream':
+      return 'pulse';
+    case undefined:
+      return 'key';
+    default:
+      return 'extensions';
   }
 }
 

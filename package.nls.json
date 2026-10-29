@@ -96,5 +96,10 @@
   "commands.table.importData.title": "Import Data from File…",
   "commands.table.exportData.title": "Export Data…",
   "commands.table.generateData.title": "Generate Test Data…",
-  "commands.table.transfer.title": "Copy to Another Connection…"
+  "commands.table.transfer.title": "Copy to Another Connection…",
+  "commands.redis.loadMoreKeys.title": "Load More Keys",
+  "commands.redis.filterKeys.title": "Filter Keys…",
+  "commands.redis.findKey.title": "Find Redis Key…",
+  "configuration.redis.keySeparator.description": "What splits Redis key names into folders in the tree, e.g. `user:1:name` → `user` → `1`. Empty: no folders.",
+  "configuration.redis.keysPerLoad.description": "How many Redis keys the tree loads at a time with `SCAN`; a **Load more keys** item brings the next portion."
 }

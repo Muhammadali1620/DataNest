@@ -358,3 +358,48 @@ describe('Redis nodes (V7.1)', () => {
     );
   });
 });
+
+describe('Redis key nodes (V7.2)', () => {
+  const folder: TreeNode = {
+    kind: 'redisFolder',
+    connectionId: 'c1',
+    database: 0,
+    path: ['user', '1'],
+    prefix: 'user:1:',
+    count: 2,
+  };
+  const key: TreeNode = {
+    kind: 'redisKey',
+    connectionId: 'c1',
+    database: 0,
+    key: { text: 'user:1:name' },
+    name: 'name',
+    keyType: 'string',
+  };
+  const binary: TreeNode = { ...key, key: { text: 'user:1:name', hex: '75' } };
+  const more: TreeNode = { kind: 'redisMore', connectionId: 'c1', database: 0, loaded: 5 };
+
+  it('gives every node an id that survives a changed count or type', () => {
+    expect(nodeId(folder)).toBe(nodeId({ ...folder, count: 9 }));
+    expect(nodeId(key)).toBe(nodeId({ ...key, keyType: 'hash' }));
+    expect(nodeId(more)).toBe(nodeId({ ...more, loaded: 10 }));
+    expect(new Set([nodeId(folder), nodeId(key), nodeId(binary), nodeId(more)]).size).toBe(4);
+    // A folder path is not confused with a name that holds the separator.
+    expect(nodeId(folder)).not.toBe(nodeId({ ...folder, path: ['user:1'] }));
+  });
+
+  it('copies the full key name, or the prefix of a folder', () => {
+    expect(nameOf(key)).toBe('user:1:name');
+    expect(nameOf(folder)).toBe('user:1:');
+    expect(nameOf(more)).toBeUndefined();
+  });
+
+  it('is a tree node of a connection, with no SQL scope or definition', () => {
+    for (const node of [folder, key, more]) {
+      expect(isTreeNode(node)).toBe(true);
+      expect(connectionIdOf(node)).toBe('c1');
+      expect(scopeOf(node)).toEqual({});
+      expect(objectRefOf(node)).toBeUndefined();
+    }
+  });
+});

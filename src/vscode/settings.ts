@@ -5,6 +5,7 @@ import { DEFAULT_FORMAT_STYLE, type FormatStyle } from '../services/sql-format';
 import { CONFIG_KEYS, CONFIG_SECTION } from './command-ids';
 import { isTransactionMode, type TransactionMode } from './editor/transaction-modes';
 import type { TreeSettings } from './tree/tree-model';
+import type { KeyBrowserSettings } from '../services/redis/key-browser';
 
 /**
  * Reads DataNest settings on every call, so a change in the editor takes effect
@@ -16,6 +17,25 @@ export function createSettings(): TreeSettings {
       vscode.workspace
         .getConfiguration(CONFIG_SECTION)
         .get<boolean>(CONFIG_KEYS.showSystemObjects, false),
+  };
+}
+
+/** The default of `datanest.redis.keysPerLoad`. */
+export const DEFAULT_REDIS_KEYS_PER_LOAD = 5000;
+
+/** What the Redis key tree reads (V7.2), asked at every load. */
+export function createRedisKeySettings(): KeyBrowserSettings {
+  const config = (): vscode.WorkspaceConfiguration =>
+    vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return {
+    separator: () => {
+      const value = config().get<string>(CONFIG_KEYS.redisKeySeparator, ':');
+      return typeof value === 'string' ? value : ':';
+    },
+    keysPerLoad: () => {
+      const value = config().get<number>(CONFIG_KEYS.redisKeysPerLoad, DEFAULT_REDIS_KEYS_PER_LOAD);
+      return Number.isInteger(value) && value > 0 ? value : DEFAULT_REDIS_KEYS_PER_LOAD;
+    },
   };
 }
 

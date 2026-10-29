@@ -70,6 +70,9 @@ describe('connections view', () => {
       'datanest.table.generateInsert',
       'datanest.table.generateUpdate',
       'datanest.table.generateDelete',
+      'datanest.redis.loadMoreKeys',
+      'datanest.redis.filterKeys',
+      'datanest.redis.findKey',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -106,6 +109,11 @@ describe('connections view', () => {
     ]) {
       await vscode.commands.executeCommand(id);
     }
+  });
+
+  it('loading more Redis keys without a node does nothing', async () => {
+    // The command belongs to the "Load more keys" item; from elsewhere there is none.
+    await vscode.commands.executeCommand('datanest.redis.loadMoreKeys');
   });
 
   it('refreshing the whole tree works without a selected node', async () => {

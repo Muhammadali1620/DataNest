@@ -12,6 +12,7 @@ import type {
   TableKind,
   TableRef,
 } from '../../core/model/objects';
+import { type RedisKeyRef, redisKeyId } from '../../shared/redis-key';
 
 /** The view id the tree is registered under; `package.json` must declare the same. */
 export const CONNECTIONS_VIEW_ID = 'datanest.connections';
@@ -37,6 +38,11 @@ export const TREE_CONTEXT = {
   projectRedisConnectionConnected: 'datanest.projectRedisConnection.connected',
   /** A numbered Redis database. */
   redisDatabase: 'datanest.redisDatabase',
+  /** A group of Redis keys sharing a prefix (V7.2). */
+  redisFolder: 'datanest.redisFolder',
+  redisKey: 'datanest.redisKey',
+  /** "Load more keys" at the end of a database that SCAN has not walked yet. */
+  redisMore: 'datanest.redisMore',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -178,6 +184,39 @@ export interface RedisDatabaseNode {
   readonly keys: number;
 }
 
+/** Keys of a Redis database that share a prefix: `user:` holds `user:1`, `user:2` (V7.2). */
+export interface RedisFolderNode {
+  readonly kind: 'redisFolder';
+  readonly connectionId: string;
+  readonly database: number;
+  /** Segments from the top, this folder's last. */
+  readonly path: readonly string[];
+  /** The prefix with its separator, e.g. `user:`: what "copy name" copies. */
+  readonly prefix: string;
+  /** Loaded keys below it. */
+  readonly count: number;
+}
+
+export interface RedisKeyNode {
+  readonly kind: 'redisKey';
+  readonly connectionId: string;
+  readonly database: number;
+  readonly key: RedisKeyRef;
+  /** The last segment, shown inside its folder. */
+  readonly name: string;
+  /** `string`, `hash`, …; absent when the server did not say. */
+  readonly keyType?: string;
+}
+
+/** The leaf after the keys of a database that SCAN has not walked to the end. */
+export interface RedisMoreNode {
+  readonly kind: 'redisMore';
+  readonly connectionId: string;
+  readonly database: number;
+  /** Keys loaded so far. */
+  readonly loaded: number;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -204,6 +243,9 @@ export type TreeNode =
   | IndexNode
   | ForeignKeyNode
   | RedisDatabaseNode
+  | RedisFolderNode
+  | RedisKeyNode
+  | RedisMoreNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -230,6 +272,9 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'connectionFolder':
     case 'connection':
     case 'redisDatabase':
+    case 'redisFolder':
+    case 'redisKey':
+    case 'redisMore':
     case 'message':
       return {};
   }
@@ -312,6 +357,12 @@ export function nodeId(node: TreeNode): string {
       ]);
     case 'redisDatabase':
       return join(['redisDatabase', node.connectionId, String(node.database)]);
+    case 'redisFolder':
+      return join(['redisFolder', node.connectionId, String(node.database), ...node.path]);
+    case 'redisKey':
+      return join(['redisKey', node.connectionId, String(node.database), redisKeyId(node.key)]);
+    case 'redisMore':
+      return join(['redisMore', node.connectionId, String(node.database)]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -355,6 +406,9 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'index' ||
     kind === 'foreignKey' ||
     kind === 'redisDatabase' ||
+    kind === 'redisFolder' ||
+    kind === 'redisKey' ||
+    kind === 'redisMore' ||
     kind === 'message'
   );
 }
@@ -378,11 +432,16 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.key.name;
     case 'connectionFolder':
       return node.folder;
+    case 'redisKey':
+      return node.key.text;
+    case 'redisFolder':
+      return node.prefix;
     case 'project':
     case 'connection':
     case 'group':
     case 'folder':
     case 'redisDatabase':
+    case 'redisMore':
     case 'message':
       return undefined;
   }
@@ -424,6 +483,9 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'index':
     case 'foreignKey':
     case 'redisDatabase':
+    case 'redisFolder':
+    case 'redisKey':
+    case 'redisMore':
     case 'message':
       return undefined;
   }

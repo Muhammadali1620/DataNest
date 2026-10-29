@@ -48,6 +48,10 @@ import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
 import type { TransactionModes } from './editor/transaction-modes';
+import type { RedisKeyBrowser } from '../services/redis/key-browser';
+import { describeTarget } from '../shared/connection';
+import { keyNodeOf, redisKeyCommandHandlers } from './redis/redis-key-commands';
+import { pickRedisKey } from './redis/find-key';
 
 export interface CommandDeps {
   readonly logger: Logger;
@@ -76,6 +80,11 @@ export interface CommandDeps {
   /** The transaction of the active editor: its status and Commit/Rollback (V4.8). */
   readonly transactions: TransactionStatus;
   readonly transactionModes: TransactionModes;
+  /** The loaded keys of Redis databases (V7.2). */
+  readonly redisKeys: RedisKeyBrowser;
+  /** The Connections view, to reveal a key found by a search. */
+  readonly treeView: vscode.TreeView<TreeNode>;
+  readonly redisKeySeparator: () => string;
 }
 
 /** The items selected in the tree, which VS Code passes after the clicked one. */
@@ -164,10 +173,54 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       text,
     );
   };
+  const redisKeyCommands = redisKeyCommandHandlers({
+    browser: deps.redisKeys,
+    store: deps.store,
+    tree: deps.tree,
+    askPattern: async (current) =>
+      await vscode.window.showInputBox({
+        title: vscode.l10n.t('Filter Keys'),
+        prompt: vscode.l10n.t(
+          'A pattern: * any characters, ? one, [abc] one of them. Empty shows every key.',
+        ),
+        value: current ?? '',
+        placeHolder: 'user:*',
+      }),
+    pickConnection: async (ids) => {
+      const chosen = await vscode.window.showQuickPick(
+        ids.map((id) => {
+          const config = deps.store.get(id);
+          return {
+            label: config?.name ?? id,
+            description: config === undefined ? '' : describeTarget(config),
+            id,
+          };
+        }),
+        { placeHolder: vscode.l10n.t('Pick a Redis connection') },
+      );
+      return chosen?.id;
+    },
+    findKey: async (place, initial) =>
+      await pickRedisKey(deps.redisKeys, place, initial, deps.logger),
+    reveal: async (place, key) => {
+      await deps.treeView.reveal(keyNodeOf(place, key, deps.redisKeySeparator()), {
+        select: true,
+        focus: true,
+        expand: false,
+      });
+    },
+    noRedisMessage: vscode.l10n.t('There is no Redis connection yet'),
+  });
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
     tree: deps.tree,
-    cache: deps.cache,
+    // Refresh means "ask the server again", for SQL structure and Redis keys alike.
+    cache: {
+      invalidate: (connectionId?: string) => {
+        deps.cache.invalidate(connectionId);
+        deps.redisKeys.reset(connectionId);
+      },
+    },
     openTable: deps.openTable,
     showDefinition,
     clipboard: vscode.env.clipboard,
@@ -393,6 +446,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       deps.showResults(document.uri.toString());
       return undefined;
     },
+    [COMMAND_IDS.redisLoadMoreKeys]: redisKeyCommands.loadMoreKeys,
+    [COMMAND_IDS.redisFilterKeys]: redisKeyCommands.filterKeys,
+    [COMMAND_IDS.redisFindKey]: redisKeyCommands.findKey,
     [COMMAND_IDS.openPing]: () => {
       const panel = new PingPanel(deps.extensionUri, deps.logger);
       pings = [...pings.filter((open) => !open.isDisposed), panel];

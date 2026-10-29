@@ -10,6 +10,7 @@ import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
 import { browseSession } from '../../services/browse-session';
 import { ConnectionManager, redisDatabaseOf } from '../../services/connection-manager';
 import { listRedisDatabases } from '../../services/redis/redis-databases';
+import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { ProjectView } from '../../services/project-connections';
@@ -46,6 +47,8 @@ export interface TreeTexts {
   readonly noColumns: string;
   /** How many keys a Redis database holds (V7.1). */
   readonly redisKeys?: (count: number) => string;
+  /** A Redis database or folder without keys (V7.2); the filter when one is set. */
+  readonly noKeys?: (pattern: string | undefined) => string;
   /** The leaf after a list the connection's filter shortened (V4.10). */
   readonly hiddenByFilter?: (count: number) => string;
   /** What an empty folder says, per folder. */
@@ -65,6 +68,10 @@ export interface ProjectSource {
 
 export interface TreeModelDeps {
   readonly store: ConnectionStore;
+  /** The loaded keys of Redis databases (V7.2). */
+  readonly redisKeys?: RedisKeyBrowser;
+  /** `datanest.redis.keySeparator`, for the prefix a folder copies. */
+  readonly redisKeySeparator?: () => string;
   readonly projects?: ProjectSource;
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
@@ -76,6 +83,8 @@ export interface TreeModelDeps {
 export class TreeModel {
   private readonly deps: TreeModelDeps;
   private readonly logger: Logger;
+  /** Key counts of Redis databases as last listed, for nodes rebuilt as parents. */
+  private readonly redisCounts = new Map<string, number>();
 
   constructor(deps: TreeModelDeps) {
     this.deps = deps;
@@ -191,13 +200,62 @@ export class TreeModel {
         return await this.tableChildren(node);
       case 'folder':
         return await this.folderChildren(node);
+      case 'redisDatabase':
+        return await this.redisKeyChildren(node.connectionId, node.database, []);
+      case 'redisFolder':
+        return await this.redisKeyChildren(node.connectionId, node.database, node.path);
       case 'column':
       case 'object':
       case 'index':
       case 'foreignKey':
-      case 'redisDatabase':
+      case 'redisKey':
+      case 'redisMore':
       case 'message':
         return [];
+    }
+  }
+
+  /**
+   * The parent of a Redis node, so a key found by a search can be revealed in the
+   * tree (V7.2); other nodes are never revealed and have none.
+   */
+  parentOf(node: TreeNode): TreeNode | undefined {
+    switch (node.kind) {
+      case 'redisKey':
+      case 'redisFolder': {
+        const path =
+          node.kind === 'redisKey'
+            ? (this.deps.redisKeys?.folderOf(node.connectionId, node.database, node.key) ?? [])
+            : node.path.slice(0, -1);
+        return path.length === 0
+          ? this.redisDatabaseNode(node.connectionId, node.database)
+          : this.redisFolderNode(node.connectionId, node.database, path, 0);
+      }
+      case 'redisMore':
+        return this.redisDatabaseNode(node.connectionId, node.database);
+      case 'redisDatabase':
+        return { kind: 'connection', connectionId: node.connectionId };
+      case 'connection': {
+        const project = this.deps.store.projectOf(node.connectionId);
+        if (project !== undefined) {
+          return { kind: 'project', key: project.key, name: project.name };
+        }
+        const folder = this.deps.store.get(node.connectionId)?.folder;
+        return folder === undefined ? undefined : { kind: 'connectionFolder', folder };
+      }
+      case 'project':
+      case 'connectionFolder':
+      case 'database':
+      case 'schema':
+      case 'group':
+      case 'table':
+      case 'column':
+      case 'folder':
+      case 'object':
+      case 'index':
+      case 'foreignKey':
+      case 'message':
+        return undefined;
     }
   }
 
@@ -245,12 +303,77 @@ export class TreeModel {
       { connectionId },
     );
     const databases = await listRedisDatabases(session, opened);
-    return databases.map((database) => ({
+    for (const database of databases) {
+      this.redisCounts.set(`${connectionId}\u0000${database.index}`, database.keys);
+    }
+    return databases.map((database) =>
+      this.redisDatabaseNode(connectionId, database.index, database.keys),
+    );
+  }
+
+  private redisDatabaseNode(connectionId: string, database: number, keys?: number): TreeNode {
+    return {
       kind: 'redisDatabase',
       connectionId,
-      database: database.index,
-      keys: database.keys,
-    }));
+      database,
+      keys: keys ?? this.redisCounts.get(`${connectionId}\u0000${database}`) ?? 0,
+    };
+  }
+
+  private redisFolderNode(
+    connectionId: string,
+    database: number,
+    path: readonly string[],
+    count: number,
+  ): TreeNode {
+    const separator = this.deps.redisKeys === undefined ? ':' : this.separatorOf();
+    return {
+      kind: 'redisFolder',
+      connectionId,
+      database,
+      path,
+      prefix: `${path.join(separator)}${separator}`,
+      count,
+    };
+  }
+
+  private separatorOf(): string {
+    return this.deps.redisKeySeparator?.() ?? ':';
+  }
+
+  /** Folders, then keys, then "load more" while SCAN has not reached the end (V7.2). */
+  private async redisKeyChildren(
+    connectionId: string,
+    database: number,
+    path: readonly string[],
+  ): Promise<TreeNode[]> {
+    const browser = this.deps.redisKeys;
+    if (browser === undefined) {
+      return [];
+    }
+    const listing = await browser.children(connectionId, database, path);
+    const nodes: TreeNode[] = [
+      ...listing.folders.map((folder) =>
+        this.redisFolderNode(connectionId, database, folder.path, folder.count),
+      ),
+      ...listing.keys.map((leaf): TreeNode => ({
+        kind: 'redisKey',
+        connectionId,
+        database,
+        key: leaf.entry.key,
+        name: leaf.name,
+        ...(leaf.entry.type === undefined ? {} : { keyType: leaf.entry.type }),
+      })),
+    ];
+    if (path.length > 0) {
+      return nodes;
+    }
+    if (listing.more) {
+      nodes.push({ kind: 'redisMore', connectionId, database, loaded: listing.loaded });
+    } else if (nodes.length === 0 && this.deps.texts.noKeys !== undefined) {
+      nodes.push({ kind: 'message', text: this.deps.texts.noKeys(listing.pattern), connectionId });
+    }
+    return nodes;
   }
 
   /** "N hidden by the filter", so a missing database does not look like a lost one. */

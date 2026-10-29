@@ -13,7 +13,8 @@ import {
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
 import { FakeDriverProvider, linkLostError } from '../../../helpers/fake-driver';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helpers/fakes';
-import { bulk, FakeRedisDriver } from '../../../helpers/fake-redis';
+import { bulk, FakeRedisDriver, type FakeRedisSession } from '../../../helpers/fake-redis';
+import { RedisKeyBrowser } from '../../../../src/services/redis/key-browser';
 
 const TEXTS: TreeTexts = {
   emptyFolder: 'Drag here',
@@ -857,5 +858,198 @@ describe('TreeModel with Redis (V7.1)', () => {
       texts: TEXTS,
     });
     expect(bare.redisKeysText(5)).toBe('5');
+  });
+});
+
+describe('TreeModel with Redis keys (V7.2)', () => {
+  async function setup(keys: string[], perLoad = 5000) {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const redis = new FakeRedisDriver((words) =>
+      words[0] === 'TYPE' ? bulk(words[1]?.startsWith('hash:') ? 'hash' : 'string') : null,
+    );
+    const drivers = Object.assign(new FakeDriverProvider(), {
+      getRedis: () => Promise.resolve(redis),
+    });
+    const manager = new ConnectionManager({ store, drivers, logger });
+    const original = redis.openSession.bind(redis);
+    redis.openSession = async (config) => {
+      const session = (await original(config)) as FakeRedisSession;
+      session.keyspace = [keys];
+      return session;
+    };
+    const redisKeys = new RedisKeyBrowser({
+      manager,
+      settings: { separator: () => ':', keysPerLoad: () => perLoad },
+      logger,
+    });
+    const model = new TreeModel({
+      store,
+      manager,
+      cache: new MetadataCache({ logger }),
+      settings: { showSystemObjects: () => false },
+      logger,
+      texts: {
+        ...TEXTS,
+        noKeys: (pattern) => (pattern === undefined ? 'No keys' : `None match ${pattern}`),
+      },
+      redisKeys,
+      redisKeySeparator: () => ':',
+    });
+    const cache = await store.add({ name: 'Cache', driver: 'redis', host: 'h' });
+    const database = {
+      kind: 'redisDatabase',
+      connectionId: cache.id,
+      database: 0,
+      keys: 0,
+    } as const;
+    return { model, cache, redisKeys, database, store };
+  }
+
+  it('shows folders, then keys, below a database', async () => {
+    const { model, cache, database } = await setup(['user:1', 'user:2', 'hits']);
+    expect(await model.children(database)).toEqual([
+      {
+        kind: 'redisFolder',
+        connectionId: cache.id,
+        database: 0,
+        path: ['user'],
+        prefix: 'user:',
+        count: 2,
+      },
+      {
+        kind: 'redisKey',
+        connectionId: cache.id,
+        database: 0,
+        key: { text: 'hits' },
+        name: 'hits',
+        keyType: 'string',
+      },
+    ]);
+    expect(
+      await model.children({
+        kind: 'redisFolder',
+        connectionId: cache.id,
+        database: 0,
+        path: ['user'],
+        prefix: 'user:',
+        count: 2,
+      }),
+    ).toEqual([
+      {
+        kind: 'redisKey',
+        connectionId: cache.id,
+        database: 0,
+        key: { text: 'user:1' },
+        name: '1',
+        keyType: 'string',
+      },
+      {
+        kind: 'redisKey',
+        connectionId: cache.id,
+        database: 0,
+        key: { text: 'user:2' },
+        name: '2',
+        keyType: 'string',
+      },
+    ]);
+  });
+
+  it('ends a database with "load more" while SCAN has not reached the end', async () => {
+    const keys = Array.from({ length: 1500 }, (_value, index) => `k${index}`);
+    const { model, cache, database } = await setup(keys, 1000);
+    const children = await model.children(database);
+    expect(children.at(-1)).toEqual({
+      kind: 'redisMore',
+      connectionId: cache.id,
+      database: 0,
+      loaded: 1000,
+    });
+  });
+
+  it('says when there are no keys, naming the filter', async () => {
+    const { model, cache, database, redisKeys } = await setup([]);
+    expect(await model.children(database)).toEqual([
+      { kind: 'message', text: 'No keys', connectionId: cache.id },
+    ]);
+    redisKeys.setPattern(cache.id, 0, 'x*');
+    expect(await model.children(database)).toEqual([
+      { kind: 'message', text: 'None match x*', connectionId: cache.id },
+    ]);
+  });
+
+  it('has nothing below a key or "load more"', async () => {
+    const { model, cache } = await setup(['a']);
+    expect(
+      await model.children({ kind: 'redisMore', connectionId: cache.id, database: 0, loaded: 1 }),
+    ).toEqual([]);
+    expect(
+      await model.children({
+        kind: 'redisKey',
+        connectionId: cache.id,
+        database: 0,
+        key: { text: 'a' },
+        name: 'a',
+      }),
+    ).toEqual([]);
+  });
+
+  it('knows the parents of a key, up to the connection folder, for reveal', async () => {
+    const { model, cache, database, store } = await setup(['user:1:name']);
+    await model.children(database);
+    const key = {
+      kind: 'redisKey',
+      connectionId: cache.id,
+      database: 0,
+      key: { text: 'user:1:name' },
+      name: 'name',
+    } as const;
+    const folder = model.parentOf(key);
+    expect(folder).toEqual({
+      kind: 'redisFolder',
+      connectionId: cache.id,
+      database: 0,
+      path: ['user', '1'],
+      prefix: 'user:1:',
+      count: 0,
+    });
+    const top = folder === undefined ? undefined : model.parentOf(folder);
+    expect(top).toMatchObject({ kind: 'redisFolder', path: ['user'] });
+    const db = top === undefined ? undefined : model.parentOf(top);
+    expect(db).toMatchObject({ kind: 'redisDatabase', database: 0 });
+    expect(db === undefined ? undefined : model.parentOf(db)).toEqual({
+      kind: 'connection',
+      connectionId: cache.id,
+    });
+    expect(model.parentOf({ kind: 'connection', connectionId: cache.id })).toBeUndefined();
+    await store.createFolder('Work');
+    await store.moveConnections([cache.id], { folder: 'Work' });
+    expect(model.parentOf({ kind: 'connection', connectionId: cache.id })).toEqual({
+      kind: 'connectionFolder',
+      folder: 'Work',
+    });
+    expect(
+      model.parentOf({ kind: 'redisMore', connectionId: cache.id, database: 2, loaded: 0 }),
+    ).toMatchObject({ kind: 'redisDatabase', database: 2 });
+    expect(
+      model.parentOf({ kind: 'database', connectionId: cache.id, database: 'x' }),
+    ).toBeUndefined();
+  });
+
+  it('remembers the key count of a database it listed, for parents', async () => {
+    const { model, cache } = await setup(['a']);
+    await model.children({ kind: 'connection', connectionId: cache.id });
+    expect(
+      model.parentOf({ kind: 'redisMore', connectionId: cache.id, database: 0, loaded: 0 }),
+    ).toEqual({
+      kind: 'redisDatabase',
+      connectionId: cache.id,
+      database: 0,
+      keys: 0,
+    });
   });
 });

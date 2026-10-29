@@ -382,5 +382,20 @@
   "into tables that are already there": "в уже существующие таблицы",
   "into the columns both tables have": "в колонки, которые есть в обеих таблицах",
   "1 key": "1 ключ",
-  "{0} keys": "ключей: {0}"
+  "{0} keys": "ключей: {0}",
+  "Filter Keys": "Фильтр ключей",
+  "A pattern: * any characters, ? one, [abc] one of them. Empty shows every key.": "Шаблон: * — любые символы, ? — один, [abc] — один из них. Пусто — все ключи.",
+  "Pick a Redis connection": "Выберите подключение Redis",
+  "There is no Redis connection yet": "Подключений Redis пока нет",
+  "Find a key in db{0}": "Найти ключ в db{0}",
+  "Part of the name, or a pattern such as user:*:name": "Часть имени или шаблон, например user:*:name",
+  "$(info) Not every key was looked at: type more of the name": "$(info) Просмотрены не все ключи: уточните имя",
+  "$(info) No key matches": "$(info) Подходящих ключей нет",
+  "No keys": "Ключей нет",
+  "No keys match {0}": "Нет ключей по шаблону {0}",
+  "Only keys that match {0}": "Только ключи по шаблону {0}",
+  "{0} keys loaded under {1}": "Загружено ключей в {1}: {0}",
+  "Load more keys…": "Загрузить ещё ключи…",
+  "{0} loaded": "загружено: {0}",
+  "Load more keys": "Загрузить ещё ключи"
 }

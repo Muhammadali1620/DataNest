@@ -96,5 +96,10 @@
   "commands.table.importData.title": "Импортировать данные из файла…",
   "commands.table.exportData.title": "Экспортировать данные…",
   "commands.table.generateData.title": "Сгенерировать тестовые данные…",
-  "commands.table.transfer.title": "Скопировать в другое подключение…"
+  "commands.table.transfer.title": "Скопировать в другое подключение…",
+  "commands.redis.loadMoreKeys.title": "Загрузить ещё ключи",
+  "commands.redis.filterKeys.title": "Фильтр ключей…",
+  "commands.redis.findKey.title": "Найти ключ Redis…",
+  "configuration.redis.keySeparator.description": "Чем имена ключей Redis делятся на папки в дереве, например `user:1:name` → `user` → `1`. Пусто — без папок.",
+  "configuration.redis.keysPerLoad.description": "Сколько ключей Redis дерево загружает за раз через `SCAN`; пункт **Загрузить ещё ключи** приносит следующую порцию."
 }

@@ -101,6 +101,12 @@ export const COMMAND_IDS = {
   showHistory: 'datanest.history.show',
   /** Finds a table, view or routine in every connected connection. */
   searchObjects: 'datanest.objects.search',
+  /** Brings the next portion of a Redis database's keys into the tree (V7.2). */
+  redisLoadMoreKeys: 'datanest.redis.loadMoreKeys',
+  /** Shows only the keys of a Redis database that match a glob. */
+  redisFilterKeys: 'datanest.redis.filterKeys',
+  /** Finds a Redis key with SCAN and shows it in the tree. */
+  redisFindKey: 'datanest.redis.findKey',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;
@@ -143,4 +149,8 @@ export const CONFIG_KEYS = {
   formatLogicalOperatorNewline: 'format.logicalOperatorNewline',
   formatExpressionWidth: 'format.expressionWidth',
   formatDenseOperators: 'format.denseOperators',
+  /** What splits Redis key names into folders (V7.2). */
+  redisKeySeparator: 'redis.keySeparator',
+  /** How many Redis keys the tree loads at a time. */
+  redisKeysPerLoad: 'redis.keysPerLoad',
 } as const;

@@ -7,6 +7,8 @@ import type {
   RedisReply,
   RedisSession,
   ResolvedRedisConfig,
+  ScanOptions,
+  ScanStep,
 } from '../../src/drivers/redis-driver';
 import type { RedisMode } from '../../src/shared/connection';
 
@@ -28,6 +30,12 @@ export class FakeRedisSession implements RedisSession {
   closed = false;
   /** Replies of `onMasters`, one per master; by default the one `call` gives. */
   masters: ((words: string[]) => RedisReply[]) | undefined;
+  /** The keys `scanStep` walks, per master; the cursor is a position in the list. */
+  keyspace: string[][] = [[]];
+  /** Every scan step asked for: master, cursor, match, count. */
+  readonly scans: { master: number; cursor: string; match?: string; count: number }[] = [];
+  /** Thrown by scanStep() when set. */
+  scanError: Error | undefined;
 
   constructor(
     private readonly answer: FakeRedisAnswer = () => bulk('OK'),
@@ -72,10 +80,62 @@ export class FakeRedisSession implements RedisSession {
     return [await this.call(command)];
   }
 
+  async scanStep(master: number, cursor: string, options: ScanOptions): Promise<ScanStep> {
+    this.scans.push({
+      master,
+      cursor,
+      ...(options.match === undefined ? {} : { match: options.match }),
+      count: options.count,
+    });
+    if (this.scanError !== undefined) {
+      throw this.scanError;
+    }
+    const keys = this.keyspace[master] ?? [];
+    const start = Number(cursor);
+    const end = Math.min(keys.length, start + options.count);
+    const pattern = options.match === undefined ? undefined : globRegex(options.match);
+    return await Promise.resolve({
+      cursor: end >= keys.length ? '0' : String(end),
+      keys: keys
+        .slice(start, end)
+        .filter((key) => pattern === undefined || pattern.test(key))
+        .map(bulk),
+      masters: this.keyspace.length,
+    });
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     await Promise.resolve();
   }
+}
+
+/** Redis glob (`*`, `?`, `[…]`, `\\x`) as a regular expression, enough for the fakes. */
+export function globRegex(glob: string): RegExp {
+  let source = '';
+  for (let index = 0; index < glob.length; index++) {
+    const char = glob[index] ?? '';
+    if (char === '\\' && index + 1 < glob.length) {
+      source += (glob[++index] ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    } else if (char === '*') {
+      source += '.*';
+    } else if (char === '?') {
+      source += '.';
+    } else if (char === '[') {
+      const end = glob.indexOf(']', index);
+      source +=
+        end === -1
+          ? '\\['
+          : glob
+              .slice(index, end + 1)
+              .replace('[^', '[^')
+              .replace('[!', '[^');
+      index = end === -1 ? index : end;
+    } else {
+      source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return new RegExp(`^${source}$`, 's');
 }
 
 /** A Redis driver that opens fake sessions and remembers what it was asked. */

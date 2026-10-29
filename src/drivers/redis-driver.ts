@@ -61,8 +61,28 @@ export interface RedisSession {
    * e.g. `DBSIZE` of a cluster. A server or a Sentinel's master has one.
    */
   onMasters(command: RedisCommand): Promise<RedisReply[]>;
+  /**
+   * One `SCAN` step on one master: index 0 for a server, each master of a cluster in
+   * turn (V7.2). Never blocks the server: each step looks at about `count` keys.
+   */
+  scanStep(master: number, cursor: string, options: ScanOptions): Promise<ScanStep>;
   /** Closes the connection; the session is unusable afterwards. */
   close(): Promise<void>;
+}
+
+export interface ScanOptions {
+  /** A glob pattern (`user:*`); all keys when absent. */
+  readonly match?: string;
+  /** How many keys the server looks at in one step; a hint, not a limit. */
+  readonly count: number;
+}
+
+export interface ScanStep {
+  /** The cursor of the next step on this master; `'0'` when it is done. */
+  readonly cursor: string;
+  readonly keys: readonly Uint8Array[];
+  /** How many masters hold keys: one for a server, each master of a cluster. */
+  readonly masters: number;
 }
 
 /** Opens Redis sessions; holds no connections itself. */

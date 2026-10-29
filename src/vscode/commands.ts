@@ -30,6 +30,8 @@ import { filterCommandHandlers } from './tree/filter-commands';
 import { transferCommandHandlers } from './connection-transfer-commands';
 import { scriptCommandHandlers } from './script-commands';
 import { dumpCommandHandlers } from './dump-commands';
+import { importCommandHandlers } from './import-commands';
+import { DataImportPanel } from './panels/data-import-panel';
 import { SqlDumper } from '../services/sql-dump';
 import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
@@ -109,6 +111,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     cache: deps.cache,
     dumper: new SqlDumper({ manager: deps.manager, logger: deps.logger }),
+    logger: deps.logger,
+  });
+  const imports = importCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
     logger: deps.logger,
   });
   const filters = filterCommandHandlers({
@@ -292,6 +301,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
           : vscode.window.activeTextEditor?.document.uri.toString(),
       ),
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
+    [COMMAND_IDS.importData]: (target) => imports.importData(target),
     [COMMAND_IDS.dumpSql]: (target, ...rest: unknown[]) => dumps.dump(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;
@@ -381,6 +391,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         pings = [];
         ConnectionFormPanel.disposeAll();
         TableDesignerPanel.disposeAll();
+        DataImportPanel.disposeAll();
         ResultsPanel.disposeAll();
       },
     },

@@ -87,6 +87,8 @@ export const COMMAND_IDS = {
   runSqlFile: 'datanest.script.run',
   /** Dumps tables, a database or a schema to a SQL script (V5.2). */
   dumpSql: 'datanest.dump.create',
+  /** Fills a table from a CSV or JSON file (V5.3). */
+  importData: 'datanest.table.importData',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

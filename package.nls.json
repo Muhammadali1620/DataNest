@@ -92,5 +92,6 @@
   "commands.connections.import.title": "Import Connections…",
   "commands.connections.export.title": "Export Connections…",
   "commands.script.run.title": "Run SQL File…",
-  "commands.dump.create.title": "Dump to SQL File…"
+  "commands.dump.create.title": "Dump to SQL File…",
+  "commands.table.importData.title": "Import Data from File…"
 }

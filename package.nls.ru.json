@@ -92,5 +92,6 @@
   "commands.connections.import.title": "Импортировать подключения…",
   "commands.connections.export.title": "Экспортировать подключения…",
   "commands.script.run.title": "Выполнить SQL-файл…",
-  "commands.dump.create.title": "Дамп в SQL-файл…"
+  "commands.dump.create.title": "Дамп в SQL-файл…",
+  "commands.table.importData.title": "Импортировать данные из файла…"
 }

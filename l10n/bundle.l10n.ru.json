@@ -327,5 +327,12 @@
   "Open": "Открыть",
   "Show in Folder": "Показать в папке",
   "Dump saved: {0} tables, {1} views, {2} rows, {3} in {4}": "Дамп сохранён: таблиц: {0}, представлений: {1}, строк: {2}, {3} за {4}",
-  "Left out, the server does not show their definition to this user: {0}": "Пропущены — сервер не показывает их определение этому пользователю: {0}"
+  "Left out, the server does not show their definition to this user: {0}": "Пропущены — сервер не показывает их определение этому пользователю: {0}",
+  "\"{0}\" is read-only: data cannot be imported into it.": "«{0}» только для чтения: импортировать в него данные нельзя.",
+  "CSV and JSON": "CSV и JSON",
+  "Import": "Импортировать",
+  "Import Data into {0}": "Импорт данных в {0}",
+  "Import into {0}": "Импорт в {0}",
+  "PRODUCTION \"{0}\": import \"{1}\" into {2}?": "PRODUCTION «{0}»: импортировать «{1}» в {2}?",
+  "Pick a table in the DataNest view to import into": "Выберите таблицу в панели DataNest, в которую импортировать"
 }

@@ -149,6 +149,7 @@ export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf())
     case 'DESC':
     case 'USE':
     case 'PRINT':
+    case 'EXISTS':
       return true;
     case 'BEGIN':
       // In T-SQL a bare BEGIN opens a block of statements, which may write anything;

@@ -16,13 +16,15 @@
 
   interface Props {
     design: TableDesign;
+    /** False where indexes cannot be unique (ClickHouse): the column is left out. */
+    unique?: boolean;
     problems: readonly DesignProblem[];
     showProblems: boolean;
     t: Translate;
     onchange: (design: TableDesign) => void;
   }
 
-  const { design, problems, showProblems, t, onchange }: Props = $props();
+  const { design, unique = true, problems, showProblems, t, onchange }: Props = $props();
 
   const columnOptions = $derived(
     design.columns.map((column, index) => ({
@@ -46,7 +48,9 @@
       <tr>
         <th>{t('designer.index.name')}</th>
         <th>{t('designer.index.columns')}</th>
-        <th>{t('designer.index.unique')}</th>
+        {#if unique}
+          <th>{t('designer.index.unique')}</th>
+        {/if}
         <th></th>
       </tr>
     </thead>
@@ -77,16 +81,18 @@
               }}
             />
           </td>
-          <td class="check">
-            <input
-              type="checkbox"
-              checked={index.unique}
-              aria-label={t('designer.fieldLabel', t('designer.index.unique'), index.name)}
-              onchange={(event) => {
-                onchange(updateIndex(design, index.id, { unique: event.currentTarget.checked }));
-              }}
-            />
-          </td>
+          {#if unique}
+            <td class="check">
+              <input
+                type="checkbox"
+                checked={index.unique}
+                aria-label={t('designer.fieldLabel', t('designer.index.unique'), index.name)}
+                onchange={(event) => {
+                  onchange(updateIndex(design, index.id, { unique: event.currentTarget.checked }));
+                }}
+              />
+            </td>
+          {/if}
           <td>
             <button
               class="icon"

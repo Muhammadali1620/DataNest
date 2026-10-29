@@ -2,6 +2,7 @@
 // `created_at`), its type says the rest, and keys decide what must not repeat or
 // must point at an existing row.
 
+import { clickhouseBareType } from '../../shared/clickhouse-types';
 import { enumOptions, inputKindOf } from '../../shared/cell-input';
 import type { GeneratorKind, GeneratorSettings } from './generators';
 
@@ -102,7 +103,7 @@ export function suggestGenerator(column: PlanColumn): GeneratorKind {
 
 /** What the type itself allows: lengths, ranges, scale, the values of an enum. */
 export function typeSettings(column: PlanColumn, kind: GeneratorKind): GeneratorSettings {
-  const type = column.dataType.trim().toLowerCase();
+  const type = clickhouseBareType(column.dataType).toLowerCase();
   const length = /^(?:national\s+)?(var)?char(?:acter)?(?:\s+varying)?\s*\((\d+)\)/u.exec(type);
   const varying = length?.[1] !== undefined || /varying|varchar/u.test(type);
   const decimal = /^(?:decimal|numeric|dec|fixed)\s*\((\d+)\s*(?:,\s*(\d+))?\)/u.exec(type);
@@ -132,6 +133,17 @@ export function typeSettings(column: PlanColumn, kind: GeneratorKind): Generator
 }
 
 function integerRange(type: string): { min?: number; max?: number } {
+  // ClickHouse names say the width: Int8, UInt16, …
+  const sized = /^(u?)int(8|16)$/u.exec(type);
+  if (sized !== null) {
+    const unsigned = sized[1] === 'u';
+    return sized[2] === '8'
+      ? { min: unsigned ? 0 : 1, max: unsigned ? 255 : 127 }
+      : { min: 1, max: 32_000 };
+  }
+  if (/^u?int(32|64|128|256)$/u.test(type)) {
+    return { min: 1, max: 100_000 };
+  }
   const unsigned = type.includes('unsigned');
   if (/^tinyint\s*\(\s*1\s*\)/u.test(type)) {
     return { min: 0, max: 1 };

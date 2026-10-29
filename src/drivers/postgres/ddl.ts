@@ -60,7 +60,15 @@ export const postgresDdl: SchemaDdl = {
   createSchema: (name) => `CREATE SCHEMA ${quoteIdentifier(name)}`,
   dropSchema: (name, cascade) => `DROP SCHEMA ${quoteIdentifier(name)}${cascade ? ' CASCADE' : ''}`,
   // Columns of an existing table keep their places: PostgreSQL cannot move them.
-  designer: { columnComments: true, tableComment: true, types: TYPES, reorder: false },
+  designer: {
+    columnComments: true,
+    tableComment: true,
+    types: TYPES,
+    reorder: false,
+    autoIncrement: true,
+    foreignKeys: true,
+    uniqueIndexes: true,
+  },
   alterTable: postgresAlterTable,
   createTable: (table, design) => {
     const target = qualified({ ...table, name: design.name.trim() });

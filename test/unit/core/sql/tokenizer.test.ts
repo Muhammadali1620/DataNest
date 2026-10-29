@@ -300,3 +300,39 @@ describe('tokenize: SQL Server (V6.2)', () => {
     expect(kinds('a[1]')).toEqual(['word', 'punctuation', 'number', 'punctuation']);
   });
 });
+
+describe('tokenize: ClickHouse (V6.3)', () => {
+  it('reads backslash escapes inside strings, so a quoted quote does not end it', () => {
+    expect(firstText("SELECT 'O\\'Brien; x' FROM t", 'string', 'clickhouse')).toBe(
+      "'O\\'Brien; x'",
+    );
+  });
+
+  it('treats # as a line comment', () => {
+    expect(kinds('SELECT 1 # note; here\nFROM t', 'clickhouse')).toContain('comment');
+    expect(firstText('SELECT 1 # note; here\nFROM t', 'comment', 'clickhouse')).toBe(
+      '# note; here',
+    );
+  });
+
+  it('quotes identifiers with backticks and double quotes', () => {
+    expect(firstText('SELECT `a;b` FROM t', 'quoted-identifier', 'clickhouse')).toBe('`a;b`');
+    expect(firstText('SELECT "a;b" FROM t', 'quoted-identifier', 'clickhouse')).toBe('"a;b"');
+  });
+
+  it('reads $heredoc$ strings as one string', () => {
+    expect(firstText('SELECT $doc$a;b$doc$', 'string', 'clickhouse')).toBe('$doc$a;b$doc$');
+  });
+
+  it('has no brackets and no GO lines', () => {
+    expect(syntaxOf('clickhouse')).toMatchObject({
+      backslashEscapes: true,
+      hashComments: true,
+      backtickIdentifiers: true,
+      doubleQuoteIdentifiers: true,
+      dollarQuotes: true,
+      bracketIdentifiers: false,
+      batchSeparator: false,
+    });
+  });
+});

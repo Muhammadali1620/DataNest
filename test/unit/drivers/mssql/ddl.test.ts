@@ -57,6 +57,9 @@ describe('mssql ddl', () => {
       columnComments: true,
       tableComment: true,
       reorder: false,
+      autoIncrement: true,
+      foreignKeys: true,
+      uniqueIndexes: true,
     });
   });
 

@@ -96,6 +96,8 @@ const reportSchema = object({
 
 const stateSchema = object({
   driver: literal(...DRIVER_IDS),
+  /** False where a stopped import cannot be undone (ClickHouse has no transactions). */
+  transactional: boolean(),
   /** The table, as the title shows it: `shop.orders`. */
   table: string({ maxLength: NAME }),
   file: string({ maxLength: 4000 }),

@@ -17,7 +17,14 @@ export function addColumn(design: TableDesign, driver: DriverId): TableDesign {
     id: nextColumnId(design),
     name: '',
     // SQL Server's TEXT is deprecated; NVARCHAR keeps any language.
-    type: driver === 'mysql' ? 'varchar' : driver === 'mssql' ? 'nvarchar' : 'text',
+    type:
+      driver === 'mysql'
+        ? 'varchar'
+        : driver === 'mssql'
+          ? 'nvarchar'
+          : driver === 'clickhouse'
+            ? 'String'
+            : 'text',
     length: driver === 'mysql' || driver === 'mssql' ? '255' : '',
     nullable: true,
     defaultValue: '',

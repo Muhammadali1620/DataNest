@@ -50,7 +50,15 @@ describe('tableDesignerProtocol', () => {
       mode: 'create',
       driver: 'sqlite',
       scope: '',
-      features: { columnComments: false, tableComment: false, types: ['integer'], reorder: true },
+      features: {
+        columnComments: false,
+        tableComment: false,
+        types: ['integer'],
+        reorder: true,
+        autoIncrement: true,
+        foreignKeys: true,
+        uniqueIndexes: true,
+      },
       design: newTableDesign('sqlite'),
       kept: { indexes: [{ name: 'ix', description: '(lower(a))' }], columns: ['twice'] },
     };
@@ -118,5 +126,36 @@ describe('index and key schemas', () => {
     expect(tables.result.parse({ tables: ['a', 'b'] })).toEqual({ tables: ['a', 'b'] });
     expect(columns.params.parse({ table: 'a' })).toEqual({ table: 'a' });
     expect(() => columns.params.parse({ table: '' })).toThrow();
+  });
+});
+
+describe('designer features (V6.3)', () => {
+  it('requires the auto numbering, foreign key and unique index flags', () => {
+    const state = {
+      mode: 'create',
+      driver: 'clickhouse',
+      scope: 'events',
+      features: {
+        columnComments: true,
+        tableComment: true,
+        types: ['UInt64'],
+        reorder: true,
+        autoIncrement: false,
+        foreignKeys: false,
+        uniqueIndexes: false,
+      },
+      design: newTableDesign('clickhouse'),
+      kept: { indexes: [], columns: [] },
+    };
+    expect(tableDesignerProtocol.webview.events.state.parse(state)).toEqual(state);
+    for (const flag of ['autoIncrement', 'foreignKeys', 'uniqueIndexes'] as const) {
+      const features = Object.fromEntries(
+        Object.entries(state.features).filter(([key]) => key !== flag),
+      );
+      expect(
+        () => tableDesignerProtocol.webview.events.state.parse({ ...state, features }),
+        flag,
+      ).toThrow();
+    }
   });
 });

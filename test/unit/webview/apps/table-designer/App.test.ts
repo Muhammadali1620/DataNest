@@ -24,6 +24,9 @@ function state(overrides: Partial<TableDesignerState> = {}): TableDesignerState 
       tableComment: true,
       types: ['int', 'varchar'],
       reorder: true,
+      autoIncrement: true,
+      foreignKeys: true,
+      uniqueIndexes: true,
     },
     design: newTableDesign('mysql'),
     kept: { indexes: [], columns: [] },
@@ -106,7 +109,15 @@ describe('table designer App', () => {
       state({
         driver: 'sqlite',
         scope: '',
-        features: { columnComments: false, tableComment: false, types: [], reorder: true },
+        features: {
+          columnComments: false,
+          tableComment: false,
+          types: [],
+          reorder: true,
+          autoIncrement: true,
+          foreignKeys: true,
+          uniqueIndexes: true,
+        },
         design: newTableDesign('sqlite'),
       }),
     );
@@ -314,7 +325,15 @@ describe('table designer App', () => {
         mode: 'edit',
         driver: 'postgres',
         scope: 'shop.public',
-        features: { columnComments: true, tableComment: true, types: [], reorder: false },
+        features: {
+          columnComments: true,
+          tableComment: true,
+          types: [],
+          reorder: false,
+          autoIncrement: true,
+          foreignKeys: true,
+          uniqueIndexes: true,
+        },
         design: {
           ...newTableDesign('postgres', 'orders'),
           columns: [
@@ -440,5 +459,64 @@ describe('table designer App', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
       expect(input('Name of column remark').value).toBe('remark');
     });
+  });
+});
+
+describe('table designer App: what the database cannot do (V6.3)', () => {
+  const indexed: TableDesign = {
+    name: 'hits',
+    comment: '',
+    columns: [
+      {
+        id: 'new-1',
+        name: 'id',
+        type: 'UInt64',
+        length: '',
+        nullable: false,
+        defaultValue: '',
+        autoIncrement: false,
+        primaryKey: true,
+        comment: '',
+      },
+    ],
+    indexes: [{ id: 'i1', name: 'ix_id', columns: ['new-1'], unique: false }],
+    foreignKeys: [],
+  };
+
+  it('hides foreign keys, auto numbering and unique indexes for ClickHouse', async () => {
+    await setup(
+      state({
+        driver: 'clickhouse',
+        scope: 'events',
+        features: {
+          columnComments: true,
+          tableComment: true,
+          types: ['UInt64', 'String'],
+          reorder: true,
+          autoIncrement: false,
+          foreignKeys: false,
+          uniqueIndexes: false,
+        },
+        design: indexed,
+      }),
+    );
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Columns',
+      'Indexes',
+      'SQL',
+    ]);
+    expect(screen.queryByLabelText('Auto of column id')).toBeNull();
+    expect(screen.queryByText('Auto')).toBeNull();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
+    expect(screen.queryByLabelText('Unique of ix_id')).toBeNull();
+    expect(screen.queryByText('Unique')).toBeNull();
+  });
+
+  it('keeps all three where the database has them', async () => {
+    await setup(state({ design: { ...indexed, columns: indexed.columns } }));
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toContain('Foreign keys');
+    expect(screen.queryByLabelText('Auto of column id')).not.toBeNull();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
+    expect(screen.queryByLabelText('Unique of ix_id')).not.toBeNull();
   });
 });

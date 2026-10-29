@@ -175,6 +175,9 @@ describe('structure changes on SQL Server', () => {
     );
     await runAll(session, "INSERT INTO dbo.st_people (email, score) VALUES (N'x@y.z', 1.5)");
     const { design: before, background } = await load('st_people');
+    // A nonclustered index the designer made is the designer's to change again.
+    expect(before.indexes.map((index) => index.name)).toEqual(['ux_st_people_email']);
+    expect(background.fixedIndexes).toEqual([]);
     const columns = before.columns.map((column) => {
       switch (column.name) {
         case 'email':

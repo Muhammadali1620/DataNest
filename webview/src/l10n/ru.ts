@@ -70,6 +70,7 @@ export const ru: Record<MessageKey, string> = {
   'form.driver.postgres': 'PostgreSQL',
   'form.driver.sqlite': 'SQLite',
   'form.driver.mssql': 'Microsoft SQL Server',
+  'form.driver.clickhouse': 'ClickHouse',
   'form.host': 'Хост',
   'form.port': 'Порт',
   'form.portHint': 'По умолчанию: {0}',
@@ -408,6 +409,8 @@ export const ru: Record<MessageKey, string> = {
   'import.mode': 'Если строка не подходит',
   'import.modeAll': 'Всё или ничего: остановиться на первой плохой строке и ничего не сохранять',
   'import.modeSkip': 'Пропустить неподходящие строки и сохранить остальные',
+  'import.modeStop':
+    'Остановиться на первой плохой строке; строки до неё останутся (в этой базе нет транзакций, чтобы их отменить)',
   'import.progress': 'Прочитано: {0} · импортировано: {1} · с ошибкой: {2}',
   'import.stop': 'Остановить',
   'import.report': 'Результат',

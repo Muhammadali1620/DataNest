@@ -93,6 +93,18 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlSnippet[]>> = {
       body: 'CREATE OR ALTER PROCEDURE ${1:name}\n  @${2:id} INT\nAS\nBEGIN\n  SET NOCOUNT ON;\n  ${3:SELECT 1;}\nEND\nGO',
     },
   ],
+  clickhouse: [
+    {
+      prefix: 'table',
+      title: 'CREATE TABLE … ENGINE = MergeTree ORDER BY',
+      body: 'CREATE TABLE ${1:name} (\n  ${2:id} UInt64,\n  ${3:created_at} DateTime DEFAULT now()\n)\nENGINE = MergeTree\nORDER BY (${2:id});',
+    },
+    {
+      prefix: 'final',
+      title: 'SELECT … FROM … FINAL',
+      body: 'SELECT ${1:*}\nFROM ${2:table} FINAL\nWHERE ${3:condition};',
+    },
+  ],
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {

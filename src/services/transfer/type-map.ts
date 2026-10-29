@@ -3,6 +3,7 @@
 // with or without a zone…) and written back in the words of the target. Between
 // databases of the same kind nothing is translated.
 
+import { clickhouseBareType } from '../../shared/clickhouse-types';
 import type { DriverId } from '../../shared/connection';
 import { enumOptions } from '../../shared/cell-input';
 import { splitType } from '../../shared/table-design';
@@ -32,6 +33,9 @@ const INT_BYTES: readonly (readonly [RegExp, 1 | 2 | 3 | 4 | 8])[] = [
 
 /** Reads a type as the source database wrote it. Unknown types become text. */
 export function neutralType(dataType: string, driver: DriverId): NeutralType {
+  if (driver === 'clickhouse') {
+    return clickhouseNeutral(dataType);
+  }
   const type = dataType.trim().toLowerCase();
   const numbers = (/\(([^)]*)\)/u.exec(type)?.[1] ?? '')
     .split(',')
@@ -168,6 +172,84 @@ function mssqlNeutral(type: string): NeutralType | undefined {
   return undefined;
 }
 
+const CLICKHOUSE_DECIMALS: Readonly<Record<string, number>> = {
+  decimal32: 9,
+  decimal64: 18,
+  decimal128: 38,
+  decimal256: 76,
+};
+
+/** ClickHouse types, whose names say their width: Int8, UInt64, Float32, DateTime64(3). */
+function clickhouseNeutral(dataType: string): NeutralType {
+  const bare = clickhouseBareType(dataType);
+  const type = bare.toLowerCase();
+  const args = /\((.*)\)$/su.exec(bare)?.[1] ?? '';
+  const integer = /^(u?)int(8|16|32|64|128|256)$/u.exec(type);
+  if (integer !== null) {
+    const bits = Number(integer[2]);
+    if (bits > 64) {
+      return { kind: 'decimal', precision: bits === 128 ? 39 : 77, scale: 0 };
+    }
+    return {
+      kind: 'integer',
+      bytes: (bits / 8) as 1 | 2 | 4 | 8,
+      unsigned: integer[1] === 'u',
+    };
+  }
+  const sized = /^(decimal32|decimal64|decimal128|decimal256)\(\s*(\d+)\s*\)$/u.exec(type);
+  if (sized !== null) {
+    return {
+      kind: 'decimal',
+      precision: CLICKHOUSE_DECIMALS[sized[1] ?? ''] ?? 38,
+      scale: Number(sized[2]),
+    };
+  }
+  const decimal = /^decimal\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)$/u.exec(type);
+  if (decimal !== null) {
+    return { kind: 'decimal', precision: Number(decimal[1]), scale: Number(decimal[2] ?? 0) };
+  }
+  if (type === 'float32') {
+    return { kind: 'float', double: false };
+  }
+  if (type === 'float64') {
+    return { kind: 'float', double: true };
+  }
+  if (type === 'bool' || type === 'boolean') {
+    return { kind: 'boolean' };
+  }
+  const fixed = /^fixedstring\(\s*(\d+)\s*\)$/u.exec(type);
+  if (fixed !== null) {
+    return { kind: 'string', length: Number(fixed[1]), fixed: true };
+  }
+  if (type === 'date' || type === 'date32') {
+    return { kind: 'date' };
+  }
+  if (type === 'time' || type.startsWith('time64')) {
+    return { kind: 'time' };
+  }
+  if (type.startsWith('datetime64')) {
+    const digits = Number(/^\s*(\d+)/u.exec(args)?.[1] ?? '3');
+    return { kind: 'datetime', zone: false, ...precisionOf([digits]) };
+  }
+  if (type.startsWith('datetime')) {
+    return { kind: 'datetime', zone: false, precision: 0 };
+  }
+  if (type === 'uuid') {
+    return { kind: 'uuid' };
+  }
+  if (/^enum(8|16)\(/u.test(type)) {
+    const values: string[] = [];
+    for (const match of args.matchAll(/'((?:[^'\\]|\\.)*)'\s*=/gu)) {
+      values.push((match[1] ?? '').replace(/\\(.)/gu, '$1'));
+    }
+    return { kind: 'enum', values };
+  }
+  if (/^(array|map|tuple|nested|json|object)\b/u.test(type)) {
+    return { kind: 'json' };
+  }
+  return { kind: 'text' };
+}
+
 function precisionOf(numbers: readonly number[]): { precision?: number } {
   return numbers[0] === undefined ? {} : { precision: Math.min(numbers[0], 6) };
 }
@@ -190,6 +272,42 @@ export function targetType(
       return sqliteType(neutral);
     case 'mssql':
       return mssqlType(neutral, indexed);
+    case 'clickhouse':
+      return clickhouseType(neutral);
+  }
+}
+
+function clickhouseType(neutral: NeutralType): { type: string; length: string } {
+  switch (neutral.kind) {
+    case 'boolean':
+      return t('Bool');
+    case 'integer': {
+      const bits = neutral.bytes === 3 ? 32 : neutral.bytes * 8;
+      return t(`${neutral.unsigned ? 'UInt' : 'Int'}${bits}`);
+    }
+    case 'decimal':
+      return neutral.precision === undefined
+        ? t('Decimal', '38,10')
+        : t('Decimal', `${Math.min(neutral.precision, 76)},${neutral.scale ?? 0}`);
+    case 'float':
+      return t(neutral.double ? 'Float64' : 'Float32');
+    case 'string':
+    case 'text':
+    case 'json':
+    case 'binary':
+    case 'time':
+      return t('String');
+    case 'enum':
+      return t('LowCardinality', 'String');
+    case 'date':
+      // Date covers 1970–2149 only; Date32 goes back to 1900.
+      return t('Date32');
+    case 'datetime': {
+      const precision = String(neutral.precision ?? 6);
+      return neutral.zone ? t('DateTime64', `${precision}, 'UTC'`) : t('DateTime64', precision);
+    }
+    case 'uuid':
+      return t('UUID');
   }
 }
 
@@ -381,7 +499,7 @@ export function mapColumnType(
 }
 
 const NOW =
-  /^(current_timestamp|now|localtimestamp|transaction_timestamp|statement_timestamp|getdate|sysdatetime|getutcdate|sysutcdatetime|sysdatetimeoffset)\s*(\(\s*\d*\s*\))?$/iu;
+  /^(current_timestamp|now|localtimestamp|transaction_timestamp|statement_timestamp|getdate|sysdatetime|getutcdate|sysutcdatetime|sysdatetimeoffset|now64)\s*(\(\s*\d*\s*\))?$/iu;
 
 /**
  * A default for the target, or undefined when it cannot be carried over (a function
@@ -411,10 +529,10 @@ export function mapDefault(
   }
   if (neutral.kind === 'boolean') {
     if (/^(true|'t'|'true'|b?'1'|1)$/iu.test(bare)) {
-      return to === 'mysql' || to === 'mssql' ? '1' : 'TRUE';
+      return to === 'mysql' || to === 'mssql' ? '1' : to === 'clickhouse' ? 'true' : 'TRUE';
     }
     if (/^(false|'f'|'false'|b?'0'|0)$/iu.test(bare)) {
-      return to === 'mysql' || to === 'mssql' ? '0' : 'FALSE';
+      return to === 'mysql' || to === 'mssql' ? '0' : to === 'clickhouse' ? 'false' : 'FALSE';
     }
     return undefined;
   }
@@ -424,10 +542,18 @@ export function mapDefault(
   if (/^'(?:[^'\\]|'')*'$/u.test(bare)) {
     return bare;
   }
-  if (NOW.test(bare) || /^current_(date|time)$/iu.test(bare)) {
-    if (/^current_date$/iu.test(bare)) {
+  if (NOW.test(bare) || /^current_(date|time)$|^today\s*\(\s*\)$/iu.test(bare)) {
+    if (/^(current_date|today\s*\(\s*\))$/iu.test(bare)) {
       // SQL Server 2022 has no CURRENT_DATE.
-      return to === 'mssql' ? 'CAST(GETDATE() AS date)' : 'CURRENT_DATE';
+      return to === 'mssql'
+        ? 'CAST(GETDATE() AS date)'
+        : to === 'clickhouse'
+          ? 'today()'
+          : 'CURRENT_DATE';
+    }
+    if (to === 'clickhouse') {
+      const digits = neutral.kind === 'datetime' ? (neutral.precision ?? 6) : 0;
+      return digits > 0 ? `now64(${digits})` : 'now()';
     }
     if (to === 'mssql') {
       return neutral.kind === 'datetime' && neutral.zone ? 'SYSDATETIMEOFFSET()' : 'SYSDATETIME()';

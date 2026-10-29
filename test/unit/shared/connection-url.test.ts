@@ -245,3 +245,41 @@ describe('SQL Server URLs (V6.2)', () => {
     expect(parseConnectionUrl('mssql://a:b@:1433/db')).toMatchObject({ ok: false });
   });
 });
+
+describe('ClickHouse URLs (V6.3)', () => {
+  it('knows the clickhouse and ch schemes, with jdbc: too', () => {
+    expect(urlDriver('clickhouse://h')).toBe('clickhouse');
+    expect(urlDriver('ch://h')).toBe('clickhouse');
+    expect(urlDriver('jdbc:clickhouse://h:8123/db')).toBe('clickhouse');
+  });
+
+  it('reads user, password, port and database', () => {
+    expect(ok(parseConnectionUrl('clickhouse://reader:p%40ss@ch.example:8123/events'))).toEqual({
+      input: {
+        name: 'events',
+        driver: 'clickhouse',
+        host: 'ch.example',
+        port: 8123,
+        user: 'reader',
+        database: 'events',
+      },
+      password: 'p@ss',
+    });
+  });
+
+  it('turns secure=true into TLS', () => {
+    expect(ok(parseConnectionUrl('clickhouse://ch.example:8443/db?secure=true')).input.ssl).toEqual(
+      { mode: 'require' },
+    );
+    expect(ok(parseConnectionUrl('jdbc:clickhouse://ch.example/db')).input).toMatchObject({
+      driver: 'clickhouse',
+      host: 'ch.example',
+      database: 'db',
+    });
+    expect(ok(parseConnectionUrl('ch://ch.example/db')).input.ssl).toBeUndefined();
+  });
+
+  it('needs a host', () => {
+    expect(parseConnectionUrl('clickhouse:///db')).toEqual({ ok: false, problem: 'no-host' });
+  });
+});

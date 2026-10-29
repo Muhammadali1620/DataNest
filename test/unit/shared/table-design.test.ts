@@ -319,3 +319,33 @@ describe('SQL Server designs (V6.2)', () => {
     ).toEqual([{ kind: 'auto-increment', column: 'a', reason: 'default' }]);
   });
 });
+
+describe('ClickHouse designs (V6.3)', () => {
+  it('refuses auto numbering on every type', () => {
+    for (const type of ['UInt64', 'Int32', 'integer']) {
+      expect(
+        designProblems(design([column({ id: 'a', type, autoIncrement: true })]), 'clickhouse'),
+        type,
+      ).toEqual([{ kind: 'auto-increment', column: 'a', reason: 'type' }]);
+    }
+  });
+
+  it('accepts a design without auto numbering', () => {
+    expect(
+      designProblems(design([column({ id: 'a', type: 'UInt64', primaryKey: true })]), 'clickhouse'),
+    ).toEqual([]);
+  });
+});
+
+describe('newTableDesign for ClickHouse (V6.3)', () => {
+  it('starts with a UInt64 key that does not number itself, and can be saved at once', () => {
+    const design = newTableDesign('clickhouse', 'events');
+    expect(design.columns[0]).toMatchObject({
+      name: 'id',
+      type: 'UInt64',
+      primaryKey: true,
+      autoIncrement: false,
+    });
+    expect(designProblems(design, 'clickhouse')).toEqual([]);
+  });
+});

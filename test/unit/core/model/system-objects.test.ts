@@ -122,3 +122,20 @@ describe('SQL Server system objects (V6.2)', () => {
     expect(isSystemSchema('mssql', 'dbo')).toBe(false);
   });
 });
+
+describe('ClickHouse system objects (V6.3)', () => {
+  it('hides the system and information schema databases, whatever their case', () => {
+    for (const name of ['system', 'INFORMATION_SCHEMA', 'information_schema', 'System']) {
+      expect(isSystemDatabase('clickhouse', name), name).toBe(true);
+    }
+    expect(withoutSystemDatabases('clickhouse', ['default', 'system', 'shop'])).toEqual([
+      'default',
+      'shop',
+    ]);
+  });
+
+  it('has no schemas of its own to hide', () => {
+    expect(isSystemSchema('clickhouse', 'system')).toBe(false);
+    expect(withoutSystemSchemas('clickhouse', ['a'])).toEqual(['a']);
+  });
+});

@@ -42,6 +42,8 @@ export interface DataImportModelDeps {
   readonly target: SessionTarget;
   readonly table: TableRef;
   readonly driver: DriverId;
+  /** The database can undo a stopped import (all but ClickHouse). */
+  readonly transactional?: boolean;
   readonly file: string;
   readonly columns: readonly ColumnDetail[];
   readonly readChunks: (file: string) => AsyncIterable<ScriptChunk>;
@@ -65,6 +67,10 @@ export class DataImportModel {
 
   get driver(): DriverId {
     return this.deps.driver;
+  }
+
+  get transactional(): boolean {
+    return this.deps.transactional ?? true;
   }
 
   /** How the file is most likely written: the format by its name, CSV details by its start. */

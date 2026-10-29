@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
 import { mssqlDialect } from '../../../../src/drivers/mssql/dialect';
+import { clickhouseDialect } from '../../../../src/drivers/clickhouse/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { ObjectScope, TableRef, TableStructure } from '../../../../src/core/model/objects';
@@ -16,6 +17,7 @@ const DIALECTS = {
   postgres: postgresDialect,
   sqlite: sqliteDialect,
   mssql: mssqlDialect,
+  clickhouse: clickhouseDialect,
 };
 
 /** `orders (id int auto pk, note text)` with a FULLTEXT index the designer keeps. */
@@ -116,11 +118,29 @@ describe('TableDesignerModel: a new table', () => {
       mode: 'create',
       driver: 'sqlite',
       scope: '',
-      features: { columnComments: false, tableComment: false, reorder: true },
+      features: {
+        columnComments: false,
+        tableComment: false,
+        reorder: true,
+        autoIncrement: true,
+        foreignKeys: true,
+        uniqueIndexes: true,
+      },
       design: newTableDesign('sqlite'),
       kept: { indexes: [], columns: [] },
     });
     expect((await harness('postgres').instance.state()).features.reorder).toBe(false);
+  });
+
+  it('passes on what the driver cannot do: ClickHouse has no auto numbering, keys or unique indexes (V6.3)', async () => {
+    const { features } = await harness('clickhouse').instance.state();
+    expect(features).toMatchObject({
+      reorder: true,
+      autoIncrement: false,
+      foreignKeys: false,
+      uniqueIndexes: false,
+    });
+    expect(features.types).toContain('UInt64');
   });
 
   it('previews the CREATE TABLE of a valid design in its scope', () => {

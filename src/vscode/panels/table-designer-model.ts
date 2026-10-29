@@ -69,6 +69,9 @@ export class TableDesignerModel {
       tableComment: designer.tableComment,
       types: [...designer.types],
       reorder: designer.reorder,
+      autoIncrement: designer.autoIncrement,
+      foreignKeys: designer.foreignKeys,
+      uniqueIndexes: designer.uniqueIndexes,
     };
     if (this.table === undefined) {
       return {

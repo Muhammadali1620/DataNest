@@ -52,6 +52,9 @@ export const fakeDialect: Dialect = {
       tableComment: true,
       types: ['integer', 'text'],
       reorder: true,
+      autoIncrement: true,
+      foreignKeys: true,
+      uniqueIndexes: true,
     },
     alterTable: (table, before, after) => ({
       statements:
@@ -292,6 +295,7 @@ export class FakeDriver implements Driver {
     schemas: false,
     databaseScopedSessions: false,
     cancel: true,
+    transactions: true,
     objectKinds: [],
   };
   readonly sessions: FakeSession[] = [];

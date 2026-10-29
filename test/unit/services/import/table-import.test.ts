@@ -214,4 +214,55 @@ describe('TableImporter', () => {
     await failing.importer().run(failing.request(rows(1)));
     expect(failing.session.executed.at(-1)).toBe('ROLLBACK TRANSACTION');
   });
+
+  describe('without transactions (ClickHouse, V6.3)', () => {
+    function plain(): Harness {
+      const harness = new Harness();
+      harness.driver.capabilities = { ...harness.driver.capabilities, transactions: false };
+      return harness;
+    }
+
+    it('imports with no transaction words at all', async () => {
+      const harness = plain();
+      const report = await harness.importer().run(harness.request(rows(3)));
+      expect(harness.session.executed).toEqual([
+        `INSERT INTO "people" ("id", "name") IDENTITY VALUES (1, 'n1'), (2, 'n2'), (3, 'n3')`,
+        'RESET people.id',
+      ]);
+      expect(report).toMatchObject({ outcome: 'done', inserted: 3, rolledBack: false });
+    });
+
+    it('stops at the first bad row in all-or-nothing mode, rolling nothing back', async () => {
+      const harness = plain();
+      const records = [...rows(2), { line: 3, values: ['x', 'bad'] }, ...rows(2, 4)];
+      const report = await harness.importer().run(harness.request(records));
+      expect(harness.session.executed).toEqual([]);
+      expect(report).toMatchObject({ outcome: 'stopped', inserted: 0, rolledBack: false, read: 3 });
+    });
+
+    it('keeps the batches that went in before the bad row', async () => {
+      const harness = plain();
+      const good = rows(INSERT_ROWS);
+      const records = [...good, { line: INSERT_ROWS + 1, values: ['x', 'bad'] }];
+      const report = await harness.importer().run(harness.request(records));
+      expect(harness.inserts).toHaveLength(1);
+      expect(harness.session.executed).not.toContain('BEGIN');
+      expect(harness.session.executed).not.toContain('ROLLBACK');
+      expect(report).toMatchObject({
+        outcome: 'stopped',
+        inserted: INSERT_ROWS,
+        rolledBack: false,
+      });
+    });
+
+    it('stops when the server refuses a batch, without a ROLLBACK', async () => {
+      const harness = plain();
+      harness.session.failExecuteWhen = (sql) => sql.startsWith('INSERT');
+      const report = await harness.importer().run(harness.request(rows(3)));
+      expect(harness.session.executed.some((sql) => /^(BEGIN|COMMIT|ROLLBACK)/u.test(sql))).toBe(
+        false,
+      );
+      expect(report).toMatchObject({ outcome: 'stopped', inserted: 0, rolledBack: false });
+    });
+  });
 });

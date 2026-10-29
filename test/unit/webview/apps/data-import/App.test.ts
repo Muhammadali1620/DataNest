@@ -17,6 +17,7 @@ type HostPeer = RpcPeer<DataImportProtocol['host'], DataImportProtocol['webview'
 function state(overrides: Partial<ImportPageState> = {}): ImportPageState {
   return {
     driver: 'postgres',
+    transactional: true,
     table: 'public.people',
     file: 'people.csv',
     size: 2048,
@@ -237,5 +238,22 @@ describe('data import page', () => {
     await setup(state({ progress: { read: 5, inserted: 5, failed: 0, percent: 10 } }));
     expect(screen.getByText('Read: 5 · imported: 5 · failed: 0')).not.toBeNull();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Import' }).disabled).toBe(true);
+  });
+});
+
+describe('data import page without transactions (V6.3)', () => {
+  it('says that stopping keeps the rows already in', async () => {
+    await setup(state({ driver: 'clickhouse', transactional: false }));
+    const modes = screen.getByRole('region', { name: 'When a row does not fit' }).textContent;
+    expect(modes).toContain('Stop at the first bad row; the rows before it stay');
+    expect(modes).not.toContain('All or nothing');
+  });
+
+  it('offers all or nothing where the database can undo it', async () => {
+    await setup();
+    expect(
+      screen.getByText('All or nothing: stop at the first bad row and keep nothing'),
+    ).not.toBeNull();
+    expect(screen.queryByText(/the rows before it stay/u)).toBeNull();
   });
 });

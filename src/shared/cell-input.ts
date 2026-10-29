@@ -2,6 +2,7 @@
 // column. The host is the authority (it runs this before queuing a change); the page
 // uses the same code to pick an editor and to check input as the user types.
 
+import { clickhouseBareType } from './clickhouse-types';
 import { type CellValue } from './cell-value';
 
 export const INPUT_KINDS = [
@@ -26,11 +27,12 @@ export function isTextEditable(kind: InputKind): boolean {
 
 /** Which editor a column of this database type gets. */
 export function inputKindOf(dataType: string | undefined): InputKind {
-  const type = (dataType ?? '').trim().toLowerCase();
+  // ClickHouse wraps the type it stores: Nullable(…), LowCardinality(…).
+  const type = clickhouseBareType(dataType ?? '').toLowerCase();
   if (type === '') {
     return 'text';
   }
-  if (/^enum\s*\(/u.test(type)) {
+  if (/^enum(8|16)?\s*\(/u.test(type)) {
     return 'enum';
   }
   if (/blob|binary|bytea|^raw\b|^image$/u.test(type)) {
@@ -46,13 +48,17 @@ export function inputKindOf(dataType: string | undefined): InputKind {
   if (/^(timestamp|datetime|smalldatetime)/u.test(type)) {
     return 'datetime';
   }
-  if (/^date$/u.test(type)) {
+  if (/^date(32)?$/u.test(type)) {
     return 'date';
   }
   if (/^time(\s|\(|$)/u.test(type)) {
     return 'time';
   }
-  if (/^(tiny|small|medium|big)?int(eger)?\d*(\s|\(|$)|^(big|small)?serial\d*$|^year/u.test(type)) {
+  if (
+    /^(tiny|small|medium|big)?int(eger)?\d*(\s|\(|$)|^(big|small)?serial\d*$|^year|^uint\d+$/u.test(
+      type,
+    )
+  ) {
     return 'integer';
   }
   if (
@@ -63,9 +69,12 @@ export function inputKindOf(dataType: string | undefined): InputKind {
   return 'text';
 }
 
-/** The values of `enum('a','b')`, or undefined when the type does not list them. */
+/**
+ * The values of `enum('a','b')` (and ClickHouse's `Enum8('a' = 1, 'b' = 2)`), or undefined
+ * when the type does not list them.
+ */
 export function enumOptions(dataType: string | undefined): string[] | undefined {
-  const match = /^enum\s*\((.*)\)$/isu.exec((dataType ?? '').trim());
+  const match = /^enum(?:8|16)?\s*\((.*)\)$/isu.exec(clickhouseBareType(dataType ?? ''));
   if (match === null) {
     return undefined;
   }

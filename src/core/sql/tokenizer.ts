@@ -112,11 +112,29 @@ const MSSQL: SqlSyntax = {
   batchSeparator: true,
 };
 
+const CLICKHOUSE: SqlSyntax = {
+  // Strings take C-style escapes: 'O\\'Brien'.
+  backslashEscapes: true,
+  hashComments: true,
+  backtickIdentifiers: true,
+  doubleQuoteIdentifiers: true,
+  escapeStrings: false,
+  // `$heredoc$ … $heredoc$` strings.
+  dollarQuotes: true,
+  nestedBlockComments: false,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+};
+
 const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,
   mssql: MSSQL,
+  clickhouse: CLICKHOUSE,
 };
 
 /** The syntax of a driver; the safest common set when none is known. */

@@ -221,3 +221,39 @@ describe('designFromStructure', () => {
     });
   });
 });
+
+describe('designFromStructure: index kinds of SQL Server and ClickHouse (V6.3)', () => {
+  const base: TableStructure = {
+    columns: [
+      { name: 'id', dataType: 'int', nullable: false, autoIncrement: false, generated: false },
+      { name: 'name', dataType: 'String', nullable: false, autoIncrement: false, generated: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [
+      { name: 'ix_nc', columns: ['name'], unique: false, primary: false, method: 'NONCLUSTERED' },
+      {
+        name: 'ix_bloom',
+        columns: ['name'],
+        unique: false,
+        primary: false,
+        method: 'bloom_filter',
+      },
+      { name: 'ix_cl', columns: ['name'], unique: false, primary: false, method: 'CLUSTERED' },
+      { name: 'ix_gin', columns: ['name'], unique: false, primary: false, method: 'gin' },
+      { name: 'ix_hash', columns: ['name'], unique: false, primary: false, method: 'HASH' },
+      { name: 'ix_minmax', columns: ['name'], unique: false, primary: false, method: 'minmax' },
+    ],
+    foreignKeys: [],
+  };
+
+  it('edits nonclustered and bloom filter indexes, and keeps the other kinds', () => {
+    const { design, background } = designFromStructure({ name: 't' }, base);
+    expect(design.indexes.map((index) => index.name)).toEqual(['ix_nc', 'ix_bloom']);
+    expect(background.fixedIndexes.map((index) => index.name)).toEqual([
+      'ix_cl',
+      'ix_gin',
+      'ix_hash',
+      'ix_minmax',
+    ]);
+  });
+});

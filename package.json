@@ -28,6 +28,7 @@
     "sqlite",
     "sql server",
     "mssql",
+    "clickhouse",
     "client"
   ],
   "engines": {
@@ -1108,6 +1109,7 @@
     "icon": "node scripts/make-icon.mjs"
   },
   "devDependencies": {
+    "@clickhouse/client": "1.24.1",
     "@eslint/js": "10.0.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@testing-library/svelte": "5.4.2",

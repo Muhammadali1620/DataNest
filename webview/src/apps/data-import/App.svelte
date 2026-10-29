@@ -324,7 +324,7 @@
     <section class="modes" aria-label={t('import.mode')}>
       <label>
         <input type="radio" name="mode" value="all" bind:group={mode} disabled={running} />
-        {t('import.modeAll')}
+        {t(page.transactional ? 'import.modeAll' : 'import.modeStop')}
       </label>
       <label>
         <input type="radio" name="mode" value="skip" bind:group={mode} disabled={running} />

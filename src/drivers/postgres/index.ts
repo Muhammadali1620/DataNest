@@ -13,6 +13,7 @@ export const driver: Driver = {
     schemas: true,
     databaseScopedSessions: true,
     cancel: true,
+    transactions: true,
     objectKinds: ['function', 'procedure', 'sequence'],
   },
   openSession: openPostgresSession,

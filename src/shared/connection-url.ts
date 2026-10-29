@@ -29,6 +29,8 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   file: 'sqlite',
   mssql: 'mssql',
   sqlserver: 'mssql',
+  clickhouse: 'clickhouse',
+  ch: 'clickhouse',
 };
 
 /** The driver a URL is for, or undefined when DataNest does not know the scheme. */
@@ -79,7 +81,8 @@ function sslFrom(params: URLSearchParams): SslSettings | undefined {
   const modeText = get('sslmode', 'ssl-mode', 'sslMode', 'ssl_mode')?.toLowerCase();
   let mode: SslMode | 'off' | undefined =
     modeText === undefined ? undefined : SSL_MODE_NAMES[modeText];
-  const ssl = get('ssl', 'tls', 'useSSL')?.toLowerCase();
+  // `secure=true` is how ClickHouse clients ask for HTTPS.
+  const ssl = get('ssl', 'tls', 'useSSL', 'secure')?.toLowerCase();
   if (mode === undefined && ssl !== undefined) {
     if (ssl === 'true' || ssl === '1' || ssl === 'require') {
       mode = 'require';

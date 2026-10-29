@@ -120,6 +120,9 @@ function driverFromWord(word: string): DriverId | undefined {
   if (/sqlsrv|sqlserver|mssql/.test(text)) {
     return 'mssql';
   }
+  if (text.includes('clickhouse')) {
+    return 'clickhouse';
+  }
   return undefined;
 }
 
@@ -141,7 +144,15 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
   const driver =
     (named === undefined ? undefined : driverFromWord(named)) ??
     driverFromWord(prefix) ??
-    (port === 5432 ? 'postgres' : port === 3306 ? 'mysql' : port === 1433 ? 'mssql' : undefined);
+    (port === 5432
+      ? 'postgres'
+      : port === 3306
+        ? 'mysql'
+        : port === 1433
+          ? 'mssql'
+          : port === 8123
+            ? 'clickhouse'
+            : undefined);
   if (driver === undefined) {
     return undefined;
   }

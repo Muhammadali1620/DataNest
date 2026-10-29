@@ -943,3 +943,28 @@ describe('connection form App', () => {
     });
   });
 });
+
+describe('connection form App: more databases (V6.3)', () => {
+  it('lists SQL Server and ClickHouse by their names, with ClickHouse on port 8123', async () => {
+    await withState(
+      newState({
+        drivers: [
+          ...DRIVERS,
+          { id: 'mssql', defaultPort: 1433, file: false },
+          { id: 'clickhouse', defaultPort: 8123, file: false },
+        ],
+      }),
+    );
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      'MySQL / MariaDB',
+      'PostgreSQL',
+      'SQLite',
+      'Microsoft SQL Server',
+      'ClickHouse',
+    ]);
+    select.value = 'clickhouse';
+    await fireEvent.change(select);
+    expect(screen.getByLabelText<HTMLInputElement>('Port').value).toBe('8123');
+  });
+});

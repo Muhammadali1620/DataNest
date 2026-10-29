@@ -199,3 +199,33 @@ services:
           '-Q',
           "IF NOT EXISTS (SELECT 1 FROM datanest_test.inventory.stock_levels) THROW 50000, 'seed not loaded', 1",
         ]
+
+  # ClickHouse (V6.3): HTTP on 7123 for the tests, HTTPS with the test CA on 7443.
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8.33-alpine
+    container_name: datanest-clickhouse
+    profiles: [clickhouse]
+    environment:
+      CLICKHOUSE_USER: datanest
+      CLICKHOUSE_PASSWORD: datanest
+      CLICKHOUSE_DB: datanest_test
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: '1'
+      TZ: UTC
+    ports:
+      - 127.0.0.1:7123:8123
+      - 127.0.0.1:7443:8443
+    volumes:
+      - ./seed/clickhouse:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/tls.xml:/etc/clickhouse-server/config.d/tls.xml:ro
+      - ./tls:/etc/datanest-tls:ro
+    tmpfs:
+      - /var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD-SHELL',
+          'clickhouse-client --user datanest --password datanest -q "SELECT count() FROM datanest_test.big_table" | grep -qx 10000',
+        ]

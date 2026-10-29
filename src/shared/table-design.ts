@@ -112,6 +112,12 @@ export interface DesignerFeatures {
   readonly types: readonly string[];
   /** Existing columns can change places (MySQL with AFTER, SQLite by a rebuild). */
   readonly reorder: boolean;
+  /** A column can number itself (all but ClickHouse). */
+  readonly autoIncrement: boolean;
+  /** Tables can have foreign keys (all but ClickHouse). */
+  readonly foreignKeys: boolean;
+  /** An index can be unique (all but ClickHouse, whose indexes only skip data). */
+  readonly uniqueIndexes: boolean;
 }
 
 /** Words that may follow a length: `decimal(10,2) unsigned`, `time(3) with time zone`. */
@@ -212,6 +218,8 @@ const INTEGER_TYPES: Readonly<Record<DriverId, ReadonlySet<string>>> = {
   // Only INTEGER PRIMARY KEY is the rowid; INT or BIGINT would not auto-number.
   sqlite: new Set(['integer']),
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
+  // Nothing numbers itself: rows have no identity, only a sorting key.
+  clickhouse: new Set(),
 };
 
 /**
@@ -344,11 +352,17 @@ export function newTableDesign(driver: DriverId, name = ''): TableDesign {
       {
         id: 'new-1',
         name: 'id',
-        type: driver === 'mysql' || driver === 'mssql' ? 'int' : 'integer',
+        type:
+          driver === 'clickhouse'
+            ? 'UInt64'
+            : driver === 'mysql' || driver === 'mssql'
+              ? 'int'
+              : 'integer',
         length: '',
         nullable: false,
         defaultValue: '',
-        autoIncrement: true,
+        // ClickHouse has no auto numbering: the key is filled by whoever inserts.
+        autoIncrement: driver !== 'clickhouse',
         primaryKey: true,
         comment: '',
       },

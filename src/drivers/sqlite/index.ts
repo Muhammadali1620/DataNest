@@ -16,6 +16,7 @@ export function createSqliteDriver(options: SqliteSessionOptions = {}): Driver {
       schemas: false,
       databaseScopedSessions: false,
       cancel: true,
+      transactions: true,
       objectKinds: [],
     },
     openSession: (config: ResolvedConnectionConfig): Promise<Session> =>

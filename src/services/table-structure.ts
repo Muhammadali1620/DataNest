@@ -25,7 +25,11 @@ function action(value: string | undefined): ReferentialAction {
 }
 
 /** Index methods the designer writes by default; any other is kept as is. */
-const PLAIN_METHODS = new Set(['btree']);
+/**
+ * Index kinds the designer edits: B-trees (MySQL, PostgreSQL), SQL Server's nonclustered
+ * indexes, and the bloom filters it creates in ClickHouse. Others are kept as they are.
+ */
+const PLAIN_METHODS = new Set(['btree', 'nonclustered', 'bloom_filter']);
 
 function describe(index: IndexInfo): string {
   const kind = [index.unique ? 'UNIQUE' : '', index.method ?? ''].filter((p) => p !== '').join(' ');

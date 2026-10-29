@@ -14,6 +14,8 @@ const LIMITS: Readonly<
   postgres: { max: 63, bytes: true },
   sqlite: undefined,
   mssql: { max: 128, bytes: false },
+  // Names are file names on the server's disk; it allows long ones.
+  clickhouse: undefined,
 };
 
 export function identifierProblem(name: string, driver: DriverId): IdentifierProblem | undefined {

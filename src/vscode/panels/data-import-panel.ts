@@ -54,6 +54,7 @@ export class DataImportPanel implements vscode.Disposable {
     const { source, mapping } = await deps.model.load(options);
     const panel = new DataImportPanel(deps, {
       driver: deps.model.driver,
+      transactional: deps.model.transactional,
       table: deps.tableLabel,
       file: basename(deps.file),
       size: deps.size,

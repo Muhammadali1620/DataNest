@@ -68,3 +68,12 @@ describe('SQL Server keywords (V6.2)', () => {
     expect(KEYWORDS.mssql).not.toContain('LIMIT');
   });
 });
+
+describe('ClickHouse keywords (V6.3)', () => {
+  it('has the words of its own SQL', () => {
+    expect(KEYWORDS.clickhouse).toEqual(
+      expect.arrayContaining(['PREWHERE', 'FINAL', 'ENGINE', 'ARRAY JOIN', 'SETTINGS', 'FORMAT']),
+    );
+    expect(keywordsOf()).toEqual(expect.arrayContaining(['PREWHERE', 'ENGINE']));
+  });
+});

@@ -249,3 +249,23 @@ describe('SQL Server in .env files (V6.2)', () => {
     expect(found?.input).toMatchObject({ driver: 'mssql', host: 'db', database: 'shop' });
   });
 });
+
+describe('ClickHouse in .env files (V6.3)', () => {
+  it('reads a CLICKHOUSE_* group by its prefix', () => {
+    const [found] = connectionsFromEnv(
+      parseDotenv(['CLICKHOUSE_HOST=ch', 'CLICKHOUSE_USER=r', 'CLICKHOUSE_PASSWORD=p'].join('\n')),
+    );
+    expect(found?.input).toMatchObject({ driver: 'clickhouse', host: 'ch', user: 'r' });
+    expect(found?.password).toBe('p');
+  });
+
+  it('guesses ClickHouse from port 8123 when nothing names the driver', () => {
+    const [found] = connectionsFromEnv(parseDotenv(['DB_HOST=ch', 'DB_PORT=8123'].join('\n')));
+    expect(found?.input).toMatchObject({ driver: 'clickhouse', host: 'ch', port: 8123 });
+  });
+
+  it('reads a clickhouse:// URL', () => {
+    const [found] = connectionsFromEnv(parseDotenv('CLICKHOUSE_URL=clickhouse://r@ch:8123/events'));
+    expect(found?.input).toMatchObject({ driver: 'clickhouse', host: 'ch', database: 'events' });
+  });
+});

@@ -504,3 +504,23 @@ describe('SQL Server batches (V6.2)', () => {
     }
   });
 });
+
+describe('splitStatements: ClickHouse (V6.3)', () => {
+  it('splits at semicolons outside escaped strings, comments and heredocs', () => {
+    expect(
+      texts(
+        'SELECT \'a\\\';b\';\nSELECT 2 # c; d\n;\nSELECT $h$x;y$h$;\nINSERT INTO t FORMAT JSONEachRow {"a":";"}',
+        'clickhouse',
+      ),
+    ).toEqual([
+      "SELECT 'a\\';b'",
+      'SELECT 2 # c; d',
+      'SELECT $h$x;y$h$',
+      'INSERT INTO t FORMAT JSONEachRow {"a":";"}',
+    ]);
+  });
+
+  it('treats GO as a plain word', () => {
+    expect(texts('SELECT 1\nGO\nSELECT 2', 'clickhouse')).toEqual(['SELECT 1\nGO\nSELECT 2']);
+  });
+});

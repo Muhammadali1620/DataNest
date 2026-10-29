@@ -72,6 +72,7 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
           : { connectionId: target.connectionId, database: table.database },
       table,
       driver: driver.id,
+      transactional: driver.capabilities.transactions,
       file: file.fsPath,
       columns: structure.columns,
       readChunks: (path) => readTextChunks(path),

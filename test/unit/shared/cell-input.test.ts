@@ -278,3 +278,40 @@ describe('parseCellInput', () => {
     expect(parseCellInput('binary', 'deadbeef')).toEqual(bad('unsupported'));
   });
 });
+
+describe('ClickHouse types (V6.3)', () => {
+  it.each([
+    ['UInt8', 'integer'],
+    ['UInt16', 'integer'],
+    ['UInt32', 'integer'],
+    ['UInt64', 'integer'],
+    ['UInt256', 'integer'],
+    ['Int8', 'integer'],
+    ['Int128', 'integer'],
+    ['Float32', 'number'],
+    ['Float64', 'number'],
+    ['Decimal(10, 2)', 'number'],
+    ['Bool', 'boolean'],
+    ['Date', 'date'],
+    ['Date32', 'date'],
+    ['DateTime', 'datetime'],
+    ["DateTime64(3, 'UTC')", 'datetime'],
+    ["Enum8('a' = 1, 'b' = 2)", 'enum'],
+    ['Nullable(UInt8)', 'integer'],
+    ['LowCardinality(String)', 'text'],
+    ['LowCardinality(Nullable(Date32))', 'date'],
+    ['Nullable(Decimal(38, 10))', 'number'],
+    ['String', 'text'],
+    ['UUID', 'text'],
+    ['Array(Int32)', 'text'],
+    ['Map(String, Int32)', 'text'],
+  ] as const)('reads %s as %s', (type, kind) => {
+    expect(inputKindOf(type)).toBe(kind);
+  });
+
+  it('lists the values of an Enum8 or Enum16, also when Nullable', () => {
+    expect(enumOptions("Enum8('a' = 1, 'b' = 2)")).toEqual(['a', 'b']);
+    expect(enumOptions("Nullable(Enum16('new' = 1, 'paid' = 2))")).toEqual(['new', 'paid']);
+    expect(enumOptions('Int8')).toBeUndefined();
+  });
+});

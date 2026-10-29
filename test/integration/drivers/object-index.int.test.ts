@@ -9,6 +9,7 @@ import type { Driver } from '../../../src/drivers/driver';
 import { driver as mysqlDriver } from '../../../src/drivers/mysql';
 import { driver as postgresDriver } from '../../../src/drivers/postgres';
 import { driver as mssqlDriver } from '../../../src/drivers/mssql';
+import { driver as clickhouseDriver } from '../../../src/drivers/clickhouse';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { browseSession } from '../../../src/services/browse-session';
 import { ConnectionManager } from '../../../src/services/connection-manager';
@@ -31,6 +32,7 @@ beforeAll(async () => {
     postgres: postgresDriver,
     sqlite: createSqliteDriver({ workerPath: worker.workerPath }),
     mssql: mssqlDriver,
+    clickhouse: clickhouseDriver,
   };
 }, 60_000);
 

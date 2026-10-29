@@ -56,7 +56,15 @@ function qualified(object: { database?: string; name: string }): string {
 export const mysqlDdl: SchemaDdl = {
   createDatabase: (name) => `CREATE DATABASE ${quoteIdentifier(name)}`,
   dropDatabase: (name) => `DROP DATABASE ${quoteIdentifier(name)}`,
-  designer: { columnComments: true, tableComment: true, types: TYPES, reorder: true },
+  designer: {
+    columnComments: true,
+    tableComment: true,
+    types: TYPES,
+    reorder: true,
+    autoIncrement: true,
+    foreignKeys: true,
+    uniqueIndexes: true,
+  },
   alterTable: mysqlAlterTable,
   createTable: (table, design) => {
     const columns = design.columns.map((column) =>

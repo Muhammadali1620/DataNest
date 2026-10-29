@@ -96,7 +96,7 @@ export class TableImporter {
     if (request.columns.length === 0) {
       throw new DbError('unsupported', 'No column of the table gets a value from the file');
     }
-    const { dialect } = await this.manager.driverOf(request.target.connectionId);
+    const { dialect, capabilities } = await this.manager.driverOf(request.target.connectionId);
     const owner = ConnectionManager.taskOwner(`import-${nextImport++}`);
     const session = await this.manager.acquire(owner, request.target);
     const state = new ImportState();
@@ -111,6 +111,9 @@ export class TableImporter {
         identity,
       );
     const all = request.mode === 'all';
+    // Without transactions, all-or-nothing means stopping at the first bad row: what
+    // went in before it stays, and the report says so.
+    const transaction = all && capabilities.transactions;
     const cancel = (): void => {
       session.cancel().catch((error: unknown) => {
         this.logger.warn('Cancelling the import statement failed', error);
@@ -119,7 +122,7 @@ export class TableImporter {
     request.signal?.addEventListener('abort', cancel);
     let rolledBack = false;
     try {
-      if (all) {
+      if (transaction) {
         await run(session, dialect.transaction.begin);
       }
       const flush = async (rows: readonly PendingRow[]): Promise<boolean> =>
@@ -152,7 +155,7 @@ export class TableImporter {
       if (aborted(request.signal)) {
         state.outcome = 'cancelled';
       }
-      if (all) {
+      if (transaction) {
         if (state.outcome === 'done') {
           await run(session, dialect.transaction.commit);
         } else {
@@ -167,7 +170,7 @@ export class TableImporter {
         await this.moveSequences(session, request, state);
       }
     } catch (error) {
-      if (all) {
+      if (transaction) {
         await run(session, dialect.transaction.rollback).catch(() => undefined);
       }
       if (aborted(request.signal)) {

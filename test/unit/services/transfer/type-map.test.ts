@@ -423,3 +423,174 @@ describe('SQL Server types (V6.2)', () => {
     expect(mapDefault('NULL', { kind: 'text' }, 'mssql', 'postgres')).toBeUndefined();
   });
 });
+
+describe('ClickHouse as the source (V6.3)', () => {
+  const read = (type: string) => neutralType(type, 'clickhouse');
+
+  it('reads integers by their width, wide ones as decimals', () => {
+    expect(read('Int8')).toEqual({ kind: 'integer', bytes: 1, unsigned: false });
+    expect(read('UInt16')).toEqual({ kind: 'integer', bytes: 2, unsigned: true });
+    expect(read('UInt32')).toEqual({ kind: 'integer', bytes: 4, unsigned: true });
+    expect(read('Int64')).toEqual({ kind: 'integer', bytes: 8, unsigned: false });
+    expect(read('Int128')).toEqual({ kind: 'decimal', precision: 39, scale: 0 });
+    expect(read('UInt256')).toEqual({ kind: 'decimal', precision: 77, scale: 0 });
+  });
+
+  it('looks through Nullable and LowCardinality', () => {
+    expect(read('Nullable(UInt8)')).toEqual({ kind: 'integer', bytes: 1, unsigned: true });
+    expect(read('LowCardinality(Nullable(String))')).toEqual({ kind: 'text' });
+    expect(read('Nullable(Decimal(10, 2))')).toEqual({ kind: 'decimal', precision: 10, scale: 2 });
+  });
+
+  it('reads decimals, floats, booleans and fixed strings', () => {
+    expect(read('Decimal(18, 4)')).toEqual({ kind: 'decimal', precision: 18, scale: 4 });
+    expect(read('Decimal(9)')).toEqual({ kind: 'decimal', precision: 9, scale: 0 });
+    expect(read('Decimal32(3)')).toEqual({ kind: 'decimal', precision: 9, scale: 3 });
+    expect(read('Decimal128(10)')).toEqual({ kind: 'decimal', precision: 38, scale: 10 });
+    expect(read('Float32')).toEqual({ kind: 'float', double: false });
+    expect(read('Float64')).toEqual({ kind: 'float', double: true });
+    expect(read('Bool')).toEqual({ kind: 'boolean' });
+    expect(read('FixedString(3)')).toEqual({ kind: 'string', length: 3, fixed: true });
+    expect(read('String')).toEqual({ kind: 'text' });
+  });
+
+  it('reads dates and times with their precision', () => {
+    expect(read('Date')).toEqual({ kind: 'date' });
+    expect(read('Date32')).toEqual({ kind: 'date' });
+    expect(read('DateTime')).toEqual({ kind: 'datetime', zone: false, precision: 0 });
+    expect(read("DateTime('UTC')")).toEqual({ kind: 'datetime', zone: false, precision: 0 });
+    expect(read("DateTime64(3, 'UTC')")).toEqual({ kind: 'datetime', zone: false, precision: 3 });
+    expect(read('DateTime64(9)')).toEqual({ kind: 'datetime', zone: false, precision: 6 });
+    expect(read('Time')).toEqual({ kind: 'time' });
+  });
+
+  it('reads UUIDs, enums with their values, and composites as JSON', () => {
+    expect(read('UUID')).toEqual({ kind: 'uuid' });
+    expect(read("Enum8('New' = 1, 'paid' = 2)")).toEqual({ kind: 'enum', values: ['New', 'paid'] });
+    expect(read("Nullable(Enum16('a' = 1))")).toEqual({ kind: 'enum', values: ['a'] });
+    for (const type of [
+      'Array(Int32)',
+      'Map(String, Int32)',
+      'Tuple(String, Int32)',
+      'JSON',
+      'Nested(a Int32)',
+    ]) {
+      expect(read(type), type).toEqual({ kind: 'json' });
+    }
+    expect(read('IPv4')).toEqual({ kind: 'text' });
+  });
+});
+
+describe('ClickHouse as the target (V6.3)', () => {
+  const write = (neutral: Parameters<typeof targetType>[0]) =>
+    targetType(neutral, 'clickhouse', false);
+
+  it('writes integers with their sign and width', () => {
+    expect(write({ kind: 'boolean' })).toEqual({ type: 'Bool', length: '' });
+    expect(write({ kind: 'integer', bytes: 1, unsigned: true })).toEqual({
+      type: 'UInt8',
+      length: '',
+    });
+    expect(write({ kind: 'integer', bytes: 3, unsigned: false })).toEqual({
+      type: 'Int32',
+      length: '',
+    });
+    expect(write({ kind: 'integer', bytes: 8, unsigned: false })).toEqual({
+      type: 'Int64',
+      length: '',
+    });
+  });
+
+  it('writes decimals within 76 digits and floats by width', () => {
+    expect(write({ kind: 'decimal' })).toEqual({ type: 'Decimal', length: '38,10' });
+    expect(write({ kind: 'decimal', precision: 100, scale: 4 })).toEqual({
+      type: 'Decimal',
+      length: '76,4',
+    });
+    expect(write({ kind: 'float', double: true })).toEqual({ type: 'Float64', length: '' });
+    expect(write({ kind: 'float', double: false })).toEqual({ type: 'Float32', length: '' });
+  });
+
+  it('writes every kind of text as String, enums as LowCardinality(String)', () => {
+    for (const neutral of [
+      { kind: 'string', length: 5, fixed: true },
+      { kind: 'text' },
+      { kind: 'json' },
+      { kind: 'binary' },
+      { kind: 'time' },
+    ] as const) {
+      expect(write(neutral), neutral.kind).toEqual({ type: 'String', length: '' });
+    }
+    expect(write({ kind: 'enum', values: ['a'] })).toEqual({
+      type: 'LowCardinality',
+      length: 'String',
+    });
+  });
+
+  it('writes dates as Date32 and moments as DateTime64, in UTC when they had a zone', () => {
+    expect(write({ kind: 'date' })).toEqual({ type: 'Date32', length: '' });
+    expect(write({ kind: 'datetime', zone: false })).toEqual({ type: 'DateTime64', length: '6' });
+    expect(write({ kind: 'datetime', zone: true, precision: 3 })).toEqual({
+      type: 'DateTime64',
+      length: "3, 'UTC'",
+    });
+    expect(write({ kind: 'uuid' })).toEqual({ type: 'UUID', length: '' });
+  });
+
+  it('keeps ClickHouse types as they are between ClickHouse servers', () => {
+    expect(mapColumnType("DateTime64(3, 'UTC')", 'clickhouse', 'clickhouse', false)).toEqual({
+      type: 'DateTime64',
+      length: "3, 'UTC'",
+    });
+    expect(mapColumnType('tinyint(1)', 'mysql', 'clickhouse', false)).toEqual({
+      type: 'Bool',
+      length: '',
+    });
+  });
+});
+
+describe('defaults to and from ClickHouse (V6.3)', () => {
+  it('writes booleans as true and false', () => {
+    expect(mapDefault('TRUE', { kind: 'boolean' }, 'postgres', 'clickhouse')).toBe('true');
+    expect(mapDefault('0', { kind: 'boolean' }, 'mysql', 'clickhouse')).toBe('false');
+  });
+
+  it('turns the current time into now() or now64(p), the current date into today()', () => {
+    expect(
+      mapDefault(
+        'CURRENT_TIMESTAMP(3)',
+        { kind: 'datetime', zone: false, precision: 3 },
+        'mysql',
+        'clickhouse',
+      ),
+    ).toBe('now64(3)');
+    expect(
+      mapDefault(
+        'now()',
+        { kind: 'datetime', zone: false, precision: 0 },
+        'postgres',
+        'clickhouse',
+      ),
+    ).toBe('now()');
+    expect(mapDefault('CURRENT_DATE', { kind: 'date' }, 'postgres', 'clickhouse')).toBe('today()');
+    expect(mapDefault("'x'", { kind: 'text' }, 'postgres', 'clickhouse')).toBe("'x'");
+  });
+
+  it("carries ClickHouse's today() and now64() to the others", () => {
+    expect(mapDefault('today()', { kind: 'date' }, 'clickhouse', 'postgres')).toBe('CURRENT_DATE');
+    expect(mapDefault('today()', { kind: 'date' }, 'clickhouse', 'mssql')).toBe(
+      'CAST(GETDATE() AS date)',
+    );
+    expect(
+      mapDefault(
+        'now64(3)',
+        { kind: 'datetime', zone: false, precision: 3 },
+        'clickhouse',
+        'mysql',
+      ),
+    ).toBe('CURRENT_TIMESTAMP(3)');
+    expect(
+      mapDefault('generateUUIDv4()', { kind: 'uuid' }, 'clickhouse', 'postgres'),
+    ).toBeUndefined();
+  });
+});

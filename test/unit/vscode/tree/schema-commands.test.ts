@@ -4,6 +4,7 @@ import { DbError } from '../../../../src/core/errors';
 import type { Driver } from '../../../../src/drivers/driver';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
 import { mssqlDialect } from '../../../../src/drivers/mssql/dialect';
+import { clickhouseDialect } from '../../../../src/drivers/clickhouse/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
@@ -54,6 +55,7 @@ const DIALECTS = {
   postgres: postgresDialect,
   sqlite: sqliteDialect,
   mssql: mssqlDialect,
+  clickhouse: clickhouseDialect,
 };
 
 interface Script {
@@ -109,6 +111,7 @@ function setup(script: Script = {}) {
       schemas: driverId === 'postgres',
       databaseScopedSessions: driverId === 'postgres',
       cancel: true,
+      transactions: true,
       objectKinds: [],
     },
   } as unknown as Driver;

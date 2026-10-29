@@ -13,6 +13,7 @@ export const driver: Driver = {
     schemas: false,
     databaseScopedSessions: false,
     cancel: true,
+    transactions: true,
     objectKinds: ['function', 'procedure', 'event'],
   },
   openSession: openMysqlSession,

@@ -62,6 +62,11 @@ export interface DriverCapabilities {
   /** A running statement can be cancelled from another connection or API. */
   readonly cancel: boolean;
   /**
+   * Changes can be grouped in a transaction and rolled back (all but ClickHouse). Where
+   * not, an import stops at the first bad row but keeps what it inserted before.
+   */
+  readonly transactions: boolean;
+  /**
    * Kinds of objects that live in a database or schema next to tables and views,
    * in the order the tree shows their folders. Triggers belong to tables instead.
    */

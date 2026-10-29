@@ -17,6 +17,7 @@
 npm ci
 npm run db:up          # группа core: MySQL 7306, MariaDB 7307, PostgreSQL 7432, SSH 7022
 npm run db:up -- mssql # SQL Server 7143 (раздел 16a)
+npm run db:up -- clickhouse # ClickHouse 7123/7443 (раздел 16b)
 npm run package        # соберёт datanest-<версия>.vsix
 ```
 
@@ -239,6 +240,18 @@ npm run package        # соберёт datanest-<версия>.vsix
 8. Изменить процедуру `restock` и применить; с синтаксической ошибкой — ошибка, старая процедура осталась.
 9. Дамп схемы `dbo` → файл с `GO`; создать пустую базу, «Выполнить SQL-файл» на ней → все таблицы, строки, процедуры, триггер, последовательность на месте; второй прогон поверх — без ошибок.
 10. Импорт CSV в таблицу с `IDENTITY` (с колонкой id и без), экспорт таблицы в XLSX, генератор на `customers`, перенос `dbo` в SQLite-файл и обратно в `datanest_empty`.
+
+## 16b. ClickHouse (0.6.0)
+
+`npm run db:up -- clickhouse` поднимает ClickHouse 25.8 на `127.0.0.1:7123` (HTTPS — 7443; пользователь и пароль `datanest`, база `datanest_test`).
+
+1. Новое подключение «ClickHouse», порт 7123 → «Проверить» — успешно; неверный пароль — понятная ошибка. HTTPS: порт 7443, «Проверять CA» с `docker/tls/ca.crt` — подключается. URL `clickhouse://datanest:datanest@127.0.0.1:7123/datanest_test` заполняет форму.
+2. Дерево: базы без `system`, таблицы, представление `order_totals`, материализованное `product_sales` (без `.inner`-таблицы); у таблицы колонки с `Nullable(…)` и ключ сортировки.
+3. `SELECT * FROM all_types` → `c_int64`, `c_uint64`, `c_int128`, `c_decimal` без округления, `c_array`/`c_map` — JSON, `c_tuple` — `('x', 7)`. `SELECT sleepEachRow(1) FROM numbers(30) SETTINGS max_block_size = 1` → «Отмена» за секунду, следующий запрос работает. `SET max_threads = 3` и затем `SELECT getSetting('max_threads')` → 3. `USE datanest_empty` → `SELECT currentDatabase()` → `datanest_empty`.
+4. Read-only подключение: `INSERT` — отказ сервера. Результаты нельзя редактировать (нет ключа).
+5. Табличный вид `customers`: страницы с точным числом строк, фильтр «содержит `иван`» находит Ольгу.
+6. Конструктор: нет вкладки «Внешние ключи», колонки «Автонумерация» и галочки «Уникальный»; новая таблица с ключом, `Nullable`-колонкой и комментарием создаётся с `ENGINE = MergeTree ORDER BY`; перестановка колонок и переименование применяются; смена ключа — понятный отказ.
+7. Импорт CSV с плохой строкой в режиме «Остановиться на первой плохой строке» — надпись про отсутствие транзакций; «Пропустить» — остальные строки на месте. Экспорт `big_table` в XLSX, генератор на новой таблице, дамп `datanest_test` и выполнение его на `datanest_empty`, перенос в SQLite-файл и обратно.
 
 ## 17. Темы, язык, доступность
 

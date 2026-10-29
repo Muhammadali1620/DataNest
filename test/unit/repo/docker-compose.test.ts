@@ -43,8 +43,9 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
+      'clickhouse',
       'mariadb',
       'mssql',
       'mysql',
@@ -69,7 +70,8 @@ describe('docker/compose.yml (D17)', () => {
   });
 
   it.each(all)('publishes %s only on 127.0.0.1 within ports 7000-7999', (id, service) => {
-    expect(service.ports?.length ?? 0).toBe(id === 'ssh-inner' ? 0 : 1);
+    // ClickHouse answers HTTP and HTTPS on ports of their own.
+    expect(service.ports?.length ?? 0).toBe(id === 'ssh-inner' ? 0 : id === 'clickhouse' ? 2 : 1);
     for (const mapping of service.ports ?? []) {
       const { host, hostPort } = parsePort(mapping);
       expect(host).toBe('127.0.0.1');

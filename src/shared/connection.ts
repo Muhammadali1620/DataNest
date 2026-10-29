@@ -1,7 +1,7 @@
 // The saved description of a connection. Passwords never live here: they are
 // kept in SecretStorage and joined in only at connect time (ARCHITECTURE.md §8).
 
-export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite', 'mssql'] as const;
+export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite', 'mssql', 'clickhouse'] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
 
@@ -19,6 +19,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   mysql: 3306,
   postgres: 5432,
   mssql: 1433,
+  // The HTTP interface; HTTPS is 8443, which DataNest picks when TLS is on.
+  clickhouse: 8123,
 };
 
 export const CONNECTION_LIMITS = {
@@ -157,6 +159,9 @@ export function optionSupport(driver: DriverId): OptionSupport {
     // SQL Server sessions have no time zone of their own, and N'…' text needs no charset.
     case 'mssql':
       return { connectTimeout: true, keepAlive: true, timeZone: false, charset: false };
+    // HTTP carries UTF-8; the time zone is the session_timezone setting.
+    case 'clickhouse':
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false };
   }
 }
 
@@ -183,6 +188,8 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
       return { databases: false, schemas: false };
     case 'mssql':
       return { databases: true, schemas: true };
+    case 'clickhouse':
+      return { databases: true, schemas: false };
   }
 }
 

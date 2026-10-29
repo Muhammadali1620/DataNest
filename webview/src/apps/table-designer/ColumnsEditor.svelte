@@ -77,7 +77,9 @@
       <th>{t('designer.col.notNull')}</th>
       <th>{t('designer.col.default')}</th>
       <th>{t('designer.col.primaryKey')}</th>
-      <th>{t('designer.col.autoIncrement')}</th>
+      {#if features.autoIncrement}
+        <th>{t('designer.col.autoIncrement')}</th>
+      {/if}
       {#if features.columnComments}
         <th>{t('designer.col.comment')}</th>
       {/if}
@@ -178,17 +180,19 @@
             }}
           />
         </td>
-        <td class="check">
-          <input
-            type="checkbox"
-            checked={column.autoIncrement}
-            aria-label={cell('designer.col.autoIncrement', column, index)}
-            aria-invalid={own.some((p) => p.kind === 'auto-increment')}
-            onchange={(event) => {
-              update(column.id, { autoIncrement: event.currentTarget.checked });
-            }}
-          />
-        </td>
+        {#if features.autoIncrement}
+          <td class="check">
+            <input
+              type="checkbox"
+              checked={column.autoIncrement}
+              aria-label={cell('designer.col.autoIncrement', column, index)}
+              aria-invalid={own.some((p) => p.kind === 'auto-increment')}
+              onchange={(event) => {
+                update(column.id, { autoIncrement: event.currentTarget.checked });
+              }}
+            />
+          </td>
+        {/if}
         {#if features.columnComments}
           <td>
             <input
@@ -215,7 +219,7 @@
       {#if own.length > 0}
         <tr class="problems">
           <td></td>
-          <td colspan={features.columnComments ? 9 : 8}>
+          <td colspan={7 + (features.columnComments ? 1 : 0) + (features.autoIncrement ? 1 : 0)}>
             {#each own as problem, number (number)}
               <span class="error" role="alert">{t(problemMessage(problem))}</span>
             {/each}

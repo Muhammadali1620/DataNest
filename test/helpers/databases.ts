@@ -4,7 +4,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type TestDatabaseId = 'mysql' | 'mariadb' | 'postgres' | 'mssql';
+export type TestDatabaseId = 'mysql' | 'mariadb' | 'postgres' | 'mssql' | 'clickhouse';
 
 /** The databases of the `core` group, which the SSH server can reach. */
 export type CoreDatabaseId = 'mysql' | 'mariadb' | 'postgres';
@@ -27,6 +27,7 @@ export const DEFAULT_PORTS: Readonly<Record<TestDatabaseId, number>> = {
   mariadb: 7307,
   postgres: 7432,
   mssql: 7143,
+  clickhouse: 7123,
 };
 
 export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
@@ -34,6 +35,7 @@ export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
   mariadb: 'DATANEST_MARIADB_PORT',
   postgres: 'DATANEST_POSTGRES_PORT',
   mssql: 'DATANEST_MSSQL_PORT',
+  clickhouse: 'DATANEST_CLICKHOUSE_PORT',
 };
 
 /** Reads a port from `env`, falling back to the default; rejects ports outside 7000-7999. */
@@ -112,3 +114,6 @@ export function testSshServer(
     inner: { host: 'ssh-inner', port: 22 },
   };
 }
+
+/** ClickHouse's HTTPS port next to its HTTP one (V6.3). */
+export const CLICKHOUSE_HTTPS_PORT = 7443;

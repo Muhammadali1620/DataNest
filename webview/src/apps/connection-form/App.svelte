@@ -60,6 +60,7 @@
     postgres: 'form.driver.postgres',
     sqlite: 'form.driver.sqlite',
     mssql: 'form.driver.mssql',
+    clickhouse: 'form.driver.clickhouse',
   };
 
   const problems = $derived(fields === undefined ? [] : problemsOf(fields));

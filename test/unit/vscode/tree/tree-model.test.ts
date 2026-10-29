@@ -167,6 +167,7 @@ describe('TreeModel', () => {
         schemas: false,
         databaseScopedSessions: false,
         cancel: true,
+        transactions: true,
         objectKinds: [],
       };
       expect(await model.children({ kind: 'connection', connectionId: sqlite.id })).toEqual([
@@ -240,6 +241,7 @@ describe('TreeModel', () => {
         schemas: true,
         databaseScopedSessions: true,
         cancel: true,
+        transactions: true,
         objectKinds: [],
       };
       driver.sessionMetadata.schemas = ['public', 'pg_catalog', 'information_schema', 'audit'];
@@ -274,6 +276,7 @@ describe('TreeModel', () => {
         schemas: true,
         databaseScopedSessions: true,
         cancel: true,
+        transactions: true,
         objectKinds: [],
       };
       driver.sessionMetadata.schemas = ['public', 'audit', 'sales'];
@@ -296,6 +299,7 @@ describe('TreeModel', () => {
         schemas: true,
         databaseScopedSessions: true,
         cancel: true,
+        transactions: true,
         objectKinds: [],
       };
       driver.sessionMetadata.schemas = ['public', 'audit'];
@@ -336,6 +340,7 @@ describe('TreeModel', () => {
         schemas: true,
         databaseScopedSessions: true,
         cancel: true,
+        transactions: true,
         objectKinds: [],
       };
       await model.children({

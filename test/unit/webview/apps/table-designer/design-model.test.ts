@@ -226,3 +226,10 @@ describe('addColumn on SQL Server (V6.2)', () => {
     expect(next.columns.at(-1)).toMatchObject({ type: 'nvarchar', length: '255', nullable: true });
   });
 });
+
+describe('addColumn on ClickHouse (V6.3)', () => {
+  it('adds a nullable String without a length', () => {
+    const next = addColumn({ ...newTableDesign('clickhouse', 't'), columns: [] }, 'clickhouse');
+    expect(next.columns[0]).toMatchObject({ type: 'String', length: '', nullable: true });
+  });
+});

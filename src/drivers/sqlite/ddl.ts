@@ -12,7 +12,15 @@ import { quoteIdentifier, quoteTable } from './quote';
 const TYPES = ['integer', 'real', 'text', 'blob', 'numeric'];
 
 export const sqliteDdl: SchemaDdl = {
-  designer: { columnComments: false, tableComment: false, types: TYPES, reorder: true },
+  designer: {
+    columnComments: false,
+    tableComment: false,
+    types: TYPES,
+    reorder: true,
+    autoIncrement: true,
+    foreignKeys: true,
+    uniqueIndexes: true,
+  },
   alterTable: (table, before, after, background) =>
     sqliteAlterTable(table, before, after, background),
   createTable: sqliteCreateTable,

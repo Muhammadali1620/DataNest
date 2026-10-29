@@ -139,3 +139,30 @@ describe('isReadOnlyStatement: T-SQL (V6.2)', () => {
     expect(isReadOnlyStatement('DECLARE @n INT; DELETE FROM t', mssql)).toBe(false);
   });
 });
+
+describe('isReadOnlyStatement: ClickHouse (V6.3)', () => {
+  const clickhouse = syntaxOf('clickhouse');
+
+  it('reads with EXISTS, SHOW, DESCRIBE and SELECT … FINAL', () => {
+    for (const sql of [
+      'EXISTS TABLE t',
+      'SHOW TABLES',
+      'DESCRIBE TABLE t',
+      'SELECT * FROM t FINAL WHERE a = 1',
+    ]) {
+      expect(isReadOnlyStatement(sql, clickhouse), sql).toBe(true);
+    }
+  });
+
+  it('counts mutations, OPTIMIZE and SYSTEM as changes', () => {
+    for (const sql of [
+      'ALTER TABLE t DELETE WHERE a = 1',
+      'OPTIMIZE TABLE t FINAL',
+      'SYSTEM DROP DNS CACHE',
+      'INSERT INTO t FORMAT JSONEachRow {}',
+      'KILL QUERY WHERE 1',
+    ]) {
+      expect(isReadOnlyStatement(sql, clickhouse), sql).toBe(false);
+    }
+  });
+});

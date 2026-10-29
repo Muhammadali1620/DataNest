@@ -70,6 +70,7 @@ export const en = {
   'form.driver.postgres': 'PostgreSQL',
   'form.driver.sqlite': 'SQLite',
   'form.driver.mssql': 'Microsoft SQL Server',
+  'form.driver.clickhouse': 'ClickHouse',
   'form.host': 'Host',
   'form.port': 'Port',
   'form.portHint': 'Default: {0}',
@@ -407,6 +408,8 @@ export const en = {
   'import.mode': 'When a row does not fit',
   'import.modeAll': 'All or nothing: stop at the first bad row and keep nothing',
   'import.modeSkip': 'Skip the rows that do not fit and keep the rest',
+  'import.modeStop':
+    'Stop at the first bad row; the rows before it stay (this database has no transactions to undo them)',
   'import.progress': 'Read: {0} · imported: {1} · failed: {2}',
   'import.stop': 'Stop',
   'import.report': 'Result',

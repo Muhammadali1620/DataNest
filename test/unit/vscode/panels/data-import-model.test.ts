@@ -201,3 +201,24 @@ describe('valueOptions and sourceText', () => {
     expect(sourceText({ json: '[1]' })).toBe('[1]');
   });
 });
+
+describe('DataImportModel: transactions (V6.3)', () => {
+  const base = {
+    target: { connectionId: 'c' },
+    table: { database: 'events', name: 'hits' },
+    file: '/tmp/hits.csv',
+    columns: COLUMNS,
+    readChunks: () => chunks(''),
+    importer: { run: () => Promise.reject(new Error('not used')) },
+  };
+
+  it('can undo a stopped import unless the driver says otherwise', () => {
+    expect(new DataImportModel({ ...base, driver: 'postgres' }).transactional).toBe(true);
+    expect(
+      new DataImportModel({ ...base, driver: 'mysql', transactional: true }).transactional,
+    ).toBe(true);
+    const clickhouse = new DataImportModel({ ...base, driver: 'clickhouse', transactional: false });
+    expect(clickhouse.transactional).toBe(false);
+    expect(clickhouse.driver).toBe('clickhouse');
+  });
+});

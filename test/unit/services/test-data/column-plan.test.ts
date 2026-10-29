@@ -136,3 +136,36 @@ describe('typeSettings', () => {
     expect(typeSettings(column('a', 'text', { unique: true }), 'words').unique).toBe(true);
   });
 });
+
+describe('ClickHouse types (V6.3)', () => {
+  it('keeps integers within the width the type name says', () => {
+    expect(typeSettings(column('a', 'UInt8'), 'integer')).toMatchObject({ min: 0, max: 255 });
+    expect(typeSettings(column('a', 'Int8'), 'integer')).toMatchObject({ min: 1, max: 127 });
+    expect(typeSettings(column('a', 'UInt16'), 'integer')).toMatchObject({ min: 1, max: 32_000 });
+    expect(typeSettings(column('a', 'Int64'), 'integer')).toMatchObject({ min: 1, max: 100_000 });
+    expect(typeSettings(column('a', 'Nullable(UInt8)'), 'integer')).toMatchObject({
+      min: 0,
+      max: 255,
+    });
+  });
+
+  it('reads decimals, strings and enums through their wrappers', () => {
+    expect(typeSettings(column('a', 'Nullable(Decimal(5, 2))'), 'decimal')).toMatchObject({
+      scale: 2,
+      max: 999,
+    });
+    expect(typeSettings(column('a', "Enum8('s' = 1, 'm' = 2)"), 'enum').choices).toEqual([
+      's',
+      'm',
+    ]);
+  });
+
+  it('suggests generators by the ClickHouse type', () => {
+    expect(suggestGenerator(column('level', 'UInt8'))).toBe('integer');
+    expect(suggestGenerator(column('flag', 'Bool'))).toBe('boolean');
+    expect(suggestGenerator(column('born', 'Date32'))).toBe('date');
+    expect(suggestGenerator(column('seen', "DateTime64(3, 'UTC')"))).toBe('datetime');
+    expect(suggestGenerator(column('token', 'UUID'))).toBe('uuid');
+    expect(suggestGenerator(column('size', "Enum8('s' = 1)"))).toBe('enum');
+  });
+});

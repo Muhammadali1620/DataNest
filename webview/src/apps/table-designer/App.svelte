@@ -264,7 +264,7 @@
     {/if}
 
     <div class="tabs" role="tablist">
-      {#each TABS as item (item.id)}
+      {#each TABS.filter((item) => item.id !== 'keys' || designerState?.features.foreignKeys !== false) as item (item.id)}
         <button
           role="tab"
           class="tab"
@@ -291,7 +291,14 @@
         <p class="error" role="alert">{t('designer.problem.noColumns')}</p>
       {/if}
     {:else if tab === 'indexes'}
-      <IndexesEditor {design} {problems} {showProblems} {t} onchange={setColumns} />
+      <IndexesEditor
+        {design}
+        unique={designerState.features.uniqueIndexes}
+        {problems}
+        {showProblems}
+        {t}
+        onchange={setColumns}
+      />
     {:else if tab === 'keys'}
       <ForeignKeysEditor
         {design}

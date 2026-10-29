@@ -38,6 +38,7 @@ describe('languageOf', () => {
     expect(languageOf('postgres')).toBe('postgresql');
     expect(languageOf('sqlite')).toBe('sqlite');
     expect(languageOf('mssql')).toBe('transactsql');
+    expect(languageOf('clickhouse')).toBe('clickhouse');
     expect(languageOf(undefined)).toBe('sql');
   });
 
@@ -168,5 +169,18 @@ describe('createBundleFormatterLoader', () => {
     expect(() => createBundleFormatterLoader(join(empty, 'extension.js'))()).toThrow(
       /formatter\.js/,
     );
+  });
+});
+
+describe('ClickHouse formatting (V6.3)', () => {
+  it('formats through the real formatter in its own dialect', () => {
+    const text = formatter.format(
+      'select uniqExact(user_id) from hits final prewhere ts > now() - 60 settings max_threads=2',
+      'clickhouse',
+      DEFAULT_FORMAT_STYLE,
+    );
+    expect(text).toContain('SELECT');
+    expect(text).toContain('FINAL');
+    expect(text).toContain('PREWHERE');
   });
 });

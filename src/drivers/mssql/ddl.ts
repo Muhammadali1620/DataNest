@@ -61,7 +61,15 @@ export const mssqlDdl: SchemaDdl = {
     return `DROP SCHEMA ${quoteIdentifier(name)}`;
   },
   // Columns of an existing table keep their places: SQL Server cannot move them.
-  designer: { columnComments: true, tableComment: true, types: TYPES, reorder: false },
+  designer: {
+    columnComments: true,
+    tableComment: true,
+    types: TYPES,
+    reorder: false,
+    autoIncrement: true,
+    foreignKeys: true,
+    uniqueIndexes: true,
+  },
   alterTable: mssqlAlterTable,
   createTable: (table, rawDesign) => {
     const design = { ...rawDesign, foreignKeys: rawDesign.foreignKeys.map(withoutRestrict) };

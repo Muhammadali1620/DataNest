@@ -15,6 +15,7 @@ export const driver: Driver = {
     // database, as for PostgreSQL (D28).
     databaseScopedSessions: true,
     cancel: true,
+    transactions: true,
     objectKinds: ['function', 'procedure', 'sequence'],
   },
   openSession: openMssqlSession,

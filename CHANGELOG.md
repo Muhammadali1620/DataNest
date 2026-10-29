@@ -14,6 +14,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   table designer, editing, dumps, imports, exports, test data and copies to and from the
   other databases. Connect by host, `host\INSTANCE` or port, with TLS checks of your choice,
   or paste a `sqlserver://` URL.
+- ClickHouse over its HTTP interface: databases, tables, views and materialized views,
+  columns with their full types, the sorting key and skipping indexes; exact 64- and
+  128-bit integers and decimals; sessions that keep `SET` and `USE`; cancel; read-only
+  connections enforced by the server; the table designer (MergeTree, `Nullable`, column
+  order), dumps, imports, exports, test data and copies to and from the other databases.
+  Results are read-only, since rows have no key.
+
+### Changed
+
+- Where a database has no transactions (ClickHouse), “all or nothing” imports stop at the
+  first bad row and say that the rows before it stay.
 
 ### Fixed
 
@@ -21,6 +32,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   shows the first set instead of mixing the rows of all of them under its columns.
 - Copying tables between database systems gives foreign keys names of their own: keys
   from SQLite are all called `fk_1`, which MySQL and SQL Server refuse twice.
+- The table designer edits SQL Server's nonclustered indexes instead of keeping them
+  as they are.
 
 ## [0.5.0] - 2026-10-29
 

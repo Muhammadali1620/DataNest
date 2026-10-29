@@ -366,3 +366,26 @@ describe('SQL Server connections (V6.2)', () => {
     expect(filterSupport('mssql')).toEqual({ databases: true, schemas: true });
   });
 });
+
+describe('ClickHouse connections (V6.3)', () => {
+  it('is a network driver on the HTTP port 8123', () => {
+    expect(isDriverId('clickhouse')).toBe(true);
+    expect(isFileDriver('clickhouse')).toBe(false);
+    expect(DEFAULT_PORTS.clickhouse).toBe(8123);
+    expect(effectivePort({ name: 'c', driver: 'clickhouse', host: 'h' })).toBe(8123);
+    expect(effectivePort({ name: 'c', driver: 'clickhouse', host: 'h', port: 8443 })).toBe(8443);
+  });
+
+  it('honours a time zone, but no character set', () => {
+    expect(optionSupport('clickhouse')).toEqual({
+      connectTimeout: true,
+      keepAlive: true,
+      timeZone: true,
+      charset: false,
+    });
+  });
+
+  it('filters databases only: ClickHouse has no schemas', () => {
+    expect(filterSupport('clickhouse')).toEqual({ databases: true, schemas: false });
+  });
+});

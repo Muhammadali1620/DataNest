@@ -10,6 +10,7 @@ import type { Driver } from '../../../src/drivers/driver';
 import { driver as mysqlDriver } from '../../../src/drivers/mysql';
 import { driver as postgresDriver } from '../../../src/drivers/postgres';
 import { driver as mssqlDriver } from '../../../src/drivers/mssql';
+import { driver as clickhouseDriver } from '../../../src/drivers/clickhouse';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
@@ -122,7 +123,13 @@ describe('table view paging', () => {
         logger,
       });
       const sqlite = createSqliteDriver({ workerPath: worker.workerPath });
-      drivers = { mysql: mysqlDriver, postgres: postgresDriver, sqlite, mssql: mssqlDriver };
+      drivers = {
+        mysql: mysqlDriver,
+        postgres: postgresDriver,
+        sqlite,
+        mssql: mssqlDriver,
+        clickhouse: clickhouseDriver,
+      };
       manager = new ConnectionManager({
         store,
         drivers: { get: (id) => Promise.resolve(drivers[id]) },

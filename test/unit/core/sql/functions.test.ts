@@ -86,3 +86,22 @@ describe('SQL Server functions and snippets (V6.2)', () => {
     expect(snippets.find((s) => s.prefix === 'proc')?.body).toMatch(/\nGO$/u);
   });
 });
+
+describe('ClickHouse completion (V6.3)', () => {
+  it('offers its own functions next to the common ones', () => {
+    const names = functionsOf('clickhouse').map((fn) => fn.name);
+    expect(names).toEqual(
+      expect.arrayContaining(['COUNT', 'now', 'toDateTime', 'uniqExact', 'groupArray', 'LENGTH']),
+    );
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('offers a MergeTree table and a FINAL select', () => {
+    const snippets = snippetsOf('clickhouse');
+    const table = snippets.find((snippet) => snippet.prefix === 'table');
+    expect(table?.body).toContain('ENGINE = MergeTree');
+    expect(table?.body).toContain('ORDER BY');
+    expect(snippets.find((snippet) => snippet.prefix === 'final')?.body).toContain('FINAL');
+    expect(snippets.find((snippet) => snippet.prefix === 'sel')).toBeDefined();
+  });
+});

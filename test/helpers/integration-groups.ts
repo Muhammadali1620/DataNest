@@ -43,6 +43,14 @@ const DEFINITIONS = {
       return [{ name: 'mssql', host: db.host, port: db.port }];
     },
   },
+  clickhouse: {
+    always: false,
+    folders: ['clickhouse'],
+    endpoints: (env) => {
+      const db = testDatabase('clickhouse', env);
+      return [{ name: 'clickhouse', host: db.host, port: db.port }];
+    },
+  },
 } as const satisfies Record<string, IntegrationGroup>;
 
 export type IntegrationGroupId = keyof typeof DEFINITIONS;

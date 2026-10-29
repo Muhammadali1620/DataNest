@@ -71,6 +71,14 @@ export class FakeRedisSession implements RedisSession {
     return replies;
   }
 
+  /** Every block run atomically, as text. */
+  readonly blocks: string[][][] = [];
+
+  async atomic(commands: readonly RedisCommand[]): Promise<RedisReply[]> {
+    this.blocks.push(commands.map(commandWords));
+    return await this.pipeline(commands);
+  }
+
   async onMasters(command: RedisCommand): Promise<RedisReply[]> {
     if (this.masters !== undefined) {
       const words = commandWords(command);

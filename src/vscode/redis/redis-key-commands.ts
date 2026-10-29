@@ -7,7 +7,19 @@ import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import type { LoadedKey } from '../../services/redis/key-tree';
 import type { ConnectionStore } from '../../services/connection-store';
 import { redisDatabaseOf } from '../../services/connection-manager';
-import { isTreeNode, type RedisDatabaseNode, type TreeNode } from '../tree/nodes';
+import {
+  createKey,
+  deleteKeys,
+  type NewKeyContent,
+  renameKey,
+} from '../../services/redis/key-edits';
+import { type RedisKeyRef, redisKeyBytes, redisKeyId, redisKeyRef } from '../../shared/redis-key';
+import {
+  isTreeNode,
+  type RedisDatabaseNode,
+  type RedisKeyNode,
+  type TreeNode,
+} from '../tree/nodes';
 import type { CommandTarget, RefreshableTree } from '../tree/tree-commands';
 
 /** Where a key command works: a connection and one of its numbered databases. */
@@ -16,8 +28,23 @@ export interface RedisPlace {
   readonly database: number;
 }
 
+/** The questions the key commands ask, as texts of the editor's language. */
+export interface RedisKeyTexts {
+  deleteKeys(names: readonly string[]): string;
+  readonly deleteAction: string;
+  productionDetail(connection: string): string;
+  replaceKey(name: string): string;
+  readonly replaceAction: string;
+  /** The button of the production question. */
+  readonly changeAction: string;
+  readonly readOnly: string;
+}
+
 export interface RedisKeyCommandDeps {
-  readonly browser: Pick<RedisKeyBrowser, 'loadMore' | 'patternOf' | 'setPattern' | 'include'>;
+  readonly browser: Pick<
+    RedisKeyBrowser,
+    'loadMore' | 'patternOf' | 'setPattern' | 'include' | 'forget' | 'session'
+  >;
   readonly store: Pick<ConnectionStore, 'get' | 'list'>;
   readonly tree: RefreshableTree;
   /** Asks for a glob; undefined when the user backs out, '' to show every key. */
@@ -30,9 +57,25 @@ export interface RedisKeyCommandDeps {
   readonly reveal: (place: RedisPlace, key: LoadedKey) => Promise<void>;
   /** Shown when a command needs a Redis database and none is at hand. */
   readonly noRedisMessage: string;
+  /** Opens the page of a key (V7.3). */
+  readonly openKey: (place: RedisPlace, key: RedisKeyRef) => Promise<void>;
+  /** Asks for the name, type and first content of a new key; `prefix` starts the name. */
+  readonly askNewKey: (
+    prefix: string,
+  ) => Promise<{ readonly name: string; readonly content: NewKeyContent } | undefined>;
+  /** Asks for a new name; undefined when the user backs out. */
+  readonly askName: (current: string) => Promise<string | undefined>;
+  /** A modal question with one action; true when the user takes it. */
+  readonly confirm: (
+    message: string,
+    detail: string | undefined,
+    action: string,
+  ) => Promise<boolean>;
+  readonly texts: RedisKeyTexts;
 }
 
-export type RedisKeyCommandName = 'loadMoreKeys' | 'filterKeys' | 'findKey';
+export type RedisKeyCommandName =
+  'loadMoreKeys' | 'filterKeys' | 'findKey' | 'openKey' | 'newKey' | 'renameKey' | 'deleteKeys';
 
 function databaseNode(place: RedisPlace): RedisDatabaseNode {
   // The key count does not matter to refresh: nodes are matched by id.
@@ -46,7 +89,7 @@ function databaseNode(place: RedisPlace): RedisDatabaseNode {
 
 export function redisKeyCommandHandlers(
   deps: RedisKeyCommandDeps,
-): Record<RedisKeyCommandName, (target?: CommandTarget) => unknown> {
+): Record<RedisKeyCommandName, (target?: CommandTarget, ...rest: unknown[]) => unknown> {
   /** The database of the clicked node, of the connection, or one the user picks. */
   const placeOf = async (target: CommandTarget): Promise<RedisPlace | undefined> => {
     if (isTreeNode(target)) {
@@ -119,9 +162,137 @@ export function redisKeyCommandHandlers(
       }
       deps.browser.include(place.connectionId, place.database, found);
       await deps.reveal(place, found);
+      await deps.openKey(place, found.key);
+      return undefined;
+    },
+
+    openKey: async (target?: CommandTarget) => {
+      if (isTreeNode(target) && target.kind === 'redisKey') {
+        await deps.openKey(
+          { connectionId: target.connectionId, database: target.database },
+          target.key,
+        );
+      }
+      return undefined;
+    },
+
+    newKey: async (target?: CommandTarget) => {
+      const place = await placeOf(target);
+      if (place === undefined || !(await mayChange(place))) {
+        return undefined;
+      }
+      const prefix = isTreeNode(target) && target.kind === 'redisFolder' ? target.prefix : '';
+      const asked = await deps.askNewKey(prefix);
+      if (asked === undefined) {
+        return undefined;
+      }
+      const key = new TextEncoder().encode(asked.name);
+      await createKey(
+        await deps.browser.session(place.connectionId, place.database),
+        key,
+        asked.content,
+      );
+      const ref = redisKeyRef(key);
+      deps.browser.include(place.connectionId, place.database, {
+        key: ref,
+        type: asked.content.type,
+      });
+      deps.tree.refresh(databaseNode(place));
+      await deps.openKey(place, ref);
+      return undefined;
+    },
+
+    renameKey: async (target?: CommandTarget) => {
+      if (!isTreeNode(target) || target.kind !== 'redisKey') {
+        return undefined;
+      }
+      const place = { connectionId: target.connectionId, database: target.database };
+      if (!(await mayChange(place))) {
+        return undefined;
+      }
+      const name = await deps.askName(target.key.text);
+      if (name === undefined || name === target.key.text) {
+        return undefined;
+      }
+      const session = await deps.browser.session(place.connectionId, place.database);
+      const from = redisKeyBytes(target.key);
+      const to = new TextEncoder().encode(name);
+      if (!(await renameKey(session, from, to, false))) {
+        if (
+          !(await deps.confirm(deps.texts.replaceKey(name), undefined, deps.texts.replaceAction))
+        ) {
+          return undefined;
+        }
+        await renameKey(session, from, to, true);
+      }
+      deps.browser.forget(place.connectionId, place.database, target.key);
+      deps.browser.include(place.connectionId, place.database, {
+        key: redisKeyRef(to),
+        ...(target.keyType === undefined ? {} : { type: target.keyType }),
+      });
+      deps.tree.refresh(databaseNode(place));
+      return undefined;
+    },
+
+    /** Deletes the clicked key, or every selected key of its database, after one question. */
+    deleteKeys: async (target?: CommandTarget, selection?: unknown) => {
+      if (!isTreeNode(target) || target.kind !== 'redisKey') {
+        return undefined;
+      }
+      const place = { connectionId: target.connectionId, database: target.database };
+      const chosen = (Array.isArray(selection) ? selection : [])
+        .filter(isTreeNode)
+        .filter(
+          (node): node is RedisKeyNode =>
+            node.kind === 'redisKey' &&
+            node.connectionId === place.connectionId &&
+            node.database === place.database,
+        );
+      const keys = chosen.some((node) => redisKeyId(node.key) === redisKeyId(target.key))
+        ? chosen.map((node) => node.key)
+        : [target.key];
+      const config = deps.store.get(place.connectionId);
+      if (config?.readOnly === true) {
+        throw new DbError('permission-denied', deps.texts.readOnly);
+      }
+      const detail =
+        config?.production === true ? deps.texts.productionDetail(config.name) : undefined;
+      if (
+        !(await deps.confirm(
+          deps.texts.deleteKeys(keys.map((key) => key.text)),
+          detail,
+          deps.texts.deleteAction,
+        ))
+      ) {
+        return undefined;
+      }
+      await deleteKeys(
+        await deps.browser.session(place.connectionId, place.database),
+        keys.map(redisKeyBytes),
+      );
+      for (const key of keys) {
+        deps.browser.forget(place.connectionId, place.database, key);
+      }
+      deps.tree.refresh(databaseNode(place));
       return undefined;
     },
   };
+
+  /** Read-only refuses; production asks once (V4.6). */
+  async function mayChange(place: RedisPlace): Promise<boolean> {
+    const config = deps.store.get(place.connectionId);
+    if (config?.readOnly === true) {
+      throw new DbError('permission-denied', deps.texts.readOnly);
+    }
+    if (config?.production !== true) {
+      return true;
+    }
+    return await deps.confirm(
+      deps.texts.productionDetail(config.name),
+      undefined,
+      deps.texts.changeAction,
+    );
+  }
 }
 
 /** The tree node of a key in a database, as the tree builds it: named by its last segment. */

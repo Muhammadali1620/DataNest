@@ -422,6 +422,30 @@
         "title": "%commands.redis.findKey.title%",
         "category": "DataNest",
         "icon": "$(search)"
+      },
+      {
+        "command": "datanest.redis.openKey",
+        "title": "%commands.redis.openKey.title%",
+        "category": "DataNest",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "datanest.redis.newKey",
+        "title": "%commands.redis.newKey.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.redis.renameKey",
+        "title": "%commands.redis.renameKey.title%",
+        "category": "DataNest",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "datanest.redis.deleteKeys",
+        "title": "%commands.redis.deleteKeys.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -528,6 +552,18 @@
         },
         {
           "command": "datanest.redis.loadMoreKeys",
+          "when": "false"
+        },
+        {
+          "command": "datanest.redis.openKey",
+          "when": "false"
+        },
+        {
+          "command": "datanest.redis.renameKey",
+          "when": "false"
+        },
+        {
+          "command": "datanest.redis.deleteKeys",
           "when": "false"
         }
       ],
@@ -863,6 +899,31 @@
           "command": "datanest.redis.loadMoreKeys",
           "when": "view == datanest.connections && viewItem == datanest.redisMore",
           "group": "1_keys@3"
+        },
+        {
+          "command": "datanest.redis.newKey",
+          "when": "view == datanest.connections && (viewItem == datanest.redisDatabase || viewItem == datanest.redisFolder)",
+          "group": "inline@2"
+        },
+        {
+          "command": "datanest.redis.newKey",
+          "when": "view == datanest.connections && (viewItem == datanest.redisDatabase || viewItem == datanest.redisFolder)",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "datanest.redis.openKey",
+          "when": "view == datanest.connections && viewItem == datanest.redisKey",
+          "group": "0_open@1"
+        },
+        {
+          "command": "datanest.redis.renameKey",
+          "when": "view == datanest.connections && viewItem == datanest.redisKey",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "datanest.redis.deleteKeys",
+          "when": "view == datanest.connections && viewItem == datanest.redisKey",
+          "group": "8_destroy@1"
         }
       ],
       "editor/title": [

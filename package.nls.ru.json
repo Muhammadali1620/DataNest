@@ -101,5 +101,9 @@
   "commands.redis.filterKeys.title": "Фильтр ключей…",
   "commands.redis.findKey.title": "Найти ключ Redis…",
   "configuration.redis.keySeparator.description": "Чем имена ключей Redis делятся на папки в дереве, например `user:1:name` → `user` → `1`. Пусто — без папок.",
-  "configuration.redis.keysPerLoad.description": "Сколько ключей Redis дерево загружает за раз через `SCAN`; пункт **Загрузить ещё ключи** приносит следующую порцию."
+  "configuration.redis.keysPerLoad.description": "Сколько ключей Redis дерево загружает за раз через `SCAN`; пункт **Загрузить ещё ключи** приносит следующую порцию.",
+  "commands.redis.openKey.title": "Открыть ключ",
+  "commands.redis.newKey.title": "Новый ключ…",
+  "commands.redis.renameKey.title": "Переименовать ключ…",
+  "commands.redis.deleteKeys.title": "Удалить ключ"
 }

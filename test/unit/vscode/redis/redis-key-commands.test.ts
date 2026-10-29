@@ -7,6 +7,9 @@ import {
   redisKeyCommandHandlers,
 } from '../../../../src/vscode/redis/redis-key-commands';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
+import type { NewKeyContent } from '../../../../src/services/redis/key-edits';
+import type { RedisKeyRef } from '../../../../src/shared/redis-key';
+import { FakeRedisSession } from '../../../helpers/fake-redis';
 
 const CONFIGS: ConnectionConfig[] = [
   { id: 'r1', name: 'Cache', driver: 'redis', host: 'h', database: '4' },
@@ -15,15 +18,31 @@ const CONFIGS: ConnectionConfig[] = [
 ];
 
 function setup(
-  options: { configs?: ConnectionConfig[]; pattern?: string | undefined; found?: LoadedKey } = {},
+  options: {
+    configs?: ConnectionConfig[];
+    pattern?: string | undefined;
+    found?: LoadedKey;
+    session?: FakeRedisSession;
+    confirm?: boolean;
+    newKey?: { name: string; content: NewKeyContent } | undefined;
+    name?: string;
+  } = {},
 ) {
   const configs = options.configs ?? CONFIGS;
+  const session = options.session ?? new FakeRedisSession(() => '1');
   const browser = {
     loadMore: vi.fn(() => Promise.resolve()),
     patternOf: vi.fn((): string | undefined => 'old*'),
     setPattern: vi.fn(),
     include: vi.fn(),
+    forget: vi.fn(),
+    session: vi.fn(() => Promise.resolve(session)),
   };
+  const openKey = vi.fn((_place: RedisPlace, _key: RedisKeyRef) => Promise.resolve());
+  const askNewKey = vi.fn((_prefix: string) => Promise.resolve(options.newKey));
+  const confirm = vi.fn((_message: string, _detail: string | undefined, _action: string) =>
+    Promise.resolve(options.confirm ?? true),
+  );
   const refresh = vi.fn();
   const askPattern = vi.fn((_current: string | undefined) => Promise.resolve(options.pattern));
   const pickConnection = vi.fn((ids: readonly string[]) => Promise.resolve(ids[1]));
@@ -38,8 +57,33 @@ function setup(
     findKey,
     reveal,
     noRedisMessage: 'No Redis',
+    openKey,
+    askNewKey,
+    askName: () => Promise.resolve(options.name),
+    confirm,
+    texts: {
+      deleteKeys: (names) => `delete ${names.join(',')}?`,
+      deleteAction: 'Delete',
+      productionDetail: (connection) => `${connection} is production`,
+      replaceKey: (name) => `replace ${name}?`,
+      replaceAction: 'Replace',
+      changeAction: 'Change',
+      readOnly: 'read-only',
+    },
   });
-  return { handlers, browser, refresh, askPattern, pickConnection, findKey, reveal };
+  return {
+    handlers,
+    browser,
+    refresh,
+    askPattern,
+    pickConnection,
+    findKey,
+    reveal,
+    openKey,
+    confirm,
+    session,
+    askNewKey,
+  };
 }
 
 const db: TreeNode = { kind: 'redisDatabase', connectionId: 'r1', database: 2, keys: 7 };
@@ -107,6 +151,12 @@ describe('findKey', () => {
     expect(reveal).toHaveBeenCalledWith({ connectionId: 'r1', database: 2 }, found);
   });
 
+  it('opens the key it found', async () => {
+    const { handlers, openKey } = setup({ found });
+    await handlers.findKey(db);
+    expect(openKey).toHaveBeenCalledWith({ connectionId: 'r1', database: 2 }, found.key);
+  });
+
   it('starts from the prefix of a folder', async () => {
     const { handlers, findKey } = setup();
     await handlers.findKey({
@@ -160,5 +210,153 @@ describe('keyNodeOf', () => {
     expect(
       keyNodeOf({ connectionId: 'r1', database: 1 }, { key: { text: 'a:b' } }, ''),
     ).toMatchObject({ name: 'a:b' });
+  });
+});
+
+const keyNode = (text: string, connectionId = 'r1', database = 2): TreeNode => ({
+  kind: 'redisKey',
+  connectionId,
+  database,
+  key: { text },
+  name: text,
+  keyType: 'hash',
+});
+
+const PROD: ConnectionConfig[] = [
+  { id: 'r1', name: 'Live', driver: 'redis', host: 'h', production: true },
+  { id: 'ro', name: 'Mirror', driver: 'redis', host: 'h', readOnly: true },
+];
+
+describe('openKey (V7.3)', () => {
+  it('opens the clicked key and ignores anything else', async () => {
+    const { handlers, openKey } = setup();
+    await handlers.openKey(keyNode('user:1'));
+    await handlers.openKey(db);
+    await handlers.openKey();
+    expect(openKey).toHaveBeenCalledTimes(1);
+    expect(openKey).toHaveBeenCalledWith({ connectionId: 'r1', database: 2 }, { text: 'user:1' });
+  });
+});
+
+describe('newKey (V7.3)', () => {
+  const content: NewKeyContent = { type: 'hash', field: { text: 'f' }, value: { text: 'v' } };
+
+  it('creates the key, shows it in the tree and opens it', async () => {
+    const { handlers, session, browser, refresh, openKey } = setup({
+      newKey: { name: 'user:9', content },
+    });
+    await handlers.newKey(db);
+    expect(session.calls[0]?.slice(3)).toEqual(['user:9', 'HSET', 'f', 'v']);
+    expect(browser.include).toHaveBeenCalledWith('r1', 2, {
+      key: { text: 'user:9' },
+      type: 'hash',
+    });
+    expect(refresh).toHaveBeenCalledWith(dbRefresh);
+    expect(openKey).toHaveBeenCalledWith({ connectionId: 'r1', database: 2 }, { text: 'user:9' });
+  });
+
+  it('starts the name with the prefix of the folder', async () => {
+    const { handlers, askNewKey } = setup();
+    await handlers.newKey({
+      kind: 'redisFolder',
+      connectionId: 'r1',
+      database: 0,
+      path: ['user'],
+      prefix: 'user:',
+      count: 1,
+    });
+    expect(askNewKey).toHaveBeenCalledWith('user:');
+  });
+
+  it('does nothing when the user backs out', async () => {
+    const { handlers, session, openKey } = setup({ newKey: undefined });
+    await handlers.newKey(db);
+    expect(session.calls).toEqual([]);
+    expect(openKey).not.toHaveBeenCalled();
+  });
+
+  it('refuses a read-only connection and asks on production', async () => {
+    const readOnly = setup({ configs: PROD, newKey: { name: 'x', content } });
+    await expect(readOnly.handlers.newKey('ro')).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    const declined = setup({ configs: PROD, confirm: false, newKey: { name: 'x', content } });
+    await declined.handlers.newKey({
+      kind: 'redisDatabase',
+      connectionId: 'r1',
+      database: 0,
+      keys: 0,
+    });
+    expect(declined.confirm).toHaveBeenCalledWith('Live is production', undefined, 'Change');
+    expect(declined.session.calls).toEqual([]);
+  });
+});
+
+describe('renameKey (V7.3)', () => {
+  it('renames and moves the key in the tree', async () => {
+    const { handlers, session, browser } = setup({ name: 'user:2' });
+    await handlers.renameKey(keyNode('user:1'));
+    expect(session.calls).toEqual([['RENAMENX', 'user:1', 'user:2']]);
+    expect(browser.forget).toHaveBeenCalledWith('r1', 2, { text: 'user:1' });
+    expect(browser.include).toHaveBeenCalledWith('r1', 2, {
+      key: { text: 'user:2' },
+      type: 'hash',
+    });
+  });
+
+  it('replaces a taken name only after asking', async () => {
+    const taken = new FakeRedisSession((words) => (words[0] === 'RENAMENX' ? '0' : '1'));
+    const agreed = setup({ name: 'b', session: taken });
+    await agreed.handlers.renameKey(keyNode('a'));
+    expect(agreed.confirm).toHaveBeenCalledWith('replace b?', undefined, 'Replace');
+    expect(taken.calls.at(-1)).toEqual(['RENAME', 'a', 'b']);
+    const refused = setup({ name: 'b', session: new FakeRedisSession(() => '0'), confirm: false });
+    await refused.handlers.renameKey(keyNode('a'));
+    expect(refused.browser.forget).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for the same name, no name, or a node that is no key', async () => {
+    for (const name of ['a', undefined]) {
+      const { handlers, session } = setup({ ...(name === undefined ? {} : { name }) });
+      await handlers.renameKey(keyNode('a'));
+      await handlers.renameKey(db);
+      expect(session.calls).toEqual([]);
+    }
+  });
+});
+
+describe('deleteKeys (V7.3)', () => {
+  it('deletes every selected key of the database after one question', async () => {
+    const { handlers, session, confirm, browser, refresh } = setup();
+    const selection = [keyNode('a'), keyNode('b'), keyNode('other', 'r2'), db];
+    await handlers.deleteKeys(keyNode('a'), selection);
+    expect(confirm).toHaveBeenCalledWith('delete a,b?', undefined, 'Delete');
+    expect(session.calls).toEqual([
+      ['UNLINK', 'a'],
+      ['UNLINK', 'b'],
+    ]);
+    expect(browser.forget).toHaveBeenCalledTimes(2);
+    expect(refresh).toHaveBeenCalledWith(dbRefresh);
+  });
+
+  it('deletes only the clicked key when it is not among the selected', async () => {
+    const { handlers, session } = setup();
+    await handlers.deleteKeys(keyNode('c'), [keyNode('a')]);
+    expect(session.calls).toEqual([['UNLINK', 'c']]);
+  });
+
+  it('names production in the question, and keeps everything when declined', async () => {
+    const { handlers, session, confirm } = setup({ configs: PROD, confirm: false });
+    await handlers.deleteKeys(keyNode('a', 'r1'));
+    expect(confirm).toHaveBeenCalledWith('delete a?', 'Live is production', 'Delete');
+    expect(session.calls).toEqual([]);
+  });
+
+  it('refuses a read-only connection without asking', async () => {
+    const { handlers, confirm } = setup({ configs: PROD });
+    await expect(handlers.deleteKeys(keyNode('a', 'ro'))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(confirm).not.toHaveBeenCalled();
   });
 });

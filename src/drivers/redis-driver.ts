@@ -57,6 +57,11 @@ export interface RedisSession {
    */
   pipeline(commands: readonly RedisCommand[]): Promise<RedisReply[]>;
   /**
+   * Runs commands as one MULTI … EXEC block: no other client's command comes in between
+   * (V7.3). In a cluster their keys must share a slot. Error replies stay in place.
+   */
+  atomic(commands: readonly RedisCommand[]): Promise<RedisReply[]>;
+  /**
    * Runs a keyless command on every master that holds keys and returns each reply,
    * e.g. `DBSIZE` of a cluster. A server or a Sentinel's master has one.
    */

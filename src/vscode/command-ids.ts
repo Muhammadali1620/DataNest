@@ -107,6 +107,12 @@ export const COMMAND_IDS = {
   redisFilterKeys: 'datanest.redis.filterKeys',
   /** Finds a Redis key with SCAN and shows it in the tree. */
   redisFindKey: 'datanest.redis.findKey',
+  /** Opens the page of a Redis key: its value, TTL, size (V7.3). */
+  redisOpenKey: 'datanest.redis.openKey',
+  redisNewKey: 'datanest.redis.newKey',
+  redisRenameKey: 'datanest.redis.renameKey',
+  /** Deletes the clicked key, or every selected one. */
+  redisDeleteKeys: 'datanest.redis.deleteKeys',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

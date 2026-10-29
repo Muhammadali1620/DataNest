@@ -107,6 +107,25 @@ class IoredisSession implements RedisSession {
     });
   }
 
+  async atomic(commands: readonly RedisCommand[]): Promise<RedisReply[]> {
+    const transaction = this.client.multi();
+    for (const command of commands) {
+      transaction.callBuffer(nameOf(command), ...command.slice(1).map(toBuffer));
+    }
+    let results: [Error | null, unknown][] | null;
+    try {
+      results = await transaction.exec();
+    } catch (error) {
+      throw this.failure(error);
+    }
+    if (results === null) {
+      throw new DbError('busy', 'The transaction was aborted: the key changed meanwhile');
+    }
+    return results.map(([error, value]) =>
+      error === null ? normalizeReply(value) : { error: error.message },
+    );
+  }
+
   async onMasters(command: RedisCommand): Promise<RedisReply[]> {
     if (!(this.client instanceof Cluster)) {
       return [await this.call(command)];

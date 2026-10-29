@@ -73,6 +73,10 @@ describe('connections view', () => {
       'datanest.redis.loadMoreKeys',
       'datanest.redis.filterKeys',
       'datanest.redis.findKey',
+      'datanest.redis.openKey',
+      'datanest.redis.newKey',
+      'datanest.redis.renameKey',
+      'datanest.redis.deleteKeys',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -111,9 +115,16 @@ describe('connections view', () => {
     }
   });
 
-  it('loading more Redis keys without a node does nothing', async () => {
-    // The command belongs to the "Load more keys" item; from elsewhere there is none.
-    await vscode.commands.executeCommand('datanest.redis.loadMoreKeys');
+  it('Redis key commands without a node do nothing', async () => {
+    // They belong to tree items; from elsewhere there is no key to act on.
+    for (const id of [
+      'datanest.redis.loadMoreKeys',
+      'datanest.redis.openKey',
+      'datanest.redis.renameKey',
+      'datanest.redis.deleteKeys',
+    ]) {
+      await vscode.commands.executeCommand(id);
+    }
   });
 
   it('refreshing the whole tree works without a selected node', async () => {

@@ -50,7 +50,11 @@ import type { TransactionStatus } from './editor/transaction-status';
 import type { TransactionModes } from './editor/transaction-modes';
 import type { RedisKeyBrowser } from '../services/redis/key-browser';
 import { describeTarget } from '../shared/connection';
-import { keyNodeOf, redisKeyCommandHandlers } from './redis/redis-key-commands';
+import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
+import { askNewKey } from './redis/new-key';
+import { RedisKeyPanel } from './panels/redis-key-panel';
+import { RedisKeyModel } from './panels/redis-key-model';
+import type { RedisKeyRef } from '../shared/redis-key';
 import { pickRedisKey } from './redis/find-key';
 
 export interface CommandDeps {
@@ -173,6 +177,40 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       text,
     );
   };
+  /** Opens the page of a key; the tree follows what the page renames or deletes. */
+  const openRedisKey = (place: RedisPlace, key: RedisKeyRef): void => {
+    const config = deps.store.get(place.connectionId);
+    RedisKeyPanel.show({
+      extensionUri: deps.extensionUri,
+      logger: deps.logger,
+      connectionId: place.connectionId,
+      database: place.database,
+      policy: policyOf(config),
+      model: new RedisKeyModel({
+        key,
+        database: place.database,
+        connectionName: config?.name ?? '',
+        readOnly: config?.readOnly === true,
+        session: async () => await deps.redisKeys.session(place.connectionId, place.database),
+      }),
+      onChanged: (change) => {
+        if (change.renamedFrom !== undefined) {
+          deps.redisKeys.forget(change.connectionId, change.database, change.renamedFrom);
+        }
+        if (change.deleted === true) {
+          deps.redisKeys.forget(change.connectionId, change.database, change.key);
+        } else {
+          deps.redisKeys.include(change.connectionId, change.database, { key: change.key });
+        }
+        deps.tree.refresh({
+          kind: 'redisDatabase',
+          connectionId: change.connectionId,
+          database: change.database,
+          keys: 0,
+        });
+      },
+    });
+  };
   const redisKeyCommands = redisKeyCommandHandlers({
     browser: deps.redisKeys,
     store: deps.store,
@@ -210,6 +248,37 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       });
     },
     noRedisMessage: vscode.l10n.t('There is no Redis connection yet'),
+    openKey: async (place, key) => {
+      openRedisKey(place, key);
+      await Promise.resolve();
+    },
+    askNewKey,
+    askName: async (current) =>
+      await vscode.window.showInputBox({
+        title: vscode.l10n.t('Rename Key'),
+        prompt: vscode.l10n.t('The new name of "{0}"', current),
+        value: current,
+        validateInput: (text) => (text === '' ? vscode.l10n.t('A key needs a name') : undefined),
+      }),
+    confirm: async (message, detail, action) =>
+      (await vscode.window.showWarningMessage(
+        message,
+        { modal: true, ...(detail === undefined ? {} : { detail }) },
+        action,
+      )) === action,
+    texts: {
+      deleteKeys: (names) =>
+        names.length === 1
+          ? vscode.l10n.t('Delete the key "{0}"?', names[0] ?? '')
+          : vscode.l10n.t('Delete {0} keys?', names.length),
+      deleteAction: vscode.l10n.t('Delete'),
+      productionDetail: (connection) =>
+        vscode.l10n.t('"{0}" is a production connection.', connection),
+      replaceKey: (name) => vscode.l10n.t('The key "{0}" already exists. Replace it?', name),
+      replaceAction: vscode.l10n.t('Replace'),
+      changeAction: vscode.l10n.t('Change'),
+      readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+    },
   });
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
@@ -449,6 +518,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.redisLoadMoreKeys]: redisKeyCommands.loadMoreKeys,
     [COMMAND_IDS.redisFilterKeys]: redisKeyCommands.filterKeys,
     [COMMAND_IDS.redisFindKey]: redisKeyCommands.findKey,
+    [COMMAND_IDS.redisOpenKey]: redisKeyCommands.openKey,
+    [COMMAND_IDS.redisNewKey]: redisKeyCommands.newKey,
+    [COMMAND_IDS.redisRenameKey]: redisKeyCommands.renameKey,
+    [COMMAND_IDS.redisDeleteKeys]: (target, selection) =>
+      redisKeyCommands.deleteKeys(target, selection),
     [COMMAND_IDS.openPing]: () => {
       const panel = new PingPanel(deps.extensionUri, deps.logger);
       pings = [...pings.filter((open) => !open.isDisposed), panel];
@@ -471,6 +545,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         DataImportPanel.disposeAll();
         TestDataPanel.disposeAll();
         ResultsPanel.disposeAll();
+        RedisKeyPanel.disposeAll();
       },
     },
   ];

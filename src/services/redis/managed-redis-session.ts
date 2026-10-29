@@ -56,6 +56,10 @@ export class ManagedRedisSession implements RedisSession {
     return await this.watch(() => this.inner.pipeline(commands));
   }
 
+  async atomic(commands: readonly RedisCommand[]): Promise<RedisReply[]> {
+    return await this.watch(() => this.inner.atomic(commands));
+  }
+
   async onMasters(command: RedisCommand): Promise<RedisReply[]> {
     return await this.watch(() => this.inner.onMasters(command));
   }

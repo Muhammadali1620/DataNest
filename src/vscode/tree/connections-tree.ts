@@ -249,6 +249,11 @@ export class ConnectionsTreeProvider
         item.description = node.keyType;
         item.tooltip = node.key.text;
         item.contextValue = TREE_CONTEXT.redisKey;
+        item.command = {
+          command: 'datanest.redis.openKey',
+          title: vscode.l10n.t('Open Key'),
+          arguments: [node],
+        };
         return item;
       }
       case 'redisMore': {

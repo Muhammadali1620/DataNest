@@ -85,6 +85,21 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - A record card shows one row as a form; a foreign key cell opens the row it points at.
 - Tables filter, sort and page on the server, with a fast estimated row count.
 
+**Import, export and transfer**
+
+- Run SQL files of any size — dumps included — statement by statement as they are read,
+  with progress, cancel, and a choice to stop at the first error or go on.
+- Dump tables, a whole database or a schema to a `.sql` script — structure, data or
+  both — read in one consistent snapshot and ordered to load into an empty database.
+- Import CSV and JSON files into a table: column mapping, a preview with the values as
+  they will be stored, batches, and a report of every row that did not fit.
+- Export a whole table to CSV, JSON, SQL, Markdown or Excel straight from the server,
+  however large it is — not just the rows on screen.
+- Generate test data that fits each column: names, emails, cities, prices, dates, keys of
+  the referenced table, with a seed that makes it repeatable.
+- Copy tables to another connection, even another database system: types, defaults and
+  keys are translated, and the report says what could not be.
+
 **Safety and history**
 
 - Safe mode asks before `DELETE` or `UPDATE` without `WHERE`, `DROP` and `TRUNCATE`.

@@ -2,7 +2,7 @@
   "name": "datanest",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "datanest",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -273,6 +273,11 @@
       {
         "command": "datanest.table.generateData",
         "title": "%commands.table.generateData.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.table.transfer",
+        "title": "%commands.table.transfer.title%",
         "category": "DataNest"
       },
       {
@@ -787,6 +792,11 @@
           "command": "datanest.dump.create",
           "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view)",
           "group": "7_export@1"
+        },
+        {
+          "command": "datanest.table.transfer",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.table)",
+          "group": "7_export@5"
         },
         {
           "command": "datanest.table.exportData",

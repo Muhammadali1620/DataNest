@@ -3,6 +3,46 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [0.5.0] - 2026-10-29
+
+Moving data in and out without other tools: SQL files of any size, dumps, imports,
+whole-table exports, test data, and copies between connections of any kind.
+
+### Added
+
+- Run SQL File: a script of any size runs statement by statement as it is read, on a
+  connection of its own, with progress and cancel. Stop at the first error or go on and
+  get a report of every failed statement with its line. `DELIMITER`, MySQL `/*! … */`
+  comments and psql commands are understood; `COPY … FROM stdin` is reported.
+- Dump to SQL File: tables, a database or a schema — structure, data or both — written in
+  one read-only snapshot and ordered to load into an empty database (types, routines,
+  sequences, tables, rows, keys, triggers, views, events). Optional `DROP … IF EXISTS`.
+- Import Data from File: CSV and JSON (arrays or JSON Lines) into a table, with the
+  delimiter and header guessed, a column mapping, a preview of the converted values,
+  all-or-nothing or skip-bad-rows modes and a list of every row that did not fit.
+- Export Data: every row of a table or view straight from the server to CSV, JSON, SQL,
+  Markdown or Excel, with progress and cancel. Exporting a table view writes the whole
+  filtered and sorted table; a result cut by the row limit can be read again in full.
+- Generate Test Data: a generator per column chosen from its name and type, a NULL
+  share, a row count and a seed; insert the rows or open them as SQL.
+- Copy to Another Connection: tables with their rows, keys and numbering go to another
+  connection, also between MySQL, PostgreSQL and SQLite, with types and defaults
+  translated and a report of what could not be carried over.
+
+### Changed
+
+- Queries read rows only as fast as they are used, so a slow consumer no longer makes
+  a large result pile up in memory.
+
+### Fixed
+
+- PostgreSQL `E'…'` strings with a backslash-escaped quote no longer confuse the
+  statement splitter.
+- “New Table…” shows again on the Tables folder of the tree.
+- MySQL: a default on a `TEXT`, `BLOB` or `JSON` column is written as an expression, as
+  the server requires.
+- PostgreSQL `NaN` and `Infinity` are no longer written as `NULL` in generated SQL.
+
 ## [0.4.0] - 2026-10-28
 
 Connections for real work: remote and production databases, connections shared

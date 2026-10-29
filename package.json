@@ -256,6 +256,11 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.dump.create",
+        "title": "%commands.dump.create.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.results.export",
         "title": "%commands.results.export.title%",
         "category": "DataNest",
@@ -643,7 +648,7 @@
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.folder)",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.column || viewItem == datanest.folder)",
           "group": "1_state@1"
         },
         {
@@ -750,6 +755,11 @@
           "command": "datanest.table.generateDelete",
           "when": "view == datanest.connections && viewItem == datanest.table",
           "group": "6_generate@4"
+        },
+        {
+          "command": "datanest.dump.create",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "7_export@1"
         }
       ],
       "editor/title": [

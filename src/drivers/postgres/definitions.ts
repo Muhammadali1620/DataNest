@@ -82,7 +82,7 @@ async function relationDefinition(
   return statements;
 }
 
-async function columnLines(read: PgRowReader, oid: string): Promise<string[]> {
+export async function columnLines(read: PgRowReader, oid: string): Promise<string[]> {
   const rows = await read(
     `SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
             pg_get_expr(d.adbin, d.adrelid), a.attidentity::text, a.attgenerated::text,
@@ -121,11 +121,16 @@ async function columnLines(read: PgRowReader, oid: string): Promise<string[]> {
   });
 }
 
-async function constraintLines(read: PgRowReader, oid: string): Promise<string[]> {
+/** Constraint lines of CREATE TABLE; foreign keys only when `foreignKeys` is set. */
+export async function constraintLines(
+  read: PgRowReader,
+  oid: string,
+  foreignKeys = true,
+): Promise<string[]> {
   const rows = await read(
     `SELECT conname, pg_get_constraintdef(oid, true)
      FROM pg_constraint
-     WHERE conrelid = $1::oid AND contype IN ('p', 'u', 'c', 'f', 'x')
+     WHERE conrelid = $1::oid AND contype IN ('p', 'u', 'c', 'x', ${foreignKeys ? "'f'" : "'p'"})
      ORDER BY CASE contype WHEN 'p' THEN 0 WHEN 'u' THEN 1 WHEN 'c' THEN 2 WHEN 'f' THEN 3
               ELSE 4 END, conname`,
     [oid],
@@ -134,7 +139,7 @@ async function constraintLines(read: PgRowReader, oid: string): Promise<string[]
 }
 
 /** Indexes of their own; the ones behind a key are already part of the constraint. */
-async function indexStatements(read: PgRowReader, oid: string): Promise<string[]> {
+export async function indexStatements(read: PgRowReader, oid: string): Promise<string[]> {
   const rows = await read(
     `SELECT pg_get_indexdef(i.indexrelid)
      FROM pg_index i
@@ -148,7 +153,7 @@ async function indexStatements(read: PgRowReader, oid: string): Promise<string[]
   return rows.map((row) => text(row[0]));
 }
 
-async function columnComments(
+export async function columnComments(
   read: PgRowReader,
   oid: string,
   qualified: string,
@@ -167,7 +172,7 @@ async function columnComments(
   );
 }
 
-async function tableTriggers(read: PgRowReader, oid: string): Promise<string[]> {
+export async function tableTriggers(read: PgRowReader, oid: string): Promise<string[]> {
   const rows = await read(
     `SELECT pg_get_triggerdef(oid, true) FROM pg_trigger
      WHERE tgrelid = $1::oid AND NOT tgisinternal ORDER BY tgname`,
@@ -233,7 +238,7 @@ async function triggerDefinition(
   return rows.map((row) => text(row[0]));
 }
 
-async function sequenceDefinition(
+export async function sequenceDefinition(
   read: PgRowReader,
   schema: string,
   name: string,
@@ -284,10 +289,10 @@ function stripSemicolon(sql: string): string {
   return sql.endsWith(';') ? sql.slice(0, -1).trimEnd() : sql;
 }
 
-function text(value: unknown): string {
+export function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-function optionalText(value: unknown): string | undefined {
+export function optionalText(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }

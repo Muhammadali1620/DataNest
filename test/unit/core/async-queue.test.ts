@@ -107,4 +107,100 @@ describe('AsyncQueue', () => {
     expect(await collect(queue)).toEqual([]);
     expect(await collect(queue)).toEqual([]);
   });
+
+  describe('flow control', () => {
+    function controlled(highWater = 4): { queue: AsyncQueue<number>; calls: string[] } {
+      const calls: string[] = [];
+      const queue = new AsyncQueue<number>({
+        highWater,
+        pause: () => calls.push('pause'),
+        resume: () => calls.push('resume'),
+      });
+      return { queue, calls };
+    }
+
+    it('asks the producer to pause once the buffer reaches the high-water mark', () => {
+      const { queue, calls } = controlled(3);
+      queue.push(1);
+      queue.push(2);
+      expect(calls).toEqual([]);
+      queue.push(3);
+      expect(calls).toEqual(['pause']);
+      expect(queue.isPaused).toBe(true);
+      // More items while paused (the protocol cannot stop mid-packet) are still kept.
+      expect(queue.push(4)).toBe(true);
+      expect(calls).toEqual(['pause']);
+    });
+
+    it('resumes once the consumer has read the buffer down to half', async () => {
+      const { queue, calls } = controlled(4);
+      for (const item of [1, 2, 3, 4, 5]) {
+        queue.push(item);
+      }
+      const iterator = queue[Symbol.asyncIterator]();
+      expect((await iterator.next()).value).toBe(1);
+      expect((await iterator.next()).value).toBe(2);
+      expect(calls).toEqual(['pause']);
+      expect((await iterator.next()).value).toBe(3);
+      expect(calls).toEqual(['pause', 'resume']);
+      expect(queue.isPaused).toBe(false);
+    });
+
+    it('never pauses when the consumer keeps up', async () => {
+      const { queue, calls } = controlled(2);
+      const iterator = queue[Symbol.asyncIterator]();
+      for (const item of [1, 2, 3, 4]) {
+        const next = iterator.next();
+        queue.push(item);
+        expect((await next).value).toBe(item);
+      }
+      expect(calls).toEqual([]);
+    });
+
+    it('lets a paused producer go on when the consumer stops early', async () => {
+      const { queue, calls } = controlled(2);
+      queue.push(1);
+      queue.push(2);
+      for await (const _item of queue) {
+        break;
+      }
+      expect(calls).toEqual(['pause', 'resume']);
+      expect(queue.push(3)).toBe(false);
+    });
+
+    it('delivers everything in order across several pauses', async () => {
+      const total = 50;
+      let next = 0;
+      let paused = false;
+      let pauses = 0;
+      const queue: AsyncQueue<number> = new AsyncQueue<number>({
+        highWater: 3,
+        pause: () => {
+          paused = true;
+          pauses += 1;
+        },
+        resume: () => {
+          paused = false;
+          setTimeout(pump, 0);
+        },
+      });
+      // A producer that honours pause, like a socket does.
+      function pump(): void {
+        while (!paused && next < total) {
+          queue.push(next);
+          next += 1;
+        }
+        if (next === total) {
+          queue.end();
+        }
+      }
+      pump();
+      const received: number[] = [];
+      for await (const item of queue) {
+        received.push(item);
+      }
+      expect(received).toEqual(Array.from({ length: total }, (_, index) => index));
+      expect(pauses).toBeGreaterThan(5);
+    });
+  });
 });

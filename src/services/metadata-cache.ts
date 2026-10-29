@@ -92,6 +92,9 @@ export class MetadataCache {
         ),
       // A definition is read when the user asks for it and must be the current one.
       getDefinition: async (object) => await reader.getDefinition(object),
+      // A dump reads inside its own snapshot, never from what an earlier look cached.
+      getTableDump: async (table) => await reader.getTableDump(table),
+      listTypeDumps: async (scope, tables) => await reader.listTypeDumps(scope, tables),
     };
   }
 

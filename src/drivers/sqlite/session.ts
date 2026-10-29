@@ -8,7 +8,7 @@ import type { ExecuteEvent, ExecuteOptions, Session, TransactionState } from '..
 import { attachBlobs } from './blobs';
 import { fromWireError, toSqliteDbError } from './errors';
 import { SqliteMetadata } from './metadata';
-import type { SqliteParam, WorkerToHost } from './protocol';
+import { FLOW_STOP, FLOW_TAKEN, type SqliteParam, type WorkerToHost } from './protocol';
 
 /** The worker bundle next to dist/drivers/sqlite.js (scripts/build-config.mjs). */
 export const WORKER_FILENAME = 'sqlite-worker.js';
@@ -113,6 +113,8 @@ class SqliteSession implements Session {
     const id = this.nextId++;
     const queue = new AsyncQueue<ExecuteEvent>();
     this.queues.set(id, queue);
+    // The worker sends rows only a window ahead of what the consumer has taken.
+    const flow = new Int32Array(new SharedArrayBuffer(2 * Int32Array.BYTES_PER_ELEMENT));
     try {
       worker.postMessage({
         t: 'exec',
@@ -120,13 +122,20 @@ class SqliteSession implements Session {
         sql,
         ...(params === undefined ? {} : { params }),
         ...(options.rowLimit === undefined ? {} : { rowLimit: options.rowLimit }),
+        flow: flow.buffer,
       });
       for await (const event of queue) {
+        if (event.kind === 'rows') {
+          Atomics.add(flow, FLOW_TAKEN, 1);
+          Atomics.notify(flow, FLOW_TAKEN);
+        }
         yield event;
       }
     } finally {
-      // An abandoned statement needs no kill: the worker finishes it and the
-      // closed queue silently drops the rest.
+      // An abandoned statement needs no kill: the worker stops reading at its next
+      // batch, and the closed queue silently drops whatever it still sends.
+      Atomics.store(flow, FLOW_STOP, 1);
+      Atomics.notify(flow, FLOW_TAKEN);
       this.queues.delete(id);
     }
   }

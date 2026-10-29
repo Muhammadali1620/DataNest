@@ -3,7 +3,6 @@
 // with a quote in it cannot break out of the statement it is pasted into.
 
 import type { CopyError, CopyFormat } from '../shared/copy-format';
-import { retainedBytes } from '../shared/binary-bytes';
 import { cellJson, cellText, isNumericValue } from '../shared/cell-text';
 import type { CellValue } from '../shared/cell-value';
 import { toCsv } from '../shared/csv';
@@ -11,6 +10,7 @@ import { toTsv } from '../shared/tsv';
 import type { ResultEdit } from '../core/model/editability';
 import type { Dialect, ResultColumn } from '../drivers/driver';
 import { columnNames } from './column-names';
+import { literalOf } from './sql-literal';
 
 export interface CopyInput {
   readonly format: CopyFormat;
@@ -102,24 +102,6 @@ function markdown(input: CopyInput, indexes: readonly number[]): string {
   );
   const line = (cells: readonly string[]): string => `| ${cells.join(' | ')} |`;
   return [line(header), line(align), ...body.map(line)].join('\n');
-}
-
-/**
- * A SQL literal. A binary value normally carries only a short hex preview, so the
- * full bytes are used when the host still has them.
- */
-function literalOf(dialect: Dialect, cell: CellValue): string {
-  if (typeof cell === 'object' && cell !== null && cell.kind === 'binary') {
-    const bytes = retainedBytes(cell);
-    if (bytes !== undefined) {
-      return dialect.literal({
-        kind: 'binary',
-        size: bytes.byteLength,
-        preview: Buffer.from(bytes).toString('hex'),
-      });
-    }
-  }
-  return dialect.literal(cell);
 }
 
 /** The table column behind a result column, or undefined for one that cannot be written. */

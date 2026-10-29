@@ -11,7 +11,7 @@ import type {
   TableStructure,
 } from '../../core/model/objects';
 import type { CellValue } from '../../shared/cell-value';
-import type { MetadataReader } from '../driver';
+import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { quoteIdentifier } from './dialect';
 import type { SqliteParam } from './protocol';
@@ -180,6 +180,37 @@ export class SqliteMetadata implements MetadataReader {
       [object.name],
     );
     return [first, ...related.map((row) => asText(row[0]) ?? '').filter((sql) => sql !== '')];
+  }
+
+  /** The table and its indexes; its triggers wait for the data, so they do not fire on it. */
+  async getTableDump(table: TableRef): Promise<TableDump> {
+    const master =
+      table.database === undefined
+        ? 'sqlite_master'
+        : `${quoteIdentifier(table.database)}.sqlite_master`;
+    const rows = await this.session.queryRows(
+      `SELECT type, sql FROM ${master}
+       WHERE tbl_name = ? AND type IN ('table', 'index', 'trigger') AND sql IS NOT NULL
+       ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, name`,
+      [table.name],
+    );
+    if (!rows.some((row) => row[0] === 'table')) {
+      throw new DbError('not-found', `${table.name} does not exist`);
+    }
+    const create: string[] = [];
+    const after: string[] = [];
+    for (const row of rows) {
+      const sql = asText(row[1]);
+      if (sql !== undefined && sql !== '') {
+        (row[0] === 'trigger' ? after : create).push(sql);
+      }
+    }
+    return { before: [], create, after, owns: [] };
+  }
+
+  /** SQLite has no types of its own. */
+  listTypeDumps(): Promise<TypeDump[]> {
+    return Promise.resolve([]);
   }
 }
 

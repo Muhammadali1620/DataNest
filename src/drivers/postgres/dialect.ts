@@ -1,3 +1,4 @@
+import { postgresDump } from './dump';
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
@@ -18,7 +19,11 @@ export function literal(value: CellValue): string {
     return value ? 'TRUE' : 'FALSE';
   }
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? String(value) : 'NULL';
+    if (Number.isFinite(value)) {
+      return String(value);
+    }
+    // Floating-point columns hold these too, and a dump must not turn them into NULL.
+    return Number.isNaN(value) ? "'NaN'" : value > 0 ? "'Infinity'" : "'-Infinity'";
   }
   if (typeof value === 'string') {
     return quoteString(value);
@@ -63,4 +68,5 @@ export const postgresDialect: Dialect = {
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
   ddl: postgresDdl,
+  dump: postgresDump,
 };

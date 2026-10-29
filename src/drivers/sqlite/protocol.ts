@@ -16,7 +16,19 @@ export type HostToWorker =
       readonly sql: string;
       readonly params?: readonly SqliteParam[];
       readonly rowLimit?: number;
+      /**
+       * Shared counters for back-pressure (V5.2): `[FLOW_TAKEN]` row batches the host
+       * has handed on, `[FLOW_STOP]` non-zero once nobody wants more rows.
+       */
+      readonly flow?: SharedArrayBuffer;
     };
+
+/** Index of the counter of row batches the host has handed to its consumer. */
+export const FLOW_TAKEN = 0;
+/** Index of the flag that tells the worker to stop reading rows. */
+export const FLOW_STOP = 1;
+/** Row batches the worker may send ahead of the host before it waits. */
+export const FLOW_WINDOW = 16;
 
 /** Bytes of the binary cell at `[row][column]` of a rows message. */
 export interface WireBlob {

@@ -12,7 +12,7 @@ import type {
   TableRef,
   TableStructure,
 } from '../../core/model/objects';
-import type { MetadataReader } from '../driver';
+import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readMysqlDefinition } from './definitions';
 import { readMysqlStructure } from './structure';
@@ -200,6 +200,35 @@ export class MysqlMetadata implements MetadataReader {
 
   async getDefinition(object: ObjectRef): Promise<string[]> {
     return await readMysqlDefinition(async (sql, params) => await this.query(sql, params), object);
+  }
+
+  /**
+   * SHOW CREATE TABLE keeps foreign keys inline; a dump turns their checks off while
+   * it loads, so tables can come in any order. Triggers wait for the data.
+   */
+  async getTableDump(table: TableRef): Promise<TableDump> {
+    const read = async (sql: string, params?: unknown[]): Promise<unknown[][]> =>
+      await this.query(sql, params);
+    const create = await readMysqlDefinition(read, { ...table, kind: 'table' });
+    const triggers = await this.query(
+      `SELECT TRIGGER_NAME FROM information_schema.TRIGGERS
+       WHERE TRIGGER_SCHEMA = COALESCE(?, DATABASE()) AND EVENT_OBJECT_TABLE = ?
+       ORDER BY ACTION_TIMING DESC, EVENT_MANIPULATION, ACTION_ORDER`,
+      [table.database ?? null, table.name],
+    );
+    const after: string[] = [];
+    for (const row of triggers) {
+      const name = asText(row[0]);
+      if (name !== undefined) {
+        after.push(...(await readMysqlDefinition(read, { ...table, kind: 'trigger', name })));
+      }
+    }
+    return { before: [], create, after, owns: [] };
+  }
+
+  /** MySQL keeps ENUM and SET inside the column type: there are no types of its own. */
+  listTypeDumps(): Promise<TypeDump[]> {
+    return Promise.resolve([]);
   }
 
   private async query(sql: string, params: unknown[] = []): Promise<unknown[][]> {

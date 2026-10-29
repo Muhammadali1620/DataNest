@@ -140,7 +140,11 @@ export class ConnectionsTreeProvider
           node,
           groupLabel(node.group),
           GROUP_ICONS[node.group],
-          TREE_CONTEXT.group,
+          node.group === 'tables'
+            ? TREE_CONTEXT.tablesGroup
+            : node.group === 'views'
+              ? TREE_CONTEXT.viewsGroup
+              : TREE_CONTEXT.group,
         );
       case 'folder':
         return expandable(

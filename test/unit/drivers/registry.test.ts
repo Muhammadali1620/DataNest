@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DriverId } from '../../../src/shared/connection';
 import type { Driver, DriverModule } from '../../../src/drivers/driver';
 import { DriverRegistry } from '../../../src/drivers/registry';
+import { fakeDialect } from '../../helpers/fake-driver';
 import { RecordingLogger } from '../../helpers/fakes';
 
 function fakeDriver(id: DriverId): Driver {
@@ -26,6 +27,7 @@ function fakeDriver(id: DriverId): Driver {
         dropObject: () => '',
         replaceObject: () => ({ check: [], statements: [], recovery: [] }),
       },
+      dump: fakeDialect.dump,
     },
     capabilities: {
       databases: true,

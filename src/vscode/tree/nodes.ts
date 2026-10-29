@@ -35,6 +35,8 @@ export const TREE_CONTEXT = {
   group: 'datanest.group',
   /** The Tables folder, where a new table can be created. */
   tablesGroup: 'datanest.group.tables',
+  /** The Views folder, which can be dumped as a whole. */
+  viewsGroup: 'datanest.group.views',
   table: 'datanest.table',
   view: 'datanest.view',
   column: 'datanest.column',

@@ -85,6 +85,8 @@ export const COMMAND_IDS = {
   applyObject: 'datanest.object.apply',
   /** Runs a SQL file of any size, statement by statement as it is read (V5.1). */
   runSqlFile: 'datanest.script.run',
+  /** Dumps tables, a database or a schema to a SQL script (V5.2). */
+  dumpSql: 'datanest.dump.create',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

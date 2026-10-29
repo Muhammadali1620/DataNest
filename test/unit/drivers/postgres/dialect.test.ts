@@ -28,7 +28,12 @@ describe('postgresDialect.literal', () => {
     expect(postgresDialect.literal(true)).toBe('TRUE');
     expect(postgresDialect.literal("O'Brien")).toBe("'O''Brien'");
     expect(postgresDialect.literal('back\\slash')).toBe("'back\\slash'");
-    expect(postgresDialect.literal(Number.NaN)).toBe('NULL');
+  });
+
+  it('writes the special floating-point values PostgreSQL stores, not NULL', () => {
+    expect(postgresDialect.literal(Number.NaN)).toBe("'NaN'");
+    expect(postgresDialect.literal(Number.POSITIVE_INFINITY)).toBe("'Infinity'");
+    expect(postgresDialect.literal(Number.NEGATIVE_INFINITY)).toBe("'-Infinity'");
   });
 
   it('keeps numeric text unquoted and casts binary previews to bytea', () => {

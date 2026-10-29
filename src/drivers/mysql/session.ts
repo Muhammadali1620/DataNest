@@ -24,6 +24,12 @@ import { mysqlTypeName, toCellValue } from './values';
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
 
+/**
+ * Row batches that may wait unread before the socket is paused (V5.2), so a dump or a
+ * transfer of a huge table reads no faster than it writes.
+ */
+export const FLOW_HIGH_WATER = 16;
+
 /** TCP keep-alive probes start after this much quiet, so NAT and firewalls keep the link. */
 export const TCP_KEEPALIVE_DELAY_MS = 30_000;
 
@@ -173,7 +179,15 @@ class MysqlSession implements Session {
       throw new DbError('internal', 'The session is closed');
     }
     const rowLimit = options.rowLimit ?? Number.POSITIVE_INFINITY;
-    const queue = new AsyncQueue<ExecuteEvent>();
+    const queue = new AsyncQueue<ExecuteEvent>({
+      highWater: FLOW_HIGH_WATER,
+      pause: () => {
+        this.conn.pause();
+      },
+      resume: () => {
+        this.conn.resume();
+      },
+    });
     let fieldTypes: (number | undefined)[] = [];
     let batch: CellValue[][] = [];
     let rowCount = 0;

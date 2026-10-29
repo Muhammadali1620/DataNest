@@ -107,7 +107,13 @@ describe('ManagedSession', () => {
       await expect(
         session.metadata.getDefinition({ kind: 'table', name: 't' }),
       ).rejects.toMatchObject({ code: 'connection-failed' });
-      expect(lost).toHaveBeenCalledTimes(7);
+      await expect(session.metadata.getTableDump({ name: 't' })).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      await expect(session.metadata.listTypeDumps({})).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      expect(lost).toHaveBeenCalledTimes(9);
     });
 
     it('passes the structure readers of V3 through', async () => {
@@ -124,6 +130,16 @@ describe('ManagedSession', () => {
       expect(await session.metadata.getDefinition({ kind: 'function', name: 'f' })).toEqual([
         'CREATE FUNCTION f',
       ]);
+    });
+
+    it('passes the dump readers of V5 through', async () => {
+      const inner = fake();
+      const parts = { before: [], create: ['CREATE TABLE t'], after: [], owns: [] };
+      inner.metadata.tableDumps.set('t', parts);
+      inner.metadata.typeDumps = [{ name: 'm', create: 'CREATE TYPE m', drop: 'DROP TYPE m' }];
+      const { session } = managed(inner);
+      expect(await session.metadata.getTableDump({ name: 't' })).toEqual(parts);
+      expect(await session.metadata.listTypeDumps({}, ['t'])).toHaveLength(1);
     });
 
     it('keeps unsupported readers as plain errors', async () => {

@@ -22,6 +22,12 @@ import { pgTypeName, pgTypeParser, toCellValue } from './values';
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
 
+/**
+ * Row batches that may wait unread before the socket is paused (V5.2), so a dump or a
+ * transfer of a huge table reads no faster than it writes.
+ */
+export const FLOW_HIGH_WATER = 16;
+
 /** TCP keep-alive probes start after this much quiet, so NAT and firewalls keep the link. */
 export const TCP_KEEPALIVE_DELAY_MS = 30_000;
 
@@ -146,7 +152,20 @@ class PostgresSession implements Session {
       throw new DbError('internal', 'The session is closed');
     }
     const rowLimit = options.rowLimit ?? Number.POSITIVE_INFINITY;
-    const queue = new AsyncQueue<ExecuteEvent>();
+    // pg has no pause of its own; the socket under its parser does. With TLS that is
+    // the encrypted stream, which pauses the same way.
+    const socket = (): { pause(): void; resume(): void } | undefined =>
+      (this.client as unknown as { connection?: { stream?: { pause(): void; resume(): void } } })
+        .connection?.stream;
+    const queue = new AsyncQueue<ExecuteEvent>({
+      highWater: FLOW_HIGH_WATER,
+      pause: () => {
+        socket()?.pause();
+      },
+      resume: () => {
+        socket()?.resume();
+      },
+    });
     let fieldOids: (number | undefined)[] = [];
     let columnsSent = false as boolean;
     let batch: CellValue[][] = [];

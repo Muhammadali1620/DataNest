@@ -1,3 +1,4 @@
+import { mysqlDump } from './dump';
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
@@ -65,4 +66,5 @@ export const mysqlDialect: Dialect = {
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} () VALUES ()`,
   ddl: mysqlDdl,
+  dump: mysqlDump,
 };

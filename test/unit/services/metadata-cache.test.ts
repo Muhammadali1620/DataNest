@@ -100,6 +100,22 @@ describe('MetadataCache', () => {
       expect(inner.calls).toEqual(['getDefinition:view:v', 'getDefinition:view:v']);
     });
 
+    it('never caches what a dump reads: it reads inside its own snapshot', async () => {
+      const inner = reader();
+      inner.tableDumps.set('t', { before: [], create: ['CREATE TABLE t'], after: [], owns: [] });
+      const wrapped = cache.wrap('c1', inner);
+      await wrapped.getTableDump({ name: 't' });
+      await wrapped.getTableDump({ name: 't' });
+      await wrapped.listTypeDumps({ schema: 's' }, ['t']);
+      await wrapped.listTypeDumps({ schema: 's' }, ['t']);
+      expect(inner.calls).toEqual([
+        'getTableDump:t',
+        'getTableDump:t',
+        'listTypeDumps:/s:t',
+        'listTypeDumps:/s:t',
+      ]);
+    });
+
     it('tells scopes apart even when a name contains the separator', async () => {
       const inner = reader();
       const wrapped = cache.wrap('c1', inner);
@@ -133,6 +149,8 @@ describe('MetadataCache', () => {
         listIndexes: () => Promise.resolve([]),
         describeTable: () => Promise.reject(new Error('no table')),
         getDefinition: () => Promise.resolve([]),
+        getTableDump: () => Promise.resolve({ before: [], create: [], after: [], owns: [] }),
+        listTypeDumps: () => Promise.resolve([]),
       };
       const load = vi.spyOn(inner, 'listDatabases');
       const wrapped = cache.wrap('c1', inner);

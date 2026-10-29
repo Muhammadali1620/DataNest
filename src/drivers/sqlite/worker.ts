@@ -6,7 +6,13 @@ import { parentPort } from 'node:worker_threads';
 import type { ResultColumn } from '../driver';
 import { toWireError } from './errors';
 import { blobsOf } from './blobs';
-import type { HostToWorker, WorkerToHost } from './protocol';
+import {
+  FLOW_STOP,
+  FLOW_TAKEN,
+  FLOW_WINDOW,
+  type HostToWorker,
+  type WorkerToHost,
+} from './protocol';
 import { toCellValue } from './values';
 import type { CellValue } from '../../shared/cell-value';
 
@@ -46,6 +52,24 @@ function open(file: string, readOnly: boolean): void {
   }
 }
 
+/**
+ * Waits until the host has taken enough batches for one more to fit the window.
+ * False when the host wants no more rows. The timeout only re-checks the flags; the
+ * host wakes the worker itself whenever it takes a batch or stops.
+ */
+function waitForRoom(flow: Int32Array, sent: number): boolean {
+  for (;;) {
+    if (Atomics.load(flow, FLOW_STOP) !== 0) {
+      return false;
+    }
+    const taken = Atomics.load(flow, FLOW_TAKEN);
+    if (sent - taken < FLOW_WINDOW) {
+      return true;
+    }
+    Atomics.wait(flow, FLOW_TAKEN, taken, 1000);
+  }
+}
+
 /** The slice of node:sqlite's column descriptors the worker reads. */
 interface ColumnLike {
   readonly name?: string | null;
@@ -56,6 +80,7 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
   const { id, sql } = message;
   const params = message.params ?? [];
   const rowLimit = message.rowLimit ?? Number.POSITIVE_INFINITY;
+  const flow = message.flow === undefined ? undefined : new Int32Array(message.flow);
   if (!db) {
     post({ t: 'error', id, error: { code: 'internal', message: 'The database is not open' } });
     return;
@@ -89,6 +114,8 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
     post({ t: 'columns', id, columns });
     let batch: CellValue[][] = [];
     let count = 0;
+    let sent = 0;
+    let stopped = false;
     for (const row of statement.iterate(...params)) {
       if (count >= rowLimit) {
         // The iterator is simply abandoned: unlike a server, nothing keeps running.
@@ -104,9 +131,14 @@ function exec(message: Extract<HostToWorker, { t: 'exec' }>): void {
       if (batch.length >= ROW_BATCH_SIZE) {
         postRows(id, batch);
         batch = [];
+        sent += 1;
+        if (flow !== undefined && !waitForRoom(flow, sent)) {
+          stopped = true;
+          break;
+        }
       }
     }
-    if (batch.length > 0) {
+    if (batch.length > 0 && !stopped) {
       postRows(id, batch);
     }
     post({ t: 'done', id, ...tx() });

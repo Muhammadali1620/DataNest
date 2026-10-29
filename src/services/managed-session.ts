@@ -20,7 +20,9 @@ import type {
   ExecuteOptions,
   MetadataReader,
   Session,
+  TableDump,
   TransactionState,
+  TypeDump,
 } from '../drivers/driver';
 
 /** Errors that mean the connection itself is unusable, not just this statement. */
@@ -214,6 +216,14 @@ class ManagedMetadata implements MetadataReader {
 
   async getDefinition(object: ObjectRef): Promise<string[]> {
     return await this.guard(() => this.inner.getDefinition(object));
+  }
+
+  async getTableDump(table: TableRef): Promise<TableDump> {
+    return await this.guard(() => this.inner.getTableDump(table));
+  }
+
+  async listTypeDumps(scope: ObjectScope, tables?: readonly string[]): Promise<TypeDump[]> {
+    return await this.guard(() => this.inner.listTypeDumps(scope, tables));
   }
 
   private async guard<T>(call: () => Promise<T>): Promise<T> {

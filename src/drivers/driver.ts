@@ -117,6 +117,49 @@ export interface SchemaDdl {
   ): ReplacePlan;
 }
 
+/** How a dump (V5.2) is read and what its script says, per database. */
+export interface DumpDialect {
+  /** Run first on the session that reads, so values come out as the header writes them back. */
+  readonly prepare: readonly string[];
+  /** Starts a read-only snapshot, so every table of the dump is read at one moment. */
+  readonly beginSnapshot: readonly string[];
+  readonly endSnapshot: readonly string[];
+  /** The top of a dump file (encoding, checks off) and the bottom that puts things back. */
+  readonly header: readonly string[];
+  readonly footer: readonly string[];
+  /**
+   * Functions and procedures go before the tables: column defaults and checks may
+   * call them, and their bodies are not checked at creation (PostgreSQL).
+   */
+  readonly routinesFirst: boolean;
+  /**
+   * One INSERT of rows already written as `(…)` lists. `identity` is set when values
+   * go into identity columns, which some databases refuse without a clause.
+   */
+  insert(
+    quotedTable: string,
+    quotedColumns: readonly string[],
+    rows: readonly string[],
+    identity: boolean,
+  ): string;
+  /**
+   * After a table's rows: moves the sequence behind a column past the highest value,
+   * so new rows do not collide. Absent where inserting does that by itself.
+   */
+  readonly resetSequence?: (table: TableRef, column: string) => string;
+  /** DROP … IF EXISTS of tables or views, in as few statements as the database allows. */
+  dropRelations(tables: readonly TableRef[], kind: RelationKind): string[];
+  /** DROP … IF EXISTS of a routine, sequence, trigger or event. */
+  dropObject(object: ObjectRef): string;
+  /** CREATE SCHEMA IF NOT EXISTS, where names in the script carry their schema. */
+  readonly createSchema?: (name: string) => string;
+  /**
+   * Rewrites a definition so it loads under another user on another server
+   * (MySQL: without `DEFINER=…`, which only an administrator may set).
+   */
+  readonly portable?: (sql: string) => string;
+}
+
 /** Everything that differs between SQL dialects. UI builds SQL only through this. */
 export interface Dialect {
   /** Keywords for completion and highlighting, uppercase. */
@@ -152,6 +195,8 @@ export interface Dialect {
   insertDefaultRow(quotedTable: string): string;
   /** Structure changes: databases, schemas, tables and other objects. */
   readonly ddl: SchemaDdl;
+  /** Dumps to a SQL script (V5.2). */
+  readonly dump: DumpDialect;
 }
 
 export interface ResultColumn {
@@ -178,6 +223,25 @@ export type ExecuteEvent =
 export interface ExecuteOptions {
   /** Stop fetching after this many rows; `done` still arrives. */
   readonly rowLimit?: number;
+}
+
+/** A table's definition, split by where a dump (V5.2) has to put each part. */
+export interface TableDump {
+  /** Before the table: the sequences its columns draw from (PostgreSQL serial). */
+  readonly before: readonly string[];
+  /** The table itself, with its indexes and comments. */
+  readonly create: readonly string[];
+  /** Once every table is created and filled: foreign keys kept apart, then triggers. */
+  readonly after: readonly string[];
+  /** Objects the parts above already create, so a dump does not write them twice. */
+  readonly owns: readonly ObjectRef[];
+}
+
+/** A user-defined type a dump creates before the tables (PostgreSQL enums and domains). */
+export interface TypeDump {
+  readonly name: string;
+  readonly create: string;
+  readonly drop: string;
 }
 
 /** Reads structure for the tree and completion; implementations go to the server. */
@@ -211,6 +275,13 @@ export interface MetadataReader {
    * when the server hides its definition from this user.
    */
   getDefinition(object: ObjectRef): Promise<string[]>;
+  /** A table's definition in the parts a dump writes at different places. */
+  getTableDump(table: TableRef): Promise<TableDump>;
+  /**
+   * User-defined types of a scope, or only the ones the named tables use; empty
+   * where the database has none of its own (types live in the columns).
+   */
+  listTypeDumps(scope: ObjectScope, tables?: readonly string[]): Promise<TypeDump[]>;
 }
 
 /**

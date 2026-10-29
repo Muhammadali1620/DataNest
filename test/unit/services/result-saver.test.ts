@@ -41,6 +41,8 @@ const noMetadata: MetadataReader = {
   listIndexes: () => Promise.resolve([]),
   describeTable: () => Promise.reject(new Error('no table')),
   getDefinition: () => Promise.resolve([]),
+  getTableDump: () => Promise.resolve({ before: [], create: [], after: [], owns: [] }),
+  listTypeDumps: () => Promise.resolve([]),
 };
 
 /** A session that records statements and answers as a script says. */

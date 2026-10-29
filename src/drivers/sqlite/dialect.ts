@@ -1,3 +1,4 @@
+import { sqliteDump } from './dump';
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
@@ -60,4 +61,5 @@ export const sqliteDialect: Dialect = {
   defaultKeyword: false,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
   ddl: sqliteDdl,
+  dump: sqliteDump,
 };

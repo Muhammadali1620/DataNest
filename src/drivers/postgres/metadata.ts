@@ -11,9 +11,10 @@ import type {
   TableRef,
   TableStructure,
 } from '../../core/model/objects';
-import type { MetadataReader } from '../driver';
+import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readPgDefinition } from './definitions';
+import { readPgTableDump, readPgTypeDumps } from './dump-definitions';
 import { pgReferentialAction, readPgStructure } from './structure';
 import { toPgDbError } from './errors';
 
@@ -245,6 +246,18 @@ export class PostgresMetadata implements MetadataReader {
 
   async getDefinition(object: ObjectRef): Promise<string[]> {
     return await readPgDefinition(async (sql, params) => await this.query(sql, params), object);
+  }
+
+  async getTableDump(table: TableRef): Promise<TableDump> {
+    return await readPgTableDump(async (sql, params) => await this.query(sql, params), table);
+  }
+
+  async listTypeDumps(scope: ObjectScope, tables?: readonly string[]): Promise<TypeDump[]> {
+    return await readPgTypeDumps(
+      async (sql, params) => await this.query(sql, params),
+      scope.schema,
+      tables,
+    );
   }
 
   private async query(text: string, values: unknown[] = []): Promise<unknown[][]> {

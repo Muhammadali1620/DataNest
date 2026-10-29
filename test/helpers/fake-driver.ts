@@ -24,7 +24,9 @@ import type {
   MetadataReader,
   ResultColumn,
   Session,
+  TableDump,
   TransactionState,
+  TypeDump,
 } from '../../src/drivers/driver';
 import type { CellValue } from '../../src/shared/cell-value';
 
@@ -71,6 +73,22 @@ export const fakeDialect: Dialect = {
       recovery: [`DROP ${object.kind.toUpperCase()} "${object.name}"`, ...original],
     }),
   },
+  dump: {
+    prepare: ['PREPARE READ'],
+    beginSnapshot: ['BEGIN SNAPSHOT'],
+    endSnapshot: ['END SNAPSHOT'],
+    header: ['HEADER 1', 'HEADER 2'],
+    footer: ['FOOTER'],
+    routinesFirst: false,
+    insert: (table, columns, rows, identity) =>
+      `INSERT INTO ${table} (${columns.join(', ')})${identity ? ' IDENTITY' : ''} VALUES ${rows.join(', ')}`,
+    resetSequence: (table, column) => `RESET ${table.name}.${column}`,
+    dropRelations: (tables, kind) =>
+      tables.length === 0
+        ? []
+        : [`DROP ${kind.toUpperCase()} IF EXISTS ${tables.map((t) => `"${t.name}"`).join(', ')}`],
+    dropObject: (object) => `DROP ${object.kind.toUpperCase()} IF EXISTS "${object.name}"`,
+  },
 };
 
 export class FakeMetadata implements MetadataReader {
@@ -87,6 +105,10 @@ export class FakeMetadata implements MetadataReader {
   structure: TableStructure | undefined;
   /** Definitions by `kind:name`; a missing one is reported as not found. */
   definitions = new Map<string, string[]>();
+  /** Dump parts by table name; a missing one is reported as not found. */
+  tableDumps = new Map<string, TableDump>();
+  /** What listTypeDumps answers, whatever the scope. */
+  typeDumps: TypeDump[] = [];
   /** Thrown by every reader when set. */
   error: Error | undefined;
   readonly calls: string[] = [];
@@ -145,6 +167,25 @@ export class FakeMetadata implements MetadataReader {
       return Promise.reject(new DbError('not-found', `${object.name} does not exist`));
     }
     return this.answer(`getDefinition:${key}`, found ?? []);
+  }
+
+  getTableDump(table: TableRef): Promise<TableDump> {
+    const found = this.tableDumps.get(table.name);
+    if (found === undefined && this.error === undefined) {
+      this.calls.push(`getTableDump:${table.name}`);
+      return Promise.reject(new DbError('not-found', `${table.name} does not exist`));
+    }
+    return this.answer(
+      `getTableDump:${table.name}`,
+      found ?? { before: [], create: [], after: [], owns: [] },
+    );
+  }
+
+  listTypeDumps(scope: ObjectScope, tables?: readonly string[]): Promise<TypeDump[]> {
+    return this.answer(
+      `listTypeDumps:${scope.database ?? ''}/${scope.schema ?? ''}:${tables?.join(',') ?? '*'}`,
+      this.typeDumps,
+    );
   }
 
   private answer<T>(call: string, value: T): Promise<T> {
@@ -321,6 +362,8 @@ export class FakeDriver implements Driver {
     session.metadata.uniqueKeys = [...this.sessionMetadata.uniqueKeys];
     session.metadata.foreignKeys = [...this.sessionMetadata.foreignKeys];
     session.metadata.definitions = new Map(this.sessionMetadata.definitions);
+    session.metadata.tableDumps = new Map(this.sessionMetadata.tableDumps);
+    session.metadata.typeDumps = [...this.sessionMetadata.typeDumps];
     session.metadata.objects = [...this.sessionMetadata.objects];
     session.metadata.indexes = [...this.sessionMetadata.indexes];
     session.metadata.structure = this.sessionMetadata.structure;

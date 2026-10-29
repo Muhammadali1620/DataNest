@@ -7,9 +7,20 @@ interface Waiter<T> {
 }
 
 /**
- * An unbounded FIFO queue that one consumer reads with `for await`.
- * After `end()` or `fail()` the remaining buffered items are still delivered;
- * when the consumer stops early, the buffer is dropped and `push` returns false.
+ * Back-pressure: once `highWater` items wait unread, the producer is asked to pause,
+ * and to resume when the consumer has read the buffer down to half of that.
+ */
+export interface FlowControl {
+  readonly highWater: number;
+  readonly pause: () => void;
+  readonly resume: () => void;
+}
+
+/**
+ * A FIFO queue that one consumer reads with `for await`, unbounded unless it is
+ * given flow control. After `end()` or `fail()` the remaining buffered items are
+ * still delivered; when the consumer stops early, the buffer is dropped and `push`
+ * returns false.
  */
 export class AsyncQueue<T> implements AsyncIterable<T> {
   private buffer: T[] = [];
@@ -17,6 +28,14 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
   private ended = false;
   private failure: { error: unknown } | undefined;
   private closed = false;
+  private paused = false;
+
+  constructor(private readonly flow?: FlowControl) {}
+
+  /** True while the producer has been asked to wait for the consumer. */
+  get isPaused(): boolean {
+    return this.paused;
+  }
 
   /** True when nothing more will reach the consumer: it stopped, or the queue ended and drained. */
   get isClosed(): boolean {
@@ -34,8 +53,26 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       waiter.resolve({ value: item, done: false });
     } else {
       this.buffer.push(item);
+      if (this.flow !== undefined && !this.paused && this.buffer.length >= this.flow.highWater) {
+        this.paused = true;
+        this.flow.pause();
+      }
     }
     return true;
+  }
+
+  /** The consumer read an item: the producer may go on once half the buffer is gone. */
+  private drained(): void {
+    if (this.paused && this.flow !== undefined && this.buffer.length <= this.flow.highWater / 2) {
+      this.release();
+    }
+  }
+
+  private release(): void {
+    if (this.paused) {
+      this.paused = false;
+      this.flow?.resume();
+    }
   }
 
   /** No more items; buffered ones are still delivered. Idempotent. */
@@ -74,7 +111,9 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
         }
         if (this.buffer.length > 0) {
           // The cast is safe: length was just checked.
-          return Promise.resolve({ value: this.buffer.shift() as T, done: false });
+          const value = this.buffer.shift() as T;
+          this.drained();
+          return Promise.resolve({ value, done: false });
         }
         if (this.failure) {
           this.closed = true;
@@ -96,6 +135,8 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       return: (): Promise<IteratorResult<T>> => {
         this.closed = true;
         this.buffer = [];
+        // A paused producer must run to its end, or its connection stays stuck.
+        this.release();
         if (this.waiter) {
           const waiter = this.waiter;
           this.waiter = undefined;

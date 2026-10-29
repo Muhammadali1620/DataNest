@@ -29,7 +29,7 @@ export interface InvalidatableCache {
 }
 
 export interface TreeCommandDeps {
-  readonly manager: Pick<ConnectionManager, 'connect' | 'disconnect'>;
+  readonly manager: Pick<ConnectionManager, 'connectAny' | 'disconnect'>;
   /** Opens a table from the tree; the host wires this to the table viewer. */
   readonly openTable: (node: TableNode) => Promise<void>;
   /** Opens the definition of an object in a new SQL editor. */
@@ -64,7 +64,7 @@ export function treeCommandHandlers(
 
   return {
     connect: async (target?: CommandTarget) => {
-      await deps.manager.connect(requireConnectionId(target));
+      await deps.manager.connectAny(requireConnectionId(target));
       deps.tree.refresh();
       return undefined;
     },

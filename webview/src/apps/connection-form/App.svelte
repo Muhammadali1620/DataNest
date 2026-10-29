@@ -7,8 +7,9 @@
     isFileDriver,
     MAX_SSH_JUMPS,
     optionSupport,
+    REDIS_MODES,
   } from '../../../../src/shared/connection';
-  import type { DriverId } from '../../../../src/shared/connection';
+  import type { DriverId, RedisMode } from '../../../../src/shared/connection';
   import type {
     ConnectionFormProtocol,
     ConnectionFormState,
@@ -30,6 +31,8 @@
   import {
     applyPreset,
     applyUrl,
+    changeRedisMode,
+    sshAllowed,
     fieldsFrom,
     type FormFields,
     moveJump,
@@ -71,6 +74,13 @@
     mssql: 'form.driver.mssql',
     clickhouse: 'form.driver.clickhouse',
     oracle: 'form.driver.oracle',
+    redis: 'form.driver.redis',
+  };
+
+  const REDIS_MODE_LABELS: Readonly<Record<RedisMode, MessageKey>> = {
+    standalone: 'form.redis.mode.standalone',
+    sentinel: 'form.redis.mode.sentinel',
+    cluster: 'form.redis.mode.cluster',
   };
 
   const problems = $derived(fields === undefined ? [] : problemsOf(fields));
@@ -80,6 +90,7 @@
     fields === undefined ? { databases: false, schemas: false } : filterSupport(fields.driver),
   );
   const isFile = $derived(fields !== undefined && isFileDriver(fields.driver));
+  const isRedis = $derived(fields?.driver === 'redis');
   const defaultPort = $derived(
     formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
   );
@@ -141,6 +152,9 @@
     // Moving between drivers offers the new default port instead of the old one.
     const next = formState?.drivers.find((driver) => driver.id === fields?.driver);
     fields.port = next?.defaultPort === undefined ? '' : String(next.defaultPort);
+    if (fields.driver === 'redis') {
+      changeRedisMode(fields, fields.redisMode);
+    }
   }
 
   function messageOf(error: unknown): string {
@@ -410,7 +424,17 @@
         </Field>
       {:else}
         <div class="pair">
-          <Field label={t('form.host')} error={errorFor('host-empty')}>
+          <Field
+            label={t('form.host')}
+            error={errorFor('host-empty')}
+            hint={!isRedis
+              ? undefined
+              : fields.redisMode === 'sentinel'
+                ? t('form.redis.hostSentinel')
+                : fields.redisMode === 'cluster'
+                  ? t('form.redis.hostCluster')
+                  : undefined}
+          >
             <input
               class="control"
               bind:value={fields.host}
@@ -437,8 +461,65 @@
           </Field>
         </div>
 
+        {#if isRedis}
+          <Field label={t('form.redis.mode')}>
+            <select
+              class="control"
+              value={fields.redisMode}
+              onchange={(event) => {
+                if (fields) {
+                  changeRedisMode(fields, event.currentTarget.value as RedisMode);
+                }
+              }}
+              aria-label={t('form.redis.mode')}
+            >
+              {#each REDIS_MODES as mode (mode)}
+                <option value={mode}>{t(REDIS_MODE_LABELS[mode])}</option>
+              {/each}
+            </select>
+          </Field>
+          {#if fields.redisMode === 'sentinel'}
+            <Field
+              label={t('form.redis.masterName')}
+              error={errorFor('redis-master-empty')}
+              hint={t('form.redis.masterNameHint')}
+            >
+              <input
+                class="control"
+                bind:value={fields.masterName}
+                maxlength={CONNECTION_LIMITS.field}
+                aria-invalid={errorFor('redis-master-empty') !== undefined}
+                aria-label={t('form.redis.masterName')}
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </Field>
+          {/if}
+          {#if fields.redisMode !== 'standalone'}
+            <Field
+              label={fields.redisMode === 'sentinel'
+                ? t('form.redis.nodesSentinel')
+                : t('form.redis.nodesCluster')}
+              error={errorFor('redis-node-invalid') ?? errorFor('redis-too-many-nodes')}
+              hint={t('form.redis.nodesHint')}
+            >
+              <input
+                class="control"
+                bind:value={fields.redisNodes}
+                aria-invalid={errorFor('redis-node-invalid') !== undefined}
+                aria-label={fields.redisMode === 'sentinel'
+                  ? t('form.redis.nodesSentinel')
+                  : t('form.redis.nodesCluster')}
+                placeholder="10.0.0.2:26379, 10.0.0.3"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </Field>
+          {/if}
+        {/if}
+
         <div class="pair">
-          <Field label={t('form.user')}>
+          <Field label={t('form.user')} hint={isRedis ? t('form.redis.userHint') : undefined}>
             <input
               class="control"
               bind:value={fields.user}
@@ -481,12 +562,63 @@
           </label>
         {/if}
 
-        <Field label={t('form.database')} hint={t('form.databaseHint')}>
+        {#if isRedis && fields.redisMode === 'sentinel'}
+          <div class="pair">
+            <Field label={t('form.redis.sentinelUser')}>
+              <input
+                class="control"
+                bind:value={fields.sentinelUser}
+                maxlength={CONNECTION_LIMITS.field}
+                aria-label={t('form.redis.sentinelUser')}
+                autocomplete="off"
+              />
+            </Field>
+            <Field
+              label={t('form.redis.sentinelPassword')}
+              hint={fields.sentinelPassword.touched
+                ? undefined
+                : formState?.hasStoredSentinelPassword
+                  ? t('form.redis.sentinelPasswordStored')
+                  : t('form.redis.sentinelPasswordHint')}
+            >
+              <input
+                class="control"
+                type="password"
+                bind:value={fields.sentinelPassword.value}
+                oninput={() => {
+                  if (fields) {
+                    fields.sentinelPassword.touched = true;
+                  }
+                }}
+                maxlength={PASSWORD_MAX_LENGTH}
+                disabled={fields.sentinelPassword.erase}
+                aria-label={t('form.redis.sentinelPassword')}
+                autocomplete="off"
+              />
+            </Field>
+          </div>
+          {#if formState?.hasStoredSentinelPassword}
+            <label class="check">
+              <input type="checkbox" bind:checked={fields.sentinelPassword.erase} />
+              {t('form.redis.eraseSentinelPassword')}
+            </label>
+          {/if}
+        {/if}
+
+        <Field
+          label={isRedis ? t('form.redis.database') : t('form.database')}
+          hint={isRedis ? t('form.redis.databaseHint') : t('form.databaseHint')}
+          error={isRedis
+            ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
+            : undefined}
+        >
           <input
             class="control"
             bind:value={fields.database}
             maxlength={CONNECTION_LIMITS.field}
-            aria-label={t('form.database')}
+            inputmode={isRedis ? 'numeric' : undefined}
+            placeholder={isRedis ? '0' : undefined}
+            aria-label={isRedis ? t('form.redis.database') : t('form.database')}
             autocomplete="off"
           />
         </Field>
@@ -503,6 +635,9 @@
         </fieldset>
         {/if}
 
+        {#if !sshAllowed(fields)}
+          <p class="hint" data-testid="redis-ssh-note">{t('form.redis.sshNote')}</p>
+        {:else}
         <fieldset class="section">
           <legend>
             <label class="check">
@@ -584,6 +719,7 @@
             </div>
           {/if}
         </fieldset>
+        {/if}
       {/if}
 
       <details class="section options" open={hasOptions}>

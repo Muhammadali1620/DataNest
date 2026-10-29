@@ -13,6 +13,7 @@ import {
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
 import { FakeDriverProvider, linkLostError } from '../../../helpers/fake-driver';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helpers/fakes';
+import { bulk, FakeRedisDriver } from '../../../helpers/fake-redis';
 
 const TEXTS: TreeTexts = {
   emptyFolder: 'Drag here',
@@ -773,5 +774,88 @@ describe('TreeModel project connections (V4.7)', () => {
   it('lists nothing for a project that is gone', async () => {
     const { model } = await setup({});
     expect(await model.children({ kind: 'project', key: SHOP.key, name: 'shop' })).toEqual([]);
+  });
+});
+
+describe('TreeModel with Redis (V7.1)', () => {
+  const KEYSPACE = 'db0:keys=12,expires=1\r\ndb3:keys=1,expires=0\r\n';
+
+  async function setup(answer?: ConstructorParameters<typeof FakeRedisDriver>[0]) {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const redis = new FakeRedisDriver(
+      answer ??
+        ((words) =>
+          words[0] === 'INFO'
+            ? bulk(KEYSPACE)
+            : words[0] === 'CONFIG'
+              ? [bulk('databases'), bulk('4')]
+              : null),
+    );
+    const drivers = Object.assign(new FakeDriverProvider(), {
+      getRedis: () => Promise.resolve(redis),
+    });
+    const manager = new ConnectionManager({ store, drivers, logger });
+    const model = new TreeModel({
+      store,
+      manager,
+      cache: new MetadataCache({ logger }),
+      settings: { showSystemObjects: () => false },
+      logger,
+      texts: { ...TEXTS, redisKeys: (count) => `${count} keys` },
+    });
+    const cache = await store.add({ name: 'Cache', driver: 'redis', host: 'h', database: '3' });
+    return { store, redis, drivers, manager, model, cache };
+  }
+
+  it('lists the numbered databases with their keys, connecting on the opened one', async () => {
+    const { model, cache, redis, manager, drivers } = await setup();
+    expect(await model.children({ kind: 'connection', connectionId: cache.id })).toEqual([
+      { kind: 'redisDatabase', connectionId: cache.id, database: 0, keys: 12 },
+      { kind: 'redisDatabase', connectionId: cache.id, database: 1, keys: 0 },
+      { kind: 'redisDatabase', connectionId: cache.id, database: 2, keys: 0 },
+      { kind: 'redisDatabase', connectionId: cache.id, database: 3, keys: 1 },
+    ]);
+    expect(redis.opened[0]?.database).toBe('3');
+    expect(manager.redisSessionOf(ConnectionManager.treeOwner(cache.id, '3'))).toBeDefined();
+    // No SQL driver is loaded for a Redis connection.
+    expect(drivers.requested).toEqual([]);
+  });
+
+  it('turns a failure into a leaf that says what went wrong', async () => {
+    const { model, cache, redis } = await setup();
+    redis.openError = new DbError('auth-failed', 'WRONGPASS invalid password');
+    expect(await model.children({ kind: 'connection', connectionId: cache.id })).toEqual([
+      { kind: 'message', text: 'WRONGPASS invalid password', failed: true, connectionId: cache.id },
+    ]);
+  });
+
+  it('has nothing below a database yet', async () => {
+    const { model, cache } = await setup();
+    expect(
+      await model.children({ kind: 'redisDatabase', connectionId: cache.id, database: 0, keys: 1 }),
+    ).toEqual([]);
+  });
+
+  it('describes the key count with the given text, or the bare number', async () => {
+    const { model } = await setup();
+    expect(model.redisKeysText(5)).toBe('5 keys');
+    const bare = new TreeModel({
+      store: new ConnectionStore({
+        state: new FakeMemento(),
+        secrets: new FakeSecretStorage(),
+        logger: new RecordingLogger(),
+      }),
+      manager: {} as ConnectionManager,
+      cache: new MetadataCache({ logger: new RecordingLogger() }),
+      settings: { showSystemObjects: () => false },
+      logger: new RecordingLogger(),
+      texts: TEXTS,
+    });
+    expect(bare.redisKeysText(5)).toBe('5');
   });
 });

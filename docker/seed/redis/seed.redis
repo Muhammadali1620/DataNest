@@ -1,0 +1,36 @@
+FLUSHALL
+SET app:name "DataNest"
+SET app:counter 42
+SET app:big-counter 9007199254740993
+SET app:json "{\"name\":\"DataNest\",\"tags\":[\"sql\",\"nosql\"],\"id\":12345678901234567890}"
+SET app:binary "\x00\xff\x10\x80"
+SET app:empty ""
+SET "bin:\xff\xfe" "binary key"
+SET "key with spaces" "spaces"
+SET "user:имя" "Привет"
+SET session:abc token EX 86400
+HSET user:1 name Alice email alice@example.com age 30
+HSET user:2 name Bob email bob@example.com age 25
+HSET user:3 name Carol email carol@example.com
+RPUSH queue:jobs first second third fourth fifth
+SADD tags redis sql nosql cache
+ZADD leaderboard 100 alice 85.5 bob -3 carol 1e3 dave
+XADD events 1700000000000-0 type click page /home
+XADD events 1700000000001-0 type view page /about user 7
+XADD events 1700000000002-0 type click page /pricing
+SET a:b:c:d:deep 1
+SET a:b:other 2
+SET a:top 3
+EVAL "for i = 1, 2000 do redis.call('SET', 'big:key:' .. i, i) end return 1" 0
+EVAL "for i = 1, 1000 do redis.call('HSET', 'big:hash', 'field:' .. i, i) end return 1" 0
+EVAL "for i = 1, 1000 do redis.call('RPUSH', 'big:list', 'item:' .. i) end return 1" 0
+EVAL "for i = 1, 1000 do redis.call('SADD', 'big:set', 'member:' .. i) end return 1" 0
+EVAL "for i = 1, 1000 do redis.call('ZADD', 'big:zset', i, 'member:' .. i) end return 1" 0
+EVAL "for i = 1, 1000 do redis.call('XADD', 'big:stream', '*', 'n', i) end return 1" 0
+SELECT 1
+SET other:key "in db 1"
+HSET other:hash a 1
+SELECT 15
+SET last:key "in db 15"
+SELECT 0
+SET seed:done 1

@@ -7,6 +7,8 @@ import {
   toInput,
   toPasswordChange,
   toSshChanges,
+  testSentinelPassword,
+  toSentinelChange,
 } from '../../../../src/vscode/panels/connection-form-state';
 import type { ConnectionDraft } from '../../../../src/shared/protocols/connection-form';
 import { DRIVER_IDS, isFileDriver } from '../../../../src/shared/connection';
@@ -122,6 +124,7 @@ describe('toInput', () => {
       readOnly: true,
       options: { keepAlive: 60, initSql: 'SET a = 1' },
       filter: { databases: ['shop'], schemas: ['public'] },
+      redis: { mode: 'sentinel', masterName: 'm', nodes: [{ host: 's2' }], sentinelUser: 'u' },
     } as const;
     const input = toInput(full);
     const sent = connectionFormProtocol.host.requests.save.params.parse({
@@ -267,5 +270,37 @@ describe('toInput keeps every editable setting', () => {
         drivers: driverOptions(),
       }),
     ).not.toThrow();
+  });
+});
+
+describe('Sentinel password (V7.1)', () => {
+  const draft = (sentinelPassword?: ConnectionDraft['sentinelPassword']): ConnectionDraft => ({
+    input: { name: 'r', driver: 'redis', host: 'h', redis: { mode: 'sentinel', masterName: 'm' } },
+    password: { kind: 'keep' },
+    ...(sentinelPassword === undefined ? {} : { sentinelPassword }),
+  });
+
+  it('keeps the stored one when the form says nothing or keep', () => {
+    expect(toSentinelChange(draft())).toEqual({ kind: 'keep' });
+    expect(testSentinelPassword(draft(), 'stored')).toBe('stored');
+    expect(testSentinelPassword(draft({ kind: 'keep' }), 'stored')).toBe('stored');
+  });
+
+  it('uses a typed one and forgets an erased one', () => {
+    expect(toSentinelChange(draft({ kind: 'set', value: 'new' }))).toEqual({
+      kind: 'set',
+      value: 'new',
+    });
+    expect(testSentinelPassword(draft({ kind: 'set', value: 'new' }), 'stored')).toBe('new');
+    expect(testSentinelPassword(draft({ kind: 'set', value: '' }), 'stored')).toBeUndefined();
+    expect(toSentinelChange(draft({ kind: 'clear' }))).toEqual({ kind: 'clear' });
+    expect(testSentinelPassword(draft({ kind: 'clear' }), 'stored')).toBeUndefined();
+  });
+
+  it('travels in the draft the page sends', () => {
+    const parsed = connectionFormProtocol.host.requests.save.params.parse(
+      draft({ kind: 'set', value: 'spw' }),
+    );
+    expect(parsed.sentinelPassword).toEqual({ kind: 'set', value: 'spw' });
   });
 });

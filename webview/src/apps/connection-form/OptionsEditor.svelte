@@ -23,6 +23,7 @@
   const { fields, t, errorFor }: Props = $props();
 
   const support = $derived(optionSupport(fields.driver));
+  const isRedis = $derived(fields.driver === 'redis');
 </script>
 
 <div class="grid">
@@ -44,21 +45,23 @@
       />
     </Field>
   {/if}
-  <Field
-    label={t('form.options.queryTimeout')}
-    error={errorFor('query-timeout-invalid')}
-    hint={t('form.options.queryTimeoutHint')}
-  >
-    <input
-      class="control"
-      bind:value={fields.queryTimeout}
-      inputmode="numeric"
-      maxlength={5}
-      aria-invalid={errorFor('query-timeout-invalid') !== undefined}
-      aria-label={t('form.options.queryTimeout')}
-      autocomplete="off"
-    />
-  </Field>
+  {#if support.queryTimeout}
+    <Field
+      label={t('form.options.queryTimeout')}
+      error={errorFor('query-timeout-invalid')}
+      hint={t('form.options.queryTimeoutHint')}
+    >
+      <input
+        class="control"
+        bind:value={fields.queryTimeout}
+        inputmode="numeric"
+        maxlength={5}
+        aria-invalid={errorFor('query-timeout-invalid') !== undefined}
+        aria-label={t('form.options.queryTimeout')}
+        autocomplete="off"
+      />
+    </Field>
+  {/if}
   {#if support.keepAlive}
     <Field
       label={t('form.options.keepAlive')}
@@ -114,17 +117,20 @@
   {/if}
 </div>
 
+<!-- Redis has no SQL: the same box holds commands, one per line (V7.1). -->
 <Field
-  label={t('form.options.initSql')}
+  label={isRedis ? t('form.redis.initCommands') : t('form.options.initSql')}
   error={errorFor('init-sql-too-long')}
-  hint={t('form.options.initSqlHint')}
+  hint={isRedis ? t('form.redis.initCommandsHint') : t('form.options.initSqlHint')}
 >
   <textarea
     class="control code"
     bind:value={fields.initSql}
     rows={3}
     maxlength={OPTION_LIMITS.initSql}
-    placeholder={fields.driver === 'postgres'
+    placeholder={isRedis
+      ? 'CLIENT SETNAME my-app'
+      : fields.driver === 'postgres'
       ? 'SET search_path = app, public;'
       : fields.driver === 'sqlite'
         ? 'PRAGMA foreign_keys = ON;'
@@ -136,7 +142,7 @@
               ? "ALTER SESSION SET NLS_LANGUAGE = 'AMERICAN';"
           : "SET SESSION sql_mode = 'STRICT_ALL_TABLES';"}
     aria-invalid={errorFor('init-sql-too-long') !== undefined}
-    aria-label={t('form.options.initSql')}
+    aria-label={isRedis ? t('form.redis.initCommands') : t('form.options.initSql')}
     spellcheck="false"
   ></textarea>
 </Field>

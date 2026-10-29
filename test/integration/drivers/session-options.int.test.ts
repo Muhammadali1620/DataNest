@@ -16,7 +16,7 @@ import { driver as oracleDriver } from '../../../src/drivers/oracle';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, SqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';
@@ -63,7 +63,7 @@ async function managerFor(input: ConnectionInput, password?: string) {
     logger,
   });
   const sqlite = createSqliteDriver({ workerPath: worker.workerPath });
-  const drivers: Record<DriverId, Driver> = {
+  const drivers: Record<SqlDriverId, Driver> = {
     mysql: mysqlDriver,
     postgres: postgresDriver,
     sqlite,

@@ -20,7 +20,7 @@ import { QueryRunner } from '../../../src/services/query-runner';
 import { ResultStore } from '../../../src/services/result-store';
 import { ResultCopier } from '../../../src/services/result-copier';
 import { cellText } from '../../../src/shared/cell-text';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';
@@ -103,7 +103,7 @@ describe('copy as', () => {
     let results: ResultStore;
     let runner: QueryRunner;
     let copier: ResultCopier;
-    let drivers: Record<DriverId, Driver>;
+    let drivers: Record<SqlDriverId, Driver>;
     let connection: { connectionId: string };
 
     beforeAll(async () => {
@@ -162,7 +162,7 @@ describe('copy as', () => {
     const NAMES = ["it's", 'back\\slash', 'line1\nline2', 'Ünï; semi', '50%_off', null, ' padded '];
 
     async function seed(): Promise<void> {
-      const dialect = drivers[target.driver].dialect;
+      const dialect = drivers[target.driver as SqlDriverId].dialect;
       await sql('DELETE FROM copy_src');
       const values = NAMES.map(
         (name, index) =>

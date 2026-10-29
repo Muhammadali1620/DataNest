@@ -8,7 +8,10 @@ import {
   type ConnectionInput,
   type ConnectionOptions,
   FILTER_LIMITS,
+  MAX_REDIS_NODES,
   OPTION_LIMITS,
+  REDIS_MODES,
+  type RedisSettings,
   type VisibilityFilter,
   SSH_AUTH_METHODS,
   type SshHop,
@@ -67,6 +70,21 @@ export const filterSchema: Schema<VisibilityFilter> = object({
   schemas: optional(patternsSchema),
 });
 
+/** The array limit is generous; `connectionProblems` holds the real one (MAX_REDIS_NODES). */
+export const redisSchema: Schema<RedisSettings> = object({
+  mode: literal(...REDIS_MODES),
+  masterName: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+  nodes: optional(
+    array(
+      object({ host: string({ maxLength: CONNECTION_LIMITS.field }), port: optional(port()) }),
+      {
+        maxLength: MAX_REDIS_NODES * 2,
+      },
+    ),
+  ),
+  sentinelUser: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -84,6 +102,7 @@ export const connectionInputShape = {
   readOnly: optional(boolean()),
   options: optional(optionsSchema),
   filter: optional(filterSchema),
+  redis: optional(redisSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

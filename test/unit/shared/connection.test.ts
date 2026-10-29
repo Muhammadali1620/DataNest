@@ -19,6 +19,12 @@ import {
   effectivePort,
   isDriverId,
   isFileDriver,
+  driverFamily,
+  isSqlDriver,
+  SQL_DRIVER_IDS,
+  redisModeOf,
+  redisProblems,
+  MAX_REDIS_NODES,
 } from '../../../src/shared/connection';
 
 describe('isDriverId', () => {
@@ -309,6 +315,7 @@ describe('session options (V4.9)', () => {
       keepAlive: true,
       timeZone: true,
       charset: true,
+      queryTimeout: true,
       tls: true,
     });
     expect(optionSupport('postgres').charset).toBe(false);
@@ -317,6 +324,7 @@ describe('session options (V4.9)', () => {
       keepAlive: false,
       timeZone: false,
       charset: false,
+      queryTimeout: true,
       tls: false,
     });
   });
@@ -361,6 +369,7 @@ describe('SQL Server connections (V6.2)', () => {
       keepAlive: true,
       timeZone: false,
       charset: false,
+      queryTimeout: true,
       tls: true,
     });
   });
@@ -385,6 +394,7 @@ describe('ClickHouse connections (V6.3)', () => {
       keepAlive: true,
       timeZone: true,
       charset: false,
+      queryTimeout: true,
       tls: true,
     });
   });
@@ -415,6 +425,7 @@ describe('Oracle connections (V6.4)', () => {
       keepAlive: true,
       timeZone: true,
       charset: false,
+      queryTimeout: true,
       tls: false,
     });
   });
@@ -427,5 +438,113 @@ describe('Oracle connections (V6.4)', () => {
 
   it('filters schemas only: the database is the service it connects to', () => {
     expect(filterSupport('oracle')).toEqual({ databases: false, schemas: true });
+  });
+});
+
+describe('Redis connections (V7.1)', () => {
+  const redis = { name: 'Cache', driver: 'redis', host: 'h' } as const;
+
+  it('is a driver of its own family, apart from SQL', () => {
+    expect(isDriverId('redis')).toBe(true);
+    expect(driverFamily('redis')).toBe('redis');
+    expect(isSqlDriver('redis')).toBe(false);
+    for (const id of SQL_DRIVER_IDS) {
+      expect(driverFamily(id)).toBe('sql');
+      expect(isSqlDriver(id)).toBe(true);
+    }
+    expect([...SQL_DRIVER_IDS, 'redis'].sort()).toEqual([...DRIVER_IDS].sort());
+    expect(isFileDriver('redis')).toBe(false);
+  });
+
+  it('defaults to one server on port 6379, and Sentinels on 26379', () => {
+    expect(DEFAULT_PORTS.redis).toBe(6379);
+    expect(redisModeOf({ redis: undefined })).toBe('standalone');
+    expect(effectivePort(redis)).toBe(6379);
+    expect(effectivePort({ ...redis, redis: { mode: 'sentinel', masterName: 'm' } })).toBe(26_379);
+    expect(effectivePort({ ...redis, redis: { mode: 'cluster' } })).toBe(6379);
+    expect(effectivePort({ ...redis, port: 7000, redis: { mode: 'sentinel' } })).toBe(7000);
+  });
+
+  it('offers connect timeout, keep-alive and TLS, but no query timeout, time zone or charset', () => {
+    expect(optionSupport('redis')).toEqual({
+      connectTimeout: true,
+      keepAlive: true,
+      timeZone: false,
+      charset: false,
+      tls: true,
+      queryTimeout: false,
+    });
+    expect(filterSupport('redis')).toEqual({ databases: false, schemas: false });
+  });
+
+  it('accepts one server, a Sentinel group and a cluster', () => {
+    expect(connectionProblems(redis)).toEqual([]);
+    expect(connectionProblems({ ...redis, database: '15' })).toEqual([]);
+    expect(
+      connectionProblems({
+        ...redis,
+        redis: { mode: 'sentinel', masterName: 'm', nodes: [{ host: 's2' }] },
+      }),
+    ).toEqual([]);
+    expect(connectionProblems({ ...redis, database: '0', redis: { mode: 'cluster' } })).toEqual([]);
+  });
+
+  it('wants a database number', () => {
+    for (const database of ['one', '-1', '1.5', '123456']) {
+      expect(redisProblems({ ...redis, database }), database).toEqual(['redis-database-invalid']);
+    }
+    expect(redisProblems({ ...redis, database: ' 3 ' })).toEqual([]);
+  });
+
+  it('allows only database 0 in a cluster', () => {
+    expect(redisProblems({ ...redis, database: '2', redis: { mode: 'cluster' } })).toEqual([
+      'redis-cluster-database',
+    ]);
+  });
+
+  it('wants the master name in Sentinel mode', () => {
+    expect(redisProblems({ ...redis, redis: { mode: 'sentinel', masterName: '  ' } })).toEqual([
+      'redis-master-empty',
+    ]);
+  });
+
+  it('checks the extra nodes and how many there are', () => {
+    expect(redisProblems({ ...redis, redis: { mode: 'cluster', nodes: [{ host: '' }] } })).toEqual([
+      'redis-node-invalid',
+    ]);
+    expect(
+      redisProblems({ ...redis, redis: { mode: 'cluster', nodes: [{ host: 'a', port: 0 }] } }),
+    ).toEqual(['redis-node-invalid']);
+    const many = Array.from({ length: MAX_REDIS_NODES + 1 }, () => ({ host: 'n' }));
+    expect(redisProblems({ ...redis, redis: { mode: 'cluster', nodes: many } })).toEqual([
+      'redis-too-many-nodes',
+    ]);
+  });
+
+  it('allows SSH only to one server', () => {
+    const ssh = { id: 'h', host: 'b', user: 'u', auth: 'agent' } as const;
+    expect(redisProblems({ ...redis, ssh })).toEqual([]);
+    expect(redisProblems({ ...redis, ssh, redis: { mode: 'cluster' } })).toEqual([
+      'redis-ssh-topology',
+    ]);
+    expect(
+      connectionProblems({ ...redis, ssh, redis: { mode: 'sentinel', masterName: 'm' } }),
+    ).toContain('redis-ssh-topology');
+  });
+
+  it('has nothing to say about other drivers', () => {
+    expect(
+      redisProblems({
+        name: 'x',
+        driver: 'mysql',
+        host: 'h',
+        database: 'shop',
+        redis: { mode: 'sentinel' },
+      }),
+    ).toEqual([]);
+  });
+
+  it('describes the target with the default port', () => {
+    expect(describeTarget({ ...redis, user: 'app' })).toBe('app@h:6379');
   });
 });

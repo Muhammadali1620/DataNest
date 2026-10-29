@@ -11,6 +11,7 @@ import { tagsOf } from './connection-look';
 import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
   CONNECTIONS_VIEW_ID,
+  connectionContext,
   nodeId,
   TREE_CONTEXT,
   type ObjectGroup,
@@ -69,6 +70,8 @@ export class ConnectionsTreeProvider
         noViews: vscode.l10n.t('No views'),
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
+        redisKeys: (count) =>
+          count === 1 ? vscode.l10n.t('1 key') : vscode.l10n.t('{0} keys', count.toLocaleString()),
         hiddenByFilter: (count) => vscode.l10n.t('{0} more hidden by the filter', count),
         emptyFolder: vscode.l10n.t('Empty: drag connections here'),
         empty: {
@@ -188,6 +191,17 @@ export class ConnectionsTreeProvider
         item.contextValue = TREE_CONTEXT.column;
         return item;
       }
+      case 'redisDatabase': {
+        const item = new vscode.TreeItem(
+          `db${node.database}`,
+          vscode.TreeItemCollapsibleState.None,
+        );
+        item.id = nodeId(node);
+        item.iconPath = new vscode.ThemeIcon('database');
+        item.contextValue = TREE_CONTEXT.redisDatabase;
+        item.description = this.model.redisKeysText(node.keys);
+        return item;
+      }
       case 'message': {
         const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
         item.id = nodeId(node);
@@ -230,14 +244,11 @@ export class ConnectionsTreeProvider
     item.description = tags.length === 0 ? target : `${tags.join(' · ')} · ${target}`;
     const project = this.deps.store.projectOf(connectionId);
     const connected = state.status === 'connected';
-    item.contextValue =
-      project === undefined
-        ? connected
-          ? TREE_CONTEXT.connectionConnected
-          : TREE_CONTEXT.connection
-        : connected
-          ? TREE_CONTEXT.projectConnectionConnected
-          : TREE_CONTEXT.projectConnection;
+    item.contextValue = connectionContext({
+      project: project !== undefined,
+      connected,
+      redis: config?.driver === 'redis',
+    });
     item.tooltip = new vscode.MarkdownString(
       [
         `**${config?.name ?? connectionId}**`,

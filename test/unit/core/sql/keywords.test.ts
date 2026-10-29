@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { KEYWORDS, keywordsOf } from '../../../../src/core/sql/keywords';
-import { DRIVER_IDS } from '../../../../src/shared/connection';
+import { SQL_DRIVER_IDS } from '../../../../src/shared/connection';
 
 describe('KEYWORDS', () => {
   it('has a list for every driver', () => {
-    expect(Object.keys(KEYWORDS).sort()).toEqual([...DRIVER_IDS].sort());
+    expect(Object.keys(KEYWORDS).sort()).toEqual([...SQL_DRIVER_IDS].sort());
   });
 
   it('is uppercase everywhere, so completion looks consistent', () => {
-    for (const driver of DRIVER_IDS) {
+    for (const driver of SQL_DRIVER_IDS) {
       for (const keyword of KEYWORDS[driver]) {
         expect(keyword, keyword).toBe(keyword.toUpperCase());
       }
@@ -16,14 +16,14 @@ describe('KEYWORDS', () => {
   });
 
   it('has no duplicates within a dialect', () => {
-    for (const driver of DRIVER_IDS) {
+    for (const driver of SQL_DRIVER_IDS) {
       const list = KEYWORDS[driver];
       expect(new Set(list).size, driver).toBe(list.length);
     }
   });
 
   it('includes the core SQL every dialect shares', () => {
-    for (const driver of DRIVER_IDS) {
+    for (const driver of SQL_DRIVER_IDS) {
       for (const keyword of ['SELECT', 'FROM', 'WHERE', 'JOIN', 'INSERT']) {
         expect(KEYWORDS[driver], `${driver} is missing ${keyword}`).toContain(keyword);
       }

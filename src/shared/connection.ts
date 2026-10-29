@@ -1,13 +1,41 @@
 // The saved description of a connection. Passwords never live here: they are
 // kept in SecretStorage and joined in only at connect time (ARCHITECTURE.md §8).
 
-export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite', 'mssql', 'clickhouse', 'oracle'] as const;
+export const DRIVER_IDS = [
+  'mysql',
+  'postgres',
+  'sqlite',
+  'mssql',
+  'clickhouse',
+  'oracle',
+  'redis',
+] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
 
 export function isDriverId(value: unknown): value is DriverId {
   return typeof value === 'string' && (DRIVER_IDS as readonly string[]).includes(value);
 }
+
+/**
+ * What a database speaks (D81): SQL drivers share the dialect, the result grid and the
+ * SQL editor; Redis has commands and keys and a UI of its own. Connections, folders,
+ * secrets, SSH and the connection form are the same for both.
+ */
+export type DriverFamily = 'sql' | 'redis';
+
+export function driverFamily(driver: DriverId): DriverFamily {
+  return driver === 'redis' ? 'redis' : 'sql';
+}
+
+export type SqlDriverId = Exclude<DriverId, 'redis'>;
+
+export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
+  return driverFamily(driver) === 'sql';
+}
+
+/** The SQL drivers, in the order of `DRIVER_IDS`. */
+export const SQL_DRIVER_IDS: readonly SqlDriverId[] = DRIVER_IDS.filter(isSqlDriver);
 
 /** Drivers that open a local file instead of a network connection. */
 export function isFileDriver(driver: DriverId): boolean {
@@ -22,6 +50,7 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   // The HTTP interface; HTTPS is 8443, which DataNest picks when TLS is on.
   clickhouse: 8123,
   oracle: 1521,
+  redis: 6379,
 };
 
 export const CONNECTION_LIMITS = {
@@ -59,6 +88,44 @@ export interface SslSettings {
   /** Client certificate and its (unencrypted) key, for servers that ask for one. */
   readonly cert?: string;
   readonly key?: string;
+}
+
+/**
+ * How a Redis connection finds its server (V7.1): one server, the master a group of
+ * Sentinels names, or a cluster that shares the keys between its masters.
+ */
+export const REDIS_MODES = ['standalone', 'sentinel', 'cluster'] as const;
+
+export type RedisMode = (typeof REDIS_MODES)[number];
+
+/** Default port of a Sentinel, for addresses that leave it out. */
+export const DEFAULT_SENTINEL_PORT = 26_379;
+
+/** Most extra Sentinels or cluster seed nodes a connection lists. */
+export const MAX_REDIS_NODES = 20;
+
+export interface RedisNodeAddress {
+  readonly host: string;
+  readonly port?: number;
+}
+
+/**
+ * Redis settings beyond host and port. In `sentinel` mode `host:port` is the first
+ * Sentinel, in `cluster` mode the first node; `nodes` lists more of them, tried when
+ * the first does not answer. The Sentinels' own password is a secret, kept apart.
+ */
+export interface RedisSettings {
+  readonly mode: RedisMode;
+  /** The name of the master the Sentinels watch (`sentinel monitor <name> …`). */
+  readonly masterName?: string;
+  readonly nodes?: readonly RedisNodeAddress[];
+  /** The ACL user of the Sentinels, when they ask for one. */
+  readonly sentinelUser?: string;
+}
+
+/** The mode of a Redis config; settings left out mean one server. */
+export function redisModeOf(config: Pick<ConnectionInput, 'redis'>): RedisMode {
+  return config.redis?.mode ?? 'standalone';
 }
 
 /** How DataNest proves who it is to an SSH server. */
@@ -147,15 +214,31 @@ export interface OptionSupport {
   readonly charset: boolean;
   /** TLS to the server (not for files, and not yet for Oracle's TCPS). */
   readonly tls: boolean;
+  /** A limit on how long one statement may run; Redis commands have none. */
+  readonly queryTimeout: boolean;
 }
 
 export function optionSupport(driver: DriverId): OptionSupport {
   switch (driver) {
     case 'mysql':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: true, tls: true };
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: true,
+        charset: true,
+        tls: true,
+        queryTimeout: true,
+      };
     // pg decodes every result as UTF-8, so another client encoding would garble text.
     case 'postgres':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false, tls: true };
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: true,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+      };
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
       return {
@@ -164,16 +247,49 @@ export function optionSupport(driver: DriverId): OptionSupport {
         timeZone: false,
         charset: false,
         tls: false,
+        queryTimeout: true,
       };
     // SQL Server sessions have no time zone of their own, and N'…' text needs no charset.
     case 'mssql':
-      return { connectTimeout: true, keepAlive: true, timeZone: false, charset: false, tls: true };
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+      };
     // HTTP carries UTF-8; the time zone is the session_timezone setting.
     case 'clickhouse':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false, tls: true };
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: true,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+      };
     // TCPS needs a wallet on the server; until it is supported, Oracle goes plain or via SSH.
     case 'oracle':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false, tls: false };
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: true,
+        charset: false,
+        tls: false,
+        queryTimeout: true,
+      };
+    // Init SQL holds Redis commands instead, one per line; a running command has no
+    // limit of DataNest's, because blocking reads wait on purpose.
+    case 'redis':
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: false,
+      };
   }
 }
 
@@ -205,6 +321,9 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     // The database is the one service the connection names.
     case 'oracle':
       return { databases: false, schemas: true };
+    // Numbered databases, all listed.
+    case 'redis':
+      return { databases: false, schemas: false };
   }
 }
 
@@ -215,7 +334,7 @@ export interface ConnectionInput {
   readonly host?: string;
   readonly port?: number;
   readonly user?: string;
-  /** Initial database (MySQL) or database name (PostgreSQL). */
+  /** Initial database (MySQL) or database name (PostgreSQL); the number of a Redis one. */
   readonly database?: string;
   /** Path to the database file for file-based drivers. */
   readonly file?: string;
@@ -237,6 +356,8 @@ export interface ConnectionInput {
   readonly options?: ConnectionOptions;
   /** Databases and schemas to show (V4.10). */
   readonly filter?: VisibilityFilter;
+  /** Sentinel or cluster (V7.1); Redis connections only. */
+  readonly redis?: RedisSettings;
 }
 
 export interface ConnectionConfig extends ConnectionInput {
@@ -274,7 +395,13 @@ export function effectiveSshPort(hop: SshHop): number {
 
 /** The port a driver should actually use. */
 export function effectivePort(config: ConnectionInput): number | undefined {
-  return config.port ?? DEFAULT_PORTS[config.driver];
+  if (config.port !== undefined) {
+    return config.port;
+  }
+  // In Sentinel mode the address is the first Sentinel's.
+  return config.driver === 'redis' && redisModeOf(config) === 'sentinel'
+    ? DEFAULT_SENTINEL_PORT
+    : DEFAULT_PORTS[config.driver];
 }
 
 /**
@@ -290,7 +417,25 @@ export type ConnectionProblem =
   | 'ssl-key-without-cert'
   | OptionProblem
   | 'filter-too-long'
+  | RedisProblem
   | SshProblem;
+
+/** What is wrong with the Redis settings. */
+export type RedisProblem =
+  /** Sentinel mode needs the name of the master. */
+  | 'redis-master-empty'
+  /** An extra Sentinel or cluster node without a host or with a bad port. */
+  | 'redis-node-invalid'
+  | 'redis-too-many-nodes'
+  /** The database is a number: 0, 1, … */
+  | 'redis-database-invalid'
+  /** A cluster has database 0 only. */
+  | 'redis-cluster-database'
+  /**
+   * A Sentinel and a cluster hand out the addresses of other servers, which a tunnel
+   * to one of them cannot reach.
+   */
+  | 'redis-ssh-topology';
 
 /** What is wrong with the session options. */
 export type OptionProblem =
@@ -371,6 +516,35 @@ export function optionProblems(options: ConnectionOptions | undefined): OptionPr
   return problems;
 }
 
+/** Problems of the Redis side of a config; empty for other drivers. */
+export function redisProblems(input: ConnectionInput): RedisProblem[] {
+  if (input.driver !== 'redis') {
+    return [];
+  }
+  const problems: RedisProblem[] = [];
+  const mode = redisModeOf(input);
+  const database = (input.database ?? '').trim();
+  if (database !== '' && !/^\d{1,5}$/.test(database)) {
+    problems.push('redis-database-invalid');
+  } else if (mode === 'cluster' && database !== '' && Number(database) !== 0) {
+    problems.push('redis-cluster-database');
+  }
+  if (mode === 'sentinel' && (input.redis?.masterName ?? '').trim() === '') {
+    problems.push('redis-master-empty');
+  }
+  const nodes = input.redis?.nodes ?? [];
+  if (nodes.some((node) => node.host.trim() === '' || !isPortValid(node.port))) {
+    problems.push('redis-node-invalid');
+  }
+  if (nodes.length > MAX_REDIS_NODES) {
+    problems.push('redis-too-many-nodes');
+  }
+  if (mode !== 'standalone' && input.ssh !== undefined) {
+    problems.push('redis-ssh-topology');
+  }
+  return problems;
+}
+
 export function connectionProblems(input: ConnectionInput): ConnectionProblem[] {
   const problems: ConnectionProblem[] = [];
   if (input.name.trim() === '') {
@@ -423,6 +597,7 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     if (hasKey && !hasCert) {
       problems.push('ssl-key-without-cert');
     }
+    problems.push(...redisProblems(input));
   }
   return problems;
 }

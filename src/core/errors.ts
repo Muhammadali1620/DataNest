@@ -25,9 +25,25 @@ export interface DbErrorOptions {
   readonly cause?: unknown;
 }
 
+/**
+ * Marks a DbError of any copy of this module. Every driver is a bundle of its own with
+ * its own copy of the class (§7), so plain `instanceof` would not know a driver's
+ * error in the extension: the brand lives in the global symbol registry instead (D82).
+ */
+const BRAND = Symbol.for('datanest.DbError');
+
 /** The only error type that crosses layer boundaries (ARCHITECTURE.md §9). */
 export class DbError extends Error {
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      (value as { readonly [BRAND]?: unknown })[BRAND] === true
+    );
+  }
+
   override readonly name = 'DbError';
+  readonly [BRAND] = true;
   readonly code: DbErrorCode;
   readonly detail: string | undefined;
   readonly position: number | undefined;

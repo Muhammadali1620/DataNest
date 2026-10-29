@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  connectionContext,
+  connectionIdOf,
+  isTreeNode,
+  nameOf,
   nodeId,
+  TREE_CONTEXT,
   relationKindOf,
   objectRefOf,
   scopeOf,
@@ -313,5 +318,43 @@ describe('project nodes', () => {
     expect(nameOf(node)).toBeUndefined();
     expect(scopeOf(node)).toEqual({});
     expect(objectRefOf(node)).toBeUndefined();
+  });
+});
+
+describe('Redis nodes (V7.1)', () => {
+  const database: TreeNode = { kind: 'redisDatabase', connectionId: 'c1', database: 3, keys: 9 };
+
+  it('gives a database an id of its own that does not change with its key count', () => {
+    expect(nodeId(database)).toBe(nodeId({ ...database, keys: 0 }));
+    expect(nodeId(database)).not.toBe(nodeId({ ...database, database: 4 }));
+    expect(isTreeNode(database)).toBe(true);
+    expect(connectionIdOf(database)).toBe('c1');
+  });
+
+  it('has no SQL scope, name or definition', () => {
+    expect(scopeOf(database)).toEqual({});
+    expect(nameOf(database)).toBeUndefined();
+    expect(objectRefOf(database)).toBeUndefined();
+  });
+
+  it('marks Redis connections apart, so only the shared menus show', () => {
+    const contexts = [false, true].flatMap((project) =>
+      [false, true].flatMap((connected) =>
+        [false, true].map((redis) => connectionContext({ project, connected, redis })),
+      ),
+    );
+    expect(new Set(contexts).size).toBe(8);
+    expect(connectionContext({ project: false, connected: true, redis: true })).toBe(
+      TREE_CONTEXT.redisConnectionConnected,
+    );
+    expect(connectionContext({ project: true, connected: false, redis: true })).toBe(
+      TREE_CONTEXT.projectRedisConnection,
+    );
+    expect(connectionContext({ project: true, connected: true, redis: false })).toBe(
+      TREE_CONTEXT.projectConnectionConnected,
+    );
+    expect(connectionContext({ project: false, connected: false, redis: false })).toBe(
+      TREE_CONTEXT.connection,
+    );
   });
 });

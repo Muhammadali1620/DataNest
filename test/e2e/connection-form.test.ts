@@ -141,7 +141,10 @@ describe('saved connections in the real editor', () => {
 
   it('opens no form for a URL it cannot read', async () => {
     await closeFormTabs();
-    await vscode.commands.executeCommand('datanest.connections.addFromUrl', 'redis://cache:6379');
+    await vscode.commands.executeCommand(
+      'datanest.connections.addFromUrl',
+      'mongodb://cache:27017',
+    );
     await sleep(300);
     assert.equal(formTabs().length, 0);
   });

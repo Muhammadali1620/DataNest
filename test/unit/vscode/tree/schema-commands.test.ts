@@ -9,7 +9,7 @@ import { oracleDialect } from '../../../../src/drivers/oracle/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
-import type { DriverId } from '../../../../src/shared/connection';
+import type { SqlDriverId } from '../../../../src/shared/connection';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
 import {
   schemaCommandHandlers,
@@ -65,7 +65,7 @@ interface Script {
   names?: (string | undefined)[];
   confirm?: 'run' | 'edit' | undefined;
   pick?: unknown;
-  driver?: DriverId;
+  driver?: SqlDriverId;
   /** Makes sqlOf fail as unsupported. */
   unsupported?: string;
   policy?: WritePolicy;

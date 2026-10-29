@@ -8,7 +8,7 @@ import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { ObjectScope, TableRef, TableStructure } from '../../../../src/core/model/objects';
 import { DbError } from '../../../../src/core/errors';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
-import type { DriverId } from '../../../../src/shared/connection';
+import type { SqlDriverId } from '../../../../src/shared/connection';
 import { newTableDesign, type TableDesign } from '../../../../src/shared/table-design';
 import { TableDesignerModel } from '../../../../src/vscode/panels/table-designer-model';
 import type { PerformOutcome } from '../../../../src/vscode/tree/schema-commands';
@@ -39,7 +39,7 @@ const ORDERS: TableStructure = {
 };
 
 function harness(
-  driver: DriverId,
+  driver: SqlDriverId,
   options: { scope?: ObjectScope; table?: string; outcome?: PerformOutcome } = {},
 ) {
   let structure: TableStructure | undefined = ORDERS;

@@ -5,6 +5,7 @@ import {
   CONNECTIONS_STATE_KEY,
   ConnectionStore,
   passwordSecretKey,
+  sentinelSecretKey,
   sshSecretKey,
 } from '../../../src/services/connection-store';
 import {
@@ -903,5 +904,132 @@ describe('ConnectionStore visibility filter (V4.10)', () => {
     expect(store.get(config.id)?.filter).toBeUndefined();
     expect(await store.getPassword(config.id)).toBe('pw');
     await expect(store.setFilter('nope', undefined)).rejects.toMatchObject({ code: 'not-found' });
+  });
+});
+
+describe('ConnectionStore Redis (V7.1)', () => {
+  const sentinelInput: ConnectionInput = {
+    name: 'Cache',
+    driver: 'redis',
+    host: ' s1 ',
+    redis: {
+      mode: 'sentinel',
+      masterName: ' mymaster ',
+      nodes: [{ host: ' s2 ', port: 26_380 }, { host: '  ' }],
+      sentinelUser: ' ',
+    },
+  };
+
+  function setup() {
+    const state = new FakeMemento();
+    const secrets = new FakeSecretStorage();
+    const logger = new RecordingLogger();
+    return { state, secrets, store: new ConnectionStore({ state, secrets, logger }) };
+  }
+
+  it('stores the Sentinel settings trimmed, and their password only in secrets', async () => {
+    const { state, secrets, store } = setup();
+    const added = await store.add(sentinelInput, 'pw', {}, { sentinelPassword: 'spw' });
+    expect(added.redis).toEqual({
+      mode: 'sentinel',
+      masterName: 'mymaster',
+      nodes: [{ host: 's2', port: 26_380 }],
+    });
+    expect(added.host).toBe('s1');
+    expect(await store.getSentinelPassword(added.id)).toBe('spw');
+    expect(secrets.data.get(sentinelSecretKey(added.id))).toBe('spw');
+    expect(JSON.stringify(state.data.get(CONNECTIONS_STATE_KEY))).not.toContain('spw');
+  });
+
+  it('keeps no Redis settings for one server, nor for another driver', async () => {
+    const { store } = setup();
+    const single = await store.add({
+      name: 'R',
+      driver: 'redis',
+      host: 'h',
+      redis: { mode: 'standalone' },
+    });
+    expect(single.redis).toBeUndefined();
+    const sql = await store.add({ ...mysqlInput, redis: { mode: 'cluster' } });
+    expect(sql.redis).toBeUndefined();
+  });
+
+  it('drops the master name and Sentinel user of a cluster', async () => {
+    const { store } = setup();
+    const added = await store.add({
+      name: 'C',
+      driver: 'redis',
+      host: 'n1',
+      redis: { mode: 'cluster', masterName: 'm', sentinelUser: 'u' },
+    });
+    expect(added.redis).toEqual({ mode: 'cluster' });
+  });
+
+  it('ignores a Sentinel password for a connection that does not use Sentinels', async () => {
+    const { secrets, store } = setup();
+    const added = await store.add(
+      { name: 'R', driver: 'redis', host: 'h' },
+      undefined,
+      {},
+      {
+        sentinelPassword: 'spw',
+      },
+    );
+    expect(secrets.data.has(sentinelSecretKey(added.id))).toBe(false);
+  });
+
+  it('refuses invalid Redis settings', async () => {
+    const { store } = setup();
+    await expect(
+      store.add({ name: 'R', driver: 'redis', host: 'h', redis: { mode: 'sentinel' } }),
+    ).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('redis-master-empty') as unknown,
+    });
+    await expect(
+      store.add({ name: 'R', driver: 'redis', host: 'h', database: 'x' }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('redis-database-invalid') as unknown,
+    });
+  });
+
+  it('keeps, replaces and clears the Sentinel password on update', async () => {
+    const { store } = setup();
+    const added = await store.add(sentinelInput, undefined, {}, { sentinelPassword: 'one' });
+    await store.update(added.id, sentinelInput);
+    expect(await store.getSentinelPassword(added.id)).toBe('one');
+    await store.update(
+      added.id,
+      sentinelInput,
+      { kind: 'keep' },
+      {},
+      { kind: 'set', value: 'two' },
+    );
+    expect(await store.getSentinelPassword(added.id)).toBe('two');
+    await store.update(added.id, sentinelInput, { kind: 'keep' }, {}, { kind: 'clear' });
+    expect(await store.getSentinelPassword(added.id)).toBeUndefined();
+  });
+
+  it('erases the Sentinel password when the connection stops using Sentinels', async () => {
+    const { store } = setup();
+    const added = await store.add(sentinelInput, undefined, {}, { sentinelPassword: 'one' });
+    await store.update(
+      added.id,
+      { name: 'Cache', driver: 'redis', host: 'n1', redis: { mode: 'cluster' } },
+      { kind: 'keep' },
+      {},
+      { kind: 'set', value: 'ignored' },
+    );
+    expect(await store.getSentinelPassword(added.id)).toBeUndefined();
+  });
+
+  it('copies the Sentinel password with a duplicate and deletes it with the connection', async () => {
+    const { secrets, store } = setup();
+    const added = await store.add(sentinelInput, undefined, {}, { sentinelPassword: 'spw' });
+    const copy = await store.duplicate(added.id);
+    expect(await store.getSentinelPassword(copy.id)).toBe('spw');
+    await store.remove(added.id);
+    expect(secrets.data.has(sentinelSecretKey(added.id))).toBe(false);
+    expect(await store.getSentinelPassword(copy.id)).toBe('spw');
   });
 });

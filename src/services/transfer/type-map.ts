@@ -5,6 +5,7 @@
 
 import { clickhouseBareType } from '../../shared/clickhouse-types';
 import type { DriverId } from '../../shared/connection';
+import { DbError } from '../../core/errors';
 import { enumOptions } from '../../shared/cell-input';
 import { splitType } from '../../shared/table-design';
 
@@ -337,6 +338,8 @@ export function targetType(
       return clickhouseType(neutral);
     case 'oracle':
       return oracleType(neutral, indexed);
+    case 'redis':
+      throw new DbError('unsupported', 'Tables cannot be copied to Redis');
   }
 }
 

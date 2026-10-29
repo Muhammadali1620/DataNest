@@ -13,7 +13,7 @@ function setup() {
   const openTable = vi.fn(() => Promise.resolve());
   const showDefinition = vi.fn(() => Promise.resolve());
   const handlers = treeCommandHandlers({
-    manager: { connect, disconnect } as never,
+    manager: { connectAny: connect, disconnect },
     tree: { refresh },
     cache: { invalidate },
     openTable,
@@ -70,7 +70,7 @@ describe('connect', () => {
     const refresh = vi.fn();
     const failing = treeCommandHandlers({
       manager: {
-        connect: () => Promise.reject(new Error('server down')),
+        connectAny: () => Promise.reject(new Error('server down')),
         disconnect: () => Promise.resolve(),
       },
       tree: { refresh },
@@ -125,7 +125,10 @@ describe('refresh', () => {
   it('drops the cache before the tree asks for children again', async () => {
     const order: string[] = [];
     const handlers = treeCommandHandlers({
-      manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
+      manager: {
+        connectAny: () => Promise.resolve(),
+        disconnect: () => Promise.resolve(),
+      },
       tree: {
         refresh: () => {
           order.push('refresh');
@@ -148,7 +151,10 @@ describe('refresh', () => {
   it('reads the project files again before redrawing the whole tree, not for a subtree', async () => {
     const order: string[] = [];
     const handlers = treeCommandHandlers({
-      manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
+      manager: {
+        connectAny: () => Promise.resolve(),
+        disconnect: () => Promise.resolve(),
+      },
       tree: {
         refresh: () => {
           order.push('refresh');
@@ -278,7 +284,10 @@ describe('showDefinition', () => {
 
   it('lets a failure reach the command guard', async () => {
     const handlers = treeCommandHandlers({
-      manager: { connect: () => Promise.resolve(), disconnect: () => Promise.resolve() } as never,
+      manager: {
+        connectAny: () => Promise.resolve(),
+        disconnect: () => Promise.resolve(),
+      },
       tree: { refresh: () => undefined },
       cache: { invalidate: () => undefined },
       openTable: () => Promise.resolve(),
@@ -296,7 +305,7 @@ describe('disconnect with open transactions (V4.8)', () => {
     const refresh = vi.fn();
     const asked: string[] = [];
     const handlers = treeCommandHandlers({
-      manager: { connect: () => Promise.resolve(), disconnect } as never,
+      manager: { connectAny: () => Promise.resolve(), disconnect },
       tree: { refresh },
       cache: { invalidate: () => undefined },
       openTable: () => Promise.resolve(),

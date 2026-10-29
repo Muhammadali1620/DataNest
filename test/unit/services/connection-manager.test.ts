@@ -8,6 +8,8 @@ import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/f
 import { FakeTunnels, unreachable } from '../../helpers/fake-tunnels';
 import type { HostKeyCheck } from '../../../src/services/tunnels';
 import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
+import { redisDatabaseOf } from '../../../src/services/connection-manager';
+import { bulk, FakeRedisDriver } from '../../helpers/fake-redis';
 
 async function drain(events: AsyncIterable<unknown>): Promise<void> {
   for await (const _event of events) {
@@ -638,5 +640,201 @@ describe('ConnectionManager', () => {
         vi.useRealTimers();
       }
     });
+  });
+});
+
+describe('ConnectionManager with Redis (V7.1)', () => {
+  let store: ConnectionStore;
+  let drivers: FakeDriverProvider & { getRedis(): Promise<FakeRedisDriver> };
+  let redis: FakeRedisDriver;
+  let manager: ConnectionManager;
+  let tunnels: FakeTunnels;
+  let cache: ConnectionConfig;
+
+  beforeEach(async () => {
+    const logger = new RecordingLogger();
+    store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    redis = new FakeRedisDriver();
+    drivers = Object.assign(new FakeDriverProvider(), { getRedis: () => Promise.resolve(redis) });
+    tunnels = new FakeTunnels();
+    manager = new ConnectionManager({
+      store,
+      drivers,
+      logger,
+      tunnels,
+      checkHostKey: () => Promise.resolve(true),
+    });
+    cache = await store.add({ name: 'Cache', driver: 'redis', host: 'h', database: '2' }, 'pw');
+  });
+
+  it('opens a Redis session with the stored password and the database the target names', async () => {
+    const session = await manager.acquireRedis('tree:x', { connectionId: cache.id });
+    expect(redis.opened[0]).toMatchObject({ host: 'h', password: 'pw', database: '2' });
+    expect(await session.call(['GET', 'k'])).toEqual(bulk('OK'));
+    expect(manager.getState(cache.id)).toEqual({ status: 'connected' });
+    expect(manager.redisSessionOf('tree:x')).toBe(session);
+    expect(manager.sessionOf('tree:x')).toBeUndefined();
+    await manager.acquireRedis('tree:y', { connectionId: cache.id, database: '5' });
+    expect(redis.opened[1]?.database).toBe('5');
+  });
+
+  it('adds the Sentinel password to what the driver gets', async () => {
+    const sentinel = await store.add(
+      { name: 'S', driver: 'redis', host: 's', redis: { mode: 'sentinel', masterName: 'm' } },
+      undefined,
+      {},
+      { sentinelPassword: 'spw' },
+    );
+    await manager.acquireRedis('a', { connectionId: sentinel.id });
+    expect(redis.opened[0]).toMatchObject({ sentinelPassword: 'spw' });
+    expect(redis.opened[0]).not.toHaveProperty('password');
+  });
+
+  it('runs the init commands before handing the session out', async () => {
+    const withInit = await store.add({
+      name: 'I',
+      driver: 'redis',
+      host: 'h',
+      options: { initSql: 'CLIENT SETNAME app' },
+    });
+    await manager.acquireRedis('a', { connectionId: withInit.id });
+    expect(redis.sessions[0]?.calls).toEqual([['CLIENT', 'SETNAME', 'app']]);
+  });
+
+  it('closes the session when an init command fails, and reports the connection failed', async () => {
+    redis = new FakeRedisDriver((words) =>
+      words[0] === 'CLIENT' ? new DbError('permission-denied', 'NOPERM') : bulk('OK'),
+    );
+    const withInit = await store.add({
+      name: 'I',
+      driver: 'redis',
+      host: 'h',
+      options: { initSql: 'CLIENT SETNAME app' },
+    });
+    await expect(manager.acquireRedis('a', { connectionId: withInit.id })).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(redis.sessions[0]?.closed).toBe(true);
+    expect(manager.getState(withInit.id).status).toBe('error');
+  });
+
+  it('keeps SQL and Redis apart, in both directions', async () => {
+    const sql = await store.add({ name: 'Db', driver: 'mysql', host: 'h' });
+    await expect(manager.acquire('a', { connectionId: cache.id })).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('Redis connection') as unknown,
+    });
+    await expect(manager.acquireRedis('b', { connectionId: sql.id })).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    await expect(manager.driverOf(cache.id)).rejects.toMatchObject({ code: 'unsupported' });
+    expect(manager.familyOf(cache.id)).toBe('redis');
+    expect(manager.familyOf(sql.id)).toBe('sql');
+    expect(redis.opened).toEqual([]);
+  });
+
+  it('connects the tree on the database the connection names', async () => {
+    await manager.connectAny(cache.id);
+    expect(manager.redisSessionOf(ConnectionManager.treeOwner(cache.id, '2'))).toBeDefined();
+    const sql = await store.add({ name: 'Db', driver: 'mysql', host: 'h' });
+    await manager.connectAny(sql.id);
+    expect(manager.sessionOf(ConnectionManager.treeOwner(sql.id))).toBeDefined();
+  });
+
+  it('closes every Redis session on disconnect', async () => {
+    await manager.acquireRedis('a', { connectionId: cache.id });
+    await manager.acquireRedis('b', { connectionId: cache.id });
+    await manager.disconnect(cache.id);
+    expect(redis.sessions.every((session) => session.closed)).toBe(true);
+    expect(manager.getState(cache.id)).toEqual({ status: 'disconnected' });
+    expect(manager.connectedIds()).toEqual([]);
+  });
+
+  it('drops a session whose link is gone, and opens a new one next time', async () => {
+    const first = await manager.acquireRedis('a', { connectionId: cache.id });
+    await redis.sessions[0]?.close();
+    await expect(first.call(['PING'])).rejects.toMatchObject({ code: 'connection-failed' });
+    expect(manager.redisSessionOf('a')).toBeUndefined();
+    expect(manager.getState(cache.id).status).toBe('error');
+    const second = await manager.acquireRedis('a', { connectionId: cache.id });
+    expect(second).not.toBe(first);
+    expect(redis.opened).toHaveLength(2);
+  });
+
+  it('goes through an SSH tunnel to one server', async () => {
+    const tunnelled = await store.add({
+      name: 'T',
+      driver: 'redis',
+      host: 'cache.internal',
+      ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'agent' },
+    });
+    await manager.acquireRedis('a', { connectionId: tunnelled.id });
+    expect(redis.opened[0]).toMatchObject({
+      host: '127.0.0.1',
+      port: 40_000,
+      tlsServerName: 'cache.internal',
+    });
+    await manager.disconnect(tunnelled.id);
+    expect(tunnels.released).toHaveLength(1);
+  });
+
+  it('releases the tunnel when the driver cannot open', async () => {
+    redis.openError = new DbError('auth-failed', 'WRONGPASS');
+    const tunnelled = await store.add({
+      name: 'T',
+      driver: 'redis',
+      host: 'cache.internal',
+      ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'agent' },
+    });
+    await expect(manager.acquireRedis('a', { connectionId: tunnelled.id })).rejects.toMatchObject({
+      code: 'auth-failed',
+    });
+    expect(tunnels.released).toHaveLength(1);
+  });
+
+  it('tests settings with PING and closes the throwaway session', async () => {
+    await manager.test(
+      { name: 'p', driver: 'redis', host: 'h', redis: { mode: 'sentinel', masterName: 'm' } },
+      'pw',
+      {},
+      'spw',
+    );
+    expect(redis.opened[0]).toMatchObject({ password: 'pw', sentinelPassword: 'spw' });
+    expect(redis.sessions[0]?.calls).toEqual([['PING']]);
+    expect(redis.sessions[0]?.closed).toBe(true);
+    expect(manager.connectedIds()).toEqual([]);
+  });
+
+  it('fails a test whose init commands fail, still closing the session', async () => {
+    redis = new FakeRedisDriver((words) =>
+      words[0] === 'SET' ? new DbError('permission-denied', 'NOPERM') : bulk('OK'),
+    );
+    await expect(
+      manager.test({ name: 'p', driver: 'redis', host: 'h', options: { initSql: 'SET a b' } }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(redis.sessions[0]?.closed).toBe(true);
+  });
+
+  it('says Redis is not available without the driver', async () => {
+    const plain = new ConnectionManager({
+      store,
+      drivers: new FakeDriverProvider(),
+      logger: new RecordingLogger(),
+    });
+    await expect(plain.acquireRedis('a', { connectionId: cache.id })).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+  });
+});
+
+describe('redisDatabaseOf', () => {
+  it('is the number the connection names, 0 without one', () => {
+    expect(redisDatabaseOf({})).toBe('0');
+    expect(redisDatabaseOf({ database: ' ' })).toBe('0');
+    expect(redisDatabaseOf({ database: '03' })).toBe('3');
   });
 });

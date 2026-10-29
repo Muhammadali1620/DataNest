@@ -8,8 +8,10 @@ import {
   CONNECTION_COLORS,
   DRIVER_IDS,
   FILTER_LIMITS,
+  MAX_REDIS_NODES,
   MAX_SSH_JUMPS,
   OPTION_LIMITS,
+  REDIS_MODES,
   SSH_AUTH_METHODS,
   SSL_MODES,
 } from '../../../src/shared/connection';
@@ -17,6 +19,7 @@ import {
   connectionInputShape,
   filterSchema,
   optionsSchema,
+  redisSchema,
   sshHopShape,
 } from '../../../src/shared/connection-schema';
 import { PROJECT_FILE_PATH } from '../../../src/services/project-connections';
@@ -63,8 +66,9 @@ describe('connections JSON schema', () => {
 
   it('offers the same choices as the code', () => {
     expect(props.driver?.enum).toEqual([...DRIVER_IDS]);
-    // Oracle joined in V6.4: a project file may name it.
+    // Oracle joined in V6.4, Redis in V7.1: a project file may name them.
     expect(props.driver?.enum).toContain('oracle');
+    expect(props.driver?.enum).toContain('redis');
     expect(props.color?.enum).toEqual([...CONNECTION_COLORS]);
     expect(props.ssl?.properties?.mode?.enum).toEqual([...SSL_MODES]);
     expect(hop.properties?.auth?.enum).toEqual([...SSH_AUTH_METHODS]);
@@ -106,5 +110,21 @@ describe('connections JSON schema', () => {
       expect(list.maxItems).toBe(FILTER_LIMITS.patterns);
       expect((list.items as { maxLength?: number }).maxLength).toBe(FILTER_LIMITS.pattern);
     }
+  });
+
+  it('describes the Redis settings as the code reads them, without the Sentinel password (V7.1)', () => {
+    const redis = props.redis ?? {};
+    const parsed = redisSchema.parse({
+      mode: 'sentinel',
+      masterName: 'm',
+      nodes: [{ host: 'h', port: 1 }],
+      sentinelUser: 'u',
+    });
+    expect(keys(parsed)).toEqual(keys(redis.properties));
+    expect(redis.properties?.mode?.enum).toEqual([...REDIS_MODES]);
+    expect(redis.properties?.nodes?.maxItems).toBe(MAX_REDIS_NODES);
+    expect(keys(redis.properties?.nodes?.items?.properties)).toEqual(['host', 'port']);
+    expect(redis.additionalProperties).toBe(false);
+    expect(redis.required).toEqual(['mode']);
   });
 });

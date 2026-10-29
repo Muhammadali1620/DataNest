@@ -1,7 +1,7 @@
 // Statement templates completion offers where a statement begins. Bodies use the
 // editor's snippet syntax: ${1:name} is a tab stop with a placeholder.
 
-import type { DriverId } from '../../shared/connection';
+import { type DriverId, isSqlDriver, type SqlDriverId } from '../../shared/connection';
 
 export interface SqlSnippet {
   /** What the user types to find it. */
@@ -54,7 +54,7 @@ const COMMON: readonly SqlSnippet[] = [
   },
 ];
 
-const BY_DRIVER: Readonly<Record<DriverId, readonly SqlSnippet[]>> = {
+const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
   mysql: [
     {
       prefix: 'upsert',
@@ -125,5 +125,5 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlSnippet[]>> = {
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {
-  return driver === undefined ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
+  return driver === undefined || !isSqlDriver(driver) ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
 }

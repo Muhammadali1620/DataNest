@@ -14,6 +14,11 @@ import {
   filterSupport,
   type OptionProblem,
   optionSupport,
+  DEFAULT_PORTS,
+  DEFAULT_SENTINEL_PORT,
+  type RedisMode,
+  type RedisNodeAddress,
+  type RedisSettings,
   type VisibilityFilter,
   type SshAuthMethod,
   type SshHop,
@@ -124,6 +129,14 @@ export interface FormFields {
   /** Patterns of the visible databases and schemas (V4.10), comma separated. */
   filterDatabases: string;
   filterSchemas: string;
+  /** Redis (V7.1): one server, through Sentinels, or a cluster. */
+  redisMode: RedisMode;
+  /** The master the Sentinels watch. */
+  masterName: string;
+  /** More Sentinels or cluster nodes: `host:port`, separated by commas or blanks. */
+  redisNodes: string;
+  sentinelUser: string;
+  sentinelPassword: SecretField;
 }
 
 /** The option fields that hold seconds, with the problem a bad number gives. */
@@ -169,7 +182,80 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     initSql: input.options?.initSql ?? '',
     filterDatabases: (input.filter?.databases ?? []).join(', '),
     filterSchemas: (input.filter?.schemas ?? []).join(', '),
+    redisMode: input.redis?.mode ?? 'standalone',
+    masterName: input.redis?.masterName ?? '',
+    redisNodes: (input.redis?.nodes ?? []).map(nodeText).join(', '),
+    sentinelUser: input.redis?.sentinelUser ?? '',
+    sentinelPassword: emptySecret(),
   };
+}
+
+/** `host:port`, with brackets around an IPv6 address; the port only when set. */
+export function nodeText(node: RedisNodeAddress): string {
+  const host = node.host.includes(':') ? `[${node.host}]` : node.host;
+  return node.port === undefined ? host : `${host}:${node.port}`;
+}
+
+/**
+ * The extra Sentinels or nodes typed into one box: `a:26379, b`, `[::1]:7000`. A port
+ * that is not a number makes the list invalid; the nodes before it are still read.
+ */
+export function parseNodes(text: string): { nodes: RedisNodeAddress[]; invalid: boolean } {
+  const nodes: RedisNodeAddress[] = [];
+  let invalid = false;
+  for (const item of text.split(/[\s,;]+/).filter((part) => part !== '')) {
+    const match = /^(\[[^\]]*\]|[^:]*)(?::(.*))?$/.exec(item);
+    const rawHost = match?.[1] ?? '';
+    const host = rawHost.startsWith('[') ? rawHost.slice(1, -1) : rawHost;
+    const portText = match?.[2];
+    const port = portText === undefined ? undefined : parsePort(portText);
+    if (
+      host === '' ||
+      (portText !== undefined && (port === undefined || port < 1 || port > 65_535))
+    ) {
+      invalid = true;
+      continue;
+    }
+    nodes.push(port === undefined ? { host } : { host, port });
+  }
+  return { nodes, invalid };
+}
+
+/** The Redis settings to send; none for one server, which is the default. */
+export function toRedis(fields: FormFields): RedisSettings | undefined {
+  if (fields.driver !== 'redis' || fields.redisMode === 'standalone') {
+    return undefined;
+  }
+  const { nodes } = parseNodes(fields.redisNodes);
+  const masterName = fields.redisMode === 'sentinel' ? trim(fields.masterName) : undefined;
+  const sentinelUser = fields.redisMode === 'sentinel' ? trim(fields.sentinelUser) : undefined;
+  return {
+    mode: fields.redisMode,
+    ...(masterName === undefined ? {} : { masterName }),
+    ...(nodes.length === 0 ? {} : { nodes }),
+    ...(sentinelUser === undefined ? {} : { sentinelUser }),
+  };
+}
+
+/** SSH reaches one server only: Sentinels and clusters hand out other addresses. */
+export function sshAllowed(fields: Pick<FormFields, 'driver' | 'redisMode'>): boolean {
+  return fields.driver !== 'redis' || fields.redisMode === 'standalone';
+}
+
+/**
+ * Switching between one server and Sentinels moves a default port to the other default,
+ * so `6379` does not stay behind as the Sentinel's port; a typed port stays.
+ */
+export function changeRedisMode(fields: FormFields, mode: RedisMode): void {
+  const serverPort = String(DEFAULT_PORTS.redis);
+  const sentinelPort = String(DEFAULT_SENTINEL_PORT);
+  const port = fields.port.trim();
+  if (mode === 'sentinel' && (port === '' || port === serverPort)) {
+    fields.port = sentinelPort;
+  } else if (mode !== 'sentinel' && port === sentinelPort) {
+    fields.port = serverPort;
+  }
+  fields.redisMode = mode;
 }
 
 /** The lists the driver has, from the typed patterns; none at all is no filter. */
@@ -319,6 +405,7 @@ export function toInput(fields: FormFields): ConnectionInput {
   const ssl = toSsl(fields);
   const user = trim(fields.user);
   const database = trim(fields.database);
+  const redis = toRedis(fields);
   return {
     name,
     driver: fields.driver,
@@ -326,7 +413,7 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(port === undefined ? {} : { port }),
     ...(user === undefined ? {} : { user }),
     ...(database === undefined ? {} : { database }),
-    ...(fields.useSsh
+    ...(fields.useSsh && sshAllowed(fields)
       ? {
           ssh: {
             ...toHop(fields.ssh),
@@ -338,6 +425,7 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...arrangement(fields),
     ...(options === undefined ? {} : { options }),
     ...(filter === undefined ? {} : { filter }),
+    ...(redis === undefined ? {} : { redis }),
   };
 }
 
@@ -380,6 +468,10 @@ export function toDraft(fields: FormFields): ConnectionDraft {
     input,
     password: passwordChange(fields),
     ...(fields.project === '' ? {} : { project: fields.project }),
+    // Only a Sentinel connection has the password; the store drops it for the others.
+    ...(input.redis?.mode === 'sentinel'
+      ? { sentinelPassword: secretChange(fields.sentinelPassword) }
+      : {}),
     ...(input.ssh === undefined
       ? {}
       : { ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)) }),
@@ -416,7 +508,15 @@ export function problemsOf(fields: FormFields): ConnectionProblem[] {
       problems.push(problem);
     }
   }
-  if (!isFileDriver(fields.driver) && fields.useSsh) {
+  if (
+    fields.driver === 'redis' &&
+    fields.redisMode !== 'standalone' &&
+    parseNodes(fields.redisNodes).invalid &&
+    !problems.includes('redis-node-invalid')
+  ) {
+    problems.push('redis-node-invalid');
+  }
+  if (!isFileDriver(fields.driver) && fields.useSsh && sshAllowed(fields)) {
     for (const hop of [...fields.jumps, fields.ssh]) {
       for (const problem of hopProblemsOf(hop)) {
         if (!problems.includes(problem)) {
@@ -449,6 +549,12 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'charset-invalid': 'form.options.error.charset',
   'init-sql-too-long': 'form.options.error.initSql',
   'filter-too-long': 'form.filter.error.tooLong',
+  'redis-master-empty': 'form.redis.error.masterEmpty',
+  'redis-node-invalid': 'form.redis.error.nodeInvalid',
+  'redis-too-many-nodes': 'form.redis.error.tooManyNodes',
+  'redis-database-invalid': 'form.redis.error.database',
+  'redis-cluster-database': 'form.redis.error.clusterDatabase',
+  'redis-ssh-topology': 'form.redis.error.ssh',
 };
 
 export { DEFAULT_SSH_PORT };
@@ -480,6 +586,8 @@ export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void 
   fields.sslCa = input.ssl?.ca ?? '';
   fields.sslCert = input.ssl?.cert ?? '';
   fields.sslKey = input.ssl?.key ?? '';
+  // A URL names one server.
+  fields.redisMode = 'standalone';
   if (password !== undefined) {
     fields.password = password;
     fields.passwordTouched = true;

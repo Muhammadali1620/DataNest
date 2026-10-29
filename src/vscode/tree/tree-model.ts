@@ -8,7 +8,8 @@ import { withoutSystemDatabases, withoutSystemSchemas } from '../../core/model/s
 import { filterNames } from '../../shared/name-filter';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
 import { browseSession } from '../../services/browse-session';
-import type { ConnectionManager } from '../../services/connection-manager';
+import { ConnectionManager, redisDatabaseOf } from '../../services/connection-manager';
+import { listRedisDatabases } from '../../services/redis/redis-databases';
 import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { ProjectView } from '../../services/project-connections';
@@ -43,6 +44,8 @@ export interface TreeTexts {
   readonly noViews: string;
   readonly noDatabases: string;
   readonly noColumns: string;
+  /** How many keys a Redis database holds (V7.1). */
+  readonly redisKeys?: (count: number) => string;
   /** The leaf after a list the connection's filter shortened (V4.10). */
   readonly hiddenByFilter?: (count: number) => string;
   /** What an empty folder says, per folder. */
@@ -192,13 +195,22 @@ export class TreeModel {
       case 'object':
       case 'index':
       case 'foreignKey':
+      case 'redisDatabase':
       case 'message':
         return [];
     }
   }
 
+  /** "12 keys", for the description of a Redis database. */
+  redisKeysText(count: number): string {
+    return this.deps.texts.redisKeys?.(count) ?? String(count);
+  }
+
   /** Expanding a connection connects it: that is what the user means by it. */
   private async connectionChildren(connectionId: string): Promise<TreeNode[]> {
+    if (this.driverIdOf(connectionId) === 'redis') {
+      return await this.redisDatabases(connectionId);
+    }
     const capabilities = await this.capabilitiesOf(connectionId);
     const metadata = await this.metadataOf(connectionId);
     if (!capabilities.databases) {
@@ -222,6 +234,23 @@ export class TreeModel {
       return [{ kind: 'message', text: this.deps.texts.noDatabases, connectionId }];
     }
     return [...nodes, ...hidden];
+  }
+
+  /** The numbered databases of a Redis connection, with their key counts (V7.1). */
+  private async redisDatabases(connectionId: string): Promise<TreeNode[]> {
+    const config = this.configOf(connectionId);
+    const opened = Number(redisDatabaseOf(config));
+    const session = await this.deps.manager.acquireRedis(
+      ConnectionManager.treeOwner(connectionId, String(opened)),
+      { connectionId },
+    );
+    const databases = await listRedisDatabases(session, opened);
+    return databases.map((database) => ({
+      kind: 'redisDatabase',
+      connectionId,
+      database: database.index,
+      keys: database.keys,
+    }));
   }
 
   /** "N hidden by the filter", so a missing database does not look like a lost one. */

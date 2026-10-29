@@ -19,7 +19,7 @@ import { MetadataCache } from '../../../src/services/metadata-cache';
 import { QueryRunner } from '../../../src/services/query-runner';
 import { ResultStore } from '../../../src/services/result-store';
 import { TableViewer, tableDocumentUri } from '../../../src/services/table-view';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';
@@ -113,7 +113,7 @@ describe('table view paging', () => {
     let runner: QueryRunner;
     let viewer: TableViewer;
     const pageSize = 100;
-    let drivers: Record<DriverId, Driver>;
+    let drivers: Record<SqlDriverId, Driver>;
     let connection: { connectionId: string };
 
     beforeAll(async () => {

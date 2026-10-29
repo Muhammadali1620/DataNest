@@ -128,6 +128,10 @@ function driverFromWord(word: string): DriverId | undefined {
   if (/oracle|oci8/.test(text)) {
     return 'oracle';
   }
+  // Laravel's REDIS_CLIENT says `phpredis` or `predis`; Valkey is a Redis fork (V7.1).
+  if (/redis|valkey/.test(text)) {
+    return 'redis';
+  }
   return undefined;
 }
 
@@ -159,7 +163,9 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
             ? 'clickhouse'
             : port === 1521
               ? 'oracle'
-              : undefined);
+              : port === 6379
+                ? 'redis'
+                : undefined);
   if (driver === undefined) {
     return undefined;
   }
@@ -177,7 +183,9 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
     return undefined;
   }
   const user = get('user');
-  const password = get('password');
+  // Laravel writes REDIS_PASSWORD=null for "no password".
+  const typed = get('password');
+  const password = driver === 'redis' && typed === 'null' ? undefined : typed;
   const input: ConnectionInput = {
     name: '',
     driver,

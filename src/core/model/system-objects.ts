@@ -1,13 +1,13 @@
 // Which databases and schemas belong to the server rather than to the user.
 // The tree hides them unless `datanest.showSystemObjects` is on.
 
-import type { DriverId } from '../../shared/connection';
+import { type DriverId, isSqlDriver, type SqlDriverId } from '../../shared/connection';
 
 /**
  * Databases the server keeps for itself. `postgres` is left out on purpose: it is
  * a normal database that people do use, even though the server creates it.
  */
-const SYSTEM_DATABASES: Readonly<Record<DriverId, readonly string[]>> = {
+const SYSTEM_DATABASES: Readonly<Record<SqlDriverId, readonly string[]>> = {
   // TiDB adds its metrics to MySQL's own (V6.5).
   mysql: ['information_schema', 'performance_schema', 'mysql', 'sys', 'metrics_schema'],
   // CockroachDB keeps its cluster settings in `system`, YugabyteDB its own in
@@ -22,7 +22,7 @@ const SYSTEM_DATABASES: Readonly<Record<DriverId, readonly string[]>> = {
 };
 
 /** Schemas the server keeps for itself. */
-const SYSTEM_SCHEMAS: Readonly<Record<DriverId, readonly string[]>> = {
+const SYSTEM_SCHEMAS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   mysql: [],
   // CockroachDB's own views and extension types (V6.5).
   postgres: ['pg_catalog', 'information_schema', 'crdb_internal', 'pg_extension'],
@@ -34,7 +34,7 @@ const SYSTEM_SCHEMAS: Readonly<Record<DriverId, readonly string[]>> = {
 };
 
 /** Prefixes of generated schemas: PostgreSQL numbers them per session. */
-const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<DriverId, readonly string[]>> = {
+const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<SqlDriverId, readonly string[]>> = {
   mysql: [],
   postgres: ['pg_toast', 'pg_temp_', 'pg_toast_temp_'],
   sqlite: [],
@@ -49,11 +49,15 @@ function equalsAny(name: string, names: readonly string[]): boolean {
   return names.some((candidate) => candidate.toLowerCase() === lower);
 }
 
+/** Redis numbers its databases; none of them is the server's own. */
 export function isSystemDatabase(driver: DriverId, name: string): boolean {
-  return equalsAny(name, SYSTEM_DATABASES[driver]);
+  return isSqlDriver(driver) && equalsAny(name, SYSTEM_DATABASES[driver]);
 }
 
 export function isSystemSchema(driver: DriverId, name: string): boolean {
+  if (!isSqlDriver(driver)) {
+    return false;
+  }
   if (equalsAny(name, SYSTEM_SCHEMAS[driver])) {
     return true;
   }

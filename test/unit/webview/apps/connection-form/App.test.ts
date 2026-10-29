@@ -675,7 +675,7 @@ describe('connection form App', () => {
 
     it('fills on Enter and explains a URL it cannot read', async () => {
       await withState();
-      await fireEvent.input(field('Connection URL'), { target: { value: 'redis://cache' } });
+      await fireEvent.input(field('Connection URL'), { target: { value: 'mongodb://cache' } });
       await fireEvent.keyDown(field('Connection URL'), { key: 'Enter' });
       await waitFor(() => {
         expect(
@@ -1160,6 +1160,112 @@ describe('connection form App: compatible servers (V6.5)', () => {
     await fireEvent.change(select);
     await waitFor(() => {
       expect(field('Port').value).toBe('3306');
+    });
+  });
+
+  describe('Redis (V7.1)', () => {
+    const REDIS: ConnectionFormState['drivers'] = [
+      ...DRIVERS,
+      { id: 'redis', defaultPort: 6379, file: false },
+    ];
+
+    async function redisForm(
+      input: ConnectionFormState['input'] = {
+        name: 'Cache',
+        driver: 'redis',
+        host: 'h',
+        port: 6379,
+      },
+      extra: Partial<ConnectionFormState> = {},
+    ) {
+      return await withState(newState({ input, drivers: REDIS, ...extra }));
+    }
+
+    it('offers Redis with its default port and a database number', async () => {
+      await withState(newState({ drivers: REDIS }));
+      expect(driverOptions(screen.getByLabelText<HTMLSelectElement>('Database'))).toContain(
+        'Redis',
+      );
+      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'redis' } });
+      await waitFor(() => {
+        expect(field('Port').value).toBe('6379');
+      });
+      expect(field('Database number').placeholder).toBe('0');
+      expect(screen.getByLabelText('Topology')).toBeTruthy();
+      expect(screen.getByLabelText('Init commands')).toBeTruthy();
+      expect(screen.queryByLabelText('Query timeout')).toBeNull();
+    });
+
+    it('asks for the master and the Sentinel password in Sentinel mode, and saves them', async () => {
+      const { host } = await redisForm();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.change(screen.getByLabelText('Topology'), { target: { value: 'sentinel' } });
+      await waitFor(() => {
+        expect(field('Port').value).toBe('26379');
+      });
+      await fireEvent.input(field('Master name'), { target: { value: 'mymaster' } });
+      await fireEvent.input(field('Other Sentinels'), { target: { value: 's2:26380' } });
+      await fireEvent.input(field('Sentinel password'), { target: { value: 'spw' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input).toMatchObject({
+        driver: 'redis',
+        port: 26379,
+        redis: { mode: 'sentinel', masterName: 'mymaster', nodes: [{ host: 's2', port: 26380 }] },
+      });
+      expect(drafts[0]?.sentinelPassword).toEqual({ kind: 'set', value: 'spw' });
+    });
+
+    it('blocks saving a Sentinel connection without a master name', async () => {
+      const { host } = await redisForm({
+        name: 'C',
+        driver: 'redis',
+        host: 'h',
+        redis: { mode: 'sentinel' },
+      });
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByText('Enter the name of the master')).toBeTruthy();
+      });
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('says a Sentinel password is stored and offers to remove it', async () => {
+      await redisForm(
+        { name: 'C', driver: 'redis', host: 'h', redis: { mode: 'sentinel', masterName: 'm' } },
+        { connectionId: 'c1', hasStoredSentinelPassword: true },
+      );
+      expect(screen.getByText('A Sentinel password is saved; leave empty to keep it')).toBeTruthy();
+      expect(screen.getByLabelText('Remove the saved Sentinel password')).toBeTruthy();
+    });
+
+    it('hides SSH for a cluster and says why', async () => {
+      await redisForm({ name: 'C', driver: 'redis', host: 'h', redis: { mode: 'cluster' } });
+      expect(screen.getByTestId('redis-ssh-note')).toBeTruthy();
+      expect(screen.queryByLabelText('Connect through an SSH tunnel')).toBeNull();
+      expect(screen.getByLabelText('Other cluster nodes')).toBeTruthy();
+      expect(screen.queryByLabelText('Master name')).toBeNull();
+    });
+
+    it('marks a database that is not a number', async () => {
+      const { host } = await redisForm();
+      host.handle(
+        'save',
+        vi.fn(() => ({ connectionId: 'c1' })),
+      );
+      await fireEvent.input(field('Database number'), { target: { value: 'cache' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByText('The database is a number: 0, 1, 2…')).toBeTruthy();
+      });
     });
   });
 });

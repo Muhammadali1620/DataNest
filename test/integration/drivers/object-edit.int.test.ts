@@ -21,7 +21,7 @@ import { ConnectionStore } from '../../../src/services/connection-store';
 import { MetadataCache } from '../../../src/services/metadata-cache';
 import { definitionDocument } from '../../../src/services/object-definitions';
 import { actionSql, SchemaActions } from '../../../src/services/schema-actions';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { runAll } from '../../helpers/driver-run';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
@@ -37,7 +37,7 @@ interface Editor {
 }
 
 async function editor(
-  drivers: Record<DriverId, Driver>,
+  drivers: Record<SqlDriverId, Driver>,
   input: ConnectionInput,
   password?: string,
 ): Promise<Editor> {
@@ -54,7 +54,7 @@ async function editor(
   });
   const actions = new SchemaActions({ manager, cache: new MetadataCache({ logger }), logger });
   const connectionId = (await store.add(input, password)).id;
-  const driver = drivers[input.driver];
+  const driver = drivers[input.driver as SqlDriverId];
   const session = async () => await browseSession(manager, connectionId);
   return {
     open: async (object) =>
@@ -85,7 +85,7 @@ function serverInput(id: TestDatabaseId, driver: DriverId): ConnectionInput {
 }
 
 let worker: BuiltWorker;
-let drivers: Record<DriverId, Driver>;
+let drivers: Record<SqlDriverId, Driver>;
 
 beforeAll(async () => {
   worker = await buildSqliteWorker();

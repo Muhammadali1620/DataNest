@@ -22,6 +22,12 @@ import {
   toOptions,
   toFilter,
   applyPreset,
+  changeRedisMode,
+  emptySecret,
+  nodeText,
+  parseNodes,
+  sshAllowed,
+  toRedis,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
 import { en } from '../../../../../webview/src/l10n/en';
@@ -58,6 +64,11 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     initSql: '',
     filterDatabases: '',
     filterSchemas: '',
+    redisMode: 'standalone',
+    masterName: '',
+    redisNodes: '',
+    sentinelUser: '',
+    sentinelPassword: emptySecret(),
     ...overrides,
   };
 }
@@ -109,6 +120,11 @@ describe('fieldsFrom', () => {
       initSql: '',
       filterDatabases: '',
       filterSchemas: '',
+      redisMode: 'standalone',
+      masterName: '',
+      redisNodes: '',
+      sentinelUser: '',
+      sentinelPassword: { value: '', touched: false, erase: false },
     });
   });
 
@@ -829,5 +845,150 @@ describe('applyPreset (V6.5)', () => {
     applyPreset(form, preset('aurora-mysql'));
     expect(form).toMatchObject({ driver: 'mysql', port: '3306', user: '', sslMode: 'require' });
     expect(toInput(form).ssl).toEqual({ mode: 'require' });
+  });
+});
+
+describe('Redis fields (V7.1)', () => {
+  const redis = (overrides: Partial<FormFields> = {}): FormFields =>
+    fields({ driver: 'redis', port: '6379', user: '', database: '', ...overrides });
+
+  it('sends nothing Redis-specific for one server', () => {
+    expect(toInput(redis()).redis).toBeUndefined();
+    expect(toDraft(redis()).sentinelPassword).toBeUndefined();
+  });
+
+  it('sends the Sentinel settings, nodes and password change', () => {
+    const form = redis({
+      redisMode: 'sentinel',
+      port: '26379',
+      masterName: ' mymaster ',
+      redisNodes: 's2:26380, s3',
+      sentinelUser: ' watcher ',
+      sentinelPassword: { value: 'pw', touched: true, erase: false },
+    });
+    expect(toInput(form).redis).toEqual({
+      mode: 'sentinel',
+      masterName: 'mymaster',
+      nodes: [{ host: 's2', port: 26380 }, { host: 's3' }],
+      sentinelUser: 'watcher',
+    });
+    expect(toDraft(form).sentinelPassword).toEqual({ kind: 'set', value: 'pw' });
+    expect(problemsOf(form)).toEqual([]);
+  });
+
+  it('keeps a stored Sentinel password untouched, and erases it on request', () => {
+    const form = redis({ redisMode: 'sentinel', masterName: 'm' });
+    expect(toDraft(form).sentinelPassword).toEqual({ kind: 'keep' });
+    form.sentinelPassword.erase = true;
+    expect(toDraft(form).sentinelPassword).toEqual({ kind: 'clear' });
+  });
+
+  it('drops the master name and the Sentinel user for a cluster', () => {
+    const form = redis({
+      redisMode: 'cluster',
+      masterName: 'm',
+      sentinelUser: 'u',
+      redisNodes: 'n2:7001',
+    });
+    expect(toRedis(form)).toEqual({ mode: 'cluster', nodes: [{ host: 'n2', port: 7001 }] });
+    expect(toDraft(form).sentinelPassword).toBeUndefined();
+  });
+
+  it('sends no Redis settings for another driver, whatever is left in the fields', () => {
+    expect(toRedis(fields({ redisMode: 'cluster' }))).toBeUndefined();
+    expect(sshAllowed(fields({ redisMode: 'cluster' }))).toBe(true);
+  });
+
+  it('reads extra nodes with IPv6 brackets and flags bad ones', () => {
+    expect(parseNodes('[::1]:7000; a  b:1')).toEqual({
+      nodes: [{ host: '::1', port: 7000 }, { host: 'a' }, { host: 'b', port: 1 }],
+      invalid: false,
+    });
+    expect(parseNodes('a:x, b:70000, :5, c')).toEqual({ nodes: [{ host: 'c' }], invalid: true });
+    expect(parseNodes('')).toEqual({ nodes: [], invalid: false });
+    expect(nodeText({ host: '::1', port: 7000 })).toBe('[::1]:7000');
+    expect(nodeText({ host: 'a' })).toBe('a');
+  });
+
+  it('reports bad nodes, a missing master name and a bad database', () => {
+    const form = redis({ redisMode: 'sentinel', redisNodes: 'a:x', database: 'one' });
+    const problems = problemsOf(form);
+    expect(problems).toContain('redis-node-invalid');
+    expect(problems).toContain('redis-master-empty');
+    expect(problems).toContain('redis-database-invalid');
+    expect(problemsOf(redis({ redisMode: 'cluster', database: '3' }))).toContain(
+      'redis-cluster-database',
+    );
+    // Bad nodes do not matter for one server: the box is hidden.
+    expect(problemsOf(redis({ redisNodes: 'a:x' }))).toEqual([]);
+  });
+
+  it('has a message for every Redis problem', () => {
+    for (const problem of [
+      'redis-master-empty',
+      'redis-node-invalid',
+      'redis-too-many-nodes',
+      'redis-database-invalid',
+      'redis-cluster-database',
+      'redis-ssh-topology',
+    ] as const) {
+      expect(en[PROBLEM_MESSAGES[problem]]).toBeTruthy();
+    }
+  });
+
+  it('leaves SSH out for Sentinels and clusters, and does not check its hop', () => {
+    const tunnel = { useSsh: true, ssh: { ...newHopFields('h1'), host: '' } };
+    expect(toInput(redis({ redisMode: 'cluster', ...tunnel })).ssh).toBeUndefined();
+    expect(problemsOf(redis({ redisMode: 'cluster', ...tunnel }))).toEqual([]);
+    expect(sshAllowed(redis({ redisMode: 'sentinel' }))).toBe(false);
+    expect(problemsOf(redis(tunnel))).toContain('ssh-host-empty');
+  });
+
+  it('moves a default port along with the mode, but keeps a typed one', () => {
+    const form = redis();
+    changeRedisMode(form, 'sentinel');
+    expect(form.port).toBe('26379');
+    changeRedisMode(form, 'cluster');
+    expect(form.port).toBe('6379');
+    form.port = '7000';
+    changeRedisMode(form, 'sentinel');
+    expect(form.port).toBe('7000');
+    expect(form.redisMode).toBe('sentinel');
+    form.port = '';
+    changeRedisMode(form, 'sentinel');
+    expect(form.port).toBe('26379');
+  });
+
+  it('fills the form from a saved Sentinel connection without its password', () => {
+    const result = fieldsFrom({
+      input: {
+        name: 'r',
+        driver: 'redis',
+        host: 's1',
+        redis: {
+          mode: 'sentinel',
+          masterName: 'm',
+          nodes: [{ host: 's2', port: 1 }],
+          sentinelUser: 'u',
+        },
+      },
+      hasStoredPassword: false,
+      hasStoredSentinelPassword: true,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect(result).toMatchObject({
+      redisMode: 'sentinel',
+      masterName: 'm',
+      redisNodes: 's2:1',
+      sentinelUser: 'u',
+      sentinelPassword: { value: '', touched: false, erase: false },
+    });
+  });
+
+  it('turns a URL into one server', () => {
+    const form = redis({ redisMode: 'cluster' });
+    applyUrl(form, { input: { name: 'x', driver: 'redis', host: 'h' } });
+    expect(form.redisMode).toBe('standalone');
   });
 });

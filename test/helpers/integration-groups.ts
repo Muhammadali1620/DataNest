@@ -5,6 +5,7 @@
 
 import { createConnection } from 'node:net';
 import { testDatabase, testSshServer } from './databases';
+import { TEST_REDIS } from './redis-servers';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -67,6 +68,19 @@ const DEFINITIONS = {
       const db = testDatabase('clickhouse', env);
       return [{ name: 'clickhouse', host: db.host, port: db.port }];
     },
+  },
+  redis: {
+    always: false,
+    folders: ['redis'],
+    endpoints: () => [
+      { name: 'redis', host: TEST_REDIS.host, port: TEST_REDIS.port },
+      { name: 'redis-sentinel', host: TEST_REDIS.host, port: TEST_REDIS.sentinel.port },
+      ...TEST_REDIS.cluster.ports.map((port) => ({
+        name: `redis-cluster:${port}`,
+        host: TEST_REDIS.host,
+        port,
+      })),
+    ],
   },
 } as const satisfies Record<string, IntegrationGroup>;
 

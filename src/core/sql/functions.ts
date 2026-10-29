@@ -1,7 +1,7 @@
 // Functions completion offers, with their arguments as snippet placeholders. A short
 // list of what people type every day per dialect, not the whole manual.
 
-import type { DriverId } from '../../shared/connection';
+import { type DriverId, isSqlDriver, type SqlDriverId } from '../../shared/connection';
 
 export interface SqlFunction {
   readonly name: string;
@@ -40,7 +40,7 @@ const COMMON: readonly SqlFunction[] = [
   fn('LEAD', 'expression'),
 ];
 
-const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
+const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
   mysql: [
     ...LENGTH_SUBSTR,
     fn('NOW'),
@@ -163,7 +163,7 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
 
 /** The functions of a dialect, common ones first; standard SQL when none is known. */
 export function functionsOf(driver?: DriverId): readonly SqlFunction[] {
-  return driver === undefined ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
+  return driver === undefined || !isSqlDriver(driver) ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
 }
 
 /** `COALESCE(${1:value}, ${2:fallback})`: a call with tab stops for its arguments. */

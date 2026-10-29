@@ -14,9 +14,11 @@ import {
   driverOptions,
   NEW_CONNECTION,
   storedSshFlags,
+  testSentinelPassword,
   testSshSecrets,
   toInput,
   toPasswordChange,
+  toSentinelChange,
   toSshChanges,
 } from './connection-form-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
@@ -145,7 +147,16 @@ export class ConnectionFormPanel implements vscode.Disposable {
     const password = await this.resolveTestPassword(draft);
     const stored =
       this.connectionId === undefined ? {} : await this.deps.store.getSshSecrets(this.connectionId);
-    await this.deps.manager.test(draft.input, password, testSshSecrets(draft, stored));
+    const sentinel =
+      this.connectionId === undefined
+        ? undefined
+        : await this.deps.store.getSentinelPassword(this.connectionId);
+    await this.deps.manager.test(
+      draft.input,
+      password,
+      testSshSecrets(draft, stored),
+      testSentinelPassword(draft, sentinel),
+    );
   }
 
   /** "Test" must work while editing without retyping a stored password. */
@@ -173,7 +184,10 @@ export class ConnectionFormPanel implements vscode.Disposable {
             ? this.prefill?.password
             : undefined,
         testSshSecrets(draft, {}),
-        draft.project === undefined ? {} : { project: draft.project },
+        {
+          ...(draft.project === undefined ? {} : { project: draft.project }),
+          ...(sentinelValue(draft) === undefined ? {} : { sentinelPassword: sentinelValue(draft) }),
+        },
       );
       this.connectionId = created.id;
       this.prefill = undefined;
@@ -186,6 +200,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       draft.input,
       change,
       toSshChanges(draft),
+      toSentinelChange(draft),
     );
     this.retitle(updated.name);
     this.sendState();
@@ -209,6 +224,10 @@ export class ConnectionFormPanel implements vscode.Disposable {
         : (await this.deps.store.getPassword(connectionId)) !== undefined;
     const storedSsh =
       connectionId === undefined ? {} : await this.deps.store.getSshSecrets(connectionId);
+    const hasStoredSentinelPassword =
+      connectionId === undefined
+        ? false
+        : (await this.deps.store.getSentinelPassword(connectionId)) !== undefined;
     const project =
       connectionId === undefined ? undefined : this.deps.store.projectOf(connectionId);
     // The panel may have been closed while the secret was read; stay silent then.
@@ -219,6 +238,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       ...(connectionId === undefined ? {} : { connectionId }),
       input: config === undefined ? (this.prefill?.input ?? NEW_CONNECTION) : toInput(config),
       hasStoredPassword,
+      ...(hasStoredSentinelPassword ? { hasStoredSentinelPassword } : {}),
       ...(this.prefill?.password === undefined ? {} : { importedPassword: true }),
       storedSsh: storedSshFlags(storedSsh),
       projects: this.deps.store.projectFolders().map(({ key, name }) => ({ key, name })),
@@ -227,6 +247,11 @@ export class ConnectionFormPanel implements vscode.Disposable {
       drivers: driverOptions(),
     });
   }
+}
+
+/** The Sentinel password a new connection is saved with. */
+function sentinelValue(draft: ConnectionDraft): string | undefined {
+  return testSentinelPassword(draft, undefined);
 }
 
 async function pickDatabaseFile(create: boolean): Promise<{ file?: string }> {

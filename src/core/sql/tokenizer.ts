@@ -2,7 +2,7 @@
 // a comment, a quoted name, a word. Everything that needs to find a semicolon that
 // really ends a statement (splitting, CodeLens, completion context) builds on it.
 
-import type { DriverId } from '../../shared/connection';
+import { type DriverId, isSqlDriver, type SqlDriverId } from '../../shared/connection';
 
 export type TokenKind =
   'whitespace' | 'comment' | 'string' | 'quoted-identifier' | 'word' | 'number' | 'punctuation';
@@ -163,7 +163,7 @@ const ORACLE: SqlSyntax = {
   quoteOperator: true,
 };
 
-const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
+const BY_DRIVER: Readonly<Record<SqlDriverId, SqlSyntax>> = {
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,
@@ -174,7 +174,7 @@ const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
 
 /** The syntax of a driver; the safest common set when none is known. */
 export function syntaxOf(driver?: DriverId): SqlSyntax {
-  if (driver === undefined) {
+  if (driver === undefined || !isSqlDriver(driver)) {
     // Accept the union of quoting styles, so nothing is mistaken for code.
     return {
       backslashEscapes: false,

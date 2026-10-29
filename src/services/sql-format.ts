@@ -53,6 +53,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
       return 'clickhouse';
     case 'oracle':
       return 'plsql';
+    case 'redis':
     case undefined:
       return 'sql';
   }

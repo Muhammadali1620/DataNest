@@ -27,7 +27,7 @@ describe('urlDriver', () => {
   });
 
   it('ignores everything else', () => {
-    expect(urlDriver('redis://h')).toBeUndefined();
+    expect(urlDriver('mongodb://h')).toBeUndefined();
     expect(urlDriver('https://example.com')).toBeUndefined();
     expect(urlDriver('just text')).toBeUndefined();
   });
@@ -139,7 +139,7 @@ describe('parseConnectionUrl', () => {
     expect(parseConnectionUrl('localhost:5432')).toEqual({ ok: false, problem: 'unknown-scheme' });
     expect(parseConnectionUrl('just text')).toEqual({ ok: false, problem: 'not-a-url' });
     expect(parseConnectionUrl('')).toEqual({ ok: false, problem: 'not-a-url' });
-    expect(parseConnectionUrl('redis://cache:6379')).toEqual({
+    expect(parseConnectionUrl('mongodb://cache:27017')).toEqual({
       ok: false,
       problem: 'unknown-scheme',
     });
@@ -412,5 +412,53 @@ describe('compatible servers (V6.5)', () => {
       },
       password: 'secret',
     });
+  });
+});
+
+describe('Redis URLs (V7.1)', () => {
+  it('knows redis, rediss and the Valkey schemes', () => {
+    for (const scheme of ['redis', 'rediss', 'valkey', 'valkeys', 'REDIS']) {
+      expect(urlDriver(`${scheme}://h`)).toBe('redis');
+    }
+  });
+
+  it('reads the ACL user, password, port and database number, named by the host', () => {
+    expect(ok(parseConnectionUrl('redis://app:s%40cret@cache.example:6380/2'))).toEqual({
+      input: {
+        name: 'cache.example',
+        driver: 'redis',
+        host: 'cache.example',
+        port: 6380,
+        user: 'app',
+        database: '2',
+      },
+      password: 's@cret',
+    });
+  });
+
+  it('takes a password without a user, as the default user signs in', () => {
+    const parsed = ok(parseConnectionUrl('redis://:only-pass@localhost'));
+    expect(parsed.input.user).toBeUndefined();
+    expect(parsed.password).toBe('only-pass');
+    expect(parsed.input.port).toBeUndefined();
+  });
+
+  it('reads the database from ?db= as some clients write it', () => {
+    expect(ok(parseConnectionUrl('redis://h?db=5')).input.database).toBe('5');
+  });
+
+  it('checks the certificate for rediss:// unless the URL turns it off', () => {
+    expect(ok(parseConnectionUrl('rediss://h:6380')).input.ssl).toEqual({ mode: 'verify-full' });
+    expect(ok(parseConnectionUrl('valkeys://h')).input.ssl).toEqual({ mode: 'verify-full' });
+    expect(ok(parseConnectionUrl('rediss://h?ssl_cert_reqs=none')).input.ssl).toEqual({
+      mode: 'require',
+    });
+    expect(ok(parseConnectionUrl('redis://h')).input.ssl).toBeUndefined();
+    // An explicit TLS parameter wins over the scheme.
+    expect(ok(parseConnectionUrl('redis://h?tls=true')).input.ssl).toEqual({ mode: 'require' });
+  });
+
+  it('needs a host', () => {
+    expect(parseConnectionUrl('redis:///0')).toEqual({ ok: false, problem: 'no-host' });
   });
 });

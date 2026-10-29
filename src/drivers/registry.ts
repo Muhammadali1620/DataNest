@@ -4,10 +4,11 @@
 import { createRequire } from 'node:module';
 import { DbError, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
-import { type DriverId, isDriverId } from '../shared/connection';
+import { type DriverId, isDriverId, type SqlDriverId } from '../shared/connection';
 import type { Driver, DriverModule } from './driver';
+import type { RedisDriver, RedisDriverModule } from './redis-driver';
 
-export type DriverLoader = (id: DriverId) => Promise<DriverModule>;
+export type DriverLoader = (id: DriverId) => Promise<DriverModule | RedisDriverModule>;
 
 /**
  * Resolves `./drivers/<id>.js` relative to the running bundle (dist/extension.js).
@@ -18,21 +19,41 @@ export function createBundleDriverLoader(bundlePath: string): DriverLoader {
   return (id) => Promise.resolve(requireFromBundle(`./drivers/${id}.js`) as DriverModule);
 }
 
+/** A SQL driver or the Redis one (D81), as the bundle exports it. */
+type AnyDriver = Driver | RedisDriver;
+
 export class DriverRegistry {
   private readonly loader: DriverLoader;
   private readonly logger: Logger;
-  private readonly loading = new Map<DriverId, Promise<Driver>>();
+  private readonly loading = new Map<DriverId, Promise<AnyDriver>>();
 
   constructor(deps: { loader: DriverLoader; logger: Logger }) {
     this.loader = deps.loader;
     this.logger = deps.logger.child('drivers');
   }
 
-  /** Loads the driver on first use; concurrent calls share one load. */
-  async get(id: DriverId): Promise<Driver> {
-    if (!isDriverId(id)) {
-      throw new DbError('unsupported', `Unknown driver "${String(id)}"`);
+  /** Loads a SQL driver on first use; concurrent calls share one load. */
+  async get(id: SqlDriverId): Promise<Driver> {
+    if (!isDriverId(id) || id === ('redis' as DriverId)) {
+      throw new DbError('unsupported', `Unknown SQL driver "${id}"`);
     }
+    const driver = await this.loadOnce(id);
+    if (!isSqlDriverShaped(driver)) {
+      throw new DbError('internal', `Driver "${id}" is broken: unexpected module shape`);
+    }
+    return driver;
+  }
+
+  /** Loads the Redis driver on first use. */
+  async getRedis(): Promise<RedisDriver> {
+    const driver = await this.loadOnce('redis');
+    if (isSqlDriverShaped(driver)) {
+      throw new DbError('internal', 'Driver "redis" is broken: unexpected module shape');
+    }
+    return driver;
+  }
+
+  private async loadOnce(id: DriverId): Promise<AnyDriver> {
     let promise = this.loading.get(id);
     if (!promise) {
       promise = (async () => {
@@ -50,9 +71,9 @@ export class DriverRegistry {
     return await promise;
   }
 
-  private async load(id: DriverId): Promise<Driver> {
+  private async load(id: DriverId): Promise<AnyDriver> {
     this.logger.debug(`Loading driver "${id}"`);
-    let module: DriverModule;
+    let module: DriverModule | RedisDriverModule;
     try {
       module = await this.loader(id);
     } catch (error) {
@@ -60,26 +81,30 @@ export class DriverRegistry {
       throw toDbError(error, 'internal');
     }
     const driver: unknown = (module as Partial<DriverModule> | null | undefined)?.driver;
-    if (!isDriverShaped(driver) || driver.id !== id) {
+    const shaped = id === 'redis' ? isRedisDriverShaped(driver) : isSqlDriverShaped(driver);
+    if (!shaped || (driver as AnyDriver).id !== id) {
       this.logger.error(`Driver bundle "${id}" has a wrong shape`);
       throw new DbError('internal', `Driver "${id}" is broken: unexpected module shape`);
     }
     this.logger.info(`Driver "${id}" loaded`);
-    return driver;
+    return driver as AnyDriver;
   }
 }
 
-function isDriverShaped(value: unknown): value is Driver {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const driver = value as Record<string, unknown>;
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isSqlDriverShaped(value: unknown): value is Driver {
   return (
-    typeof driver.id === 'string' &&
-    typeof driver.openSession === 'function' &&
-    typeof driver.dialect === 'object' &&
-    driver.dialect !== null &&
-    typeof driver.capabilities === 'object' &&
-    driver.capabilities !== null
+    isObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.openSession === 'function' &&
+    isObject(value.dialect) &&
+    isObject(value.capabilities)
   );
+}
+
+function isRedisDriverShaped(value: unknown): value is RedisDriver {
+  return isObject(value) && value.id === 'redis' && typeof value.openSession === 'function';
 }

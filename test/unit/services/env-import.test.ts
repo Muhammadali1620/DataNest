@@ -74,7 +74,7 @@ describe('connectionsFromEnv', () => {
       parseDotenv(
         [
           'DATABASE_URL=postgres://app:pw@db:5432/shop',
-          'CACHE_URL=redis://cache:6379',
+          'CACHE_URL=memcached://cache:11211',
           'HOMEPAGE=https://example.com',
         ].join('\n'),
       ),
@@ -150,7 +150,7 @@ describe('connectionsFromEnv', () => {
   });
 
   it('skips groups whose database it cannot tell, or that have no host', () => {
-    expect(connectionsFromEnv(parseDotenv('REDIS_HOST=h\nREDIS_PORT=6379'))).toEqual([]);
+    expect(connectionsFromEnv(parseDotenv('MEMCACHED_HOST=h\nMEMCACHED_PORT=11211'))).toEqual([]);
     expect(connectionsFromEnv(parseDotenv('SMTP_SERVER=mail\nHOST=x'))).toEqual([]);
     expect(connectionsFromEnv(parseDotenv('DB_CONNECTION=pgsql\nDB_PORT=5432'))).toEqual([]);
   });
@@ -343,5 +343,57 @@ describe('compatible servers in .env files (V6.5)', () => {
   ])('takes port %i for %s when nothing names the database', (port, driver) => {
     const [found] = connectionsFromEnv(parseDotenv(['DB_HOST=db', `DB_PORT=${port}`].join('\n')));
     expect(found?.input).toMatchObject({ driver, port });
+  });
+});
+
+describe('Redis in .env files (V7.1)', () => {
+  it("reads Laravel's REDIS_* group next to the database, with null meaning no password", () => {
+    const found = connectionsFromEnv(
+      parseDotenv(
+        [
+          'DB_CONNECTION=mysql',
+          'DB_HOST=db',
+          'REDIS_CLIENT=phpredis',
+          'REDIS_HOST=127.0.0.1',
+          'REDIS_PASSWORD=null',
+          'REDIS_PORT=6379',
+          'REDIS_DB=1',
+        ].join('\n'),
+      ),
+    );
+    const redis = found.find((candidate) => candidate.input.driver === 'redis');
+    expect(found.map((candidate) => candidate.input.driver).sort()).toEqual(['mysql', 'redis']);
+    expect(redis?.input).toEqual({
+      name: '127.0.0.1',
+      driver: 'redis',
+      host: '127.0.0.1',
+      port: 6379,
+      database: '1',
+    });
+    expect(redis?.password).toBeUndefined();
+    expect(redis?.source).toBe('REDIS_*');
+  });
+
+  it('keeps a real Redis password and an ACL user', () => {
+    const [found] = connectionsFromEnv(
+      parseDotenv(['REDIS_HOST=cache', 'REDIS_USERNAME=app', 'REDIS_PASSWORD=pw'].join('\n')),
+    );
+    expect(found?.input).toMatchObject({ driver: 'redis', host: 'cache', user: 'app' });
+    expect(found?.password).toBe('pw');
+  });
+
+  it('reads REDIS_URL, Valkey and a bare port 6379', () => {
+    const fromUrl = connectionsFromEnv(parseDotenv('REDIS_URL=rediss://:pw@cache:6380/0'));
+    expect(fromUrl[0]?.input).toMatchObject({
+      driver: 'redis',
+      host: 'cache',
+      port: 6380,
+      ssl: { mode: 'verify-full' },
+    });
+    expect(fromUrl[0]?.password).toBe('pw');
+    const valkey = connectionsFromEnv(parseDotenv('VALKEY_HOST=v1'));
+    expect(valkey[0]?.input.driver).toBe('redis');
+    const byPort = connectionsFromEnv(parseDotenv(['CACHE_HOST=c', 'CACHE_PORT=6379'].join('\n')));
+    expect(byPort[0]?.input.driver).toBe('redis');
   });
 });

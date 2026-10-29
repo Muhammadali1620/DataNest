@@ -6,17 +6,21 @@ import type { ObjectScope } from '../core/model/objects';
 import { browseSession } from '../services/browse-session';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
-import { describeTarget } from '../shared/connection';
+import { describeTarget, isSqlDriver } from '../shared/connection';
 
+/** SQL connections only: the commands that ask here run SQL, which Redis has not (D81). */
 export async function pickConnection(
   store: Pick<ConnectionStore, 'list'>,
   placeHolder: string = vscode.l10n.t('Pick a connection'),
 ): Promise<string | undefined> {
-  const items = store.list().map((config) => ({
-    label: config.name,
-    description: describeTarget(config),
-    id: config.id,
-  }));
+  const items = store
+    .list()
+    .filter((config) => isSqlDriver(config.driver))
+    .map((config) => ({
+      label: config.name,
+      description: describeTarget(config),
+      id: config.id,
+    }));
   if (items.length === 0) {
     void vscode.window.showInformationMessage(vscode.l10n.t('There are no saved connections yet'));
     return undefined;

@@ -30,6 +30,13 @@ export const TREE_CONTEXT = {
   /** A connection from a project file: no user folders, other menus. */
   projectConnection: 'datanest.projectConnection',
   projectConnectionConnected: 'datanest.projectConnection.connected',
+  /** Redis connections (V7.1) share the connection menus but none of the SQL ones. */
+  redisConnection: 'datanest.redisConnection',
+  redisConnectionConnected: 'datanest.redisConnection.connected',
+  projectRedisConnection: 'datanest.projectRedisConnection',
+  projectRedisConnectionConnected: 'datanest.projectRedisConnection.connected',
+  /** A numbered Redis database. */
+  redisDatabase: 'datanest.redisDatabase',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -163,6 +170,14 @@ export interface ForeignKeyNode {
   readonly key: ForeignKey;
 }
 
+/** A numbered database of a Redis connection (V7.1). */
+export interface RedisDatabaseNode {
+  readonly kind: 'redisDatabase';
+  readonly connectionId: string;
+  readonly database: number;
+  readonly keys: number;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -188,6 +203,7 @@ export type TreeNode =
   | ObjectNode
   | IndexNode
   | ForeignKeyNode
+  | RedisDatabaseNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -213,6 +229,7 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'project':
     case 'connectionFolder':
     case 'connection':
+    case 'redisDatabase':
     case 'message':
       return {};
   }
@@ -293,6 +310,8 @@ export function nodeId(node: TreeNode): string {
         node.table.name,
         node.key.name,
       ]);
+    case 'redisDatabase':
+      return join(['redisDatabase', node.connectionId, String(node.database)]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -335,6 +354,7 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'object' ||
     kind === 'index' ||
     kind === 'foreignKey' ||
+    kind === 'redisDatabase' ||
     kind === 'message'
   );
 }
@@ -362,6 +382,7 @@ export function nameOf(node: TreeNode): string | undefined {
     case 'connection':
     case 'group':
     case 'folder':
+    case 'redisDatabase':
     case 'message':
       return undefined;
   }
@@ -402,7 +423,33 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'folder':
     case 'index':
     case 'foreignKey':
+    case 'redisDatabase':
     case 'message':
       return undefined;
   }
+}
+
+/** The context value of a connection item, which the menus of package.json match. */
+export function connectionContext(options: {
+  readonly project: boolean;
+  readonly connected: boolean;
+  readonly redis: boolean;
+}): string {
+  const { project, connected, redis } = options;
+  if (redis) {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectRedisConnectionConnected
+        : TREE_CONTEXT.projectRedisConnection
+      : connected
+        ? TREE_CONTEXT.redisConnectionConnected
+        : TREE_CONTEXT.redisConnection;
+  }
+  return project
+    ? connected
+      ? TREE_CONTEXT.projectConnectionConnected
+      : TREE_CONTEXT.projectConnection
+    : connected
+      ? TREE_CONTEXT.connectionConnected
+      : TREE_CONTEXT.connection;
 }

@@ -10,11 +10,19 @@ import type {
   ResolvedConnectionConfig,
   SshHopSecrets,
 } from '../shared/connection';
-import { type DriverId, optionSupport } from '../shared/connection';
+import {
+  type DriverFamily,
+  driverFamily,
+  optionSupport,
+  type SqlDriverId,
+} from '../shared/connection';
 import { setUpSession } from './session-setup';
 import type { Driver, Session, TransactionState } from '../drivers/driver';
+import type { RedisDriver, RedisSession } from '../drivers/redis-driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
+import { ManagedRedisSession } from './redis/managed-redis-session';
+import { setUpRedisSession } from './redis/redis-setup';
 import {
   type HostKeyCheck,
   type Tunnel,
@@ -41,7 +49,9 @@ export interface SessionTarget {
 
 /** The slice of DriverRegistry the manager needs (`DriverRegistry` satisfies it). */
 export interface DriverProvider {
-  get(id: DriverId): Promise<Driver>;
+  get(id: SqlDriverId): Promise<Driver>;
+  /** Needed only by Redis connections. */
+  getRedis?(): Promise<RedisDriver>;
 }
 
 /** The slice of TunnelPool the manager needs. */
@@ -67,10 +77,10 @@ interface Endpoint {
   readonly port: number;
 }
 
-interface Holder {
-  readonly target: SessionTarget;
-  readonly session: Session;
-}
+/** A live session of an owner: SQL, or Redis (D81). */
+type Holder =
+  | { readonly family: 'sql'; readonly target: SessionTarget; readonly session: Session }
+  | { readonly family: 'redis'; readonly target: SessionTarget; readonly session: RedisSession };
 
 const DISCONNECTED: ConnectionState = { status: 'disconnected' };
 
@@ -97,7 +107,7 @@ export class ConnectionManager implements Disposable {
   private readonly tunnels: TunnelProvider | undefined;
   private readonly checkHostKey: HostKeyCheck;
   private readonly holders = new Map<string, Holder>();
-  private readonly opening = new Map<string, Promise<Session>>();
+  private readonly opening = new Map<string, Promise<Holder>>();
   private readonly states = new Map<string, ConnectionState>();
   private readonly listeners = new Set<(connectionId: string) => void>();
   private readonly transactionListeners = new Set<(change: TransactionChange) => void>();
@@ -154,7 +164,7 @@ export class ConnectionManager implements Disposable {
    * undefined when it holds no session or the driver cannot tell.
    */
   transactionState(owner: string): TransactionState | undefined {
-    return this.holders.get(owner)?.session.transactionState?.();
+    return transactionOf(this.holders.get(owner));
   }
 
   /** Owners of a connection whose session has a transaction open or failed. */
@@ -162,15 +172,22 @@ export class ConnectionManager implements Disposable {
     return [...this.holders.entries()]
       .filter(([, held]) => held.target.connectionId === connectionId)
       .filter(([, held]) => {
-        const state = held.session.transactionState?.();
+        const state = transactionOf(held);
         return state === 'open' || state === 'failed';
       })
       .map(([owner]) => owner);
   }
 
-  /** The live session of an owner, or undefined when it holds none. */
+  /** The live SQL session of an owner, or undefined when it holds none. */
   sessionOf(owner: string): Session | undefined {
-    return this.holders.get(owner)?.session;
+    const held = this.holders.get(owner);
+    return held?.family === 'sql' ? held.session : undefined;
+  }
+
+  /** The live Redis session of an owner, or undefined when it holds none. */
+  redisSessionOf(owner: string): RedisSession | undefined {
+    const held = this.holders.get(owner);
+    return held?.family === 'redis' ? held.session : undefined;
   }
 
   /** Connection ids that currently hold at least one live session. */
@@ -185,13 +202,48 @@ export class ConnectionManager implements Disposable {
    * never retried silently, because repeating a write is not safe.
    */
   async acquire(owner: string, target: SessionTarget): Promise<Session> {
+    const held = await this.acquireHolder(owner, target, 'sql');
+    if (held.family !== 'sql') {
+      throw new DbError('internal', 'Expected a SQL session');
+    }
+    return held.session;
+  }
+
+  /** Like `acquire`, for a Redis connection (D81). */
+  async acquireRedis(owner: string, target: SessionTarget): Promise<RedisSession> {
+    const held = await this.acquireHolder(owner, target, 'redis');
+    if (held.family !== 'redis') {
+      throw new DbError('internal', 'Expected a Redis session');
+    }
+    return held.session;
+  }
+
+  /** What the connection speaks; a SQL command never gets a Redis session, nor the reverse. */
+  familyOf(connectionId: string): DriverFamily {
+    return driverFamily(this.configOf(connectionId).driver);
+  }
+
+  private async acquireHolder(
+    owner: string,
+    target: SessionTarget,
+    family: DriverFamily,
+  ): Promise<Holder> {
     if (this.disposed) {
       throw new DbError('internal', 'The connection manager is disposed');
+    }
+    const config = this.configOf(target.connectionId);
+    if (driverFamily(config.driver) !== family) {
+      throw new DbError(
+        'unsupported',
+        family === 'sql'
+          ? `"${config.name}" is a Redis connection: it runs Redis commands, not SQL`
+          : `"${config.name}" is not a Redis connection`,
+      );
     }
     const held = this.holders.get(owner);
     if (held) {
       if (sameTarget(held.target, target)) {
-        return held.session;
+        return held;
       }
       await this.release(owner);
     }
@@ -215,6 +267,23 @@ export class ConnectionManager implements Disposable {
     return await this.acquire(ConnectionManager.treeOwner(connectionId), { connectionId });
   }
 
+  /**
+   * Connects a connection of either kind, for the tree's Connect command; a Redis
+   * connection opens its tree session on the database it names.
+   */
+  async connectAny(connectionId: string): Promise<void> {
+    if (this.familyOf(connectionId) === 'redis') {
+      await this.acquireRedis(
+        ConnectionManager.treeOwner(connectionId, redisDatabaseOf(this.configOf(connectionId))),
+        {
+          connectionId,
+        },
+      );
+      return;
+    }
+    await this.connect(connectionId);
+  }
+
   /** Closes every session of a connection. Disconnecting an idle connection is a no-op. */
   async disconnect(connectionId: string): Promise<void> {
     const owners = [...this.holders.entries()]
@@ -233,7 +302,7 @@ export class ConnectionManager implements Disposable {
       return;
     }
     this.holders.delete(owner);
-    const transaction = held.session.transactionState?.();
+    const transaction = transactionOf(held);
     try {
       await held.session.close();
     } catch (error) {
@@ -255,7 +324,12 @@ export class ConnectionManager implements Disposable {
     input: ConnectionInput,
     password?: string,
     ssh: Readonly<Record<string, SshHopSecrets>> = {},
+    sentinelPassword?: string,
   ): Promise<void> {
+    if (input.driver === 'redis') {
+      await this.testRedis(input, password, ssh, sentinelPassword);
+      return;
+    }
     const driver = await this.drivers.get(input.driver);
     const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
@@ -280,14 +354,50 @@ export class ConnectionManager implements Disposable {
     }
   }
 
+  private async testRedis(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+    sentinelPassword: string | undefined,
+  ): Promise<void> {
+    const driver = await this.redisDriver();
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
+    try {
+      const resolved = {
+        ...resolve({ ...input, id: 'test' }, {}, password, tunnel),
+        ...(sentinelPassword === undefined || sentinelPassword === '' ? {} : { sentinelPassword }),
+      };
+      let session: RedisSession;
+      try {
+        session = await driver.openSession(resolved);
+      } catch (error) {
+        throw tunnel?.forwardError() ?? error;
+      }
+      try {
+        // Init commands are part of what "Test" checks; PING proves the link answers.
+        await setUpRedisSession(session, input);
+        await session.call(['PING']);
+      } finally {
+        await session.close().catch(() => undefined);
+      }
+    } finally {
+      await tunnel?.close();
+    }
+  }
+
   /** True when the saved connection refuses every change (V4.6). */
   isReadOnly(connectionId: string): boolean {
     return this.store.get(connectionId)?.readOnly === true;
   }
 
-  /** The driver of a saved connection, for its dialect and capabilities. */
+  /** The SQL driver of a saved connection, for its dialect and capabilities. */
   async driverOf(connectionId: string): Promise<Driver> {
-    return await this.drivers.get(this.configOf(connectionId).driver);
+    const { driver, name } = this.configOf(connectionId);
+    if (driver === 'redis') {
+      throw new DbError('unsupported', `"${name}" is a Redis connection: it has no SQL dialect`);
+    }
+    return await this.drivers.get(driver);
   }
 
   dispose(): void {
@@ -306,59 +416,126 @@ export class ConnectionManager implements Disposable {
     }
   }
 
-  private async open(owner: string, target: SessionTarget): Promise<Session> {
+  private async open(owner: string, target: SessionTarget): Promise<Holder> {
     const { connectionId } = target;
     const config = this.configOf(connectionId);
     this.setState(connectionId, { status: 'connecting' });
     try {
-      const driver = await this.drivers.get(config.driver);
-      const password = await this.store.getPassword(connectionId);
-      const lease = await this.leaseTunnel(config);
-      let opened: Session;
-      try {
-        opened = await driver.openSession(resolve(config, target, password, lease));
-      } catch (error) {
-        await lease?.release();
-        // "Connection reset" says little; the SSH server's reason says what is wrong.
-        throw lease?.forwardError() ?? error;
-      }
-      try {
-        await setUpSession(opened, config, driver.dialect);
-      } catch (error) {
-        await opened.close().catch(() => undefined);
-        await lease?.release();
-        throw error;
-      }
-      if (this.disposed) {
-        await opened.close().catch(() => undefined);
-        await lease?.release();
-        throw new DbError('internal', 'The connection manager is disposed');
-      }
-      const session = new ManagedSession(opened, {
-        onLinkLost: (error) => {
-          this.forget(owner, error);
-        },
-        onClosed: async () => {
-          await lease?.release();
-        },
-        onTransaction: (state) => {
-          this.notifyTransaction({ owner, connectionId, state });
-        },
-        keepAliveMs: optionSupport(config.driver).keepAlive
-          ? (config.options?.keepAlive ?? 0) * 1000
-          : 0,
-      });
-      session.scheduleKeepAlive();
-      this.holders.set(owner, { target, session });
+      const holder =
+        config.driver === 'redis'
+          ? await this.openRedis(owner, target, config)
+          : await this.openSql(owner, target, config, config.driver);
+      this.holders.set(owner, holder);
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
-      return session;
+      return holder;
     } catch (error) {
       const dbError = toDbError(error, 'connection-failed');
       this.logger.error(`Could not connect "${config.name}"`, dbError);
       this.setState(connectionId, { status: 'error', error: errorMessage(dbError) });
       throw dbError;
     }
+  }
+
+  private async openSql(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+    driverId: SqlDriverId,
+  ): Promise<Holder> {
+    const { connectionId } = target;
+    const driver = await this.drivers.get(driverId);
+    const password = await this.store.getPassword(connectionId);
+    const lease = await this.leaseTunnel(config);
+    let opened: Session;
+    try {
+      opened = await driver.openSession(resolve(config, target, password, lease));
+    } catch (error) {
+      await lease?.release();
+      // "Connection reset" says little; the SSH server's reason says what is wrong.
+      throw lease?.forwardError() ?? error;
+    }
+    try {
+      await setUpSession(opened, config, driver.dialect);
+    } catch (error) {
+      await opened.close().catch(() => undefined);
+      await lease?.release();
+      throw error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+      onTransaction: (state) => {
+        this.notifyTransaction({ owner, connectionId, state });
+      },
+      keepAliveMs: keepAliveMsOf(config),
+    });
+    session.scheduleKeepAlive();
+    return { family: 'sql', target, session };
+  }
+
+  private async openRedis(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+  ): Promise<Holder> {
+    const driver = await this.redisDriver();
+    const password = await this.store.getPassword(config.id);
+    const sentinelPassword = await this.store.getSentinelPassword(config.id);
+    const lease = await this.leaseTunnel(config);
+    let opened: RedisSession;
+    try {
+      opened = await driver.openSession({
+        ...resolve(config, target, password, lease),
+        ...(sentinelPassword === undefined || sentinelPassword === '' ? {} : { sentinelPassword }),
+      });
+    } catch (error) {
+      await lease?.release();
+      throw lease?.forwardError() ?? error;
+    }
+    try {
+      await setUpRedisSession(opened, config);
+    } catch (error) {
+      await opened.close().catch(() => undefined);
+      await lease?.release();
+      throw error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedRedisSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+      keepAliveMs: keepAliveMsOf(config),
+    });
+    session.scheduleKeepAlive();
+    return { family: 'redis', target, session };
+  }
+
+  /** A connect that finished after dispose() must not leave a live link behind. */
+  private async closeIfDisposed(
+    opened: { close(): Promise<void> },
+    lease: TunnelLease | undefined,
+  ): Promise<void> {
+    if (this.disposed) {
+      await opened.close().catch(() => undefined);
+      await lease?.release();
+      throw new DbError('internal', 'The connection manager is disposed');
+    }
+  }
+
+  private async redisDriver(): Promise<RedisDriver> {
+    if (this.drivers.getRedis === undefined) {
+      throw new DbError('unsupported', 'Redis is not available');
+    }
+    return await this.drivers.getRedis();
   }
 
   /**
@@ -375,7 +552,7 @@ export class ConnectionManager implements Disposable {
     const { connectionId } = held.target;
     this.logger.warn(`The connection of "${owner}" was lost`, error);
     // The driver still remembers the last state it saw; the server rolled it back.
-    this.endTransaction(owner, connectionId, held.session.transactionState?.(), 'lost');
+    this.endTransaction(owner, connectionId, transactionOf(held), 'lost');
     held.session.close().catch(() => undefined);
     if (!this.connectedIds().includes(connectionId)) {
       this.setState(connectionId, { status: 'error', error: errorMessage(error) });
@@ -449,6 +626,21 @@ export class ConnectionManager implements Disposable {
       }
     }
   }
+}
+
+/** What the driver last said about the transaction; Redis has none to report. */
+function transactionOf(held: Holder | undefined): TransactionState | undefined {
+  return held?.family === 'sql' ? held.session.transactionState?.() : undefined;
+}
+
+function keepAliveMsOf(config: ConnectionConfig): number {
+  return optionSupport(config.driver).keepAlive ? (config.options?.keepAlive ?? 0) * 1000 : 0;
+}
+
+/** The database a Redis connection opens: the number it names, or 0. */
+export function redisDatabaseOf(config: Pick<ConnectionInput, 'database'>): string {
+  const database = (config.database ?? '').trim();
+  return database === '' ? '0' : String(Number(database));
 }
 
 function sameTarget(a: SessionTarget, b: SessionTarget): boolean {

@@ -380,5 +380,7 @@
   "What should be copied?": "Что копировать?",
   "When the target already has a table of that name": "Если в целевой базе уже есть таблица с таким именем",
   "into tables that are already there": "в уже существующие таблицы",
-  "into the columns both tables have": "в колонки, которые есть в обеих таблицах"
+  "into the columns both tables have": "в колонки, которые есть в обеих таблицах",
+  "1 key": "1 ключ",
+  "{0} keys": "ключей: {0}"
 }

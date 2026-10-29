@@ -8,6 +8,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { ObjectRef } from '../../core/model/objects';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
+import { isSqlDriver } from '../../shared/connection';
 import {
   type IndexedObject,
   indexConnection,
@@ -64,7 +65,10 @@ export function showObjectSearch(deps: ObjectSearchDeps): void {
     for (const [connectionId, message] of problems) {
       items.push({ label: `$(error) ${nameOf(connectionId)}`, detail: message, alwaysShow: true });
     }
-    const others = deps.store.list().filter((config) => !searched.has(config.id));
+    // Redis has keys, not tables: the object search is for SQL connections (D81).
+    const others = deps.store
+      .list()
+      .filter((config) => isSqlDriver(config.driver) && !searched.has(config.id));
     if (others.length > 0) {
       items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
       for (const config of others) {
@@ -151,6 +155,9 @@ export function showObjectSearch(deps: ObjectSearchDeps): void {
   render();
   picker.show();
   for (const connectionId of deps.manager.connectedIds()) {
-    void search(connectionId);
+    const driver = deps.store.get(connectionId)?.driver;
+    if (driver !== undefined && isSqlDriver(driver)) {
+      void search(connectionId);
+    }
   }
 }

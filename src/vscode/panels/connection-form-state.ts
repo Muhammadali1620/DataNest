@@ -68,6 +68,27 @@ export function toPasswordChange(draft: ConnectionDraft): PasswordChange {
   return toChange(draft.password);
 }
 
+/** The form's choice for the Sentinel password; a form that says nothing keeps it. */
+export function toSentinelChange(draft: ConnectionDraft): PasswordChange {
+  return draft.sentinelPassword === undefined ? { kind: 'keep' } : toChange(draft.sentinelPassword);
+}
+
+/** The Sentinel password "Test" should use: what the form typed, else what is stored. */
+export function testSentinelPassword(
+  draft: ConnectionDraft,
+  stored: string | undefined,
+): string | undefined {
+  const change = toSentinelChange(draft);
+  switch (change.kind) {
+    case 'set':
+      return change.value === '' ? undefined : change.value;
+    case 'clear':
+      return undefined;
+    case 'keep':
+      return stored;
+  }
+}
+
 /** The form's choices for SSH secrets, by hop id, as the store expects them. */
 export function toSshChanges(draft: ConnectionDraft): SshSecretChanges {
   const changes: Record<string, { password: PasswordChange; passphrase: PasswordChange }> = {};

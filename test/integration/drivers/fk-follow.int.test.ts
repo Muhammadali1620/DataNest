@@ -20,7 +20,7 @@ import { QueryRunner } from '../../../src/services/query-runner';
 import { ResultStore } from '../../../src/services/result-store';
 import { ResultLinks } from '../../../src/services/result-links';
 import { TableViewer } from '../../../src/services/table-view';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';
@@ -106,7 +106,7 @@ describe('foreign key links', () => {
     let runner: QueryRunner;
     let links: ResultLinks;
     let viewer: TableViewer;
-    let drivers: Record<DriverId, Driver>;
+    let drivers: Record<SqlDriverId, Driver>;
     let connection: { connectionId: string };
 
     beforeAll(async () => {

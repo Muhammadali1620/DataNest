@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DbError,
   describeError,
@@ -64,6 +64,27 @@ describe('isDbError', () => {
     expect(isDbError(new Error('x'))).toBe(false);
     expect(isDbError({ code: 'internal', message: 'x' })).toBe(false);
     expect(isDbError(null)).toBe(false);
+  });
+
+  it('recognizes a DbError of another copy of the module, as a driver bundle throws it', async () => {
+    vi.resetModules();
+    const other = await import('../../../src/core/errors');
+    expect(other.DbError).not.toBe(DbError);
+    const foreign = new other.DbError('connection-failed', 'gone', { position: 3 });
+
+    expect(foreign instanceof DbError).toBe(true);
+    expect(isDbError(foreign)).toBe(true);
+    // The code and fields survive instead of becoming a generic `internal` error.
+    expect(toDbError(foreign)).toBe(foreign);
+    expect(toDbError(foreign).code).toBe('connection-failed');
+    expect(describeError(foreign)).toContain('DbError [connection-failed]: gone');
+    expect(new DbError('internal', 'x') instanceof other.DbError).toBe(true);
+  });
+
+  it('is not fooled by objects that only look like one', () => {
+    const fake = Object.assign(new Error('x'), { name: 'DbError', code: 'cancelled' });
+    expect(isDbError(fake)).toBe(false);
+    expect(toDbError(fake).code).toBe('internal');
   });
 });
 

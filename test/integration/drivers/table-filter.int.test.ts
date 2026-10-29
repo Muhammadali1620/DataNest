@@ -20,7 +20,7 @@ import { QueryRunner } from '../../../src/services/query-runner';
 import { ResultStore } from '../../../src/services/result-store';
 import { TableViewer } from '../../../src/services/table-view';
 import { cellText } from '../../../src/shared/cell-text';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
 import type { TableFilter } from '../../../src/shared/table-filter';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
@@ -107,7 +107,7 @@ describe('table view filter and sort', () => {
     let runner: QueryRunner;
     let viewer: TableViewer;
     let pageSize = 100;
-    let drivers: Record<DriverId, Driver>;
+    let drivers: Record<SqlDriverId, Driver>;
     let connection: { connectionId: string };
 
     beforeAll(async () => {
@@ -150,7 +150,7 @@ describe('table view filter and sort', () => {
       connection = { connectionId: (await store.add(target.input(), target.password)).id };
       await sql(target.drop);
       await sql(target.create);
-      const literal = drivers[target.driver].dialect.literal('back\\slash');
+      const literal = drivers[target.driver as SqlDriverId].dialect.literal('back\\slash');
       await sql(
         `INSERT INTO filter_people (name, age) VALUES ('alice', 30), ('bob', NULL), ('carol', 41), ('50%_off', 5), (${literal}, 7), ('Ünï', 9)`,
       );

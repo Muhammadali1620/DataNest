@@ -324,3 +324,63 @@ services:
           'CMD-SHELL',
           '/home/yugabyte/bin/ysqlsh -h "$(hostname)" -U yugabyte -d datanest_test -tAc "SELECT count(*) FROM big_table" | grep -qx 10000',
         ]
+
+  # Redis (V7.1), group `redis`: a server with ACL users and TLS on 7380, a master watched by
+  # a Sentinel, and a cluster of three masters. Sentinel and cluster nodes listen on the
+  # same port inside and outside, so the addresses they hand out work from the host.
+  redis:
+    image: redis:7.4.6-alpine
+    container_name: datanest-redis
+    profiles: [redis]
+    entrypoint: ['/bin/sh', '/datanest/standalone.sh']
+    ports:
+      - 127.0.0.1:7379:6379
+      - 127.0.0.1:7380:6380
+    volumes:
+      - ./redis:/datanest:ro
+      - ./seed/redis:/docker-entrypoint-initdb.d:ro
+      - ./tls:/etc/datanest-tls:ro
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli --user datanest --pass datanest --no-auth-warning GET seed:done | grep -qx 1',
+        ]
+
+  redis-sentinel:
+    image: redis:7.4.6-alpine
+    container_name: datanest-redis-sentinel
+    profiles: [redis]
+    entrypoint: ['/bin/sh', '/datanest/sentinel.sh']
+    ports:
+      - 127.0.0.1:7381:7381
+      - 127.0.0.1:7382:7382
+    volumes:
+      - ./redis:/datanest:ro
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli -p 7382 -a sentinel --no-auth-warning SENTINEL get-master-addr-by-name datanest | grep -qx 7381',
+        ]
+
+  redis-cluster:
+    image: redis:7.4.6-alpine
+    container_name: datanest-redis-cluster
+    profiles: [redis]
+    entrypoint: ['/bin/sh', '/datanest/cluster.sh']
+    ports:
+      - 127.0.0.1:7391:7391
+      - 127.0.0.1:7392:7392
+      - 127.0.0.1:7393:7393
+    volumes:
+      - ./redis:/datanest:ro
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli -c -p 7391 -a datanest --no-auth-warning GET cluster:seed | grep -qx done',
+        ]

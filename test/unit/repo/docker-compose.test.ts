@@ -53,6 +53,9 @@ describe('docker/compose.yml (D17)', () => {
       'mysql',
       'oracle',
       'postgres',
+      'redis',
+      'redis-cluster',
+      'redis-sentinel',
       'ssh',
       'ssh-inner',
       'tidb',
@@ -75,8 +78,16 @@ describe('docker/compose.yml (D17)', () => {
   });
 
   it.each(all)('publishes %s only on 127.0.0.1 within ports 7000-7999', (id, service) => {
-    // ClickHouse answers HTTP and HTTPS on ports of their own.
-    expect(service.ports?.length ?? 0).toBe(id === 'ssh-inner' ? 0 : id === 'clickhouse' ? 2 : 1);
+    // ClickHouse answers HTTP and HTTPS on ports of their own, Redis plain and TLS; the
+    // Sentinel container has its master and Sentinel, the cluster its three masters.
+    const expected: Readonly<Record<string, number>> = {
+      'ssh-inner': 0,
+      clickhouse: 2,
+      redis: 2,
+      'redis-sentinel': 2,
+      'redis-cluster': 3,
+    };
+    expect(service.ports?.length ?? 0).toBe(expected[id] ?? 1);
     for (const mapping of service.ports ?? []) {
       const { host, hostPort } = parsePort(mapping);
       expect(host).toBe('127.0.0.1');

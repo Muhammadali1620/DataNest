@@ -73,6 +73,7 @@ export function dumpStartOf(
     case 'object':
     case 'index':
     case 'foreignKey':
+    case 'redisDatabase':
     case 'message':
       return undefined;
   }

@@ -79,8 +79,8 @@
           "maxLength": 200
         },
         "driver": {
-          "enum": ["mysql", "postgres", "sqlite", "mssql", "clickhouse", "oracle"],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server."
+          "enum": ["mysql", "postgres", "sqlite", "mssql", "clickhouse", "oracle", "redis"],
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, not SQL."
         },
         "host": {
           "type": "string"
@@ -94,7 +94,8 @@
           "type": "string"
         },
         "database": {
-          "type": "string"
+          "type": "string",
+          "description": "Database name; for redis the number of the database, 0 when left out."
         },
         "file": {
           "type": "string",
@@ -205,12 +206,12 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 3600,
-              "description": "Seconds of quiet after which an idle session sends SELECT 1; 0 or left out: never."
+              "description": "Seconds of quiet after which an idle session sends SELECT 1 (PING for redis); 0 or left out: never."
             },
             "initSql": {
               "type": "string",
               "maxLength": 20000,
-              "description": "Statements every new session runs first, e.g. SET search_path = app."
+              "description": "Statements every new session runs first, e.g. SET search_path = app. For redis: commands, one per line, e.g. CLIENT SETNAME app."
             },
             "timeZone": {
               "type": "string",
@@ -248,6 +249,46 @@
                 "maxLength": 200
               },
               "description": "Schemas of every database (PostgreSQL); left out: all."
+            }
+          }
+        },
+        "redis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "description": "How a redis connection finds its server; left out: one server at host:port.",
+          "properties": {
+            "mode": {
+              "enum": ["standalone", "sentinel", "cluster"],
+              "description": "sentinel: host:port is a Sentinel (port 26379 when left out); cluster: host:port is one node of the cluster."
+            },
+            "masterName": {
+              "type": "string",
+              "description": "The name of the master the Sentinels watch, for sentinel."
+            },
+            "nodes": {
+              "type": "array",
+              "maxItems": 20,
+              "description": "More Sentinels or cluster nodes, tried when the first does not answer.",
+              "items": {
+                "type": "object",
+                "required": ["host"],
+                "additionalProperties": false,
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  }
+                }
+              }
+            },
+            "sentinelUser": {
+              "type": "string",
+              "description": "The ACL user of the Sentinels, when they ask for one. Their password is never kept in this file."
             }
           }
         }

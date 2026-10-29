@@ -2,7 +2,7 @@
 // Shared by both sides (D27), so the page and the host check a design by the same
 // rules and never disagree about what can be saved.
 
-import type { DriverId } from './connection';
+import { type DriverId, isSqlDriver, type SqlDriverId } from './connection';
 
 export const DESIGN_LIMITS = {
   name: 256,
@@ -203,7 +203,7 @@ export type DesignProblem =
       readonly reason: 'type' | 'key' | 'several' | 'default';
     };
 
-const INTEGER_TYPES: Readonly<Record<DriverId, ReadonlySet<string>>> = {
+const INTEGER_TYPES: Readonly<Record<SqlDriverId, ReadonlySet<string>>> = {
   mysql: new Set([
     'tinyint',
     'smallint',
@@ -333,7 +333,7 @@ function autoIncrementProblems(design: TableDesign, driver: DriverId): DesignPro
     const type = column.type.trim().toLowerCase().replace(/\s+/g, ' ');
     if (driver !== 'postgres' && index > 0) {
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'several' });
-    } else if (!INTEGER_TYPES[driver].has(type)) {
+    } else if (!isSqlDriver(driver) || !INTEGER_TYPES[driver].has(type)) {
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'type' });
     } else if (
       (driver === 'mysql' && !column.primaryKey) ||

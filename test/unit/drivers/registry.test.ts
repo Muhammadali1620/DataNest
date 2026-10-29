@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DriverId } from '../../../src/shared/connection';
+import type { DriverId, SqlDriverId } from '../../../src/shared/connection';
 import type { Driver, DriverModule } from '../../../src/drivers/driver';
+import type { RedisDriver, RedisDriverModule } from '../../../src/drivers/redis-driver';
 import { DriverRegistry } from '../../../src/drivers/registry';
 import { fakeDialect } from '../../helpers/fake-driver';
 import { RecordingLogger } from '../../helpers/fakes';
@@ -50,7 +51,7 @@ function fakeDriver(id: DriverId): Driver {
   };
 }
 
-function registryWith(load: (id: DriverId) => Promise<DriverModule>) {
+function registryWith(load: (id: DriverId) => Promise<DriverModule | RedisDriverModule>) {
   return new DriverRegistry({ loader: load, logger: new RecordingLogger() });
 }
 
@@ -82,7 +83,7 @@ describe('DriverRegistry', () => {
   it('rejects unknown driver ids without calling the loader', async () => {
     const loader = vi.fn();
     const registry = registryWith(loader as never);
-    await expect(registry.get('db2' as DriverId)).rejects.toMatchObject({
+    await expect(registry.get('db2' as SqlDriverId)).rejects.toMatchObject({
       name: 'DbError',
       code: 'unsupported',
     });
@@ -114,5 +115,49 @@ describe('DriverRegistry', () => {
   it('rejects a module whose driver reports a different id', async () => {
     const registry = registryWith(() => Promise.resolve({ driver: fakeDriver('postgres') }));
     await expect(registry.get('mysql')).rejects.toThrow('unexpected module shape');
+  });
+
+  describe('Redis (V7.1)', () => {
+    const redis: RedisDriver = { id: 'redis', openSession: () => Promise.reject(new Error('no')) };
+
+    it('loads the Redis bundle once', async () => {
+      const loader = vi.fn((id: DriverId) =>
+        Promise.resolve(id === 'redis' ? { driver: redis } : { driver: fakeDriver(id) }),
+      );
+      const registry = registryWith(loader);
+      const [a, b] = await Promise.all([registry.getRedis(), registry.getRedis()]);
+      expect(a).toBe(redis);
+      expect(b).toBe(redis);
+      expect(loader).toHaveBeenCalledTimes(1);
+      expect(loader).toHaveBeenCalledWith('redis');
+    });
+
+    it('never hands Redis out as a SQL driver', async () => {
+      const loader = vi.fn(() => Promise.resolve({ driver: redis }));
+      const registry = registryWith(loader);
+      await expect(registry.get('redis' as SqlDriverId)).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+      expect(loader).not.toHaveBeenCalled();
+    });
+
+    it('rejects a Redis bundle with a wrong shape, or a SQL driver in its place', async () => {
+      await expect(
+        registryWith(() => Promise.resolve({ driver: { id: 'redis' } } as never)).getRedis(),
+      ).rejects.toThrow('unexpected module shape');
+      await expect(
+        registryWith(() =>
+          Promise.resolve({ driver: { ...fakeDriver('mysql'), id: 'redis' } } as never),
+        ).getRedis(),
+      ).rejects.toThrow('unexpected module shape');
+    });
+
+    it('rejects a SQL bundle that carries no dialect', async () => {
+      await expect(
+        registryWith(() =>
+          Promise.resolve({ driver: { id: 'mysql', openSession: () => undefined } } as never),
+        ).get('mysql'),
+      ).rejects.toThrow('unexpected module shape');
+    });
   });
 });

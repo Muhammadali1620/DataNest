@@ -38,6 +38,8 @@ const draftSchema = object({
   ssh: optional(array(sshSecretChangeSchema, { maxLength: 20 })),
   /** A new connection goes to this project's file instead of the user's list (V4.7). */
   project: optional(projectKeySchema),
+  /** The password of a Redis connection's Sentinels (V7.1); left out keeps the stored one. */
+  sentinelPassword: optional(passwordChangeSchema),
 });
 
 const projectSchema = object({ key: projectKeySchema, name: string({ maxLength: 500 }) });
@@ -54,6 +56,8 @@ const formStateSchema = object({
    * host keeps it and saves it unless the user types another. The value never travels.
    */
   importedPassword: optional(boolean()),
+  /** True when a Sentinel password is stored for this Redis connection (V7.1). */
+  hasStoredSentinelPassword: optional(boolean()),
   /** Which SSH hops have a stored password or passphrase; values never travel. */
   storedSsh: array(
     object({

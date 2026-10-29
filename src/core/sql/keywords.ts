@@ -2,7 +2,7 @@
 // in core/ so both the driver dialects and the editor can use them: loading a driver
 // bundle just to type would defeat lazy loading (ARCHITECTURE.md §7).
 
-import type { DriverId } from '../../shared/connection';
+import { type DriverId, isSqlDriver, type SqlDriverId } from '../../shared/connection';
 
 const MYSQL_KEYWORDS = [
   'SELECT',
@@ -764,7 +764,7 @@ const ORACLE_KEYWORDS = [
   'EXPLAIN PLAN FOR',
 ] as const;
 
-export const KEYWORDS: Readonly<Record<DriverId, readonly string[]>> = {
+export const KEYWORDS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   mysql: MYSQL_KEYWORDS,
   postgres: POSTGRES_KEYWORDS,
   sqlite: SQLITE_KEYWORDS,
@@ -775,7 +775,7 @@ export const KEYWORDS: Readonly<Record<DriverId, readonly string[]>> = {
 
 /** Keywords of a driver, or the union when the connection is unknown. */
 export function keywordsOf(driver?: DriverId): readonly string[] {
-  if (driver !== undefined) {
+  if (driver !== undefined && isSqlDriver(driver)) {
     return KEYWORDS[driver];
   }
   return [

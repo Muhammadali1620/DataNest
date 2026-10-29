@@ -17,6 +17,7 @@ import {
   type ConnectionColor,
   type ConnectionOptions,
   type DriverId,
+  type RedisSettings,
   filterSupport,
   optionSupport,
   type VisibilityFilter,
@@ -54,6 +55,11 @@ export function sshSecretKey(
   kind: keyof SshHopSecrets,
 ): string {
   return `connection.${connectionId}.ssh.${hopId}.${kind}`;
+}
+
+/** Key of the password of a Redis connection's Sentinels (V7.1). */
+export function sentinelSecretKey(connectionId: string): string {
+  return `connection.${connectionId}.sentinel.password`;
 }
 
 const SSH_SECRET_KINDS = ['password', 'passphrase'] as const satisfies (keyof SshHopSecrets)[];
@@ -112,6 +118,8 @@ export interface ConnectionStoreDeps {
 export interface AddOptions {
   /** Key of the workspace folder whose project file gets the connection. */
   readonly project?: string;
+  /** The password of the Sentinels of a Redis connection, when they have one. */
+  readonly sentinelPassword?: string;
 }
 
 /**
@@ -305,6 +313,9 @@ export class ConnectionStore {
     if (password !== undefined && password !== '') {
       await this.secrets.store(passwordSecretKey(config.id), password);
     }
+    if (usesSentinels(config) && (options.sentinelPassword ?? '') !== '') {
+      await this.secrets.store(sentinelSecretKey(config.id), options.sentinelPassword ?? '');
+    }
     for (const hop of sshHopsOf(config)) {
       for (const kind of SSH_SECRET_KINDS) {
         const value = ssh[hop.id]?.[kind];
@@ -322,6 +333,7 @@ export class ConnectionStore {
     input: ConnectionInput,
     password: PasswordChange = { kind: 'keep' },
     ssh: SshSecretChanges = {},
+    sentinelPassword: PasswordChange = { kind: 'keep' },
   ): Promise<ConnectionConfig> {
     const index = this.items.findIndex((item) => item.id === id);
     const before = this.items[index] ?? this.projects?.get(id);
@@ -338,6 +350,11 @@ export class ConnectionStore {
       await this.save(items);
     }
     await this.applySecret(passwordSecretKey(id), password);
+    // A connection that no longer asks Sentinels has no use for their password.
+    await this.applySecret(
+      sentinelSecretKey(id),
+      usesSentinels(config) ? sentinelPassword : { kind: 'clear' },
+    );
     const kept = new Set(sshHopsOf(config).map((hop) => hop.id));
     for (const hop of sshHopsOf(config)) {
       for (const kind of SSH_SECRET_KINDS) {
@@ -414,6 +431,10 @@ export class ConnectionStore {
     if (password !== undefined) {
       await this.secrets.store(passwordSecretKey(targetId), password);
     }
+    const sentinel = await this.secrets.get(sentinelSecretKey(source.id));
+    if (sentinel !== undefined) {
+      await this.secrets.store(sentinelSecretKey(targetId), sentinel);
+    }
     for (const hop of sshHopsOf(source)) {
       for (const kind of SSH_SECRET_KINDS) {
         const value = await this.secrets.get(sshSecretKey(source.id, hop.id, kind));
@@ -426,6 +447,7 @@ export class ConnectionStore {
 
   private async deleteSecrets(config: ConnectionConfig): Promise<void> {
     await this.secrets.delete(passwordSecretKey(config.id));
+    await this.secrets.delete(sentinelSecretKey(config.id));
     for (const hop of sshHopsOf(config)) {
       await this.deleteHopSecrets(config.id, hop);
     }
@@ -453,6 +475,11 @@ export class ConnectionStore {
 
   async getPassword(id: string): Promise<string | undefined> {
     return await this.secrets.get(passwordSecretKey(id));
+  }
+
+  /** The password of a Redis connection's Sentinels, if one is stored. */
+  async getSentinelPassword(id: string): Promise<string | undefined> {
+    return await this.secrets.get(sentinelSecretKey(id));
   }
 
   /** The stored password and passphrase of every SSH hop of a connection, by hop id. */
@@ -583,6 +610,7 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     readOnly: input.readOnly === true ? true : undefined,
     options: normalizeOptions(input.options, input.driver),
     filter: normalizeFilter(input.filter, input.driver),
+    redis: input.driver === 'redis' ? normalizeRedis(input.redis) : undefined,
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
@@ -647,6 +675,39 @@ function normalizeOptions(
     ...(charset === undefined ? {} : { charset }),
   };
   return Object.keys(kept).length === 0 ? undefined : kept;
+}
+
+/**
+ * Standalone is the default and is not stored; the master name belongs to Sentinel
+ * mode and the Sentinel user too, and blank node rows are dropped.
+ */
+function normalizeRedis(redis: RedisSettings | undefined): RedisSettings | undefined {
+  if (redis === undefined || redis.mode === 'standalone') {
+    return undefined;
+  }
+  const trim = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+  const nodes = (redis.nodes ?? [])
+    .filter((node) => node.host.trim() !== '' || node.port !== undefined)
+    .map((node) => ({
+      host: node.host.trim(),
+      ...(node.port === undefined ? {} : { port: node.port }),
+    }));
+  const masterName = redis.mode === 'sentinel' ? trim(redis.masterName) : undefined;
+  const sentinelUser = redis.mode === 'sentinel' ? trim(redis.sentinelUser) : undefined;
+  return {
+    mode: redis.mode,
+    ...(masterName === undefined ? {} : { masterName }),
+    ...(nodes.length === 0 ? {} : { nodes }),
+    ...(sentinelUser === undefined ? {} : { sentinelUser }),
+  };
+}
+
+/** True for a Redis connection that finds its master through Sentinels. */
+function usesSentinels(config: ConnectionInput): boolean {
+  return config.driver === 'redis' && config.redis?.mode === 'sentinel';
 }
 
 function normalizeSsl(ssl: SslSettings): SslSettings {

@@ -39,7 +39,15 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   clickhouse: 'clickhouse',
   ch: 'clickhouse',
   oracle: 'oracle',
+  // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
+  redis: 'redis',
+  rediss: 'redis',
+  valkey: 'redis',
+  valkeys: 'redis',
 };
+
+/** Schemes that mean TLS by themselves, with the certificate checked. */
+const TLS_SCHEMES = new Set(['rediss', 'valkeys']);
 
 /** The driver a URL is for, or undefined when DataNest does not know the scheme. */
 export function urlDriver(text: string): DriverId | undefined {
@@ -135,7 +143,23 @@ export function suggestedName(input: ConnectionInput): string {
     const file = input.file ?? '';
     return file.split(/[\\/]/).pop() ?? file;
   }
+  // A Redis database is a number, which says less than the host.
+  if (input.driver === 'redis') {
+    return input.host ?? input.driver;
+  }
   return input.database ?? input.host ?? input.driver;
+}
+
+/**
+ * TLS of a Redis URL: `rediss://` checks the certificate, unless the URL turns that off
+ * the way Python clients do (`ssl_cert_reqs=none`).
+ */
+function redisSsl(scheme: string, params: URLSearchParams, ssl: SslSettings | undefined) {
+  if (ssl !== undefined || !TLS_SCHEMES.has(scheme)) {
+    return ssl;
+  }
+  const reqs = params.get('ssl_cert_reqs')?.toLowerCase();
+  return { mode: reqs === 'none' || reqs === 'cert_none' ? 'require' : 'verify-full' } as const;
 }
 
 const SQL_SERVER_HEAD =
@@ -299,8 +323,10 @@ export function parseConnectionUrl(text: string): UrlResult {
   const database =
     nonEmpty(decode(url.pathname.replace(/^\//, '').split('/')[0] ?? '')) ??
     nonEmpty(params.get('dbname')) ??
-    nonEmpty(params.get('database'));
-  const ssl = sslFrom(params);
+    nonEmpty(params.get('database')) ??
+    (driver === 'redis' ? nonEmpty(params.get('db')) : undefined);
+  const scheme = /^([a-z][a-z0-9.-]*):/i.exec(plain)?.[1]?.toLowerCase() ?? '';
+  const ssl = driver === 'redis' ? redisSsl(scheme, params, sslFrom(params)) : sslFrom(params);
   const input: ConnectionInput = {
     name: '',
     driver,

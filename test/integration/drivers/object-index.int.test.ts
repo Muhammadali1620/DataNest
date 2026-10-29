@@ -17,14 +17,14 @@ import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import { MetadataCache } from '../../../src/services/metadata-cache';
 import { type IndexedObject, indexConnection } from '../../../src/services/object-index';
-import type { ConnectionInput, DriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, SqlDriverId } from '../../../src/shared/connection';
 import { testDatabase } from '../../helpers/databases';
 import { runAll } from '../../helpers/driver-run';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';
 
 let worker: BuiltWorker;
-let drivers: Record<DriverId, Driver>;
+let drivers: Record<SqlDriverId, Driver>;
 
 beforeAll(async () => {
   worker = await buildSqliteWorker();

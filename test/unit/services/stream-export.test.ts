@@ -174,7 +174,8 @@ describe('StreamExporter', () => {
     };
     await expect(harness.export('xlsx')).rejects.toThrow(/at most/u);
     expect(harness.released).toHaveLength(1);
-  });
+    // A million rows through the XLSX writer: over 5 s on CI Windows with coverage.
+  }, 60_000);
 
   it('stops when cancelled and when a statement returns no rows', async () => {
     const harness = new Harness(COLUMNS, ROWS);

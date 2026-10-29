@@ -17,6 +17,7 @@ import {
   type ConnectionColor,
   type ConnectionOptions,
   type DriverId,
+  type MongoSettings,
   type RedisSettings,
   filterSupport,
   optionSupport,
@@ -611,6 +612,7 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     options: normalizeOptions(input.options, input.driver),
     filter: normalizeFilter(input.filter, input.driver),
     redis: input.driver === 'redis' ? normalizeRedis(input.redis) : undefined,
+    mongo: input.driver === 'mongodb' ? normalizeMongo(input.mongo) : undefined,
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
@@ -703,6 +705,41 @@ function normalizeRedis(redis: RedisSettings | undefined): RedisSettings | undef
     ...(nodes.length === 0 ? {} : { nodes }),
     ...(sentinelUser === undefined ? {} : { sentinelUser }),
   };
+}
+
+/**
+ * A direct connection with nothing else set is the default and is not stored; the set
+ * name and the other members belong to replica set mode, and blank rows are dropped.
+ */
+function normalizeMongo(mongo: MongoSettings | undefined): MongoSettings | undefined {
+  if (mongo === undefined) {
+    return undefined;
+  }
+  const trim = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+  const replicaSet = mongo.mode === 'replicaSet' ? trim(mongo.replicaSet) : undefined;
+  const nodes =
+    mongo.mode === 'replicaSet'
+      ? (mongo.nodes ?? [])
+          .filter((node) => node.host.trim() !== '' || node.port !== undefined)
+          .map((node) => ({
+            host: node.host.trim(),
+            ...(node.port === undefined ? {} : { port: node.port }),
+          }))
+      : [];
+  const authSource = trim(mongo.authSource);
+  const normalized: MongoSettings = {
+    mode: mongo.mode,
+    ...(replicaSet === undefined ? {} : { replicaSet }),
+    ...(nodes.length === 0 ? {} : { nodes }),
+    ...(authSource === undefined ? {} : { authSource }),
+    ...(mongo.authMechanism === undefined ? {} : { authMechanism: mongo.authMechanism }),
+  };
+  return Object.keys(normalized).length === 1 && normalized.mode === 'direct'
+    ? undefined
+    : normalized;
 }
 
 /** True for a Redis connection that finds its master through Sentinels. */

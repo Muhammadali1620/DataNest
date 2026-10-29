@@ -8,7 +8,10 @@ import {
   CONNECTION_COLORS,
   DRIVER_IDS,
   FILTER_LIMITS,
+  MAX_MONGO_NODES,
   MAX_REDIS_NODES,
+  MONGO_AUTH_MECHANISMS,
+  MONGO_MODES,
   MAX_SSH_JUMPS,
   OPTION_LIMITS,
   REDIS_MODES,
@@ -19,6 +22,7 @@ import {
   connectionInputShape,
   filterSchema,
   optionsSchema,
+  mongoSchema,
   redisSchema,
   sshHopShape,
 } from '../../../src/shared/connection-schema';
@@ -69,6 +73,7 @@ describe('connections JSON schema', () => {
     // Oracle joined in V6.4, Redis in V7.1: a project file may name them.
     expect(props.driver?.enum).toContain('oracle');
     expect(props.driver?.enum).toContain('redis');
+    expect(props.driver?.enum).toContain('mongodb');
     expect(props.color?.enum).toEqual([...CONNECTION_COLORS]);
     expect(props.ssl?.properties?.mode?.enum).toEqual([...SSL_MODES]);
     expect(hop.properties?.auth?.enum).toEqual([...SSH_AUTH_METHODS]);
@@ -126,5 +131,25 @@ describe('connections JSON schema', () => {
     expect(keys(redis.properties?.nodes?.items?.properties)).toEqual(['host', 'port']);
     expect(redis.additionalProperties).toBe(false);
     expect(redis.required).toEqual(['mode']);
+  });
+});
+
+describe('connections JSON schema: MongoDB (V7.5)', () => {
+  const mongo = props.mongo ?? {};
+
+  it('describes the MongoDB settings as the code reads them', () => {
+    const parsed = mongoSchema.parse({
+      mode: 'replicaSet',
+      replicaSet: 'rs0',
+      nodes: [{ host: 'h', port: 1 }],
+      authSource: 'admin',
+      authMechanism: 'PLAIN',
+    });
+    expect(keys(parsed)).toEqual(keys(mongo.properties));
+    expect(mongo.additionalProperties).toBe(false);
+    expect(mongo.required).toEqual(['mode']);
+    expect(mongo.properties?.mode?.enum).toEqual([...MONGO_MODES]);
+    expect(mongo.properties?.authMechanism?.enum).toEqual([...MONGO_AUTH_MECHANISMS]);
+    expect(mongo.properties?.nodes?.maxItems).toBe(MAX_MONGO_NODES);
   });
 });

@@ -28,8 +28,11 @@ import {
   parseNodes,
   sshAllowed,
   toRedis,
+  toMongo,
+  changeMongoMode,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
+import { parseConnectionUrl } from '../../../../../src/shared/connection-url';
 import { en } from '../../../../../webview/src/l10n/en';
 
 function fields(overrides: Partial<FormFields> = {}): FormFields {
@@ -69,6 +72,11 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     redisNodes: '',
     sentinelUser: '',
     sentinelPassword: emptySecret(),
+    mongoMode: 'direct',
+    replicaSet: '',
+    mongoNodes: '',
+    authSource: '',
+    authMechanism: '',
     ...overrides,
   };
 }
@@ -125,6 +133,11 @@ describe('fieldsFrom', () => {
       redisNodes: '',
       sentinelUser: '',
       sentinelPassword: { value: '', touched: false, erase: false },
+      mongoMode: 'direct',
+      replicaSet: '',
+      mongoNodes: '',
+      authSource: '',
+      authMechanism: '',
     });
   });
 
@@ -990,5 +1003,120 @@ describe('Redis fields (V7.1)', () => {
     const form = redis({ redisMode: 'cluster' });
     applyUrl(form, { input: { name: 'x', driver: 'redis', host: 'h' } });
     expect(form.redisMode).toBe('standalone');
+  });
+});
+
+describe('MongoDB fields (V7.5)', () => {
+  const mongo = (overrides: Partial<FormFields> = {}): FormFields =>
+    fields({ driver: 'mongodb', port: '27017', ...overrides });
+
+  it('reads the settings of a saved connection into the fields', () => {
+    const state = fieldsFrom({
+      input: {
+        name: 'S',
+        driver: 'mongodb',
+        host: 'a',
+        mongo: {
+          mode: 'replicaSet',
+          replicaSet: 'rs0',
+          nodes: [{ host: 'b', port: 27_018 }, { host: '::1' }],
+          authSource: 'admin',
+          authMechanism: 'PLAIN',
+        },
+      },
+      drivers: [],
+      folders: [],
+      projects: [],
+      hasStoredPassword: false,
+      storedSsh: [],
+    } as never);
+    expect(state).toMatchObject({
+      mongoMode: 'replicaSet',
+      replicaSet: 'rs0',
+      mongoNodes: 'b:27018, [::1]',
+      authSource: 'admin',
+      authMechanism: 'PLAIN',
+    });
+  });
+
+  it('sends nothing for a plain direct connection, and only what the mode uses', () => {
+    expect(toMongo(mongo())).toBeUndefined();
+    expect(toMongo(mongo({ replicaSet: 'rs0', mongoNodes: 'b' }))).toBeUndefined();
+    expect(toMongo(mongo({ authSource: ' admin ' }))).toEqual({
+      mode: 'direct',
+      authSource: 'admin',
+    });
+    expect(
+      toMongo(mongo({ mongoMode: 'replicaSet', replicaSet: ' rs0 ', mongoNodes: 'b:27018, c' })),
+    ).toEqual({
+      mode: 'replicaSet',
+      replicaSet: 'rs0',
+      nodes: [{ host: 'b', port: 27_018 }, { host: 'c' }],
+    });
+    expect(toMongo(mongo({ mongoMode: 'srv', authMechanism: 'MONGODB-X509' }))).toEqual({
+      mode: 'srv',
+      authMechanism: 'MONGODB-X509',
+    });
+    expect(toMongo(fields({ mongoMode: 'srv' }))).toBeUndefined();
+    expect(toInput(mongo({ mongoMode: 'srv', port: '' })).mongo).toEqual({ mode: 'srv' });
+  });
+
+  it('clears the port and checks TLS for SRV, and puts the port back after', () => {
+    const state = mongo({ sslMode: 'off' });
+    changeMongoMode(state, 'srv');
+    expect(state).toMatchObject({ mongoMode: 'srv', port: '', sslMode: 'verify-full' });
+    changeMongoMode(state, 'direct');
+    expect(state).toMatchObject({ mongoMode: 'direct', port: '27017', sslMode: 'verify-full' });
+    const typed = mongo({ sslMode: 'require', port: '7017' });
+    changeMongoMode(typed, 'replicaSet');
+    expect(typed).toMatchObject({ port: '7017', sslMode: 'require' });
+  });
+
+  it('allows SSH only to one server', () => {
+    expect(sshAllowed(mongo())).toBe(true);
+    expect(sshAllowed(mongo({ mongoMode: 'replicaSet' }))).toBe(false);
+    expect(sshAllowed(mongo({ mongoMode: 'srv' }))).toBe(false);
+    expect(toInput(mongo({ mongoMode: 'srv', useSsh: true })).ssh).toBeUndefined();
+  });
+
+  it('blocks a member list that cannot be read, and an SRV with a port', () => {
+    expect(problemsOf(mongo({ mongoMode: 'replicaSet', mongoNodes: 'b:x' }))).toContain(
+      'mongo-node-invalid',
+    );
+    expect(problemsOf(mongo({ mongoMode: 'direct', mongoNodes: 'b:x' }))).toEqual([]);
+    expect(problemsOf(mongo({ mongoMode: 'srv' }))).toContain('mongo-srv-port');
+    for (const problem of [
+      'mongo-node-invalid',
+      'mongo-too-many-nodes',
+      'mongo-srv-port',
+      'mongo-name-invalid',
+      'mongo-ssh-topology',
+    ] as const) {
+      expect(en[PROBLEM_MESSAGES[problem]]).toBeTruthy();
+    }
+  });
+
+  it('fills the MongoDB fields from a URL, and resets them for another one', () => {
+    const state = fields();
+    const parsed = parseConnectionUrl('mongodb+srv://u:p@c.x.net/logs?authSource=admin');
+    if (!parsed.ok) {
+      throw new Error('URL');
+    }
+    applyUrl(state, parsed.value);
+    expect(state).toMatchObject({
+      driver: 'mongodb',
+      host: 'c.x.net',
+      port: '',
+      mongoMode: 'srv',
+      authSource: 'admin',
+      sslMode: 'verify-full',
+      password: 'p',
+    });
+    const plain = parseConnectionUrl('postgres://h/db');
+    if (!plain.ok) {
+      throw new Error('URL');
+    }
+    applyUrl(state, plain.value);
+    expect(state).toMatchObject({ driver: 'postgres', mongoMode: 'direct', authSource: '' });
   });
 });

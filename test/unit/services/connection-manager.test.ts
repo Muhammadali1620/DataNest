@@ -10,6 +10,7 @@ import type { HostKeyCheck } from '../../../src/services/tunnels';
 import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
 import { redisDatabaseOf } from '../../../src/services/connection-manager';
 import { bulk, FakeRedisDriver } from '../../helpers/fake-redis';
+import { FakeMongoDriver } from '../../helpers/fake-mongo';
 
 async function drain(events: AsyncIterable<unknown>): Promise<void> {
   for await (const _event of events) {
@@ -826,6 +827,149 @@ describe('ConnectionManager with Redis (V7.1)', () => {
       logger: new RecordingLogger(),
     });
     await expect(plain.acquireRedis('a', { connectionId: cache.id })).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+  });
+});
+
+describe('ConnectionManager with MongoDB (V7.5)', () => {
+  let store: ConnectionStore;
+  let mongo: FakeMongoDriver;
+  let manager: ConnectionManager;
+  let tunnels: FakeTunnels;
+  let shop: ConnectionConfig;
+
+  beforeEach(async () => {
+    const logger = new RecordingLogger();
+    store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    mongo = new FakeMongoDriver();
+    tunnels = new FakeTunnels();
+    manager = new ConnectionManager({
+      store,
+      drivers: Object.assign(new FakeDriverProvider(), {
+        getMongo: () => Promise.resolve(mongo),
+      }),
+      logger,
+      tunnels,
+      checkHostKey: () => Promise.resolve(true),
+    });
+    shop = await store.add(
+      { name: 'Shop', driver: 'mongodb', host: 'h', user: 'app', database: 'shop' },
+      'pw',
+    );
+  });
+
+  it('opens a MongoDB session with the stored password, one per owner', async () => {
+    const session = await manager.acquireMongo('tree:x', { connectionId: shop.id });
+    expect(mongo.configs[0]).toMatchObject({ host: 'h', user: 'app', password: 'pw' });
+    expect(manager.getState(shop.id)).toEqual({ status: 'connected' });
+    expect(manager.mongoSessionOf('tree:x')).toBe(session);
+    expect(manager.redisSessionOf('tree:x')).toBeUndefined();
+    expect(manager.sessionOf('tree:x')).toBeUndefined();
+    expect(await manager.acquireMongo('tree:x', { connectionId: shop.id })).toBe(session);
+    await manager.acquireMongo('page', { connectionId: shop.id });
+    expect(mongo.configs).toHaveLength(2);
+  });
+
+  it('keeps SQL, Redis and MongoDB apart', async () => {
+    const sql = await store.add({ name: 'Db', driver: 'mysql', host: 'h' });
+    const cache = await store.add({ name: 'Cache', driver: 'redis', host: 'h' });
+    await expect(manager.acquire('a', { connectionId: shop.id })).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('MongoDB connection') as unknown,
+    });
+    await expect(manager.acquireMongo('b', { connectionId: sql.id })).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('not a MongoDB connection') as unknown,
+    });
+    await expect(manager.acquireRedis('c', { connectionId: shop.id })).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    await expect(manager.acquireMongo('d', { connectionId: cache.id })).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    await expect(manager.driverOf(shop.id)).rejects.toMatchObject({ code: 'unsupported' });
+    expect(manager.familyOf(shop.id)).toBe('mongodb');
+    expect(mongo.configs).toEqual([]);
+  });
+
+  it('connects the tree with one session for every database', async () => {
+    await manager.connectAny(shop.id);
+    expect(manager.mongoSessionOf(ConnectionManager.treeOwner(shop.id))).toBeDefined();
+  });
+
+  it('drops a session whose link is gone, and opens a new one next time', async () => {
+    const first = await manager.acquireMongo('a', { connectionId: shop.id });
+    await mongo.sessions[0]?.close();
+    await expect(first.listDatabases()).rejects.toMatchObject({ code: 'connection-failed' });
+    expect(manager.mongoSessionOf('a')).toBeUndefined();
+    expect(manager.getState(shop.id).status).toBe('error');
+    const second = await manager.acquireMongo('a', { connectionId: shop.id });
+    expect(second).not.toBe(first);
+  });
+
+  it('closes every MongoDB session on disconnect', async () => {
+    await manager.acquireMongo('a', { connectionId: shop.id });
+    await manager.acquireMongo('b', { connectionId: shop.id });
+    await manager.disconnect(shop.id);
+    expect(mongo.sessions.every((session) => session.closed)).toBe(true);
+    expect(manager.connectedIds()).toEqual([]);
+  });
+
+  it('goes through an SSH tunnel to one server, checking TLS against the real name', async () => {
+    const tunnelled = await store.add({
+      name: 'T',
+      driver: 'mongodb',
+      host: 'db.internal',
+      ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'agent' },
+    });
+    await manager.acquireMongo('a', { connectionId: tunnelled.id });
+    expect(mongo.configs[0]).toMatchObject({
+      host: '127.0.0.1',
+      port: 40_000,
+      tlsServerName: 'db.internal',
+    });
+    await manager.disconnect(tunnelled.id);
+    expect(tunnels.released).toHaveLength(1);
+  });
+
+  it('releases the tunnel and reports the failure when the driver cannot open', async () => {
+    mongo.failure = new DbError('auth-failed', 'Authentication failed.');
+    const tunnelled = await store.add({
+      name: 'T',
+      driver: 'mongodb',
+      host: 'db.internal',
+      ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'agent' },
+    });
+    await expect(manager.acquireMongo('a', { connectionId: tunnelled.id })).rejects.toMatchObject({
+      code: 'auth-failed',
+    });
+    expect(tunnels.released).toHaveLength(1);
+    expect(manager.getState(tunnelled.id)).toMatchObject({ status: 'error' });
+  });
+
+  it('tests settings by opening and closing a throwaway session', async () => {
+    await manager.test({ name: 'p', driver: 'mongodb', host: 'h', user: 'u' }, 'secret');
+    expect(mongo.configs[0]).toMatchObject({ id: 'test', password: 'secret' });
+    expect(mongo.sessions[0]?.closed).toBe(true);
+    expect(manager.connectedIds()).toEqual([]);
+    mongo.failure = new DbError('connection-failed', 'refused');
+    await expect(manager.test({ name: 'p', driver: 'mongodb', host: 'h' })).rejects.toMatchObject({
+      code: 'connection-failed',
+    });
+  });
+
+  it('says MongoDB is not available without the driver', async () => {
+    const plain = new ConnectionManager({
+      store,
+      drivers: new FakeDriverProvider(),
+      logger: new RecordingLogger(),
+    });
+    await expect(plain.acquireMongo('a', { connectionId: shop.id })).rejects.toMatchObject({
       code: 'unsupported',
     });
   });

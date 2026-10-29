@@ -9,6 +9,7 @@ export const DRIVER_IDS = [
   'clickhouse',
   'oracle',
   'redis',
+  'mongodb',
 ] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
@@ -19,16 +20,17 @@ export function isDriverId(value: unknown): value is DriverId {
 
 /**
  * What a database speaks (D81): SQL drivers share the dialect, the result grid and the
- * SQL editor; Redis has commands and keys and a UI of its own. Connections, folders,
- * secrets, SSH and the connection form are the same for both.
+ * SQL editor; Redis has commands and keys, MongoDB collections of documents (D88), each
+ * with a UI of its own. Connections, folders, secrets, SSH and the connection form are
+ * the same for all.
  */
-export type DriverFamily = 'sql' | 'redis';
+export type DriverFamily = 'sql' | 'redis' | 'mongodb';
 
 export function driverFamily(driver: DriverId): DriverFamily {
-  return driver === 'redis' ? 'redis' : 'sql';
+  return driver === 'redis' || driver === 'mongodb' ? driver : 'sql';
 }
 
-export type SqlDriverId = Exclude<DriverId, 'redis'>;
+export type SqlDriverId = Exclude<DriverId, 'redis' | 'mongodb'>;
 
 export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
   return driverFamily(driver) === 'sql';
@@ -51,6 +53,7 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   clickhouse: 8123,
   oracle: 1521,
   redis: 6379,
+  mongodb: 27_017,
 };
 
 export const CONNECTION_LIMITS = {
@@ -104,10 +107,13 @@ export const DEFAULT_SENTINEL_PORT = 26_379;
 /** Most extra Sentinels or cluster seed nodes a connection lists. */
 export const MAX_REDIS_NODES = 20;
 
-export interface RedisNodeAddress {
+/** Another server of a topology: a Sentinel, a cluster node, a replica set member. */
+export interface NodeAddress {
   readonly host: string;
   readonly port?: number;
 }
+
+export type RedisNodeAddress = NodeAddress;
 
 /**
  * Redis settings beyond host and port. In `sentinel` mode `host:port` is the first
@@ -126,6 +132,49 @@ export interface RedisSettings {
 /** The mode of a Redis config; settings left out mean one server. */
 export function redisModeOf(config: Pick<ConnectionInput, 'redis'>): RedisMode {
   return config.redis?.mode ?? 'standalone';
+}
+
+/**
+ * How a MongoDB connection finds its servers (V7.5): straight to the one server it
+ * names (and only it), a replica set found from seed members (the primary takes the
+ * changes), or the seed list a DNS SRV record publishes (`mongodb+srv://`, Atlas).
+ */
+export const MONGO_MODES = ['direct', 'replicaSet', 'srv'] as const;
+
+export type MongoMode = (typeof MONGO_MODES)[number];
+
+/** Ways to sign in that need nothing beyond the driver itself. */
+export const MONGO_AUTH_MECHANISMS = [
+  'SCRAM-SHA-256',
+  'SCRAM-SHA-1',
+  'PLAIN',
+  'MONGODB-X509',
+] as const;
+
+export type MongoAuthMechanism = (typeof MONGO_AUTH_MECHANISMS)[number];
+
+/** Most extra replica set members a connection lists. */
+export const MAX_MONGO_NODES = 50;
+
+/**
+ * MongoDB settings beyond host and port. In `replicaSet` mode `host:port` is the first
+ * seed member and `nodes` lists more; in `srv` mode the host is the DNS name of the
+ * record and has no port.
+ */
+export interface MongoSettings {
+  readonly mode: MongoMode;
+  /** The name of the replica set, checked against what the members say. */
+  readonly replicaSet?: string;
+  readonly nodes?: readonly NodeAddress[];
+  /** The database that holds the user; the connection's database, else `admin`. */
+  readonly authSource?: string;
+  /** Left out, the server and the driver agree on a SCRAM mechanism. */
+  readonly authMechanism?: MongoAuthMechanism;
+}
+
+/** The mode of a MongoDB config; settings left out mean one server, directly. */
+export function mongoModeOf(config: Pick<ConnectionInput, 'mongo'>): MongoMode {
+  return config.mongo?.mode ?? 'direct';
 }
 
 /** How DataNest proves who it is to an SSH server. */
@@ -216,6 +265,8 @@ export interface OptionSupport {
   readonly tls: boolean;
   /** A limit on how long one statement may run; Redis commands have none. */
   readonly queryTimeout: boolean;
+  /** Statements (or Redis commands) every new session runs first. */
+  readonly init: boolean;
 }
 
 export function optionSupport(driver: DriverId): OptionSupport {
@@ -228,6 +279,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: true,
         tls: true,
         queryTimeout: true,
+        init: true,
       };
     // pg decodes every result as UTF-8, so another client encoding would garble text.
     case 'postgres':
@@ -238,6 +290,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: false,
         tls: true,
         queryTimeout: true,
+        init: true,
       };
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
@@ -248,6 +301,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: false,
         tls: false,
         queryTimeout: true,
+        init: true,
       };
     // SQL Server sessions have no time zone of their own, and N'…' text needs no charset.
     case 'mssql':
@@ -258,6 +312,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: false,
         tls: true,
         queryTimeout: true,
+        init: true,
       };
     // HTTP carries UTF-8; the time zone is the session_timezone setting.
     case 'clickhouse':
@@ -268,6 +323,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: false,
         tls: true,
         queryTimeout: true,
+        init: true,
       };
     // TCPS needs a wallet on the server; until it is supported, Oracle goes plain or via SSH.
     case 'oracle':
@@ -278,6 +334,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: false,
         tls: false,
         queryTimeout: true,
+        init: true,
       };
     // Init SQL holds Redis commands instead, one per line; a running command has no
     // limit of DataNest's, because blocking reads wait on purpose.
@@ -289,6 +346,18 @@ export function optionSupport(driver: DriverId): OptionSupport {
         charset: false,
         tls: true,
         queryTimeout: false,
+        init: true,
+      };
+    // A query may run as long as `maxTimeMS` allows; nothing to run on connect.
+    case 'mongodb':
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: false,
       };
   }
 }
@@ -324,6 +393,8 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     // Numbered databases, all listed.
     case 'redis':
       return { databases: false, schemas: false };
+    case 'mongodb':
+      return { databases: true, schemas: false };
   }
 }
 
@@ -334,7 +405,10 @@ export interface ConnectionInput {
   readonly host?: string;
   readonly port?: number;
   readonly user?: string;
-  /** Initial database (MySQL) or database name (PostgreSQL); the number of a Redis one. */
+  /**
+   * Initial database (MySQL) or database name (PostgreSQL); the number of a Redis one;
+   * the database a MongoDB connection opens first (and signs in to, unless told otherwise).
+   */
   readonly database?: string;
   /** Path to the database file for file-based drivers. */
   readonly file?: string;
@@ -358,6 +432,8 @@ export interface ConnectionInput {
   readonly filter?: VisibilityFilter;
   /** Sentinel or cluster (V7.1); Redis connections only. */
   readonly redis?: RedisSettings;
+  /** Replica set, SRV and sign-in (V7.5); MongoDB connections only. */
+  readonly mongo?: MongoSettings;
 }
 
 export interface ConnectionConfig extends ConnectionInput {
@@ -398,10 +474,14 @@ export function effectivePort(config: ConnectionInput): number | undefined {
   if (config.port !== undefined) {
     return config.port;
   }
-  // In Sentinel mode the address is the first Sentinel's.
-  return config.driver === 'redis' && redisModeOf(config) === 'sentinel'
-    ? DEFAULT_SENTINEL_PORT
-    : DEFAULT_PORTS[config.driver];
+  // In Sentinel mode the address is the first Sentinel's; an SRV record has no port.
+  if (config.driver === 'redis' && redisModeOf(config) === 'sentinel') {
+    return DEFAULT_SENTINEL_PORT;
+  }
+  if (config.driver === 'mongodb' && mongoModeOf(config) === 'srv') {
+    return undefined;
+  }
+  return DEFAULT_PORTS[config.driver];
 }
 
 /**
@@ -418,6 +498,7 @@ export type ConnectionProblem =
   | OptionProblem
   | 'filter-too-long'
   | RedisProblem
+  | MongoProblem
   | SshProblem;
 
 /** What is wrong with the Redis settings. */
@@ -436,6 +517,21 @@ export type RedisProblem =
    * to one of them cannot reach.
    */
   | 'redis-ssh-topology';
+
+/** What is wrong with the MongoDB settings. */
+export type MongoProblem =
+  /** Another member without a host or with a bad port. */
+  | 'mongo-node-invalid'
+  | 'mongo-too-many-nodes'
+  /** An SRV record is a DNS name: no port, no other members. */
+  | 'mongo-srv-port'
+  /** Names of a replica set and of the user's database are plain words. */
+  | 'mongo-name-invalid'
+  /**
+   * A replica set and an SRV record hand out the addresses of other members, which a
+   * tunnel to one of them cannot reach.
+   */
+  | 'mongo-ssh-topology';
 
 /** What is wrong with the session options. */
 export type OptionProblem =
@@ -545,6 +641,40 @@ export function redisProblems(input: ConnectionInput): RedisProblem[] {
   return problems;
 }
 
+/** Characters a replica set or database name never holds (MongoDB's own rules). */
+const MONGO_NAME_FORBIDDEN = /[/\\. "$*<>:|?]|\0/u;
+
+/** Problems of the MongoDB side of a config; empty for other drivers. */
+export function mongoProblems(input: ConnectionInput): MongoProblem[] {
+  if (input.driver !== 'mongodb') {
+    return [];
+  }
+  const problems: MongoProblem[] = [];
+  const mode = mongoModeOf(input);
+  const nodes = input.mongo?.nodes ?? [];
+  if (nodes.some((node) => node.host.trim() === '' || !isPortValid(node.port))) {
+    problems.push('mongo-node-invalid');
+  }
+  if (nodes.length > MAX_MONGO_NODES) {
+    problems.push('mongo-too-many-nodes');
+  }
+  if (mode === 'srv' && (input.port !== undefined || nodes.length > 0)) {
+    problems.push('mongo-srv-port');
+  }
+  const replicaSet = (input.mongo?.replicaSet ?? '').trim();
+  const authSource = (input.mongo?.authSource ?? '').trim();
+  if (
+    (replicaSet !== '' && /[\s/,]/u.test(replicaSet)) ||
+    (authSource !== '' && MONGO_NAME_FORBIDDEN.test(authSource) && authSource !== '$external')
+  ) {
+    problems.push('mongo-name-invalid');
+  }
+  if (mode !== 'direct' && input.ssh !== undefined) {
+    problems.push('mongo-ssh-topology');
+  }
+  return problems;
+}
+
 export function connectionProblems(input: ConnectionInput): ConnectionProblem[] {
   const problems: ConnectionProblem[] = [];
   if (input.name.trim() === '') {
@@ -598,6 +728,7 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
       problems.push('ssl-key-without-cert');
     }
     problems.push(...redisProblems(input));
+    problems.push(...mongoProblems(input));
   }
   return problems;
 }

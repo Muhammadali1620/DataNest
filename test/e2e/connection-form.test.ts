@@ -143,7 +143,7 @@ describe('saved connections in the real editor', () => {
     await closeFormTabs();
     await vscode.commands.executeCommand(
       'datanest.connections.addFromUrl',
-      'mongodb://cache:27017',
+      'cassandra://cache:9042',
     );
     await sleep(300);
     assert.equal(formTabs().length, 0);

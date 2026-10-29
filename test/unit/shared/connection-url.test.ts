@@ -27,7 +27,9 @@ describe('urlDriver', () => {
   });
 
   it('ignores everything else', () => {
-    expect(urlDriver('mongodb://h')).toBeUndefined();
+    // MongoDB joined in V7.5; Cassandra is still unknown.
+    expect(urlDriver('mongodb://h')).toBe('mongodb');
+    expect(urlDriver('cassandra://h')).toBeUndefined();
     expect(urlDriver('https://example.com')).toBeUndefined();
     expect(urlDriver('just text')).toBeUndefined();
   });
@@ -139,7 +141,7 @@ describe('parseConnectionUrl', () => {
     expect(parseConnectionUrl('localhost:5432')).toEqual({ ok: false, problem: 'unknown-scheme' });
     expect(parseConnectionUrl('just text')).toEqual({ ok: false, problem: 'not-a-url' });
     expect(parseConnectionUrl('')).toEqual({ ok: false, problem: 'not-a-url' });
-    expect(parseConnectionUrl('mongodb://cache:27017')).toEqual({
+    expect(parseConnectionUrl('cassandra://cache:9042')).toEqual({
       ok: false,
       problem: 'unknown-scheme',
     });

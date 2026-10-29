@@ -107,5 +107,12 @@
   "commands.redis.renameKey.title": "Rename Key…",
   "commands.redis.deleteKeys.title": "Delete Key",
   "commands.redis.openConsole.title": "Open Redis Console",
-  "commands.redis.serverInfo.title": "Redis Server Info"
+  "commands.redis.serverInfo.title": "Redis Server Info",
+  "commands.mongo.newDatabase.title": "New Database…",
+  "commands.mongo.dropDatabase.title": "Drop Database…",
+  "commands.mongo.newCollection.title": "New Collection…",
+  "commands.mongo.renameCollection.title": "Rename Collection…",
+  "commands.mongo.dropCollection.title": "Drop Collection…",
+  "commands.mongo.newIndex.title": "New Index…",
+  "commands.mongo.dropIndex.title": "Drop Index…"
 }

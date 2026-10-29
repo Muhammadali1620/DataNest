@@ -74,6 +74,9 @@ export function dumpStartOf(
     case 'index':
     case 'foreignKey':
     case 'redisDatabase':
+    case 'mongoDatabase':
+    case 'mongoCollection':
+    case 'mongoIndex':
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':

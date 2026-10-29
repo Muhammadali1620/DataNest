@@ -8,7 +8,11 @@ import {
   type ConnectionInput,
   type ConnectionOptions,
   FILTER_LIMITS,
+  MAX_MONGO_NODES,
   MAX_REDIS_NODES,
+  MONGO_AUTH_MECHANISMS,
+  MONGO_MODES,
+  type MongoSettings,
   OPTION_LIMITS,
   REDIS_MODES,
   type RedisSettings,
@@ -85,6 +89,20 @@ export const redisSchema: Schema<RedisSettings> = object({
   sentinelUser: optional(string({ maxLength: CONNECTION_LIMITS.field })),
 });
 
+/** The array limit is generous; `connectionProblems` holds the real one (MAX_MONGO_NODES). */
+export const mongoSchema: Schema<MongoSettings> = object({
+  mode: literal(...MONGO_MODES),
+  replicaSet: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+  nodes: optional(
+    array(
+      object({ host: string({ maxLength: CONNECTION_LIMITS.field }), port: optional(port()) }),
+      { maxLength: MAX_MONGO_NODES * 2 },
+    ),
+  ),
+  authSource: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+  authMechanism: optional(literal(...MONGO_AUTH_MECHANISMS)),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -103,6 +121,7 @@ export const connectionInputShape = {
   options: optional(optionsSchema),
   filter: optional(filterSchema),
   redis: optional(redisSchema),
+  mongo: optional(mongoSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

@@ -117,7 +117,9 @@
   {/if}
 </div>
 
-<!-- Redis has no SQL: the same box holds commands, one per line (V7.1). -->
+<!-- Redis has no SQL: the same box holds commands, one per line (V7.1). MongoDB runs
+     nothing on connect (V7.5). -->
+{#if support.init}
 <Field
   label={isRedis ? t('form.redis.initCommands') : t('form.options.initSql')}
   error={errorFor('init-sql-too-long')}
@@ -146,6 +148,7 @@
     spellcheck="false"
   ></textarea>
 </Field>
+{/if}
 
 <style>
   .grid {

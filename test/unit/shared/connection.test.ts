@@ -25,6 +25,9 @@ import {
   redisModeOf,
   redisProblems,
   MAX_REDIS_NODES,
+  MAX_MONGO_NODES,
+  mongoModeOf,
+  mongoProblems,
 } from '../../../src/shared/connection';
 
 describe('isDriverId', () => {
@@ -317,6 +320,7 @@ describe('session options (V4.9)', () => {
       charset: true,
       queryTimeout: true,
       tls: true,
+      init: true,
     });
     expect(optionSupport('postgres').charset).toBe(false);
     expect(optionSupport('sqlite')).toEqual({
@@ -326,6 +330,7 @@ describe('session options (V4.9)', () => {
       charset: false,
       queryTimeout: true,
       tls: false,
+      init: true,
     });
   });
 });
@@ -371,6 +376,7 @@ describe('SQL Server connections (V6.2)', () => {
       charset: false,
       queryTimeout: true,
       tls: true,
+      init: true,
     });
   });
 
@@ -396,6 +402,7 @@ describe('ClickHouse connections (V6.3)', () => {
       charset: false,
       queryTimeout: true,
       tls: true,
+      init: true,
     });
   });
 
@@ -427,6 +434,7 @@ describe('Oracle connections (V6.4)', () => {
       charset: false,
       queryTimeout: true,
       tls: false,
+      init: true,
     });
   });
 
@@ -452,7 +460,7 @@ describe('Redis connections (V7.1)', () => {
       expect(driverFamily(id)).toBe('sql');
       expect(isSqlDriver(id)).toBe(true);
     }
-    expect([...SQL_DRIVER_IDS, 'redis'].sort()).toEqual([...DRIVER_IDS].sort());
+    expect([...SQL_DRIVER_IDS, 'redis', 'mongodb'].sort()).toEqual([...DRIVER_IDS].sort());
     expect(isFileDriver('redis')).toBe(false);
   });
 
@@ -473,6 +481,7 @@ describe('Redis connections (V7.1)', () => {
       charset: false,
       tls: true,
       queryTimeout: false,
+      init: true,
     });
     expect(filterSupport('redis')).toEqual({ databases: false, schemas: false });
   });
@@ -546,5 +555,88 @@ describe('Redis connections (V7.1)', () => {
 
   it('describes the target with the default port', () => {
     expect(describeTarget({ ...redis, user: 'app' })).toBe('app@h:6379');
+  });
+});
+
+describe('MongoDB connections (V7.5)', () => {
+  const base = { name: 'Shop', driver: 'mongodb' as const, host: 'db' };
+
+  it('is a driver of its own family, on port 27017, opened directly by default', () => {
+    expect(isDriverId('mongodb')).toBe(true);
+    expect(driverFamily('mongodb')).toBe('mongodb');
+    expect(isSqlDriver('mongodb')).toBe(false);
+    expect(SQL_DRIVER_IDS).not.toContain('mongodb');
+    expect(DEFAULT_PORTS.mongodb).toBe(27_017);
+    expect(mongoModeOf({})).toBe('direct');
+    expect(effectivePort(base)).toBe(27_017);
+    expect(effectivePort({ ...base, port: 7017 })).toBe(7017);
+  });
+
+  it('has no port in SRV mode, and says so in the description', () => {
+    const srv = { ...base, host: 'cluster0.x.net', mongo: { mode: 'srv' as const } };
+    expect(effectivePort(srv)).toBeUndefined();
+    expect(describeTarget({ ...srv, user: 'app' })).toBe('app@cluster0.x.net');
+  });
+
+  it('offers timeouts, keep-alive and TLS, but nothing to run on connect', () => {
+    expect(optionSupport('mongodb')).toEqual({
+      connectTimeout: true,
+      keepAlive: true,
+      timeZone: false,
+      charset: false,
+      tls: true,
+      queryTimeout: true,
+      init: false,
+    });
+    expect(filterSupport('mongodb')).toEqual({ databases: true, schemas: false });
+  });
+
+  it('accepts a direct connection, a replica set and an SRV record', () => {
+    expect(connectionProblems(base)).toEqual([]);
+    expect(
+      connectionProblems({
+        ...base,
+        mongo: { mode: 'replicaSet', replicaSet: 'rs0', nodes: [{ host: 'b', port: 27_018 }] },
+      }),
+    ).toEqual([]);
+    expect(
+      connectionProblems({ ...base, mongo: { mode: 'srv', authSource: '$external' } }),
+    ).toEqual([]);
+  });
+
+  it('refuses bad members, ports on SRV, odd names and SSH to many servers', () => {
+    expect(
+      mongoProblems({ ...base, mongo: { mode: 'replicaSet', nodes: [{ host: ' ' }] } }),
+    ).toEqual(['mongo-node-invalid']);
+    expect(
+      mongoProblems({
+        ...base,
+        mongo: {
+          mode: 'replicaSet',
+          nodes: Array.from({ length: MAX_MONGO_NODES + 1 }, (_, index) => ({ host: `h${index}` })),
+        },
+      }),
+    ).toEqual(['mongo-too-many-nodes']);
+    expect(mongoProblems({ ...base, port: 27_017, mongo: { mode: 'srv' } })).toEqual([
+      'mongo-srv-port',
+    ]);
+    expect(mongoProblems({ ...base, mongo: { mode: 'replicaSet', replicaSet: 'r s' } })).toEqual([
+      'mongo-name-invalid',
+    ]);
+    expect(mongoProblems({ ...base, mongo: { mode: 'direct', authSource: 'a.b' } })).toEqual([
+      'mongo-name-invalid',
+    ]);
+    const ssh = { id: 'h', host: 'bastion', user: 'u', auth: 'agent' as const };
+    expect(mongoProblems({ ...base, ssh, mongo: { mode: 'replicaSet' } })).toEqual([
+      'mongo-ssh-topology',
+    ]);
+    expect(mongoProblems({ ...base, ssh })).toEqual([]);
+    expect(connectionProblems({ ...base, host: '' })).toEqual(['host-empty']);
+  });
+
+  it('has nothing to say about other drivers', () => {
+    expect(mongoProblems({ name: 'x', driver: 'mysql', mongo: { mode: 'srv' }, port: 1 })).toEqual(
+      [],
+    );
   });
 });

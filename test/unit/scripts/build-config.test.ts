@@ -10,6 +10,8 @@ import {
   EXTERNALS,
   NATIVE_OPTIONALS,
   nativeOptionalsPlugin,
+  OPTIONAL_PEERS,
+  optionalPeersPlugin,
   UNUSED_MODULES,
   unusedModulesPlugin,
   findE2eTests,
@@ -134,7 +136,11 @@ describe('build-config', () => {
       expect(options.bundle).toBe(true);
       expect(options.target).toBe(NODE_TARGET);
       expect(options.external).toEqual(EXTERNALS);
-      expect(options.plugins).toEqual([nativeOptionalsPlugin, unusedModulesPlugin]);
+      expect(options.plugins).toEqual([
+        nativeOptionalsPlugin,
+        unusedModulesPlugin,
+        optionalPeersPlugin,
+      ]);
       expect(EXTERNALS).toContain('vscode');
       expect(options.entryPoints).toEqual({ extension: join(tmp.path, 'src', 'extension.ts') });
       expect(options.outdir).toBe(join(tmp.path, 'dist'));
@@ -203,6 +209,47 @@ describe('build-config', () => {
       );
     });
 
+    it('leaves the optional packages of the MongoDB driver out, and nothing else (V7.5)', () => {
+      for (const name of [
+        'kerberos',
+        'snappy',
+        'socks',
+        'gcp-metadata',
+        'mongodb-client-encryption',
+        '@mongodb-js/zstd',
+        '@aws-sdk/credential-providers',
+      ]) {
+        expect(OPTIONAL_PEERS.test(name)).toBe(true);
+      }
+      expect(OPTIONAL_PEERS.test('mongodb')).toBe(false);
+      expect(OPTIONAL_PEERS.test('bson')).toBe(false);
+      expect(OPTIONAL_PEERS.test('@mongodb-js/saslprep')).toBe(false);
+      expect(OPTIONAL_PEERS.test('kerberos-extra')).toBe(false);
+    });
+
+    it('makes an optional package fail to load as if it were not installed', async () => {
+      write(
+        tmp.path,
+        'entry.js',
+        "let found; try { found = require('kerberos'); } catch (error) { found = error; } module.exports = found;",
+      );
+      await build({
+        entryPoints: [join(tmp.path, 'entry.js')],
+        outfile: join(tmp.path, 'peer.js'),
+        bundle: true,
+        format: 'cjs',
+        platform: 'node',
+        logLevel: 'silent',
+        plugins: [optionalPeersPlugin],
+      });
+      const loaded = createRequire(join(tmp.path, 'x.js'))('./peer.js') as Error & {
+        code?: string;
+      };
+      expect(loaded).toBeInstanceOf(Error);
+      expect(loaded.code).toBe('MODULE_NOT_FOUND');
+      expect(loaded.message).toContain("'kerberos'");
+    });
+
     it('adds driver bundles as separate entry points', () => {
       write(tmp.path, 'src/drivers/mysql/index.ts', '');
       const options = createHostBuildOptions({ rootDir: tmp.path });
@@ -245,7 +292,11 @@ describe('build-config', () => {
       expect(options.format).toBe('cjs');
       expect(options.platform).toBe('node');
       expect(options.external).toEqual(['vscode', 'mocha']);
-      expect(options.plugins).toEqual([nativeOptionalsPlugin, unusedModulesPlugin]);
+      expect(options.plugins).toEqual([
+        nativeOptionalsPlugin,
+        unusedModulesPlugin,
+        optionalPeersPlugin,
+      ]);
       expect(options.outdir).toBe(join(tmp.path, E2E_OUT_DIR));
       expect(Object.keys(options.entryPoints ?? {})).toEqual(['smoke.test']);
     });

@@ -9,7 +9,7 @@ import { boundaryConfigs } from './scripts/lint/boundaries.mjs';
 
 export default defineConfig(
   {
-    ignores: ['dist/', 'out/', 'coverage/', '.vscode-test/', 'test/fixtures/'],
+    ignores: ['dist/', 'out/', 'coverage/', '.vscode-test/', 'test/fixtures/', 'docker/seed/'],
   },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,

@@ -125,6 +125,7 @@ describe('toInput', () => {
       options: { keepAlive: 60, initSql: 'SET a = 1' },
       filter: { databases: ['shop'], schemas: ['public'] },
       redis: { mode: 'sentinel', masterName: 'm', nodes: [{ host: 's2' }], sentinelUser: 'u' },
+      mongo: { mode: 'replicaSet', replicaSet: 'rs0', authMechanism: 'SCRAM-SHA-256' },
     } as const;
     const input = toInput(full);
     const sent = connectionFormProtocol.host.requests.save.params.parse({

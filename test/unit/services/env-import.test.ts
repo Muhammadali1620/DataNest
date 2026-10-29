@@ -397,3 +397,35 @@ describe('Redis in .env files (V7.1)', () => {
     expect(byPort[0]?.input.driver).toBe('redis');
   });
 });
+
+describe('MongoDB in .env files (V7.5)', () => {
+  it('reads MONGO_URL and MONGODB_URI, replica sets and SRV records included', () => {
+    const found = connectionsFromEnv(
+      parseDotenv(
+        [
+          'MONGO_URL=mongodb://app:pw@db1:27017,db2/shop?replicaSet=rs0',
+          'MONGODB_URI=mongodb+srv://u:p@cluster0.x.net/logs',
+        ].join('\n'),
+      ),
+    );
+    expect(found.map((candidate) => candidate.input.driver)).toEqual(['mongodb', 'mongodb']);
+    expect(found[0]?.input).toMatchObject({
+      host: 'db1',
+      port: 27_017,
+      user: 'app',
+      database: 'shop',
+      mongo: { mode: 'replicaSet', replicaSet: 'rs0', nodes: [{ host: 'db2' }] },
+    });
+    expect(found[0]?.password).toBe('pw');
+    expect(found[1]?.input).toMatchObject({ host: 'cluster0.x.net', mongo: { mode: 'srv' } });
+  });
+
+  it("reads Laravel's DB_CONNECTION=mongodb group and a bare port 27017", () => {
+    const [laravel] = connectionsFromEnv(
+      parseDotenv(['DB_CONNECTION=mongodb', 'DB_HOST=mongo', 'DB_DATABASE=app'].join('\n')),
+    );
+    expect(laravel?.input).toMatchObject({ driver: 'mongodb', host: 'mongo', database: 'app' });
+    const [byPort] = connectionsFromEnv(parseDotenv(['DB_HOST=m', 'DB_PORT=27017'].join('\n')));
+    expect(byPort?.input).toMatchObject({ driver: 'mongodb', port: 27_017 });
+  });
+});

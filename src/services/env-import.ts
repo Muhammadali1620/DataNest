@@ -132,6 +132,10 @@ function driverFromWord(word: string): DriverId | undefined {
   if (/redis|valkey/.test(text)) {
     return 'redis';
   }
+  // Laravel's MongoDB package says `mongodb`; Node apps name their variables MONGO_* (V7.5).
+  if (text.includes('mongo')) {
+    return 'mongodb';
+  }
   return undefined;
 }
 
@@ -165,7 +169,9 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
               ? 'oracle'
               : port === 6379
                 ? 'redis'
-                : undefined);
+                : port === 27_017
+                  ? 'mongodb'
+                  : undefined);
   if (driver === undefined) {
     return undefined;
   }

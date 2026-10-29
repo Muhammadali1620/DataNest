@@ -5,10 +5,16 @@ import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import { PROJECT_FILE_PATH } from '../../services/project-connections';
-import { type ConnectionConfig, describeTarget, describeTunnel } from '../../shared/connection';
+import {
+  type ConnectionConfig,
+  describeTarget,
+  describeTunnel,
+  driverFamily,
+} from '../../shared/connection';
 import { affectsDataNest } from '../settings';
 import { connectionUri, tagText } from './connection-decorations';
 import { tagsOf } from './connection-look';
+import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
 import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
   CONNECTIONS_VIEW_ID,
@@ -79,6 +85,7 @@ export class ConnectionsTreeProvider
         noViews: vscode.l10n.t('No views'),
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
+        noCollections: vscode.l10n.t('No collections'),
         noKeys: (pattern) =>
           pattern === undefined
             ? vscode.l10n.t('No keys')
@@ -272,6 +279,12 @@ export class ConnectionsTreeProvider
         };
         return item;
       }
+      case 'mongoDatabase':
+        return mongoDatabaseItem(node);
+      case 'mongoCollection':
+        return mongoCollectionItem(node);
+      case 'mongoIndex':
+        return mongoIndexItem(node);
       case 'message': {
         const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
         item.id = nodeId(node);
@@ -322,7 +335,7 @@ export class ConnectionsTreeProvider
     item.contextValue = connectionContext({
       project: project !== undefined,
       connected,
-      redis: config?.driver === 'redis',
+      family: config === undefined ? 'sql' : driverFamily(config.driver),
     });
     item.tooltip = new vscode.MarkdownString(
       [

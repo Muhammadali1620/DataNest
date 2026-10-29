@@ -13,14 +13,17 @@ import type {
 import {
   type DriverFamily,
   driverFamily,
+  isSqlDriver,
   optionSupport,
   type SqlDriverId,
 } from '../shared/connection';
 import { setUpSession } from './session-setup';
 import type { Driver, Session, TransactionState } from '../drivers/driver';
+import type { MongoDriver, MongoSession } from '../drivers/mongo-driver';
 import type { RedisDriver, RedisSession } from '../drivers/redis-driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
+import { ManagedMongoSession } from './mongodb/managed-mongo-session';
 import { ManagedRedisSession } from './redis/managed-redis-session';
 import { setUpRedisSession } from './redis/redis-setup';
 import {
@@ -52,6 +55,8 @@ export interface DriverProvider {
   get(id: SqlDriverId): Promise<Driver>;
   /** Needed only by Redis connections. */
   getRedis?(): Promise<RedisDriver>;
+  /** Needed only by MongoDB connections. */
+  getMongo?(): Promise<MongoDriver>;
 }
 
 /** The slice of TunnelPool the manager needs. */
@@ -77,10 +82,11 @@ interface Endpoint {
   readonly port: number;
 }
 
-/** A live session of an owner: SQL, or Redis (D81). */
+/** A live session of an owner: SQL, Redis (D81) or MongoDB (D88). */
 type Holder =
   | { readonly family: 'sql'; readonly target: SessionTarget; readonly session: Session }
-  | { readonly family: 'redis'; readonly target: SessionTarget; readonly session: RedisSession };
+  | { readonly family: 'redis'; readonly target: SessionTarget; readonly session: RedisSession }
+  | { readonly family: 'mongodb'; readonly target: SessionTarget; readonly session: MongoSession };
 
 const DISCONNECTED: ConnectionState = { status: 'disconnected' };
 
@@ -190,6 +196,12 @@ export class ConnectionManager implements Disposable {
     return held?.family === 'redis' ? held.session : undefined;
   }
 
+  /** The live MongoDB session of an owner, or undefined when it holds none. */
+  mongoSessionOf(owner: string): MongoSession | undefined {
+    const held = this.holders.get(owner);
+    return held?.family === 'mongodb' ? held.session : undefined;
+  }
+
   /** Connection ids that currently hold at least one live session. */
   connectedIds(): string[] {
     return [...new Set([...this.holders.values()].map((held) => held.target.connectionId))];
@@ -218,6 +230,15 @@ export class ConnectionManager implements Disposable {
     return held.session;
   }
 
+  /** Like `acquire`, for a MongoDB connection (D88). */
+  async acquireMongo(owner: string, target: SessionTarget): Promise<MongoSession> {
+    const held = await this.acquireHolder(owner, target, 'mongodb');
+    if (held.family !== 'mongodb') {
+      throw new DbError('internal', 'Expected a MongoDB session');
+    }
+    return held.session;
+  }
+
   /** What the connection speaks; a SQL command never gets a Redis session, nor the reverse. */
   familyOf(connectionId: string): DriverFamily {
     return driverFamily(this.configOf(connectionId).driver);
@@ -233,12 +254,7 @@ export class ConnectionManager implements Disposable {
     }
     const config = this.configOf(target.connectionId);
     if (driverFamily(config.driver) !== family) {
-      throw new DbError(
-        'unsupported',
-        family === 'sql'
-          ? `"${config.name}" is a Redis connection: it runs Redis commands, not SQL`
-          : `"${config.name}" is not a Redis connection`,
-      );
+      throw new DbError('unsupported', familyMismatch(config, family));
     }
     const held = this.holders.get(owner);
     if (held) {
@@ -272,6 +288,10 @@ export class ConnectionManager implements Disposable {
    * connection opens its tree session on the database it names.
    */
   async connectAny(connectionId: string): Promise<void> {
+    if (this.familyOf(connectionId) === 'mongodb') {
+      await this.acquireMongo(ConnectionManager.treeOwner(connectionId), { connectionId });
+      return;
+    }
     if (this.familyOf(connectionId) === 'redis') {
       await this.acquireRedis(
         ConnectionManager.treeOwner(connectionId, redisDatabaseOf(this.configOf(connectionId))),
@@ -330,6 +350,10 @@ export class ConnectionManager implements Disposable {
       await this.testRedis(input, password, ssh, sentinelPassword);
       return;
     }
+    if (input.driver === 'mongodb') {
+      await this.testMongo(input, password, ssh);
+      return;
+    }
     const driver = await this.drivers.get(input.driver);
     const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
@@ -386,6 +410,28 @@ export class ConnectionManager implements Disposable {
     }
   }
 
+  private async testMongo(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+  ): Promise<void> {
+    const driver = await this.mongoDriver();
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
+    try {
+      let session: MongoSession;
+      try {
+        // Opening signs in and asks the server who it is: that proves the link works.
+        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
+      } catch (error) {
+        throw tunnel?.forwardError() ?? error;
+      }
+      await session.close().catch(() => undefined);
+    } finally {
+      await tunnel?.close();
+    }
+  }
+
   /** True when the saved connection refuses every change (V4.6). */
   isReadOnly(connectionId: string): boolean {
     return this.store.get(connectionId)?.readOnly === true;
@@ -393,11 +439,11 @@ export class ConnectionManager implements Disposable {
 
   /** The SQL driver of a saved connection, for its dialect and capabilities. */
   async driverOf(connectionId: string): Promise<Driver> {
-    const { driver, name } = this.configOf(connectionId);
-    if (driver === 'redis') {
-      throw new DbError('unsupported', `"${name}" is a Redis connection: it has no SQL dialect`);
+    const config = this.configOf(connectionId);
+    if (!isSqlDriver(config.driver)) {
+      throw new DbError('unsupported', familyMismatch(config, 'sql'));
     }
-    return await this.drivers.get(driver);
+    return await this.drivers.get(config.driver);
   }
 
   dispose(): void {
@@ -424,7 +470,9 @@ export class ConnectionManager implements Disposable {
       const holder =
         config.driver === 'redis'
           ? await this.openRedis(owner, target, config)
-          : await this.openSql(owner, target, config, config.driver);
+          : config.driver === 'mongodb'
+            ? await this.openMongo(owner, target, config)
+            : await this.openSql(owner, target, config, config.driver);
       this.holders.set(owner, holder);
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -519,6 +567,35 @@ export class ConnectionManager implements Disposable {
     return { family: 'redis', target, session };
   }
 
+  private async openMongo(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+  ): Promise<Holder> {
+    const driver = await this.mongoDriver();
+    const password = await this.store.getPassword(config.id);
+    const lease = await this.leaseTunnel(config);
+    let opened: MongoSession;
+    try {
+      opened = await driver.openSession(resolve(config, target, password, lease));
+    } catch (error) {
+      await lease?.release();
+      throw lease?.forwardError() ?? error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedMongoSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+      keepAliveMs: keepAliveMsOf(config),
+    });
+    session.scheduleKeepAlive();
+    return { family: 'mongodb', target, session };
+  }
+
   /** A connect that finished after dispose() must not leave a live link behind. */
   private async closeIfDisposed(
     opened: { close(): Promise<void> },
@@ -536,6 +613,13 @@ export class ConnectionManager implements Disposable {
       throw new DbError('unsupported', 'Redis is not available');
     }
     return await this.drivers.getRedis();
+  }
+
+  private async mongoDriver(): Promise<MongoDriver> {
+    if (this.drivers.getMongo === undefined) {
+      throw new DbError('unsupported', 'MongoDB is not available');
+    }
+    return await this.drivers.getMongo();
   }
 
   /**
@@ -626,6 +710,19 @@ export class ConnectionManager implements Disposable {
       }
     }
   }
+}
+
+/** Why a connection cannot give the session a command asked for. */
+function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string {
+  const actual = driverFamily(config.driver);
+  if (wanted === 'sql') {
+    return actual === 'redis'
+      ? `"${config.name}" is a Redis connection: it runs Redis commands, not SQL`
+      : `"${config.name}" is a MongoDB connection: it has collections, not SQL tables`;
+  }
+  return wanted === 'redis'
+    ? `"${config.name}" is not a Redis connection`
+    : `"${config.name}" is not a MongoDB connection`;
 }
 
 /** What the driver last said about the transaction; Redis has none to report. */

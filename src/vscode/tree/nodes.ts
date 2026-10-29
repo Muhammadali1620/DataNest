@@ -12,6 +12,8 @@ import type {
   TableKind,
   TableRef,
 } from '../../core/model/objects';
+import type { MongoIndexInfo } from '../../services/mongodb/catalog';
+import type { DriverFamily } from '../../shared/connection';
 import { type RedisKeyRef, redisKeyId } from '../../shared/redis-key';
 
 /** The view id the tree is registered under; `package.json` must declare the same. */
@@ -43,6 +45,17 @@ export const TREE_CONTEXT = {
   redisKey: 'datanest.redisKey',
   /** "Load more keys" at the end of a database that SCAN has not walked yet. */
   redisMore: 'datanest.redisMore',
+  /** MongoDB connections (V7.5) share the connection menus but none of the SQL ones. */
+  mongoConnection: 'datanest.mongoConnection',
+  mongoConnectionConnected: 'datanest.mongoConnection.connected',
+  projectMongoConnection: 'datanest.projectMongoConnection',
+  projectMongoConnectionConnected: 'datanest.projectMongoConnection.connected',
+  mongoDatabase: 'datanest.mongoDatabase',
+  mongoCollection: 'datanest.mongoCollection',
+  mongoView: 'datanest.mongoView',
+  mongoIndex: 'datanest.mongoIndex',
+  /** The `_id_` index: every collection has it, and it cannot be dropped. */
+  mongoIdIndex: 'datanest.mongoIdIndex',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -217,6 +230,37 @@ export interface RedisMoreNode {
   readonly loaded: number;
 }
 
+/** A database of a MongoDB connection (V7.5). */
+export interface MongoDatabaseNode {
+  readonly kind: 'mongoDatabase';
+  readonly connectionId: string;
+  readonly database: string;
+  /** Bytes on disk, when the server says. */
+  readonly sizeOnDisk?: number;
+}
+
+/** A collection, time series collection or view of a MongoDB database. */
+export interface MongoCollectionNode {
+  readonly kind: 'mongoCollection';
+  readonly connectionId: string;
+  readonly database: string;
+  readonly collection: string;
+  readonly collectionType: 'collection' | 'view' | 'timeseries';
+  readonly capped?: boolean;
+  /** The collection a view reads. */
+  readonly viewOn?: string;
+  /** Documents must match a validator. */
+  readonly validated?: boolean;
+}
+
+export interface MongoIndexNode {
+  readonly kind: 'mongoIndex';
+  readonly connectionId: string;
+  readonly database: string;
+  readonly collection: string;
+  readonly index: MongoIndexInfo;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -246,6 +290,9 @@ export type TreeNode =
   | RedisFolderNode
   | RedisKeyNode
   | RedisMoreNode
+  | MongoDatabaseNode
+  | MongoCollectionNode
+  | MongoIndexNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -275,6 +322,9 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':
+    case 'mongoDatabase':
+    case 'mongoCollection':
+    case 'mongoIndex':
     case 'message':
       return {};
   }
@@ -363,6 +413,18 @@ export function nodeId(node: TreeNode): string {
       return join(['redisKey', node.connectionId, String(node.database), redisKeyId(node.key)]);
     case 'redisMore':
       return join(['redisMore', node.connectionId, String(node.database)]);
+    case 'mongoDatabase':
+      return join(['mongoDatabase', node.connectionId, node.database]);
+    case 'mongoCollection':
+      return join(['mongoCollection', node.connectionId, node.database, node.collection]);
+    case 'mongoIndex':
+      return join([
+        'mongoIndex',
+        node.connectionId,
+        node.database,
+        node.collection,
+        node.index.name,
+      ]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -409,6 +471,9 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'redisFolder' ||
     kind === 'redisKey' ||
     kind === 'redisMore' ||
+    kind === 'mongoDatabase' ||
+    kind === 'mongoCollection' ||
+    kind === 'mongoIndex' ||
     kind === 'message'
   );
 }
@@ -436,6 +501,12 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.key.text;
     case 'redisFolder':
       return node.prefix;
+    case 'mongoDatabase':
+      return node.database;
+    case 'mongoCollection':
+      return node.collection;
+    case 'mongoIndex':
+      return node.index.name;
     case 'project':
     case 'connection':
     case 'group':
@@ -486,6 +557,9 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':
+    case 'mongoDatabase':
+    case 'mongoCollection':
+    case 'mongoIndex':
     case 'message':
       return undefined;
   }
@@ -495,10 +569,19 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
 export function connectionContext(options: {
   readonly project: boolean;
   readonly connected: boolean;
-  readonly redis: boolean;
+  readonly family: DriverFamily;
 }): string {
-  const { project, connected, redis } = options;
-  if (redis) {
+  const { project, connected, family } = options;
+  if (family === 'mongodb') {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectMongoConnectionConnected
+        : TREE_CONTEXT.projectMongoConnection
+      : connected
+        ? TREE_CONTEXT.mongoConnectionConnected
+        : TREE_CONTEXT.mongoConnection;
+  }
+  if (family === 'redis') {
     return project
       ? connected
         ? TREE_CONTEXT.projectRedisConnectionConnected

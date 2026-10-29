@@ -73,8 +73,33 @@ export const unusedModulesPlugin = {
   },
 };
 
+/**
+ * Optional packages the MongoDB driver tries to `require` for features DataNest does not
+ * offer (Kerberos, AWS and GCP sign-in, wire compression, SOCKS proxies, client-side
+ * encryption; V7.5). Each becomes a stub that throws on load, as if it were not
+ * installed, which is what the driver expects of them; from dist/ Node could otherwise
+ * find a copy in node_modules that the .vsix does not ship (D19, D50).
+ */
+export const OPTIONAL_PEERS =
+  /^(kerberos|snappy|socks|gcp-metadata|mongodb-client-encryption|@mongodb-js\/zstd|@aws-sdk\/credential-providers)$/;
+
+/** @type {import('esbuild').Plugin} */
+export const optionalPeersPlugin = {
+  name: 'datanest-optional-peers',
+  setup(build) {
+    build.onResolve({ filter: OPTIONAL_PEERS }, (args) => ({
+      path: args.path,
+      namespace: 'datanest-optional-peer',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'datanest-optional-peer' }, (args) => ({
+      contents: `throw Object.assign(new Error(${JSON.stringify(`Cannot find module '${args.path}': DataNest does not ship it`)}), { code: 'MODULE_NOT_FOUND' });`,
+      loader: 'js',
+    }));
+  },
+};
+
 /** Plugins of every Node bundle. */
-export const HOST_PLUGINS = [nativeOptionalsPlugin, unusedModulesPlugin];
+export const HOST_PLUGINS = [nativeOptionalsPlugin, unusedModulesPlugin, optionalPeersPlugin];
 
 /**
  * Each driver lives in src/drivers/<id>/index.ts and is bundled separately to

@@ -15,6 +15,13 @@ import { FakeDriverProvider, linkLostError } from '../../../helpers/fake-driver'
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helpers/fakes';
 import { bulk, FakeRedisDriver, type FakeRedisSession } from '../../../helpers/fake-redis';
 import { RedisKeyBrowser } from '../../../../src/services/redis/key-browser';
+import { bool, doc, int32, str } from '../../../../src/core/mongo/value';
+import {
+  collection,
+  FakeMongoDriver,
+  FakeMongoSession,
+  indexSpec,
+} from '../../../helpers/fake-mongo';
 
 const TEXTS: TreeTexts = {
   emptyFolder: 'Drag here',
@@ -1051,5 +1058,169 @@ describe('TreeModel with Redis keys (V7.2)', () => {
       database: 0,
       keys: 0,
     });
+  });
+});
+
+describe('TreeModel with MongoDB (V7.5)', () => {
+  async function setup(options: { showSystem?: boolean; filter?: string[] } = {}) {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const server = new FakeMongoSession();
+    server.databases = [
+      { name: 'shop', sizeOnDisk: 2048 },
+      { name: 'admin' },
+      { name: 'local' },
+      { name: 'logs' },
+    ];
+    server.collections.set('shop', [
+      collection('orders'),
+      collection('big_orders', 'view', doc([['viewOn', str('orders')]])),
+      collection('events', 'collection', doc([['capped', bool(true)]])),
+      collection('metrics', 'timeseries'),
+      collection('system.views'),
+    ]);
+    server.indexes.set('shop.orders', [
+      indexSpec('status_1', doc([['status', int32(1)]])),
+      indexSpec('_id_', doc([['_id', int32(1)]])),
+    ]);
+    const mongo = new FakeMongoDriver(() => server);
+    const drivers = Object.assign(new FakeDriverProvider(), {
+      getMongo: () => Promise.resolve(mongo),
+    });
+    const manager = new ConnectionManager({ store, drivers, logger });
+    const model = new TreeModel({
+      store,
+      manager,
+      cache: new MetadataCache({ logger }),
+      settings: { showSystemObjects: () => options.showSystem === true },
+      logger,
+      texts: {
+        ...TEXTS,
+        noCollections: 'No collections',
+        hiddenByFilter: (count) => `${count} hidden`,
+      },
+    });
+    const shop = await store.add({
+      name: 'Shop',
+      driver: 'mongodb',
+      host: 'h',
+      ...(options.filter === undefined ? {} : { filter: { databases: options.filter } }),
+    });
+    return { model, shop, server, mongo, drivers, manager };
+  }
+
+  it('lists the databases with their size, without the server’s own', async () => {
+    const { model, shop, drivers, manager } = await setup();
+    expect(await model.children({ kind: 'connection', connectionId: shop.id })).toEqual([
+      { kind: 'mongoDatabase', connectionId: shop.id, database: 'logs' },
+      { kind: 'mongoDatabase', connectionId: shop.id, database: 'shop', sizeOnDisk: 2048 },
+    ]);
+    expect(manager.mongoSessionOf(ConnectionManager.treeOwner(shop.id))).toBeDefined();
+    expect(drivers.requested).toEqual([]);
+  });
+
+  it('shows the server’s databases when asked, and applies the filter', async () => {
+    const all = await setup({ showSystem: true });
+    expect(
+      (await all.model.children({ kind: 'connection', connectionId: all.shop.id })).map(
+        (node) => node.kind === 'mongoDatabase' && node.database,
+      ),
+    ).toEqual(['admin', 'local', 'logs', 'shop']);
+    const filtered = await setup({ filter: ['sh*'] });
+    expect(
+      await filtered.model.children({ kind: 'connection', connectionId: filtered.shop.id }),
+    ).toEqual([
+      { kind: 'mongoDatabase', connectionId: filtered.shop.id, database: 'shop', sizeOnDisk: 2048 },
+      { kind: 'message', text: '1 hidden', connectionId: filtered.shop.id },
+    ]);
+  });
+
+  it('says so when there is no database', async () => {
+    const { model, shop, server } = await setup();
+    server.databases = [];
+    expect(await model.children({ kind: 'connection', connectionId: shop.id })).toEqual([
+      { kind: 'message', text: 'No databases', connectionId: shop.id },
+    ]);
+  });
+
+  it('lists collections, then views, with what sets them apart', async () => {
+    const { model, shop } = await setup();
+    const database = { kind: 'mongoDatabase' as const, connectionId: shop.id, database: 'shop' };
+    expect(await model.children(database)).toEqual([
+      {
+        kind: 'mongoCollection',
+        connectionId: shop.id,
+        database: 'shop',
+        collection: 'events',
+        collectionType: 'collection',
+        capped: true,
+      },
+      {
+        kind: 'mongoCollection',
+        connectionId: shop.id,
+        database: 'shop',
+        collection: 'metrics',
+        collectionType: 'timeseries',
+      },
+      {
+        kind: 'mongoCollection',
+        connectionId: shop.id,
+        database: 'shop',
+        collection: 'orders',
+        collectionType: 'collection',
+      },
+      {
+        kind: 'mongoCollection',
+        connectionId: shop.id,
+        database: 'shop',
+        collection: 'big_orders',
+        collectionType: 'view',
+        viewOn: 'orders',
+      },
+    ]);
+    expect(
+      await model.children({ kind: 'mongoDatabase', connectionId: shop.id, database: 'empty' }),
+    ).toEqual([{ kind: 'message', text: 'No collections', connectionId: shop.id }]);
+  });
+
+  it('lists the indexes of a collection, and nothing below a view', async () => {
+    const { model, shop } = await setup();
+    const orders = {
+      kind: 'mongoCollection' as const,
+      connectionId: shop.id,
+      database: 'shop',
+      collection: 'orders',
+      collectionType: 'collection' as const,
+    };
+    const indexes = await model.children(orders);
+    expect(indexes.map((node) => node.kind === 'mongoIndex' && node.index.name)).toEqual([
+      '_id_',
+      'status_1',
+    ]);
+    expect(await model.children({ ...orders, collection: 'other' })).toEqual([
+      { kind: 'message', text: 'No indexes', connectionId: shop.id },
+    ]);
+    expect(await model.children({ ...orders, collectionType: 'view' })).toEqual([]);
+    const [index] = indexes;
+    expect(index === undefined ? [] : await model.children(index)).toEqual([]);
+  });
+
+  it('turns a failure into a leaf that says what went wrong', async () => {
+    const { model, shop, mongo } = await setup();
+    mongo.failure = new DbError('auth-failed', 'Authentication failed.');
+    expect(await model.children({ kind: 'connection', connectionId: shop.id })).toEqual([
+      { kind: 'message', text: 'Authentication failed.', failed: true, connectionId: shop.id },
+    ]);
+  });
+
+  it('has no parent for MongoDB nodes: they are never revealed', async () => {
+    const { model, shop } = await setup();
+    expect(
+      model.parentOf({ kind: 'mongoDatabase', connectionId: shop.id, database: 'shop' }),
+    ).toBeUndefined();
   });
 });

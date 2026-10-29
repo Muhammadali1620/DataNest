@@ -5,6 +5,7 @@
 
 import { createConnection } from 'node:net';
 import { testDatabase, testSshServer } from './databases';
+import { TEST_MONGO } from './mongo-servers';
 import { TEST_REDIS } from './redis-servers';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -81,6 +82,11 @@ const DEFINITIONS = {
         port,
       })),
     ],
+  },
+  mongodb: {
+    always: false,
+    folders: ['mongodb'],
+    endpoints: () => [{ name: 'mongodb', host: TEST_MONGO.host, port: TEST_MONGO.port }],
   },
 } as const satisfies Record<string, IntegrationGroup>;
 

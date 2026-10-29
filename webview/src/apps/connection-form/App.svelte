@@ -20,6 +20,7 @@
   import SshHopEditor from './SshHopEditor.svelte';
   import TlsEditor from './TlsEditor.svelte';
   import OptionsEditor from './OptionsEditor.svelte';
+  import MongoFields from './MongoFields.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import { parseConnectionUrl } from '../../../../src/shared/connection-url';
@@ -75,6 +76,7 @@
     clickhouse: 'form.driver.clickhouse',
     oracle: 'form.driver.oracle',
     redis: 'form.driver.redis',
+    mongodb: 'form.driver.mongodb',
   };
 
   const REDIS_MODE_LABELS: Readonly<Record<RedisMode, MessageKey>> = {
@@ -91,6 +93,7 @@
   );
   const isFile = $derived(fields !== undefined && isFileDriver(fields.driver));
   const isRedis = $derived(fields?.driver === 'redis');
+  const isMongo = $derived(fields?.driver === 'mongodb');
   const defaultPort = $derived(
     formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
   );
@@ -427,13 +430,19 @@
           <Field
             label={t('form.host')}
             error={errorFor('host-empty')}
-            hint={!isRedis
-              ? undefined
-              : fields.redisMode === 'sentinel'
-                ? t('form.redis.hostSentinel')
-                : fields.redisMode === 'cluster'
-                  ? t('form.redis.hostCluster')
-                  : undefined}
+            hint={isMongo
+              ? fields.mongoMode === 'srv'
+                ? t('form.mongo.hostSrv')
+                : fields.mongoMode === 'replicaSet'
+                  ? t('form.mongo.hostReplicaSet')
+                  : undefined
+              : !isRedis
+                ? undefined
+                : fields.redisMode === 'sentinel'
+                  ? t('form.redis.hostSentinel')
+                  : fields.redisMode === 'cluster'
+                    ? t('form.redis.hostCluster')
+                    : undefined}
           >
             <input
               class="control"
@@ -516,6 +525,10 @@
               />
             </Field>
           {/if}
+        {/if}
+
+        {#if isMongo}
+          <MongoFields {fields} {t} {errorFor} />
         {/if}
 
         <div class="pair">
@@ -607,7 +620,11 @@
 
         <Field
           label={isRedis ? t('form.redis.database') : t('form.database')}
-          hint={isRedis ? t('form.redis.databaseHint') : t('form.databaseHint')}
+          hint={isRedis
+            ? t('form.redis.databaseHint')
+            : isMongo
+              ? t('form.mongo.databaseHint')
+              : t('form.databaseHint')}
           error={isRedis
             ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
             : undefined}
@@ -636,7 +653,9 @@
         {/if}
 
         {#if !sshAllowed(fields)}
-          <p class="hint" data-testid="redis-ssh-note">{t('form.redis.sshNote')}</p>
+          <p class="hint" data-testid="redis-ssh-note">
+            {isMongo ? t('form.mongo.sshNote') : t('form.redis.sshNote')}
+          </p>
         {:else}
         <fieldset class="section">
           <legend>

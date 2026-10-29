@@ -79,8 +79,17 @@
           "maxLength": 200
         },
         "driver": {
-          "enum": ["mysql", "postgres", "sqlite", "mssql", "clickhouse", "oracle", "redis"],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, not SQL."
+          "enum": [
+            "mysql",
+            "postgres",
+            "sqlite",
+            "mssql",
+            "clickhouse",
+            "oracle",
+            "redis",
+            "mongodb"
+          ],
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands and mongodb keeps documents in collections, not SQL."
         },
         "host": {
           "type": "string"
@@ -95,7 +104,7 @@
         },
         "database": {
           "type": "string",
-          "description": "Database name; for redis the number of the database, 0 when left out."
+          "description": "Database name; for redis the number of the database, 0 when left out; for mongodb the database opened first, which also holds the user unless mongo.authSource says otherwise."
         },
         "file": {
           "type": "string",
@@ -289,6 +298,50 @@
             "sentinelUser": {
               "type": "string",
               "description": "The ACL user of the Sentinels, when they ask for one. Their password is never kept in this file."
+            }
+          }
+        },
+        "mongo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "description": "How a mongodb connection finds its servers and signs in; left out: the one server at host:port.",
+          "properties": {
+            "mode": {
+              "enum": ["direct", "replicaSet", "srv"],
+              "description": "direct: only the server at host:port; replicaSet: host:port is one member of the set, the primary takes the changes; srv: host is the DNS name of an SRV record (mongodb+srv), without a port."
+            },
+            "replicaSet": {
+              "type": "string",
+              "description": "The name of the replica set, for replicaSet."
+            },
+            "nodes": {
+              "type": "array",
+              "maxItems": 50,
+              "description": "More members of the replica set, tried when the first does not answer.",
+              "items": {
+                "type": "object",
+                "required": ["host"],
+                "additionalProperties": false,
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  }
+                }
+              }
+            },
+            "authSource": {
+              "type": "string",
+              "description": "The database that holds the user; database, else admin, when left out."
+            },
+            "authMechanism": {
+              "enum": ["SCRAM-SHA-256", "SCRAM-SHA-1", "PLAIN", "MONGODB-X509"],
+              "description": "Left out: the server and DataNest agree on SCRAM. MONGODB-X509 signs in with the client certificate of ssl."
             }
           }
         }

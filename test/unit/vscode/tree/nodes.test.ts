@@ -337,23 +337,31 @@ describe('Redis nodes (V7.1)', () => {
     expect(objectRefOf(database)).toBeUndefined();
   });
 
-  it('marks Redis connections apart, so only the shared menus show', () => {
+  it('marks Redis and MongoDB connections apart, so only the shared menus show', () => {
     const contexts = [false, true].flatMap((project) =>
       [false, true].flatMap((connected) =>
-        [false, true].map((redis) => connectionContext({ project, connected, redis })),
+        (['sql', 'redis', 'mongodb'] as const).map((family) =>
+          connectionContext({ project, connected, family }),
+        ),
       ),
     );
-    expect(new Set(contexts).size).toBe(8);
-    expect(connectionContext({ project: false, connected: true, redis: true })).toBe(
+    expect(new Set(contexts).size).toBe(12);
+    expect(connectionContext({ project: false, connected: true, family: 'mongodb' })).toBe(
+      TREE_CONTEXT.mongoConnectionConnected,
+    );
+    expect(connectionContext({ project: true, connected: false, family: 'mongodb' })).toBe(
+      TREE_CONTEXT.projectMongoConnection,
+    );
+    expect(connectionContext({ project: false, connected: true, family: 'redis' })).toBe(
       TREE_CONTEXT.redisConnectionConnected,
     );
-    expect(connectionContext({ project: true, connected: false, redis: true })).toBe(
+    expect(connectionContext({ project: true, connected: false, family: 'redis' })).toBe(
       TREE_CONTEXT.projectRedisConnection,
     );
-    expect(connectionContext({ project: true, connected: true, redis: false })).toBe(
+    expect(connectionContext({ project: true, connected: true, family: 'sql' })).toBe(
       TREE_CONTEXT.projectConnectionConnected,
     );
-    expect(connectionContext({ project: false, connected: false, redis: false })).toBe(
+    expect(connectionContext({ project: false, connected: false, family: 'sql' })).toBe(
       TREE_CONTEXT.connection,
     );
   });
@@ -396,6 +404,57 @@ describe('Redis key nodes (V7.2)', () => {
 
   it('is a tree node of a connection, with no SQL scope or definition', () => {
     for (const node of [folder, key, more]) {
+      expect(isTreeNode(node)).toBe(true);
+      expect(connectionIdOf(node)).toBe('c1');
+      expect(scopeOf(node)).toEqual({});
+      expect(objectRefOf(node)).toBeUndefined();
+    }
+  });
+});
+
+describe('MongoDB nodes (V7.5)', () => {
+  const database: TreeNode = { kind: 'mongoDatabase', connectionId: 'c1', database: 'shop' };
+  const collection: TreeNode = {
+    kind: 'mongoCollection',
+    connectionId: 'c1',
+    database: 'shop',
+    collection: 'orders',
+    collectionType: 'collection',
+  };
+  const index: TreeNode = {
+    kind: 'mongoIndex',
+    connectionId: 'c1',
+    database: 'shop',
+    collection: 'orders',
+    index: {
+      name: 'status_1',
+      keys: '{ status: 1 }',
+      primary: false,
+      unique: false,
+      sparse: false,
+      hidden: false,
+    },
+  };
+
+  it('gives every node its own id, even when names contain separators', () => {
+    const ids = [
+      database,
+      collection,
+      index,
+      { ...collection, database: 'shop:orders', collection: '' },
+      { ...collection, collection: 'orders:x' },
+    ].map(nodeId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('copies the database, collection or index name', () => {
+    expect(nameOf(database)).toBe('shop');
+    expect(nameOf(collection)).toBe('orders');
+    expect(nameOf(index)).toBe('status_1');
+  });
+
+  it('belongs to its connection, without a SQL scope or definition', () => {
+    for (const node of [database, collection, index]) {
       expect(isTreeNode(node)).toBe(true);
       expect(connectionIdOf(node)).toBe('c1');
       expect(scopeOf(node)).toEqual({});

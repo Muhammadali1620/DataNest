@@ -16,6 +16,9 @@ import {
   optionSupport,
   DEFAULT_PORTS,
   DEFAULT_SENTINEL_PORT,
+  type MongoAuthMechanism,
+  type MongoMode,
+  type MongoSettings,
   type RedisMode,
   type RedisNodeAddress,
   type RedisSettings,
@@ -137,6 +140,14 @@ export interface FormFields {
   redisNodes: string;
   sentinelUser: string;
   sentinelPassword: SecretField;
+  /** MongoDB (V7.5): one server, a replica set, or an SRV record. */
+  mongoMode: MongoMode;
+  replicaSet: string;
+  /** More replica set members, as for Redis nodes. */
+  mongoNodes: string;
+  authSource: string;
+  /** Empty: the server and the driver agree on SCRAM. */
+  authMechanism: MongoAuthMechanism | '';
 }
 
 /** The option fields that hold seconds, with the problem a bad number gives. */
@@ -187,7 +198,57 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     redisNodes: (input.redis?.nodes ?? []).map(nodeText).join(', '),
     sentinelUser: input.redis?.sentinelUser ?? '',
     sentinelPassword: emptySecret(),
+    ...mongoFieldsFrom(input),
   };
+}
+
+type MongoFields = Pick<
+  FormFields,
+  'mongoMode' | 'replicaSet' | 'mongoNodes' | 'authSource' | 'authMechanism'
+>;
+
+function mongoFieldsFrom(input: ConnectionInput): MongoFields {
+  return {
+    mongoMode: input.mongo?.mode ?? 'direct',
+    replicaSet: input.mongo?.replicaSet ?? '',
+    mongoNodes: (input.mongo?.nodes ?? []).map(nodeText).join(', '),
+    authSource: input.mongo?.authSource ?? '',
+    authMechanism: input.mongo?.authMechanism ?? '',
+  };
+}
+
+/** The MongoDB settings to send; none for one server signing in the usual way. */
+export function toMongo(fields: FormFields): MongoSettings | undefined {
+  if (fields.driver !== 'mongodb') {
+    return undefined;
+  }
+  const { nodes } = parseNodes(fields.mongoNodes);
+  const replicaSet = fields.mongoMode === 'replicaSet' ? trim(fields.replicaSet) : undefined;
+  const authSource = trim(fields.authSource);
+  const settings: MongoSettings = {
+    mode: fields.mongoMode,
+    ...(replicaSet === undefined ? {} : { replicaSet }),
+    ...(fields.mongoMode === 'replicaSet' && nodes.length > 0 ? { nodes } : {}),
+    ...(authSource === undefined ? {} : { authSource }),
+    ...(fields.authMechanism === '' ? {} : { authMechanism: fields.authMechanism }),
+  };
+  return Object.keys(settings).length === 1 && settings.mode === 'direct' ? undefined : settings;
+}
+
+/**
+ * An SRV record has no port, and Atlas speaks TLS: choosing SRV clears the port and turns
+ * a plain connection into a checked one; leaving SRV puts the default port back.
+ */
+export function changeMongoMode(fields: FormFields, mode: MongoMode): void {
+  if (mode === 'srv') {
+    fields.port = '';
+    if (fields.sslMode === 'off') {
+      fields.sslMode = 'verify-full';
+    }
+  } else if (fields.mongoMode === 'srv' && fields.port.trim() === '') {
+    fields.port = String(DEFAULT_PORTS.mongodb);
+  }
+  fields.mongoMode = mode;
 }
 
 /** `host:port`, with brackets around an IPv6 address; the port only when set. */
@@ -237,9 +298,14 @@ export function toRedis(fields: FormFields): RedisSettings | undefined {
   };
 }
 
-/** SSH reaches one server only: Sentinels and clusters hand out other addresses. */
-export function sshAllowed(fields: Pick<FormFields, 'driver' | 'redisMode'>): boolean {
-  return fields.driver !== 'redis' || fields.redisMode === 'standalone';
+/** SSH reaches one server only: Sentinels, clusters and replica sets hand out other addresses. */
+export function sshAllowed(
+  fields: Pick<FormFields, 'driver' | 'redisMode' | 'mongoMode'>,
+): boolean {
+  if (fields.driver === 'redis') {
+    return fields.redisMode === 'standalone';
+  }
+  return fields.driver !== 'mongodb' || fields.mongoMode === 'direct';
 }
 
 /**
@@ -406,6 +472,7 @@ export function toInput(fields: FormFields): ConnectionInput {
   const user = trim(fields.user);
   const database = trim(fields.database);
   const redis = toRedis(fields);
+  const mongo = toMongo(fields);
   return {
     name,
     driver: fields.driver,
@@ -426,6 +493,7 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(options === undefined ? {} : { options }),
     ...(filter === undefined ? {} : { filter }),
     ...(redis === undefined ? {} : { redis }),
+    ...(mongo === undefined ? {} : { mongo }),
   };
 }
 
@@ -516,6 +584,14 @@ export function problemsOf(fields: FormFields): ConnectionProblem[] {
   ) {
     problems.push('redis-node-invalid');
   }
+  if (
+    fields.driver === 'mongodb' &&
+    fields.mongoMode === 'replicaSet' &&
+    parseNodes(fields.mongoNodes).invalid &&
+    !problems.includes('mongo-node-invalid')
+  ) {
+    problems.push('mongo-node-invalid');
+  }
   if (!isFileDriver(fields.driver) && fields.useSsh && sshAllowed(fields)) {
     for (const hop of [...fields.jumps, fields.ssh]) {
       for (const problem of hopProblemsOf(hop)) {
@@ -555,6 +631,11 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'redis-database-invalid': 'form.redis.error.database',
   'redis-cluster-database': 'form.redis.error.clusterDatabase',
   'redis-ssh-topology': 'form.redis.error.ssh',
+  'mongo-node-invalid': 'form.redis.error.nodeInvalid',
+  'mongo-too-many-nodes': 'form.mongo.error.tooManyNodes',
+  'mongo-srv-port': 'form.mongo.error.srvPort',
+  'mongo-name-invalid': 'form.mongo.error.name',
+  'mongo-ssh-topology': 'form.mongo.error.ssh',
 };
 
 export { DEFAULT_SSH_PORT };
@@ -586,8 +667,9 @@ export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void 
   fields.sslCa = input.ssl?.ca ?? '';
   fields.sslCert = input.ssl?.cert ?? '';
   fields.sslKey = input.ssl?.key ?? '';
-  // A URL names one server.
+  // A Redis URL names one server; a MongoDB one may name a replica set or an SRV record.
   fields.redisMode = 'standalone';
+  Object.assign(fields, mongoFieldsFrom(input));
   if (password !== undefined) {
     fields.password = password;
     fields.passwordTouched = true;

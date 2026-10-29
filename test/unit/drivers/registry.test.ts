@@ -152,6 +152,34 @@ describe('DriverRegistry', () => {
       ).rejects.toThrow('unexpected module shape');
     });
 
+    it('loads the MongoDB driver once and keeps it apart from SQL and Redis (V7.5)', async () => {
+      const mongo = { id: 'mongodb', openSession: () => Promise.reject(new Error('unused')) };
+      const loader = vi.fn((id: DriverId) =>
+        Promise.resolve(id === 'mongodb' ? { driver: mongo } : { driver: redis }),
+      );
+      const registry = registryWith(loader as never);
+      const [a, b] = await Promise.all([registry.getMongo(), registry.getMongo()]);
+      expect(a).toBe(mongo);
+      expect(b).toBe(mongo);
+      expect(loader).toHaveBeenCalledTimes(1);
+      expect(loader).toHaveBeenCalledWith('mongodb');
+      await expect(registry.get('mongodb' as SqlDriverId)).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+      // The Redis bundle is not the MongoDB driver, and the other way round.
+      await expect(
+        registryWith(() => Promise.resolve({ driver: redis })).getMongo(),
+      ).rejects.toThrow('unexpected module shape');
+      await expect(
+        registryWith(() => Promise.resolve({ driver: mongo } as never)).getRedis(),
+      ).rejects.toThrow('unexpected module shape');
+      await expect(
+        registryWith(() =>
+          Promise.resolve({ driver: { ...fakeDriver('mysql'), id: 'mongodb' } } as never),
+        ).getMongo(),
+      ).rejects.toThrow('unexpected module shape');
+    });
+
     it('rejects a SQL bundle that carries no dialect', async () => {
       await expect(
         registryWith(() =>

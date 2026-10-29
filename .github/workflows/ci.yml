@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [core, mssql, clickhouse, oracle, compat, redis]
+        group: [core, mssql, clickhouse, oracle, compat, redis, mongodb]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

@@ -384,3 +384,27 @@ services:
           'CMD-SHELL',
           'redis-cli -c -p 7391 -a datanest --no-auth-warning GET cluster:seed | grep -qx done',
         ]
+
+  # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
+  # TLS next to plain connections. It listens on the same port inside and outside, so the
+  # member address the set hands out works from the host.
+  mongodb:
+    image: mongo:8.2.12
+    container_name: datanest-mongodb
+    profiles: [mongodb]
+    entrypoint: ['/bin/sh', '/datanest/start.sh']
+    ports:
+      - 127.0.0.1:7017:7017
+    volumes:
+      - ./mongodb:/datanest:ro
+      - ./seed/mongodb:/docker-entrypoint-initdb.d:ro
+      - ./tls:/etc/datanest-tls:ro
+    tmpfs:
+      - /data/db
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD-SHELL',
+          'mongosh --port 7017 --quiet -u datanest -p datanest --authenticationDatabase admin --eval ''quit(db.getSiblingDB("datanest").seed.countDocuments() === 1 ? 0 : 1)''',
+        ]

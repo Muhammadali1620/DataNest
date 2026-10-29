@@ -16,6 +16,12 @@ import type { MetadataCache } from '../../services/metadata-cache';
 import type { ProjectView } from '../../services/project-connections';
 import type { ConnectionConfig, DriverId } from '../../shared/connection';
 import {
+  mongoCollectionChildren,
+  mongoDatabaseChildren,
+  mongoIndexChildren,
+  type MongoTreeDeps,
+} from './mongo-tree';
+import {
   GROUP_OF_KIND,
   KIND_OF_GROUP,
   type FolderNode,
@@ -49,6 +55,8 @@ export interface TreeTexts {
   readonly redisKeys?: (count: number) => string;
   /** A Redis database or folder without keys (V7.2); the filter when one is set. */
   readonly noKeys?: (pattern: string | undefined) => string;
+  /** A MongoDB database without collections (V7.5). */
+  readonly noCollections?: string;
   /** The leaf after a list the connection's filter shortened (V4.10). */
   readonly hiddenByFilter?: (count: number) => string;
   /** What an empty folder says, per folder. */
@@ -204,12 +212,20 @@ export class TreeModel {
         return await this.redisKeyChildren(node.connectionId, node.database, []);
       case 'redisFolder':
         return await this.redisKeyChildren(node.connectionId, node.database, node.path);
+      case 'mongoDatabase':
+        return await mongoCollectionChildren(this.mongoDeps(), node.connectionId, node.database);
+      case 'mongoCollection':
+        // A view has no indexes of its own: it reads another collection's.
+        return node.collectionType === 'view'
+          ? []
+          : await mongoIndexChildren(this.mongoDeps(), node);
       case 'column':
       case 'object':
       case 'index':
       case 'foreignKey':
       case 'redisKey':
       case 'redisMore':
+      case 'mongoIndex':
       case 'message':
         return [];
     }
@@ -254,6 +270,9 @@ export class TreeModel {
       case 'object':
       case 'index':
       case 'foreignKey':
+      case 'mongoDatabase':
+      case 'mongoCollection':
+      case 'mongoIndex':
       case 'message':
         return undefined;
     }
@@ -268,6 +287,9 @@ export class TreeModel {
   private async connectionChildren(connectionId: string): Promise<TreeNode[]> {
     if (this.driverIdOf(connectionId) === 'redis') {
       return await this.redisDatabases(connectionId);
+    }
+    if (this.driverIdOf(connectionId) === 'mongodb') {
+      return await mongoDatabaseChildren(this.mongoDeps(), this.configOf(connectionId));
     }
     const capabilities = await this.capabilitiesOf(connectionId);
     const metadata = await this.metadataOf(connectionId);
@@ -292,6 +314,20 @@ export class TreeModel {
       return [{ kind: 'message', text: this.deps.texts.noDatabases, connectionId }];
     }
     return [...nodes, ...hidden];
+  }
+
+  private mongoDeps(): MongoTreeDeps {
+    const { texts } = this.deps;
+    return {
+      manager: this.deps.manager,
+      showSystemObjects: () => this.deps.settings.showSystemObjects(),
+      texts: {
+        noDatabases: texts.noDatabases,
+        noCollections: texts.noCollections ?? texts.noTables,
+        noIndexes: texts.empty.indexes,
+        ...(texts.hiddenByFilter === undefined ? {} : { hiddenByFilter: texts.hiddenByFilter }),
+      },
+    };
   }
 
   /** The numbered databases of a Redis connection, with their key counts (V7.1). */

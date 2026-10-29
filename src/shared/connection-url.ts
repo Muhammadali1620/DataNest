@@ -4,6 +4,7 @@
 // .env import) and the connection form, which can fill itself from a pasted URL.
 
 import type { ConnectionInput, DriverId, SslMode, SslSettings } from './connection';
+import { parseMongoUrl } from './mongo-url';
 
 export interface ParsedConnectionUrl {
   readonly input: ConnectionInput;
@@ -44,6 +45,8 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   rediss: 'redis',
   valkey: 'redis',
   valkeys: 'redis',
+  // `mongodb+srv` is the same scheme with a DNS seed list (V7.5).
+  mongodb: 'mongodb',
 };
 
 /** Schemes that mean TLS by themselves, with the certificate checked. */
@@ -283,6 +286,10 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === undefined) {
     return { ok: false, problem: 'unknown-scheme' };
+  }
+  // A seed list (`host1,host2`) and `+srv` are MongoDB's own.
+  if (driver === 'mongodb') {
+    return parseMongoUrl(trimmed.replace(/^jdbc:/i, ''));
   }
   // Strip `jdbc:` and `+driver`, so the rest parses as one plain URL.
   const plain = trimmed

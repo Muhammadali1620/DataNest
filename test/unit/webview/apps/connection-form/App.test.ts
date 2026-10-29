@@ -675,7 +675,7 @@ describe('connection form App', () => {
 
     it('fills on Enter and explains a URL it cannot read', async () => {
       await withState();
-      await fireEvent.input(field('Connection URL'), { target: { value: 'mongodb://cache' } });
+      await fireEvent.input(field('Connection URL'), { target: { value: 'cassandra://cache' } });
       await fireEvent.keyDown(field('Connection URL'), { key: 'Enter' });
       await waitFor(() => {
         expect(
@@ -1266,6 +1266,107 @@ describe('connection form App: compatible servers (V6.5)', () => {
       await waitFor(() => {
         expect(screen.getByText('The database is a number: 0, 1, 2…')).toBeTruthy();
       });
+    });
+  });
+  describe('MongoDB (V7.5)', () => {
+    const MONGO: ConnectionFormState['drivers'] = [
+      ...DRIVERS,
+      { id: 'mongodb', defaultPort: 27017, file: false },
+    ];
+
+    async function mongoForm(
+      input: ConnectionFormState['input'] = {
+        name: 'Shop',
+        driver: 'mongodb',
+        host: 'h',
+        port: 27017,
+      },
+    ) {
+      return await withState(newState({ input, drivers: MONGO }));
+    }
+
+    it('offers MongoDB with its default port, its sign-in fields and no init commands', async () => {
+      await withState(newState({ drivers: MONGO }));
+      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'mongodb' } });
+      await waitFor(() => {
+        expect(field('Port').value).toBe('27017');
+      });
+      expect(screen.getByLabelText('Servers')).toBeTruthy();
+      expect(screen.getByLabelText('Authentication database')).toBeTruthy();
+      expect(screen.getByLabelText('Sign-in')).toBeTruthy();
+      expect(screen.queryByLabelText('Init SQL')).toBeNull();
+      expect(screen.queryByLabelText('Init commands')).toBeNull();
+      expect(screen.queryByLabelText('Replica set name')).toBeNull();
+    });
+
+    it('saves a replica set with its name, members and sign-in', async () => {
+      const { host } = await mongoForm();
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.change(screen.getByLabelText('Servers'), { target: { value: 'replicaSet' } });
+      await fireEvent.input(field('Replica set name'), { target: { value: 'rs0' } });
+      await fireEvent.input(field('Other members'), { target: { value: 'b:27018, c' } });
+      await fireEvent.input(field('Authentication database'), { target: { value: 'admin' } });
+      await fireEvent.change(screen.getByLabelText('Sign-in'), {
+        target: { value: 'SCRAM-SHA-256' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input).toMatchObject({
+        driver: 'mongodb',
+        mongo: {
+          mode: 'replicaSet',
+          replicaSet: 'rs0',
+          nodes: [{ host: 'b', port: 27018 }, { host: 'c' }],
+          authSource: 'admin',
+          authMechanism: 'SCRAM-SHA-256',
+        },
+      });
+      expect(screen.getByTestId('redis-ssh-note').textContent).toContain('replica sets');
+    });
+
+    it('clears the port and turns TLS on for an SRV record', async () => {
+      await mongoForm();
+      await fireEvent.change(screen.getByLabelText('Servers'), { target: { value: 'srv' } });
+      await waitFor(() => {
+        expect(field('Port').value).toBe('');
+      });
+      expect(screen.getByText(/without a port/)).toBeTruthy();
+    });
+
+    it('marks a member that is not host:port', async () => {
+      const { host } = await mongoForm({
+        name: 'S',
+        driver: 'mongodb',
+        host: 'h',
+        mongo: { mode: 'replicaSet' },
+      });
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.input(field('Other members'), { target: { value: 'b:port' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(screen.getByText('Write each node as host or host:port')).toBeTruthy();
+      });
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('fills the MongoDB fields from a pasted URL', async () => {
+      await mongoForm({ name: '', driver: 'mysql', host: '' });
+      await fireEvent.input(screen.getByLabelText('Connection URL'), {
+        target: { value: 'mongodb://u:p@a:27017,b/shop?replicaSet=rs0' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Fill' }));
+      await waitFor(() => {
+        expect(field('Replica set name').value).toBe('rs0');
+      });
+      expect(field('Other members').value).toBe('b');
+      expect(field('Host').value).toBe('a');
     });
   });
 });

@@ -117,6 +117,15 @@ export const COMMAND_IDS = {
   redisOpenConsole: 'datanest.redis.openConsole',
   /** What a Redis server reports about itself (INFO). */
   redisServerInfo: 'datanest.redis.serverInfo',
+  /** A MongoDB database comes to be with its first collection (V7.5). */
+  mongoNewDatabase: 'datanest.mongo.newDatabase',
+  mongoDropDatabase: 'datanest.mongo.dropDatabase',
+  mongoNewCollection: 'datanest.mongo.newCollection',
+  mongoRenameCollection: 'datanest.mongo.renameCollection',
+  /** Drops a collection or a view. */
+  mongoDropCollection: 'datanest.mongo.dropCollection',
+  mongoNewIndex: 'datanest.mongo.newIndex',
+  mongoDropIndex: 'datanest.mongo.dropIndex',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

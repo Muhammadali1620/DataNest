@@ -4,11 +4,14 @@
 import { createRequire } from 'node:module';
 import { DbError, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
-import { type DriverId, isDriverId, type SqlDriverId } from '../shared/connection';
+import { type DriverId, isDriverId, isSqlDriver, type SqlDriverId } from '../shared/connection';
 import type { Driver, DriverModule } from './driver';
+import type { MongoDriver, MongoDriverModule } from './mongo-driver';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
 
-export type DriverLoader = (id: DriverId) => Promise<DriverModule | RedisDriverModule>;
+export type DriverLoader = (
+  id: DriverId,
+) => Promise<DriverModule | RedisDriverModule | MongoDriverModule>;
 
 /**
  * Resolves `./drivers/<id>.js` relative to the running bundle (dist/extension.js).
@@ -19,8 +22,8 @@ export function createBundleDriverLoader(bundlePath: string): DriverLoader {
   return (id) => Promise.resolve(requireFromBundle(`./drivers/${id}.js`) as DriverModule);
 }
 
-/** A SQL driver or the Redis one (D81), as the bundle exports it. */
-type AnyDriver = Driver | RedisDriver;
+/** A SQL driver, the Redis one (D81) or the MongoDB one (D88), as the bundle exports it. */
+type AnyDriver = Driver | RedisDriver | MongoDriver;
 
 export class DriverRegistry {
   private readonly loader: DriverLoader;
@@ -34,8 +37,8 @@ export class DriverRegistry {
 
   /** Loads a SQL driver on first use; concurrent calls share one load. */
   async get(id: SqlDriverId): Promise<Driver> {
-    if (!isDriverId(id) || id === ('redis' as DriverId)) {
-      throw new DbError('unsupported', `Unknown SQL driver "${id}"`);
+    if (!isDriverId(id) || !isSqlDriver(id)) {
+      throw new DbError('unsupported', `Unknown SQL driver "${String(id)}"`);
     }
     const driver = await this.loadOnce(id);
     if (!isSqlDriverShaped(driver)) {
@@ -47,8 +50,17 @@ export class DriverRegistry {
   /** Loads the Redis driver on first use. */
   async getRedis(): Promise<RedisDriver> {
     const driver = await this.loadOnce('redis');
-    if (isSqlDriverShaped(driver)) {
+    if (isSqlDriverShaped(driver) || driver.id !== 'redis') {
       throw new DbError('internal', 'Driver "redis" is broken: unexpected module shape');
+    }
+    return driver;
+  }
+
+  /** Loads the MongoDB driver on first use. */
+  async getMongo(): Promise<MongoDriver> {
+    const driver = await this.loadOnce('mongodb');
+    if (isSqlDriverShaped(driver) || driver.id !== 'mongodb') {
+      throw new DbError('internal', 'Driver "mongodb" is broken: unexpected module shape');
     }
     return driver;
   }
@@ -73,7 +85,7 @@ export class DriverRegistry {
 
   private async load(id: DriverId): Promise<AnyDriver> {
     this.logger.debug(`Loading driver "${id}"`);
-    let module: DriverModule | RedisDriverModule;
+    let module: DriverModule | RedisDriverModule | MongoDriverModule;
     try {
       module = await this.loader(id);
     } catch (error) {
@@ -81,7 +93,7 @@ export class DriverRegistry {
       throw toDbError(error, 'internal');
     }
     const driver: unknown = (module as Partial<DriverModule> | null | undefined)?.driver;
-    const shaped = id === 'redis' ? isRedisDriverShaped(driver) : isSqlDriverShaped(driver);
+    const shaped = isSqlDriver(id) ? isSqlDriverShaped(driver) : isFamilyDriverShaped(driver, id);
     if (!shaped || (driver as AnyDriver).id !== id) {
       this.logger.error(`Driver bundle "${id}" has a wrong shape`);
       throw new DbError('internal', `Driver "${id}" is broken: unexpected module shape`);
@@ -105,6 +117,7 @@ function isSqlDriverShaped(value: unknown): value is Driver {
   );
 }
 
-function isRedisDriverShaped(value: unknown): value is RedisDriver {
-  return isObject(value) && value.id === 'redis' && typeof value.openSession === 'function';
+/** The Redis and MongoDB drivers: an id and `openSession`, no dialect. */
+function isFamilyDriverShaped(value: unknown, id: DriverId): value is RedisDriver | MongoDriver {
+  return isObject(value) && value.id === id && typeof value.openSession === 'function';
 }

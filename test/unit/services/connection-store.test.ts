@@ -1033,3 +1033,70 @@ describe('ConnectionStore Redis (V7.1)', () => {
     expect(await store.getSentinelPassword(copy.id)).toBe('spw');
   });
 });
+
+describe('ConnectionStore MongoDB (V7.5)', () => {
+  function setup() {
+    const state = new FakeMemento();
+    const secrets = new FakeSecretStorage();
+    return { store: new ConnectionStore({ state, secrets, logger: new RecordingLogger() }) };
+  }
+
+  it('stores replica set settings trimmed, without blank members', async () => {
+    const { store } = setup();
+    const added = await store.add({
+      name: 'Shop',
+      driver: 'mongodb',
+      host: 'db1',
+      mongo: {
+        mode: 'replicaSet',
+        replicaSet: ' rs0 ',
+        nodes: [{ host: ' db2 ', port: 27_018 }, { host: ' ' }],
+        authSource: ' admin ',
+        authMechanism: 'SCRAM-SHA-256',
+      },
+    });
+    expect(added.mongo).toEqual({
+      mode: 'replicaSet',
+      replicaSet: 'rs0',
+      nodes: [{ host: 'db2', port: 27_018 }],
+      authSource: 'admin',
+      authMechanism: 'SCRAM-SHA-256',
+    });
+  });
+
+  it('keeps no settings for a plain direct connection, and drops what other modes do not use', async () => {
+    const { store } = setup();
+    const plain = await store.add({
+      name: 'A',
+      driver: 'mongodb',
+      host: 'h',
+      mongo: { mode: 'direct', authSource: ' ', nodes: [{ host: 'x' }], replicaSet: 'rs0' },
+    });
+    expect(plain.mongo).toBeUndefined();
+    const srv = await store.add({
+      name: 'B',
+      driver: 'mongodb',
+      host: 'cluster0.x.net',
+      mongo: { mode: 'srv', replicaSet: 'rs0' },
+    });
+    expect(srv.mongo).toEqual({ mode: 'srv' });
+  });
+
+  it('drops MongoDB settings from other drivers', async () => {
+    const { store } = setup();
+    const sql = await store.add({
+      name: 'C',
+      driver: 'mysql',
+      host: 'h',
+      mongo: { mode: 'srv' },
+    });
+    expect(sql.mongo).toBeUndefined();
+  });
+
+  it('refuses settings with problems', async () => {
+    const { store } = setup();
+    await expect(
+      store.add({ name: 'D', driver: 'mongodb', host: 'h', port: 1, mongo: { mode: 'srv' } }),
+    ).rejects.toThrow();
+  });
+});

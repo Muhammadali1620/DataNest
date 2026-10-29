@@ -54,6 +54,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'oracle':
       return 'plsql';
     case 'redis':
+    case 'mongodb':
     case undefined:
       return 'sql';
   }

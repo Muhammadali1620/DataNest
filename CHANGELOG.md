@@ -21,6 +21,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   redis-cli prints them; and a server information page (INFO, by master in a cluster).
 - Production connections ask before every Redis change, read-only ones refuse them, and
   safe mode asks before `FLUSHALL`, `FLUSHDB`, `CONFIG SET`, `KEYS` and the like.
+- MongoDB: connect to one server, a replica set or an SRV record (`mongodb+srv://`, Atlas),
+  with a password (SCRAM, LDAP) or a client certificate (X.509), TLS and SSH (to one
+  server); `mongodb://` URLs and `MONGO_URL` or Laravel's `DB_CONNECTION=mongodb` in `.env`
+  fill the form. The tree lists databases with their size, collections, time series and
+  views, and the indexes of each collection with their keys and options (unique, TTL,
+  partial, text, geo, hashed). Create and drop databases, collections and indexes, rename
+  collections. Values keep their exact BSON type and documents their field order.
 
 ### Fixed
 

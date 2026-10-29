@@ -340,6 +340,8 @@ export function targetType(
       return oracleType(neutral, indexed);
     case 'redis':
       throw new DbError('unsupported', 'Tables cannot be copied to Redis');
+    case 'mongodb':
+      throw new DbError('unsupported', 'Tables cannot be copied to MongoDB');
   }
 }
 

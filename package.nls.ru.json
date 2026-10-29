@@ -107,5 +107,12 @@
   "commands.redis.renameKey.title": "Переименовать ключ…",
   "commands.redis.deleteKeys.title": "Удалить ключ",
   "commands.redis.openConsole.title": "Открыть консоль Redis",
-  "commands.redis.serverInfo.title": "Информация о сервере Redis"
+  "commands.redis.serverInfo.title": "Информация о сервере Redis",
+  "commands.mongo.newDatabase.title": "Новая база…",
+  "commands.mongo.dropDatabase.title": "Удалить базу…",
+  "commands.mongo.newCollection.title": "Новая коллекция…",
+  "commands.mongo.renameCollection.title": "Переименовать коллекцию…",
+  "commands.mongo.dropCollection.title": "Удалить коллекцию…",
+  "commands.mongo.newIndex.title": "Новый индекс…",
+  "commands.mongo.dropIndex.title": "Удалить индекс…"
 }

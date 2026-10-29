@@ -3,8 +3,8 @@ import type { Logger } from '../../core/logging/logger';
 import { ConnectionManager } from '../../services/connection-manager';
 import { endTransaction } from '../../services/transactions';
 import type { ConnectionStore } from '../../services/connection-store';
-import { describeTarget } from '../../shared/connection';
 import { COMMAND_IDS } from '../command-ids';
+import { pickConnection, pickDatabase } from '../connection-pick';
 import { DocumentBindings, type DocumentBinding } from './document-bindings';
 import { statusView, type StatusTexts } from './status-text';
 
@@ -99,11 +99,11 @@ export class QueryEditors implements vscode.Disposable {
       );
       return undefined;
     }
-    const connectionId = await this.pickConnection();
+    const connectionId = await pickConnection(this.deps.store);
     if (connectionId === undefined) {
       return undefined;
     }
-    const database = await this.pickDatabase(connectionId);
+    const database = await pickDatabase(this.deps.manager, connectionId);
     const binding: DocumentBinding =
       database === undefined ? { connectionId } : { connectionId, database };
     const current = this.bindings.get(uri);
@@ -145,41 +145,6 @@ export class QueryEditors implements vscode.Disposable {
       subscription.dispose();
     }
     this.subscriptions.length = 0;
-  }
-
-  private async pickConnection(): Promise<string | undefined> {
-    const items = this.deps.store.list().map((config) => ({
-      label: config.name,
-      description: describeTarget(config),
-      id: config.id,
-    }));
-    if (items.length === 0) {
-      void vscode.window.showInformationMessage(
-        vscode.l10n.t('There are no saved connections yet'),
-      );
-      return undefined;
-    }
-    const chosen = await vscode.window.showQuickPick(items, {
-      placeHolder: vscode.l10n.t('Pick a connection'),
-    });
-    return chosen?.id;
-  }
-
-  /** `undefined` means "whatever the connection itself opens". */
-  private async pickDatabase(connectionId: string): Promise<string | undefined> {
-    const driver = await this.deps.manager.driverOf(connectionId);
-    if (!driver.capabilities.databases) {
-      return undefined;
-    }
-    const session = await this.deps.manager.connect(connectionId);
-    const databases = await session.metadata.listDatabases();
-    if (databases.length === 0) {
-      return undefined;
-    }
-    const chosen = await vscode.window.showQuickPick(databases, {
-      placeHolder: vscode.l10n.t('Pick a database'),
-    });
-    return chosen;
   }
 
   private async forget(document: vscode.TextDocument): Promise<void> {

@@ -28,6 +28,8 @@ import { folderCommandHandlers } from './tree/folder-commands';
 import { projectCommandHandlers } from './project-commands';
 import { filterCommandHandlers } from './tree/filter-commands';
 import { transferCommandHandlers } from './connection-transfer-commands';
+import { scriptCommandHandlers } from './script-commands';
+import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
@@ -89,6 +91,17 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const folders = folderCommandHandlers({ store: deps.store });
   const projects = projectCommandHandlers(importDeps);
   const transfer = transferCommandHandlers({ store: deps.store, logger: deps.logger });
+  const scripts = scriptCommandHandlers({
+    store: deps.store,
+    manager: deps.manager,
+    runner: new ScriptRunner({ manager: deps.manager, logger: deps.logger }),
+    bindings: deps.editors.bindings,
+    refresh: (connectionId) => {
+      deps.cache.invalidate(connectionId);
+      deps.tree.refresh();
+    },
+    logger: deps.logger,
+  });
   const filters = filterCommandHandlers({
     store: deps.store,
     manager: deps.manager,
@@ -269,6 +282,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
           ? target
           : vscode.window.activeTextEditor?.document.uri.toString(),
       ),
+    [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;
       const panel =

@@ -27,6 +27,8 @@ export interface SqlSyntax {
   readonly backtickIdentifiers: boolean;
   /** `"` quotes identifiers; where false it is a string (MySQL default). */
   readonly doubleQuoteIdentifiers: boolean;
+  /** `E'…'` strings, where `\` escapes even with standard strings (PostgreSQL). */
+  readonly escapeStrings: boolean;
   /** `$tag$ … $tag$` string literals (PostgreSQL). */
   readonly dollarQuotes: boolean;
   /** Block comments may nest (PostgreSQL). */
@@ -38,6 +40,8 @@ export interface SqlSyntax {
    * expects the whole thing as one statement without a delimiter switch (SQLite).
    */
   readonly triggerBodies: boolean;
+  /** Block comments opening with `/*!` are code the server runs (MySQL, MariaDB). */
+  readonly executableComments: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -45,10 +49,12 @@ const MYSQL: SqlSyntax = {
   hashComments: true,
   backtickIdentifiers: true,
   doubleQuoteIdentifiers: false,
+  escapeStrings: false,
   dollarQuotes: false,
   nestedBlockComments: false,
   delimiterCommand: true,
   triggerBodies: false,
+  executableComments: true,
 };
 
 const POSTGRES: SqlSyntax = {
@@ -56,10 +62,12 @@ const POSTGRES: SqlSyntax = {
   hashComments: false,
   backtickIdentifiers: false,
   doubleQuoteIdentifiers: true,
+  escapeStrings: true,
   dollarQuotes: true,
   nestedBlockComments: true,
   delimiterCommand: false,
   triggerBodies: false,
+  executableComments: false,
 };
 
 const SQLITE: SqlSyntax = {
@@ -67,10 +75,12 @@ const SQLITE: SqlSyntax = {
   hashComments: false,
   backtickIdentifiers: true,
   doubleQuoteIdentifiers: true,
+  escapeStrings: false,
   dollarQuotes: false,
   nestedBlockComments: false,
   delimiterCommand: false,
   triggerBodies: true,
+  executableComments: false,
 };
 
 const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
@@ -88,10 +98,12 @@ export function syntaxOf(driver?: DriverId): SqlSyntax {
       hashComments: true,
       backtickIdentifiers: true,
       doubleQuoteIdentifiers: true,
+      escapeStrings: true,
       dollarQuotes: true,
       nestedBlockComments: false,
       delimiterCommand: true,
       triggerBodies: false,
+      executableComments: false,
     };
   }
   return BY_DRIVER[driver];
@@ -147,6 +159,9 @@ function readToken(sql: string, start: number, syntax: SqlSyntax): Token {
     if (dollar) {
       return dollar;
     }
+  }
+  if (syntax.escapeStrings && (char === 'E' || char === 'e') && sql[start + 1] === "'") {
+    return { ...quoted(sql, start + 1, "'", true, 'string'), start };
   }
   if (/[0-9]/.test(char) || (char === '.' && /[0-9]/.test(sql[start + 1] ?? ''))) {
     return { kind: 'number', start, end: endOfNumber(sql, start) };

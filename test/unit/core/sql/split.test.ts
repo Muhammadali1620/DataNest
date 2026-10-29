@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DELIMITER,
+  splitScript,
   splitStatements,
   statementAt,
   statementsIn,
@@ -197,6 +198,72 @@ describe('splitStatements', () => {
 
   it('exports the default delimiter it starts with', () => {
     expect(DEFAULT_DELIMITER).toBe(';');
+  });
+});
+
+describe('splitScript', () => {
+  it('starts with the delimiter it is given and reports the one in force at the end', () => {
+    const split = splitScript('SELECT 1//\nDELIMITER ;\nSELECT 2;', 'mysql', { delimiter: '//' });
+    expect(split.pieces.map((piece) => [piece.text, piece.delimiter])).toEqual([
+      ['SELECT 1', '//'],
+      ['SELECT 2', ';'],
+    ]);
+    expect(split.delimiter).toBe(';');
+  });
+
+  it('remembers the delimiter each piece began with', () => {
+    const split = splitScript(
+      'SELECT 1;\nDELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1; END$$\n',
+      'mysql',
+    );
+    expect(split.pieces.map((piece) => piece.delimiter)).toEqual([';', '$$']);
+    expect(split.delimiter).toBe('$$');
+  });
+
+  it('keeps the default delimiter when nothing changes it', () => {
+    expect(splitScript('SELECT 1').delimiter).toBe(DEFAULT_DELIMITER);
+    expect(splitScript('').pieces).toEqual([]);
+  });
+
+  it('reads psql commands as lines of their own when asked', () => {
+    const sql = '\\restrict abc\nCREATE TABLE t (id int);\n  \\connect other\nSELECT 1;';
+    const split = splitScript(sql, 'postgres', { psqlCommands: true });
+    expect(split.pieces.map((piece) => [piece.kind, piece.text])).toEqual([
+      ['psql-command', '\\restrict abc'],
+      ['statement', 'CREATE TABLE t (id int)'],
+      ['psql-command', '\\connect other'],
+      ['statement', 'SELECT 1'],
+    ]);
+    for (const piece of split.pieces) {
+      expect(sql.slice(piece.start, piece.end)).toBe(piece.text);
+    }
+  });
+
+  it('treats a backslash inside a statement or a string as part of it', () => {
+    const sql = "SELECT 'a\\b'\n  \\ ;\nSELECT E'\\n';";
+    const split = splitScript(sql, 'postgres', { psqlCommands: true });
+    expect(split.pieces.map((piece) => piece.kind)).toEqual(['statement', 'statement']);
+  });
+
+  it('leaves psql commands to the server unless asked', () => {
+    expect(splitScript('\\connect db\nSELECT 1;', 'postgres').pieces).toHaveLength(1);
+  });
+
+  it('runs MySQL executable comments as statements', () => {
+    const sql = '/*!40101 SET NAMES utf8mb4 */;\n/* plain */;\n/*M!100616 SET NOTE_VERBOSITY=0 */;';
+    expect(texts(sql, 'mysql')).toEqual([
+      '/*!40101 SET NAMES utf8mb4 */',
+      '/*M!100616 SET NOTE_VERBOSITY=0 */',
+    ]);
+  });
+
+  it('keeps executable comments as comments elsewhere', () => {
+    expect(texts('/*!40101 SET NAMES utf8mb4 */;', 'postgres')).toEqual([]);
+    expect(texts('/*!40101 SET NAMES utf8mb4 */;', 'sqlite')).toEqual([]);
+  });
+
+  it('reads MySQL hash comments as comments when deciding what is code', () => {
+    expect(texts('# only a comment\n;', 'mysql')).toEqual([]);
   });
 });
 

@@ -83,6 +83,8 @@ export const COMMAND_IDS = {
   editObject: 'datanest.object.edit',
   /** Puts the edited definition of the active editor in place of the object. */
   applyObject: 'datanest.object.apply',
+  /** Runs a SQL file of any size, statement by statement as it is read (V5.1). */
+  runSqlFile: 'datanest.script.run',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

@@ -1,5 +1,7 @@
 // Binary values for the value panel: hex dump, image detection, sizes.
 
+export { formatSize } from '../../../../src/shared/byte-size';
+
 export const HEX_ROW_BYTES = 16;
 
 export interface HexRow {
@@ -84,19 +86,4 @@ export function imageMimeOf(bytes: Uint8Array): string | undefined {
       : undefined;
   }
   return undefined;
-}
-
-/** `1.5 KB`-style size; bytes below 1 KB are shown exactly. */
-export function formatSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value >= 10 ? Math.round(value) : Math.round(value * 10) / 10} ${units[unit]}`;
 }

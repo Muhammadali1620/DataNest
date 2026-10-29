@@ -133,6 +133,26 @@ describe('tokenize', () => {
       ]);
     });
 
+    it('reads PostgreSQL E-strings with backslash escapes, prefix included', () => {
+      const sql = "SELECT E'it\\'s; here', e'\\\\', 'plain\\'";
+      expect(only(sql, 'string', 'postgres').map((token) => textOf(sql, token))).toEqual([
+        "E'it\\'s; here'",
+        "e'\\\\'",
+        "'plain\\'",
+      ]);
+    });
+
+    it('keeps a word that ends in E apart from the string after it', () => {
+      const sql = "SELECT nameE'x'";
+      expect(shape(sql, 'postgres')).toContain('word:nameE');
+      expect(firstText(sql, 'string', 'postgres')).toBe("'x'");
+    });
+
+    it('reads E as a name before a quote in dialects without E-strings', () => {
+      expect(shape("SELECT E'a\\'", 'mysql')).toContain('word:E');
+      expect(shape("SELECT E'a\\'", 'sqlite')).toContain('word:E');
+    });
+
     it('does not end a string at a semicolon or a comment marker', () => {
       const sql = "SELECT 'a; -- b /* c */'";
       expect(only(sql, 'string')).toHaveLength(1);

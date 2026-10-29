@@ -3,7 +3,7 @@
 // change what a terminator even is.
 
 import type { DriverId } from '../../shared/connection';
-import { isTrivia, syntaxOf, textOf, tokenize, type Token } from './tokenizer';
+import { isTrivia, type SqlSyntax, syntaxOf, textOf, tokenize, type Token } from './tokenizer';
 
 export interface SqlStatement {
   /** The statement without its terminator or surrounding whitespace. */
@@ -16,24 +16,60 @@ export interface SqlStatement {
 
 export const DEFAULT_DELIMITER = ';';
 
+/** How a script is read beyond plain statements. */
+export interface SplitOptions {
+  /** The terminator in force where the text begins (a script read in parts). */
+  readonly delimiter?: string;
+  /**
+   * Lines that start with `\` where a statement could begin are psql commands
+   * (`\connect`, `\restrict`), which pg_dump writes and the server cannot run.
+   */
+  readonly psqlCommands?: boolean;
+}
+
+/** A piece of a script: a statement for the server, or a line for the psql client. */
+export interface ScriptPiece extends SqlStatement {
+  readonly kind: 'statement' | 'psql-command';
+  /** The terminator in force where the piece begins. */
+  readonly delimiter: string;
+}
+
+export interface ScriptSplit {
+  readonly pieces: ScriptPiece[];
+  /** The terminator in force at the end of the text. */
+  readonly delimiter: string;
+}
+
 /**
  * Statements of a script, in order. Empty statements (a stray `;`, a trailing
  * comment) are left out, so the caller never has to run nothing.
  */
 export function splitStatements(sql: string, driver?: DriverId): SqlStatement[] {
+  return splitScript(sql, driver).pieces.map(({ text, start, end }) => ({ text, start, end }));
+}
+
+/**
+ * Pieces of a script with the state a reader needs to go on in the next part:
+ * which terminator each piece started with, and which one is in force at the end.
+ */
+export function splitScript(
+  sql: string,
+  driver?: DriverId,
+  options: SplitOptions = {},
+): ScriptSplit {
   const syntax = syntaxOf(driver);
   const tokens = tokenize(sql, syntax);
-  const statements: SqlStatement[] = [];
-  let delimiter = DEFAULT_DELIMITER;
+  const pieces: ScriptPiece[] = [];
+  let delimiter = options.delimiter ?? DEFAULT_DELIMITER;
   let from = 0;
   let index = 0;
 
   const body = new TriggerBody(sql, syntax.triggerBodies);
 
   const push = (start: number, end: number): void => {
-    const statement = trimmed(sql, start, end);
+    const statement = trimmed(sql, start, end, syntax);
     if (statement) {
-      statements.push(statement);
+      pieces.push({ ...statement, kind: 'statement', delimiter });
     }
     body.reset();
   };
@@ -53,6 +89,21 @@ export function splitStatements(sql: string, driver?: DriverId): SqlStatement[] 
       index = command.nextToken;
       continue;
     }
+    const psql = options.psqlCommands === true ? readPsqlCommand(sql, tokens, index) : undefined;
+    if (psql && isStatementStart(tokens, index, from)) {
+      push(from, token.start);
+      const text = sql.slice(token.start, psql.end).trimEnd();
+      pieces.push({
+        kind: 'psql-command',
+        text,
+        start: token.start,
+        end: token.start + text.length,
+        delimiter,
+      });
+      from = psql.end;
+      index = psql.nextToken;
+      continue;
+    }
     body.see(token);
     const terminator = body.open ? undefined : matchDelimiter(sql, token, delimiter);
     if (terminator !== undefined) {
@@ -64,7 +115,7 @@ export function splitStatements(sql: string, driver?: DriverId): SqlStatement[] 
     index++;
   }
   push(from, sql.length);
-  return statements;
+  return { pieces, delimiter };
 }
 
 /** The statement the cursor is in, for "run the statement under the cursor". */
@@ -106,7 +157,12 @@ export function statementsIn(
   );
 }
 
-function trimmed(sql: string, start: number, end: number): SqlStatement | undefined {
+function trimmed(
+  sql: string,
+  start: number,
+  end: number,
+  syntax: SqlSyntax,
+): SqlStatement | undefined {
   let from = start;
   let to = end;
   while (from < to && /\s/.test(sql[from] ?? '')) {
@@ -120,11 +176,19 @@ function trimmed(sql: string, start: number, end: number): SqlStatement | undefi
   }
   const text = sql.slice(from, to);
   // A fragment of nothing but comments is not a statement worth running.
-  return hasCode(text) ? { text, start: from, end: to } : undefined;
+  return hasCode(text, syntax) ? { text, start: from, end: to } : undefined;
 }
 
-function hasCode(text: string): boolean {
-  return tokenize(text).some((token) => !isTrivia(token));
+function hasCode(text: string, syntax: SqlSyntax): boolean {
+  return tokenize(text, syntax).some(
+    (token) => !isTrivia(token) || (syntax.executableComments && isExecutableComment(text, token)),
+  );
+}
+
+// MySQL runs a block comment that opens with `/*!` (MariaDB also `/*M!`) as code;
+// mysqldump wraps its session settings in them, `SET FOREIGN_KEY_CHECKS = 0` among them.
+function isExecutableComment(text: string, token: Token): boolean {
+  return token.kind === 'comment' && /^\/\*M?!/u.test(text.slice(token.start, token.start + 4));
 }
 
 /**
@@ -175,6 +239,35 @@ function readDelimiterCommand(
     nextToken++;
   }
   return { delimiter, end, nextToken };
+}
+
+interface PsqlCommand {
+  /** Offset just past the line, where the next statement begins. */
+  readonly end: number;
+  readonly nextToken: number;
+}
+
+/** `\connect db` and the like: a backslash first on its line, up to the line end. */
+function readPsqlCommand(
+  sql: string,
+  tokens: readonly Token[],
+  index: number,
+): PsqlCommand | undefined {
+  const token = tokens[index];
+  if (token?.kind !== 'punctuation' || sql[token.start] !== '\\') {
+    return undefined;
+  }
+  const lineStart = sql.lastIndexOf('\n', token.start - 1) + 1;
+  if (sql.slice(lineStart, token.start).trim() !== '') {
+    return undefined;
+  }
+  const lineEnd = sql.indexOf('\n', token.end);
+  const end = lineEnd === -1 ? sql.length : lineEnd + 1;
+  let nextToken = index + 1;
+  while (nextToken < tokens.length && (tokens[nextToken]?.start ?? 0) < end) {
+    nextToken++;
+  }
+  return { end, nextToken };
 }
 
 /**

@@ -90,5 +90,6 @@
   "commands.connections.filterDatabases.title": "Фильтр баз данных…",
   "commands.connections.filterSchemas.title": "Фильтр схем…",
   "commands.connections.import.title": "Импортировать подключения…",
-  "commands.connections.export.title": "Экспортировать подключения…"
+  "commands.connections.export.title": "Экспортировать подключения…",
+  "commands.script.run.title": "Выполнить SQL-файл…"
 }

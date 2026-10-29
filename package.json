@@ -251,6 +251,11 @@
         "icon": "$(table)"
       },
       {
+        "command": "datanest.script.run",
+        "title": "%commands.script.run.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.results.export",
         "title": "%commands.results.export.title%",
         "category": "DataNest",
@@ -647,6 +652,11 @@
           "group": "0_query@1"
         },
         {
+          "command": "datanest.script.run",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "group": "0_query@3"
+        },
+        {
           "command": "datanest.table.open",
           "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
           "group": "0_query@0"
@@ -794,6 +804,20 @@
           "command": "datanest.query.cancel",
           "when": "editorLangId == sql && datanest.queryRunning",
           "group": "0_datanest@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "datanest.script.run",
+          "when": "resourceExtname == .sql",
+          "group": "datanest@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "datanest.script.run",
+          "when": "resourceExtname == .sql && resourceScheme == file",
+          "group": "datanest@1"
         }
       ]
     },

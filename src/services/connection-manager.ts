@@ -120,6 +120,14 @@ export class ConnectionManager implements Disposable {
     return database === undefined ? `tree:${connectionId}` : `tree:${connectionId}:${database}`;
   }
 
+  /**
+   * Owner key of a session a long task keeps to itself (running a file, a dump),
+   * so the task never waits for an editor and an editor never waits for it.
+   */
+  static taskOwner(name: string): string {
+    return `task:${name}`;
+  }
+
   /** Owner key of the session belonging to one SQL editor. */
   static editorOwner(documentUri: string): string {
     return `editor:${documentUri}`;

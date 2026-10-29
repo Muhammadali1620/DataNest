@@ -162,3 +162,19 @@ describe('Oracle system objects (V6.4)', () => {
     expect(withoutSystemDatabases('oracle', ['FREEPDB1'])).toEqual(['FREEPDB1']);
   });
 });
+
+describe('servers that speak MySQL and PostgreSQL (V6.5)', () => {
+  it("hides TiDB's metrics and the CockroachDB and YugabyteDB databases of their own", () => {
+    expect(isSystemDatabase('mysql', 'METRICS_SCHEMA')).toBe(true);
+    expect(isSystemDatabase('postgres', 'system')).toBe(true);
+    expect(isSystemDatabase('postgres', 'system_platform')).toBe(true);
+    expect(isSystemDatabase('postgres', 'defaultdb')).toBe(false);
+    expect(isSystemDatabase('postgres', 'yugabyte')).toBe(false);
+  });
+
+  it("hides CockroachDB's own schemas", () => {
+    expect(isSystemSchema('postgres', 'crdb_internal')).toBe(true);
+    expect(isSystemSchema('postgres', 'pg_extension')).toBe(true);
+    expect(isSystemSchema('postgres', 'public')).toBe(false);
+  });
+});

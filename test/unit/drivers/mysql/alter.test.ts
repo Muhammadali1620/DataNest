@@ -131,3 +131,33 @@ describe('mysql alterTable', () => {
     expect(column('x').original).toBe('x');
   });
 });
+
+describe('mysql alterTable: a column placed after a renamed one (V6.5)', () => {
+  it('renames first, as TiDB reads AFTER by the names before the statement', () => {
+    const renamed = withColumn(before, 'note', { name: 'remark' });
+    const after = { ...renamed, columns: [...renamed.columns, added('total')] };
+    expect(alter(after).statements).toEqual([
+      'ALTER TABLE `shop`.`orders`\n  CHANGE COLUMN `note` `remark` varchar(40)',
+      'ALTER TABLE `shop`.`orders`\n  ADD COLUMN `total` int AFTER `remark`',
+    ]);
+  });
+
+  it('keeps one ALTER when nothing is placed after the renamed column', () => {
+    const renamed = withColumn(before, 'customer_id', { name: 'client_id' });
+    const after = { ...renamed, columns: [added('rank'), ...renamed.columns] };
+    expect(alter(after).statements).toEqual([
+      'ALTER TABLE `shop`.`orders`\n  ADD COLUMN `rank` int FIRST,\n  CHANGE COLUMN `customer_id` `client_id` int',
+    ]);
+  });
+
+  it('moves a column after a renamed one once the rename is in', () => {
+    const [id, customer, note] = withColumn(before, 'customer_id', { name: 'client_id' }).columns;
+    if (id === undefined || customer === undefined || note === undefined) {
+      throw new Error('three columns expected');
+    }
+    expect(alter({ ...before, columns: [customer, note, id] }).statements).toEqual([
+      'ALTER TABLE `shop`.`orders`\n  CHANGE COLUMN `customer_id` `client_id` int',
+      'ALTER TABLE `shop`.`orders`\n  CHANGE COLUMN `client_id` `client_id` int FIRST,\n  CHANGE COLUMN `note` `note` varchar(40) AFTER `client_id`',
+    ]);
+  });
+});

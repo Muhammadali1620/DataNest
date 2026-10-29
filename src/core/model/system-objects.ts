@@ -8,8 +8,11 @@ import type { DriverId } from '../../shared/connection';
  * a normal database that people do use, even though the server creates it.
  */
 const SYSTEM_DATABASES: Readonly<Record<DriverId, readonly string[]>> = {
-  mysql: ['information_schema', 'performance_schema', 'mysql', 'sys'],
-  postgres: ['template0', 'template1'],
+  // TiDB adds its metrics to MySQL's own (V6.5).
+  mysql: ['information_schema', 'performance_schema', 'mysql', 'sys', 'metrics_schema'],
+  // CockroachDB keeps its cluster settings in `system`, YugabyteDB its own in
+  // `system_platform` (V6.5).
+  postgres: ['template0', 'template1', 'system', 'system_platform'],
   sqlite: [],
   // The server's own tools keep these four apart as "system databases" too.
   mssql: ['master', 'model', 'msdb', 'tempdb'],
@@ -21,7 +24,8 @@ const SYSTEM_DATABASES: Readonly<Record<DriverId, readonly string[]>> = {
 /** Schemas the server keeps for itself. */
 const SYSTEM_SCHEMAS: Readonly<Record<DriverId, readonly string[]>> = {
   mysql: [],
-  postgres: ['pg_catalog', 'information_schema'],
+  // CockroachDB's own views and extension types (V6.5).
+  postgres: ['pg_catalog', 'information_schema', 'crdb_internal', 'pg_extension'],
   sqlite: [],
   mssql: ['sys', 'INFORMATION_SCHEMA', 'guest'],
   clickhouse: [],

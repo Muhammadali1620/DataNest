@@ -30,8 +30,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   table designer (identity columns, comments), editing, dumps that load under another user,
   imports, exports, test data and copies to and from the other databases.
 
+- Servers that speak MySQL's or PostgreSQL's protocol, checked on real servers: TiDB,
+  CockroachDB, YugabyteDB and Amazon Aurora. The connection form offers them as
+  “Compatible servers” with their port, account and TLS; `cockroachdb://`, `yugabytedb://`
+  and `tidb://` URLs work too. Definitions, dumps, cancel and the designer follow what each
+  server's catalogs have.
+
 ### Changed
 
+- Dumps of MySQL databases start their snapshot without `READ ONLY`, which TiDB does not
+  take next to `CONSISTENT SNAPSHOT`.
 - Where a database has no transactions (ClickHouse), “all or nothing” imports stop at the
   first bad row and say that the rows before it stay.
 

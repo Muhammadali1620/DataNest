@@ -4,7 +4,16 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type TestDatabaseId = 'mysql' | 'mariadb' | 'postgres' | 'mssql' | 'clickhouse' | 'oracle';
+export type TestDatabaseId =
+  | 'mysql'
+  | 'mariadb'
+  | 'postgres'
+  | 'mssql'
+  | 'clickhouse'
+  | 'oracle'
+  | 'tidb'
+  | 'cockroach'
+  | 'yugabyte';
 
 /** The databases of the `core` group, which the SSH server can reach. */
 export type CoreDatabaseId = 'mysql' | 'mariadb' | 'postgres';
@@ -29,6 +38,9 @@ export const DEFAULT_PORTS: Readonly<Record<TestDatabaseId, number>> = {
   mssql: 7143,
   clickhouse: 7123,
   oracle: 7521,
+  tidb: 7400,
+  cockroach: 7257,
+  yugabyte: 7533,
 };
 
 export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
@@ -38,6 +50,19 @@ export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
   mssql: 'DATANEST_MSSQL_PORT',
   clickhouse: 'DATANEST_CLICKHOUSE_PORT',
   oracle: 'DATANEST_ORACLE_PORT',
+  tidb: 'DATANEST_TIDB_PORT',
+  cockroach: 'DATANEST_COCKROACH_PORT',
+  yugabyte: 'DATANEST_YUGABYTE_PORT',
+};
+
+/**
+ * The servers of the `compat` group (V6.5) keep the accounts they start with: TiDB and
+ * CockroachDB (insecure) a `root` without a password, YugabyteDB `yugabyte`.
+ */
+const ACCOUNTS: Partial<Record<TestDatabaseId, { user: string; password: string }>> = {
+  tidb: { user: 'root', password: '' },
+  cockroach: { user: 'root', password: '' },
+  yugabyte: { user: 'yugabyte', password: 'yugabyte' },
 };
 
 /** Reads a port from `env`, falling back to the default; rejects ports outside 7000-7999. */
@@ -68,8 +93,8 @@ export function testDatabase(
     id,
     host: '127.0.0.1',
     port: resolvePort(id, env),
-    user: 'datanest',
-    password: 'datanest',
+    user: ACCOUNTS[id]?.user ?? 'datanest',
+    password: ACCOUNTS[id]?.password ?? 'datanest',
     database: 'datanest_test',
     emptyDatabase: 'datanest_empty',
   };

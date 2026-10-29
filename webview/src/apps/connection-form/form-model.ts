@@ -27,6 +27,7 @@ import type {
 } from '../../../../src/shared/protocols/connection-form';
 import type { ParsedConnectionUrl, UrlProblem } from '../../../../src/shared/connection-url';
 import { parsePatterns } from '../../../../src/shared/name-filter';
+import type { ServerPreset } from '../../../../src/shared/server-presets';
 import type { MessageKey } from '../../l10n/en';
 
 /** A secret box: what was typed, whether it was, and whether to erase the stored one. */
@@ -492,3 +493,22 @@ export const URL_PROBLEM_MESSAGES: Readonly<Record<UrlProblem, MessageKey>> = {
   'no-host': 'form.error.hostEmpty',
   'no-file': 'form.error.fileEmpty',
 };
+
+/**
+ * Starts a connection to a server that speaks MySQL's or PostgreSQL's protocol (V6.5):
+ * its driver and port, and its usual account, database and TLS where the user has not
+ * typed their own.
+ */
+export function applyPreset(fields: FormFields, preset: ServerPreset): void {
+  fields.driver = preset.driver;
+  fields.port = String(preset.port);
+  if (fields.user.trim() === '' && preset.user !== undefined) {
+    fields.user = preset.user;
+  }
+  if (fields.database.trim() === '' && preset.database !== undefined) {
+    fields.database = preset.database;
+  }
+  if (fields.sslMode === 'off' && preset.ssl !== undefined) {
+    fields.sslMode = preset.ssl;
+  }
+}

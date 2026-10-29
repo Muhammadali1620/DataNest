@@ -5,9 +5,15 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import { literal, quoteIdentifier } from './dialect';
+import { generatedColumnSql, type PgServer, printsTriggers, withoutDatabase } from './server';
 
-/** Runs one catalog query and returns its rows as arrays. */
-export type PgRowReader = (sql: string, params?: unknown[]) => Promise<unknown[][]>;
+/**
+ * Runs one catalog query and returns its rows as arrays; `server` says which catalogs it
+ * reads (V6.5), a current PostgreSQL when absent.
+ */
+export type PgRowReader = ((sql: string, params?: unknown[]) => Promise<unknown[][]>) & {
+  readonly server?: PgServer;
+};
 
 const DEFAULT_SCHEMA = 'public';
 
@@ -39,7 +45,8 @@ async function relationDefinition(
     `SELECT c.oid::text, c.relkind::text, c.relpersistence::text,
             obj_description(c.oid, 'pg_class'),
             CASE WHEN c.relkind IN ('v', 'm') THEN pg_get_viewdef(c.oid, true) END,
-            CASE WHEN c.relkind = 'p' THEN pg_get_partkeydef(c.oid) END
+            CASE WHEN c.relkind = 'p' THEN pg_get_partkeydef(c.oid) END,
+            current_database()
      FROM pg_class c
      JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind IN ('r', 'p', 'v', 'm', 'f')`,
@@ -54,7 +61,9 @@ async function relationDefinition(
   const qualified = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
   const statements: string[] = [];
   if (kind === 'v' || kind === 'm') {
-    const body = stripSemicolon(text(row[4]).trim());
+    const printed = stripSemicolon(text(row[4]).trim());
+    const body =
+      read.server?.flavor === 'cockroach' ? withoutDatabase(printed, text(row[6])) : printed;
     statements.push(
       kind === 'v'
         ? `CREATE OR REPLACE VIEW ${qualified} AS\n${body}`
@@ -85,7 +94,7 @@ async function relationDefinition(
 export async function columnLines(read: PgRowReader, oid: string): Promise<string[]> {
   const rows = await read(
     `SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
-            pg_get_expr(d.adbin, d.adrelid), a.attidentity::text, a.attgenerated::text,
+            pg_get_expr(d.adbin, d.adrelid), a.attidentity::text, ${generatedColumnSql(read.server)},
             CASE WHEN a.attcollation <> 0 AND a.attcollation <> t.typcollation
               THEN (SELECT quote_ident(cn.nspname) || '.' || quote_ident(co.collname)
                     FROM pg_collation co JOIN pg_namespace cn ON cn.oid = co.collnamespace
@@ -141,7 +150,7 @@ export async function constraintLines(
 /** Indexes of their own; the ones behind a key are already part of the constraint. */
 export async function indexStatements(read: PgRowReader, oid: string): Promise<string[]> {
   const rows = await read(
-    `SELECT pg_get_indexdef(i.indexrelid)
+    `SELECT pg_get_indexdef(i.indexrelid), current_database()
      FROM pg_index i
      JOIN pg_class ic ON ic.oid = i.indexrelid
      WHERE i.indrelid = $1::oid
@@ -150,7 +159,12 @@ export async function indexStatements(read: PgRowReader, oid: string): Promise<s
      ORDER BY ic.relname`,
     [oid],
   );
-  return rows.map((row) => text(row[0]));
+  // CockroachDB names the table with its database in front, as it does in views.
+  return rows.map((row) =>
+    read.server?.flavor === 'cockroach'
+      ? withoutDatabase(text(row[0]), text(row[1]))
+      : text(row[0]),
+  );
 }
 
 export async function columnComments(
@@ -173,6 +187,9 @@ export async function columnComments(
 }
 
 export async function tableTriggers(read: PgRowReader, oid: string): Promise<string[]> {
+  if (!printsTriggers(read.server)) {
+    return [];
+  }
   const rows = await read(
     `SELECT pg_get_triggerdef(oid, true) FROM pg_trigger
      WHERE tgrelid = $1::oid AND NOT tgisinternal ORDER BY tgname`,
@@ -222,6 +239,9 @@ async function triggerDefinition(
   schema: string,
   object: ObjectRef,
 ): Promise<string[]> {
+  if (!printsTriggers(read.server)) {
+    throw new DbError('unsupported', 'CockroachDB cannot print a trigger back as SQL');
+  }
   const rows = await read(
     `SELECT pg_get_triggerdef(t.oid, true)
      FROM pg_trigger t

@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { ColumnDetail, TableRef, TableStructure } from '../../core/model/objects';
 import type { MetadataReader } from '../driver';
 import type { PgRowReader } from './definitions';
+import { generatedColumnSql } from './server';
 
 export async function readPgStructure(
   read: PgRowReader,
@@ -25,10 +26,12 @@ export async function readPgStructure(
   }
   const rows = await read(
     `SELECT a.attname, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull,
-            pg_get_expr(d.adbin, d.adrelid), a.attidentity::text, a.attgenerated::text,
+            pg_get_expr(d.adbin, d.adrelid), a.attidentity::text, ${generatedColumnSql(read.server)},
             col_description(a.attrelid, a.attnum)
      FROM pg_attribute a
-     LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+     -- CockroachDB keeps an identity column's nextval as its default; it is not one.
+     LEFT JOIN pg_attrdef d
+       ON d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.attidentity::text = ''
      WHERE a.attrelid = $1::oid AND a.attnum > 0 AND NOT a.attisdropped
      ORDER BY a.attnum`,
     [relation[0]],

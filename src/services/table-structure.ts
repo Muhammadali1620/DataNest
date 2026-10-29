@@ -24,12 +24,12 @@ function action(value: string | undefined): ReferentialAction {
   return REFERENTIAL_ACTIONS.find((known) => known === upper) ?? 'NO ACTION';
 }
 
-/** Index methods the designer writes by default; any other is kept as is. */
 /**
- * Index kinds the designer edits: B-trees (MySQL, PostgreSQL), SQL Server's nonclustered
- * indexes, and the bloom filters it creates in ClickHouse. Others are kept as they are.
+ * Index kinds the designer edits: B-trees (MySQL, PostgreSQL, and what stands for them in
+ * YugabyteDB, `lsm`, and CockroachDB, `prefix`), SQL Server's nonclustered indexes, and the
+ * bloom filters it creates in ClickHouse. Others are kept as they are.
  */
-const PLAIN_METHODS = new Set(['btree', 'nonclustered', 'bloom_filter']);
+const PLAIN_METHODS = new Set(['btree', 'lsm', 'prefix', 'nonclustered', 'bloom_filter']);
 
 function describe(index: IndexInfo): string {
   const kind = [index.unique ? 'UNIQUE' : '', index.method ?? ''].filter((p) => p !== '').join(' ');

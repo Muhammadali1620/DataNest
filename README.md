@@ -21,7 +21,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 
 - MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server (2016 and newer, Azure SQL),
   ClickHouse and Oracle (12.2 and newer, no Instant Client needed), each driver loaded only
-  when you first use it.
+  when you first use it. TiDB, CockroachDB, YugabyteDB and Amazon Aurora work through the
+  MySQL and PostgreSQL drivers, with presets in the connection form.
 - A form with “Test connection”, editing, duplicating and deleting; fill it from a
   `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://` or `oracle://` URL (or a JDBC
   `oracle:thin:@…` one), or import connections from the workspace's `.env` files.

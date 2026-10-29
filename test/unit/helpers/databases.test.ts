@@ -9,7 +9,17 @@ import {
   testSshServer,
 } from '../../helpers/databases';
 
-const IDS: TestDatabaseId[] = ['mysql', 'mariadb', 'postgres', 'mssql', 'clickhouse', 'oracle'];
+const IDS: TestDatabaseId[] = [
+  'mysql',
+  'mariadb',
+  'postgres',
+  'mssql',
+  'clickhouse',
+  'oracle',
+  'tidb',
+  'cockroach',
+  'yugabyte',
+];
 
 describe('test database settings', () => {
   it('uses distinct default ports in 7000-7999', () => {

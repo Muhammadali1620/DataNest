@@ -391,3 +391,26 @@ describe('Oracle URLs (V6.4)', () => {
     expect(parseConnectionUrl('oracle://h:abc/S')).toMatchObject({ ok: false });
   });
 });
+
+describe('compatible servers (V6.5)', () => {
+  it('reads cockroachdb:// and yugabytedb:// as PostgreSQL, tidb:// as MySQL', () => {
+    expect(urlDriver('cockroachdb://root@h:26257/defaultdb')).toBe('postgres');
+    expect(urlDriver('cockroach://h')).toBe('postgres');
+    expect(urlDriver('yugabytedb://h:5433/yugabyte')).toBe('postgres');
+    expect(urlDriver('tidb://root@h:4000/test')).toBe('mysql');
+  });
+
+  it('fills the form from a CockroachDB URL with its port and database', () => {
+    const result = parseConnectionUrl('cockroachdb://root:secret@crdb.example:26257/defaultdb');
+    expect(result.ok && result.value).toMatchObject({
+      input: {
+        driver: 'postgres',
+        host: 'crdb.example',
+        port: 26257,
+        user: 'root',
+        database: 'defaultdb',
+      },
+      password: 'secret',
+    });
+  });
+});

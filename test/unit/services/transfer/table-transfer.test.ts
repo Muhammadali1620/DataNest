@@ -120,7 +120,7 @@ describe('TableTransferService', () => {
     expect(harness.reader.executed.slice(0, 3)).toEqual([
       "SET time_zone = '+00:00'",
       'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ',
-      'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY',
+      'START TRANSACTION WITH CONSISTENT SNAPSHOT',
     ]);
     expect(harness.reader.executed.at(-1)).toBe('ROLLBACK');
     const sql = harness.writer.executed.join('\n');

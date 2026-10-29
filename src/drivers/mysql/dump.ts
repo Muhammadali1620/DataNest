@@ -34,7 +34,8 @@ export const mysqlDump: DumpDialect = {
     // A consistent snapshot means one only under REPEATABLE READ.
     'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ',
   ],
-  beginSnapshot: ['START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY'],
+  // The dump session only reads; TiDB takes no READ ONLY next to CONSISTENT SNAPSHOT.
+  beginSnapshot: ['START TRANSACTION WITH CONSISTENT SNAPSHOT'],
   endSnapshot: ['ROLLBACK'],
   header: [
     'SET NAMES utf8mb4',

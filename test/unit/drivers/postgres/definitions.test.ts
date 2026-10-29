@@ -177,3 +177,52 @@ describe('readPgDefinition: routines, triggers, sequences', () => {
     ).rejects.toMatchObject({ code: 'unsupported' });
   });
 });
+
+describe('readPgDefinition on PostgreSQL-compatible servers (V6.5)', () => {
+  function withServer<T extends (...args: never[]) => unknown>(
+    read: T,
+    server: { flavor: 'postgres' | 'cockroach' | 'yugabyte'; version: number },
+  ) {
+    return Object.assign(read, { server });
+  }
+
+  it('reads no generated columns before PostgreSQL 12 (YugabyteDB is 11)', async () => {
+    const { read, asked } = catalog({
+      [RELATION]: [['42', 'r', 'p', null, null, null]],
+      [COLUMNS]: [['id', 'integer', true, null, '', '', null]],
+    });
+    await readPgDefinition(withServer(read, { flavor: 'yugabyte', version: 110_002 }), {
+      kind: 'table',
+      name: 't',
+    });
+    const columns = asked.find((question) => question.sql.includes(COLUMNS))?.sql ?? '';
+    expect(columns).not.toContain('attgenerated');
+    expect(columns).toContain("''::text");
+  });
+
+  it('leaves out the triggers CockroachDB cannot print, and refuses a trigger alone', async () => {
+    const { read, asked } = catalog({
+      [RELATION]: [['42', 'r', 'p', null, null, null]],
+      [COLUMNS]: [['id', 'integer', true, null, '', '', null]],
+    });
+    const cockroach = withServer(read, { flavor: 'cockroach', version: 130_000 });
+    const statements = await readPgDefinition(cockroach, { kind: 'table', name: 't' });
+    expect(statements).toHaveLength(1);
+    expect(asked.some((question) => question.sql.includes('pg_get_triggerdef'))).toBe(false);
+    await expect(
+      readPgDefinition(cockroach, { kind: 'trigger', name: 'tr', table: 't' }),
+    ).rejects.toMatchObject({ code: 'unsupported' });
+  });
+
+  it("writes a CockroachDB view without its own database's name", async () => {
+    const { read } = catalog({
+      [RELATION]: [['7', 'v', 'p', null, 'SELECT id FROM shop.public.orders;', null, 'shop']],
+    });
+    expect(
+      await readPgDefinition(withServer(read, { flavor: 'cockroach', version: 130_000 }), {
+        kind: 'view',
+        name: 'v',
+      }),
+    ).toEqual(['CREATE OR REPLACE VIEW "public"."v" AS\nSELECT id FROM public.orders']);
+  });
+});

@@ -19,6 +19,7 @@ npm run db:up          # группа core: MySQL 7306, MariaDB 7307, PostgreSQL
 npm run db:up -- mssql # SQL Server 7143 (раздел 16a)
 npm run db:up -- clickhouse # ClickHouse 7123/7443 (раздел 16b)
 npm run db:up -- oracle # Oracle 23ai Free 7521 (раздел 16c)
+npm run db:up -- compat # TiDB 7400, CockroachDB 7257, YugabyteDB 7533 (раздел 16d)
 npm run package        # соберёт datanest-<версия>.vsix
 ```
 
@@ -267,6 +268,16 @@ npm run package        # соберёт datanest-<версия>.vsix
 7. Конструктор: новая таблица с автонумерацией, `VARCHAR2(…CHAR)`, комментариями, индексом и внешним ключом; переименование колонки, смена типа и умолчания применяются; снять автонумерацию — понятный отказ. Правка процедуры с ошибкой → прежняя версия остаётся рабочей.
 8. Файл: «Выполнить SQL-файл» со строками `SET DEFINE OFF`, `PROMPT`, PL/SQL-блоком и процедурой с `/` → всё выполнено, команды SQL*Plus пропущены.
 9. Дамп схемы `DATANEST` → в начале `ALTER SESSION SET CURRENT_SCHEMA`, после каждого оператора `/`, строки — PL/SQL-блоками `INSERT`. Импорт CSV в таблицу с автонумерацией, экспорт `BIG_TABLE` в XLSX, генератор на новой таблице, перенос схемы в SQLite-файл и обратно в `DATANEST_EMPTY`.
+
+## 16d. Совместимые серверы (0.6.0)
+
+`npm run db:up -- compat` поднимает TiDB (`127.0.0.1:7400`, `root` без пароля), CockroachDB (`7257`, `root` без пароля, без TLS) и YugabyteDB (`7533`, `yugabyte`/`yugabyte`); в каждом база `datanest_test` с магазином и пустая `datanest_empty`.
+
+1. В форме «База данных» → «Совместимые серверы» → TiDB: драйвер MySQL, порт 4000, пользователь `root`, подсказка про драйвер. Порт 7400, база `datanest_test` → «Проверить» — успешно. То же для CockroachDB (порт 26257 → 7257) и YugabyteDB (5433 → 7533). Amazon Aurora MySQL/PostgreSQL ставит TLS `require`. URL `cockroachdb://root@127.0.0.1:7257/datanest_test` заполняет форму.
+2. Дерево каждого: без `METRICS_SCHEMA`, `system`, `crdb_internal`, `system_platform`; таблицы и представление `order_totals`; у `products` индекс `ix_products_name` редактируется в конструкторе.
+3. Открыть определение `orders` и `order_totals` — без имени базы в тексте (CockroachDB). Долгий запрос (`SELECT count(*) FROM big_table a, big_table b, big_table c`) → «Отмена» за секунду.
+4. Правка результата `SELECT * FROM customers` с новой строкой, табличный вид с фильтром, конструктор: переименовать колонку и добавить новую после неё (TiDB) — сохраняется.
+5. Дамп `datanest_test` и «Выполнить SQL-файл» на `datanest_empty` — все таблицы и представление на месте, второй прогон поверх — без ошибок.
 
 ## 17. Темы, язык, доступность
 

@@ -257,3 +257,27 @@ describe('designFromStructure: index kinds of SQL Server and ClickHouse (V6.3)',
     ]);
   });
 });
+
+describe('designFromStructure: B-trees of YugabyteDB and CockroachDB (V6.5)', () => {
+  it('edits lsm and prefix indexes, which stand for the B-tree there', () => {
+    const structure: TableStructure = {
+      columns: [
+        { name: 'id', dataType: 'int', nullable: false, autoIncrement: false, generated: false },
+        { name: 'name', dataType: 'text', nullable: false, autoIncrement: false, generated: false },
+      ],
+      primaryKey: ['id'],
+      indexes: [
+        { name: 'ix_lsm', columns: ['name'], unique: false, primary: false, method: 'lsm' },
+        { name: 'ix_prefix', columns: ['name'], unique: true, primary: false, method: 'prefix' },
+        { name: 'ix_inv', columns: ['name'], unique: false, primary: false, method: 'inverted' },
+      ],
+      foreignKeys: [],
+    };
+    const { design, background } = designFromStructure({ name: 't' }, structure);
+    expect(design.indexes.map((index) => [index.name, index.unique])).toEqual([
+      ['ix_lsm', false],
+      ['ix_prefix', true],
+    ]);
+    expect(background.fixedIndexes.map((index) => index.name)).toEqual(['ix_inv']);
+  });
+});

@@ -21,7 +21,9 @@ import {
   URL_PROBLEM_MESSAGES,
   toOptions,
   toFilter,
+  applyPreset,
 } from '../../../../../webview/src/apps/connection-form/form-model';
+import { serverPreset } from '../../../../../src/shared/server-presets';
 import { en } from '../../../../../webview/src/l10n/en';
 
 function fields(overrides: Partial<FormFields> = {}): FormFields {
@@ -786,5 +788,46 @@ describe('visibility filter (V4.10)', () => {
     const many = Array.from({ length: 101 }, (_, index) => `db${index}`).join(',');
     expect(problemsOf(fields({ filterDatabases: many }))).toContain('filter-too-long');
     expect(en[PROBLEM_MESSAGES['filter-too-long']]).toBeTruthy();
+  });
+});
+
+describe('applyPreset (V6.5)', () => {
+  const preset = (id: string) => {
+    const found = serverPreset(id);
+    if (found === undefined) {
+      throw new Error(id);
+    }
+    return found;
+  };
+
+  it("sets the server's driver and port, and fills the account and database left blank", () => {
+    const form = fields({ user: '', database: '', port: '7306' });
+    applyPreset(form, preset('yugabytedb'));
+    expect(form).toMatchObject({
+      driver: 'postgres',
+      port: '5433',
+      user: 'yugabyte',
+      database: 'yugabyte',
+      sslMode: 'off',
+    });
+  });
+
+  it('keeps an account and database the user typed, and TLS already chosen', () => {
+    const form = fields({ user: 'me', database: 'shop', sslMode: 'verify-full', sslCa: 'rds.pem' });
+    applyPreset(form, preset('aurora-postgres'));
+    expect(form).toMatchObject({
+      driver: 'postgres',
+      port: '5432',
+      user: 'me',
+      database: 'shop',
+      sslMode: 'verify-full',
+    });
+  });
+
+  it('turns TLS on for a hosted server, and leaves blanks blank when the server has none', () => {
+    const form = fields({ user: '', database: '' });
+    applyPreset(form, preset('aurora-mysql'));
+    expect(form).toMatchObject({ driver: 'mysql', port: '3306', user: '', sslMode: 'require' });
+    expect(toInput(form).ssl).toEqual({ mode: 'require' });
   });
 });

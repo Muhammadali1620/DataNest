@@ -51,6 +51,15 @@ const DEFINITIONS = {
       return [{ name: 'oracle', host: db.host, port: db.port }];
     },
   },
+  compat: {
+    always: false,
+    folders: ['compat'],
+    endpoints: (env) =>
+      (['tidb', 'cockroach', 'yugabyte'] as const).map((id) => {
+        const db = testDatabase(id, env);
+        return { name: id, host: db.host, port: db.port };
+      }),
+  },
   clickhouse: {
     always: false,
     folders: ['clickhouse'],

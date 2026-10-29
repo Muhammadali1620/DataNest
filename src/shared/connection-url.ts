@@ -24,6 +24,13 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   postgres: 'postgres',
   postgresql: 'postgres',
   pgsql: 'postgres',
+  // CockroachDB and YugabyteDB speak PostgreSQL's protocol (V6.5); SQLAlchemy and other
+  // tools name the first by its own scheme.
+  cockroachdb: 'postgres',
+  cockroach: 'postgres',
+  yugabytedb: 'postgres',
+  // TiDB speaks MySQL's.
+  tidb: 'mysql',
   sqlite: 'sqlite',
   sqlite3: 'sqlite',
   file: 'sqlite',

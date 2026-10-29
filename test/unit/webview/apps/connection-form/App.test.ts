@@ -19,6 +19,13 @@ const DRIVERS: ConnectionFormState['drivers'] = [
   { id: 'sqlite', file: true },
 ];
 
+/** The drivers the Database list offers, without the compatible servers after them. */
+function driverOptions(select: HTMLSelectElement): string[] {
+  return [...select.options]
+    .filter((option) => option.parentElement === select)
+    .map((option) => option.textContent);
+}
+
 function newState(overrides: Partial<ConnectionFormState> = {}): ConnectionFormState {
   return {
     input: { name: '', driver: 'mysql', host: '127.0.0.1', port: 3306 },
@@ -956,7 +963,7 @@ describe('connection form App: more databases (V6.3)', () => {
       }),
     );
     const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    expect([...select.options].map((option) => option.textContent)).toEqual([
+    expect(driverOptions(select)).toEqual([
       'MySQL / MariaDB',
       'PostgreSQL',
       'SQLite',
@@ -984,7 +991,7 @@ describe('connection form App: Oracle (V6.4)', () => {
   it('lists Oracle by its name and offers port 1521', async () => {
     await withState(newState({ drivers }));
     const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    expect([...select.options].map((option) => option.textContent).at(-1)).toBe('Oracle');
+    expect(driverOptions(select).at(-1)).toBe('Oracle');
     select.value = 'oracle';
     await fireEvent.change(select);
     await waitFor(() => {
@@ -1056,5 +1063,103 @@ describe('connection form App: Oracle (V6.4)', () => {
     expect(screen.getByLabelText('Init SQL').getAttribute('placeholder')).toBe(
       "ALTER SESSION SET NLS_LANGUAGE = 'AMERICAN';",
     );
+  });
+});
+
+describe('connection form App: compatible servers (V6.5)', () => {
+  it('lists the compatible servers of the drivers it has, after the drivers', async () => {
+    await withState(newState());
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    const group = select.querySelector('optgroup');
+    expect(group?.label).toBe('Compatible servers');
+    expect([...(group?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([
+      'TiDB',
+      'Amazon Aurora MySQL',
+      'CockroachDB',
+      'YugabyteDB',
+      'Amazon Aurora PostgreSQL',
+    ]);
+  });
+
+  it('offers none without the MySQL and PostgreSQL drivers', async () => {
+    await withState(
+      newState({ drivers: [{ id: 'sqlite', file: true }], input: { name: '', driver: 'sqlite' } }),
+    );
+    expect(
+      screen.getByLabelText<HTMLSelectElement>('Database').querySelector('optgroup'),
+    ).toBeNull();
+  });
+
+  it('starts CockroachDB on the PostgreSQL driver with its port, account and database', async () => {
+    const { host } = await withState(
+      newState({ input: { name: 'C', driver: 'mysql', host: 'h' } }),
+    );
+    const drafts: ConnectionDraft[] = [];
+    host.handle('save', (draft) => {
+      drafts.push(draft);
+      return { connectionId: 'c1' };
+    });
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    select.value = 'preset:cockroachdb';
+    await fireEvent.change(select);
+    await waitFor(() => {
+      expect(field('Port').value).toBe('26257');
+    });
+    expect(field('User').value).toBe('root');
+    expect(
+      screen.getByText('Connects with the PostgreSQL driver; saved as a PostgreSQL connection'),
+    ).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(drafts).toHaveLength(1);
+    });
+    expect(drafts[0]?.input).toMatchObject({
+      driver: 'postgres',
+      port: 26257,
+      user: 'root',
+      database: 'defaultdb',
+    });
+  });
+
+  it('keeps what the user typed, and turns TLS on for Aurora', async () => {
+    const { host } = await withState(
+      newState({
+        input: { name: 'A', driver: 'postgres', host: 'h', user: 'me', database: 'shop' },
+      }),
+    );
+    const drafts: ConnectionDraft[] = [];
+    host.handle('save', (draft) => {
+      drafts.push(draft);
+      return { connectionId: 'c1' };
+    });
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    select.value = 'preset:aurora-mysql';
+    await fireEvent.change(select);
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(drafts).toHaveLength(1);
+    });
+    expect(drafts[0]?.input).toMatchObject({
+      driver: 'mysql',
+      port: 3306,
+      user: 'me',
+      database: 'shop',
+      ssl: { mode: 'require' },
+    });
+  });
+
+  it('goes back to a plain driver with its own default port', async () => {
+    await withState(newState());
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    select.value = 'preset:tidb';
+    await fireEvent.change(select);
+    await waitFor(() => {
+      expect(field('Port').value).toBe('4000');
+    });
+    select.value = 'mysql';
+    await fireEvent.change(select);
+    await waitFor(() => {
+      expect(field('Port').value).toBe('3306');
+    });
   });
 });

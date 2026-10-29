@@ -1,6 +1,7 @@
-// ALTER TABLE for MySQL and MariaDB. DDL there is not transactional, so the plan
+// ALTER TABLE for MySQL, MariaDB and TiDB. DDL there is not transactional, so the plan
 // keeps few statements: keys out, one ALTER for columns, indexes and the primary
-// key, keys back in, then the rename.
+// key (renames first where a column is placed after a renamed one), keys back in, then
+// the rename.
 
 import type { ColumnDesign, TableBackground, TableDesign } from '../../shared/table-design';
 import { diffTables, isEmptyDiff } from '../../shared/table-diff';
@@ -78,8 +79,43 @@ export function mysqlAlterTable(
         .join(',\n  ')}`,
     );
   }
-  const changed = new Set(diff.changed.map((change) => change.after.id));
+  let changed = new Set(diff.changed.map((change) => change.after.id));
   const keyColumns = after.columns.filter((column) => column.primaryKey).map((c) => c.id);
+  let columns = columnClauses(before, after, changed);
+  // TiDB reads `AFTER x` by the names the table had before the statement, MySQL by those
+  // after it: a column placed after a renamed one gets the rename in a statement first.
+  const renames = after.columns.filter(
+    (column) => column.original !== undefined && column.original !== column.name.trim(),
+  );
+  const leansOnRename = renames.some((column) =>
+    columns.some(
+      (clause) =>
+        !clause.startsWith(`CHANGE COLUMN ${quoteIdentifier(column.original ?? '')} `) &&
+        clause.endsWith(`AFTER ${quoteIdentifier(column.name.trim())}`),
+    ),
+  );
+  if (leansOnRename) {
+    statements.push(
+      `ALTER TABLE ${target}\n  ${renames
+        .map(
+          (column) =>
+            `CHANGE COLUMN ${quoteIdentifier(column.original ?? '')} ${definition(column)}`,
+        )
+        .join(',\n  ')}`,
+    );
+    const renamedIds = new Set(renames.map((column) => column.id));
+    const renamed = (list: readonly ColumnDesign[]): ColumnDesign[] =>
+      list.map((column) => {
+        const now = renames.find((rename) => rename.id === column.id);
+        return now === undefined ? column : { ...now, original: now.name.trim() };
+      });
+    changed = new Set([...changed].filter((id) => !renamedIds.has(id)));
+    columns = columnClauses(
+      { ...before, columns: renamed(before.columns) },
+      { ...after, columns: renamed(after.columns) },
+      changed,
+    );
+  }
   const clauses = [
     ...diff.droppedIndexes.map(
       (index) => `DROP INDEX ${quoteIdentifier(index.original ?? index.name)}`,
@@ -90,7 +126,7 @@ export function mysqlAlterTable(
     ...diff.dropped.map(
       (column) => `DROP COLUMN ${quoteIdentifier(column.original ?? column.name)}`,
     ),
-    ...columnClauses(before, after, changed),
+    ...columns,
     ...(diff.primaryKey && keyColumns.length > 0
       ? [`ADD PRIMARY KEY ${columnList(after, keyColumns, quoteIdentifier)}`]
       : []),

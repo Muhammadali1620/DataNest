@@ -17,6 +17,7 @@ import type {
 } from '../driver';
 import { toPgDbError } from './errors';
 import { PostgresMetadata } from './metadata';
+import { forServer, type PgServer, pgServer, SERVER_SQL } from './server';
 import { pgTypeName, pgTypeParser, toCellValue } from './values';
 
 /** Rows travel from the driver in batches of this size. */
@@ -81,16 +82,31 @@ export async function openPostgresSession(config: ResolvedConnectionConfig): Pro
   // Fatal errors between queries (e.g. a dropped socket) must not crash the host;
   // the next statement surfaces them as a normal failure.
   client.on('error', () => undefined);
-  if (config.readOnly === true) {
-    try {
+  let server: PgServer;
+  let cancelKey: string | undefined;
+  try {
+    const [row] = (await client.query({ text: SERVER_SQL, rowMode: 'array' })).rows as unknown[][];
+    server = pgServer(textOf(row?.[0]), textOf(row?.[1]));
+    if (server.flavor === 'cockroach') {
+      // CockroachDB cancels by session, not by backend pid (it has no pg_cancel_backend).
+      const [id] = (await client.query({ text: 'SHOW session_id', rowMode: 'array' }))
+        .rows as unknown[][];
+      cancelKey = typeof id?.[0] === 'string' ? id[0] : undefined;
+    }
+    if (config.readOnly === true) {
       // Every later transaction of the session is read-only; the server refuses writes.
       await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
-    } catch (error) {
-      await client.end().catch(() => undefined);
-      throw toPgDbError(error);
     }
+  } catch (error) {
+    await client.end().catch(() => undefined);
+    throw toPgDbError(error);
   }
-  return new PostgresSession(client, config, tls);
+  return new PostgresSession(client, config, tls, server, cancelKey);
+}
+
+/** A catalog value as text; anything that is not a string reads as empty. */
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 /** The slice of pg's field descriptors the driver reads. */
@@ -119,11 +135,18 @@ class PostgresSession implements Session {
   /** The last statement failed; see transactionState(). */
   private lastFailed = false;
 
-  constructor(client: pg.Client, config: ResolvedConnectionConfig, tls: TlsMaterial | undefined) {
+  constructor(
+    client: pg.Client,
+    config: ResolvedConnectionConfig,
+    tls: TlsMaterial | undefined,
+    private readonly server: PgServer,
+    /** CockroachDB's session id, which its CANCEL QUERIES takes. */
+    private readonly cancelKey?: string,
+  ) {
     this.client = client;
     this.config = config;
     this.tls = tls;
-    this.metadata = new PostgresMetadata(client);
+    this.metadata = new PostgresMetadata(client, server);
   }
 
   execute(sql: string, options: ExecuteOptions = {}): AsyncIterable<ExecuteEvent> {
@@ -208,7 +231,11 @@ class PostgresSession implements Session {
       queue.end();
     };
 
-    const arrayConfig: pg.QueryArrayConfig = { text: sql, rowMode: 'array', types: RAW_TYPES };
+    const arrayConfig: pg.QueryArrayConfig = {
+      text: forServer(sql, this.server),
+      rowMode: 'array',
+      types: RAW_TYPES,
+    };
     const query = new pg.Query(arrayConfig as pg.QueryConfig);
     query.on('row', (row: unknown, result: ResultLike | undefined) => {
       sendColumns(result?.fields);
@@ -273,9 +300,9 @@ class PostgresSession implements Session {
   }
 
   /**
-   * Cancels the currently running statement via pg_cancel_backend. With a `token`,
-   * only the statement that asked is cancelled: when it has already finished, the
-   * cancel is skipped so it cannot hit whatever runs next.
+   * Cancels the currently running statement (pg_cancel_backend; CANCEL QUERIES in
+   * CockroachDB). With a `token`, only the statement that asked is cancelled: when it
+   * has already finished, the cancel is skipped so it cannot hit whatever runs next.
    */
   async cancel(token?: object): Promise<void> {
     if (
@@ -293,21 +320,36 @@ class PostgresSession implements Session {
 
   private async sendCancel(token: object): Promise<void> {
     const pid = (this.client as unknown as { processID?: number | null }).processID;
-    if (typeof pid !== 'number') {
-      throw new DbError('unsupported', 'The server did not report a backend pid');
-    }
+    const query = this.cancelQuery(pid);
     const control = new pg.Client(clientConfig(this.config, this.tls));
     try {
       await control.connect();
       // Re-check after the control connection is up: the statement may be done by now.
       if (this.active === token) {
-        await control.query({ text: 'SELECT pg_cancel_backend($1)', values: [pid] });
+        await control.query(query);
       }
     } catch (error) {
       throw toPgDbError(error);
     } finally {
       await control.end().catch(() => undefined);
     }
+  }
+
+  /** pg_cancel_backend by pid, or CockroachDB's CANCEL QUERIES by session. */
+  private cancelQuery(pid: number | null | undefined): pg.QueryConfig {
+    if (this.server.flavor === 'cockroach') {
+      if (this.cancelKey === undefined) {
+        throw new DbError('unsupported', 'The server did not report its session id');
+      }
+      return {
+        text: 'CANCEL QUERIES IF EXISTS (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE session_id = $1)',
+        values: [this.cancelKey],
+      };
+    }
+    if (typeof pid !== 'number') {
+      throw new DbError('unsupported', 'The server did not report a backend pid');
+    }
+    return { text: 'SELECT pg_cancel_backend($1)', values: [pid] };
   }
 
   async close(): Promise<void> {

@@ -13,7 +13,8 @@ import type {
 } from '../../core/model/objects';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
-import { readPgDefinition } from './definitions';
+import { type PgRowReader, readPgDefinition } from './definitions';
+import { CURRENT_POSTGRES, type PgServer } from './server';
 import { readPgTableDump, readPgTypeDumps } from './dump-definitions';
 import { pgReferentialAction, readPgStructure } from './structure';
 import { toPgDbError } from './errors';
@@ -22,7 +23,18 @@ const DEFAULT_SCHEMA = 'public';
 
 /** Reads structure from the catalogs; shares the session's connection. */
 export class PostgresMetadata implements MetadataReader {
-  constructor(private readonly client: pg.Client) {}
+  constructor(
+    private readonly client: pg.Client,
+    /** Which server the catalogs belong to (V6.5); a current PostgreSQL by default. */
+    private readonly server: PgServer = CURRENT_POSTGRES,
+  ) {}
+
+  /** Catalog queries as the definition readers take them, knowing the server. */
+  private reader(): PgRowReader {
+    return Object.assign(async (sql: string, params?: unknown[]) => await this.query(sql, params), {
+      server: this.server,
+    });
+  }
 
   async listDatabases(): Promise<string[]> {
     const rows = await this.query(
@@ -70,7 +82,9 @@ export class PostgresMetadata implements MetadataReader {
        FROM pg_attribute a
        JOIN pg_class c ON c.oid = a.attrelid
        JOIN pg_namespace n ON n.oid = c.relnamespace
-       LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+       -- CockroachDB keeps an identity column's nextval as its default; it is not one.
+       LEFT JOIN pg_attrdef d
+         ON d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.attidentity::text = ''
        LEFT JOIN pg_index i
          ON i.indrelid = a.attrelid AND i.indisprimary AND a.attnum = ANY (i.indkey)
        WHERE n.nspname = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped
@@ -241,23 +255,19 @@ export class PostgresMetadata implements MetadataReader {
   }
 
   async describeTable(table: TableRef): Promise<TableStructure> {
-    return await readPgStructure(async (sql, params) => await this.query(sql, params), table, this);
+    return await readPgStructure(this.reader(), table, this);
   }
 
   async getDefinition(object: ObjectRef): Promise<string[]> {
-    return await readPgDefinition(async (sql, params) => await this.query(sql, params), object);
+    return await readPgDefinition(this.reader(), object);
   }
 
   async getTableDump(table: TableRef): Promise<TableDump> {
-    return await readPgTableDump(async (sql, params) => await this.query(sql, params), table);
+    return await readPgTableDump(this.reader(), table);
   }
 
   async listTypeDumps(scope: ObjectScope, tables?: readonly string[]): Promise<TypeDump[]> {
-    return await readPgTypeDumps(
-      async (sql, params) => await this.query(sql, params),
-      scope.schema,
-      tables,
-    );
+    return await readPgTypeDumps(this.reader(), scope.schema, tables);
   }
 
   private async query(text: string, values: unknown[] = []): Promise<unknown[][]> {

@@ -20,6 +20,7 @@ interface Service {
   tmpfs?: string[];
   healthcheck?: { test: string[] };
   profiles?: string[];
+  command?: string | string[];
 }
 
 const compose = parse(readFileSync(join(ROOT, 'docker/compose.yml'), 'utf8')) as {
@@ -43,9 +44,10 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'clickhouse',
+      'cockroach',
       'mariadb',
       'mssql',
       'mysql',
@@ -53,6 +55,8 @@ describe('docker/compose.yml (D17)', () => {
       'postgres',
       'ssh',
       'ssh-inner',
+      'tidb',
+      'yugabyte',
     ]);
   });
 
@@ -94,7 +98,8 @@ describe('docker/compose.yml (D17)', () => {
   });
 
   it.each(services)('pins the %s image to a version', (_id, service) => {
-    expect(service.image).toMatch(/^([a-z0-9.-]+\/)*[a-z0-9-]+:\d+(\.\d+)*(-[a-z0-9.]+)*$/i);
+    // TiDB and CockroachDB write their versions with a `v`.
+    expect(service.image).toMatch(/^([a-z0-9.-]+\/)*[a-z0-9-]+:v?\d+(\.\d+)*(-[a-z0-9.]+)*$/i);
     expect(service.image).not.toMatch(/:latest$|-latest$/);
   });
 
@@ -180,6 +185,19 @@ describe('docker/compose.yml (D17)', () => {
       const [type, blob] = authorized.split(' ');
       expect(type).toBe(key.type);
       expect(blob).toBe(key.getPublicSSH().toString('base64'));
+    });
+  });
+
+  describe('compat (V6.5)', () => {
+    it('keeps TiDB, CockroachDB and YugabyteDB together, each loading its own seed', () => {
+      const compat = all.filter(([, service]) => service.profiles?.[0] === 'compat');
+      expect(compat.map(([id]) => id).sort()).toEqual(['cockroach', 'tidb', 'yugabyte']);
+      expect(compose.services.tidb?.command).toContain(
+        '--initialize-sql-file=/docker-entrypoint-initdb.d/01-schema.sql',
+      );
+      const entrypoint = readFileSync(join(ROOT, 'docker/yugabyte/entrypoint.sh'), 'utf8');
+      expect(entrypoint).toContain('/docker-entrypoint-initdb.d/*.sql');
+      expect(entrypoint).toContain('ON_ERROR_STOP=1');
     });
   });
 });

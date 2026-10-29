@@ -110,10 +110,11 @@ function driverFromWord(word: string): DriverId | undefined {
   if (text.includes('sqlite')) {
     return 'sqlite';
   }
-  if (/postgres|pgsql|(^|[^a-z])pg([^a-z]|$)/.test(text)) {
+  // CockroachDB and YugabyteDB speak PostgreSQL's protocol, TiDB MySQL's (V6.5).
+  if (/postgres|pgsql|cockroach|yugabyte|(^|[^a-z])pg([^a-z]|$)/.test(text)) {
     return 'postgres';
   }
-  if (/mysql|maria/.test(text)) {
+  if (/mysql|maria|tidb/.test(text)) {
     return 'mysql';
   }
   // Laravel says `sqlsrv`, Prisma and JDBC `sqlserver`.
@@ -148,9 +149,9 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
   const driver =
     (named === undefined ? undefined : driverFromWord(named)) ??
     driverFromWord(prefix) ??
-    (port === 5432
+    (port === 5432 || port === 26257 || port === 5433
       ? 'postgres'
-      : port === 3306
+      : port === 3306 || port === 4000
         ? 'mysql'
         : port === 1433
           ? 'mssql'

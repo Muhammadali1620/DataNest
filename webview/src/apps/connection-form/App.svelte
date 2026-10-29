@@ -23,6 +23,12 @@
   import type { Translate } from '../../lib/i18n';
   import { parseConnectionUrl } from '../../../../src/shared/connection-url';
   import {
+    SERVER_PRESETS,
+    serverPreset,
+    type ServerPresetId,
+  } from '../../../../src/shared/server-presets';
+  import {
+    applyPreset,
     applyUrl,
     fieldsFrom,
     type FormFields,
@@ -49,6 +55,8 @@
   // The generic form keeps the declared type: `= $state(undefined)` would narrow it.
   let formState = $state<ConnectionFormState | undefined>(undefined);
   let fields = $state<FormFields | undefined>(undefined);
+  /** What the Database list shows: a driver id, or `preset:<id>` for a compatible server. */
+  let choice = $state('');
   let busy = $state<'test' | 'save' | undefined>(undefined);
   let notice = $state<Notice | undefined>(undefined);
   /** Problems are shown only after the first attempt, so a new form is not all red. */
@@ -89,6 +97,7 @@
       formState = next;
       // The host is the source of truth: a fresh state replaces what is on screen (D21).
       fields = fieldsFrom(next);
+      choice = fields.driver;
       notice = undefined;
       showProblems = false;
     });
@@ -98,14 +107,40 @@
     };
   });
 
-  function driverChanged(): void {
+  const PRESET_LABELS: Readonly<Record<ServerPresetId, MessageKey>> = {
+    tidb: 'form.preset.tidb',
+    'aurora-mysql': 'form.preset.auroraMysql',
+    cockroachdb: 'form.preset.cockroachdb',
+    yugabytedb: 'form.preset.yugabytedb',
+    'aurora-postgres': 'form.preset.auroraPostgres',
+  };
+
+  /** Compatible servers whose driver the host offers. */
+  const presets = $derived(
+    SERVER_PRESETS.filter((preset) =>
+      (formState?.drivers ?? []).some((driver) => driver.id === preset.driver),
+    ),
+  );
+  const chosenPreset = $derived(
+    choice.startsWith('preset:') ? serverPreset(choice.slice('preset:'.length)) : undefined,
+  );
+
+  function choiceChanged(): void {
     if (!fields) {
       return;
     }
+    notice = undefined;
+    const preset = choice.startsWith('preset:')
+      ? serverPreset(choice.slice('preset:'.length))
+      : undefined;
+    if (preset !== undefined) {
+      applyPreset(fields, preset);
+      return;
+    }
+    fields.driver = choice as DriverId;
     // Moving between drivers offers the new default port instead of the old one.
     const next = formState?.drivers.find((driver) => driver.id === fields?.driver);
     fields.port = next?.defaultPort === undefined ? '' : String(next.defaultPort);
-    notice = undefined;
   }
 
   function messageOf(error: unknown): string {
@@ -155,6 +190,7 @@
       return;
     }
     applyUrl(fields, parsed.value);
+    choice = fields.driver;
     urlError = undefined;
     urlText = '';
     notice = { kind: 'ok', text: t('form.url.filled') };
@@ -328,16 +364,28 @@
         </div>
       </div>
 
-      <Field label={t('form.driver')}>
+      <Field
+        label={t('form.driver')}
+        hint={chosenPreset === undefined
+          ? undefined
+          : t('form.presetHint', t(DRIVER_LABELS[chosenPreset.driver]))}
+      >
         <select
           class="control"
-          bind:value={fields.driver}
-          onchange={driverChanged}
+          bind:value={choice}
+          onchange={choiceChanged}
           aria-label={t('form.driver')}
         >
           {#each formState?.drivers ?? [] as driver (driver.id)}
             <option value={driver.id}>{t(DRIVER_LABELS[driver.id])}</option>
           {/each}
+          {#if presets.length > 0}
+            <optgroup label={t('form.compatible')}>
+              {#each presets as preset (preset.id)}
+                <option value={`preset:${preset.id}`}>{t(PRESET_LABELS[preset.id])}</option>
+              {/each}
+            </optgroup>
+          {/if}
         </select>
       </Field>
 

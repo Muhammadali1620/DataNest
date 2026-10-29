@@ -9,9 +9,7 @@ describe('mysqlDump', () => {
 
   it('reads in UTC inside a consistent snapshot', () => {
     expect(mysqlDump.prepare).toContain("SET time_zone = '+00:00'");
-    expect(mysqlDump.beginSnapshot).toEqual([
-      'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY',
-    ]);
+    expect(mysqlDump.beginSnapshot).toEqual(['START TRANSACTION WITH CONSISTENT SNAPSHOT']);
     expect(mysqlDump.endSnapshot).toEqual(['ROLLBACK']);
   });
 

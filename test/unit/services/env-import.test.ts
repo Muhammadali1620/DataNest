@@ -323,3 +323,25 @@ describe('Oracle in .env files (V6.4)', () => {
     expect(jdbc?.input).toMatchObject({ driver: 'oracle', host: 'ora', port: 1521 });
   });
 });
+
+describe('compatible servers in .env files (V6.5)', () => {
+  it.each([
+    ['cockroachdb', 'postgres'],
+    ['yugabytedb', 'postgres'],
+    ['tidb', 'mysql'],
+  ])('reads DB_CONNECTION=%s with the %s driver', (word, driver) => {
+    const [found] = connectionsFromEnv(
+      parseDotenv([`DB_CONNECTION=${word}`, 'DB_HOST=db'].join('\n')),
+    );
+    expect(found?.input).toMatchObject({ driver, host: 'db' });
+  });
+
+  it.each([
+    [26257, 'postgres'],
+    [5433, 'postgres'],
+    [4000, 'mysql'],
+  ])('takes port %i for %s when nothing names the database', (port, driver) => {
+    const [found] = connectionsFromEnv(parseDotenv(['DB_HOST=db', `DB_PORT=${port}`].join('\n')));
+    expect(found?.input).toMatchObject({ driver, port });
+  });
+});

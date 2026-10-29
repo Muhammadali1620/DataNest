@@ -473,5 +473,22 @@
   "{0} on the production connection \"{1}\"?": "{0} на production-подключении «{1}»?",
   "Delete the document {0}?": "Удалить документ {0}?",
   "Delete {0} documents?": "Удалить документов: {0}?",
-  "Open Documents": "Открыть документы"
+  "Open Documents": "Открыть документы",
+  "▶ Run": "▶ Выполнить",
+  "Open a MongoDB query first: DataNest: New MongoDB Query": "Сначала откройте запрос MongoDB: DataNest: Новый запрос MongoDB",
+  "There is no statement here": "Здесь нет оператора",
+  "Pick a database; `use <name>` in the editor does the same": "Выберите базу; то же делает `use <имя>` в редакторе",
+  "Safe mode blocks statements that drop data or change every document; turn datanest.safeMode to \"confirm\" to run them after a question": "Safe mode не пускает операторы, которые удаляют данные или меняют все документы; поставьте datanest.safeMode в \"confirm\", чтобы выполнять их после вопроса",
+  "Switched to the database {0}": "Запрос теперь в базе {0}",
+  "{0} documents": "документов: {0}",
+  "The first {0} documents are shown": "Показаны первые {0} документов",
+  "Result: {0}": "Результат: {0}",
+  "Run this? It drops data or changes every document.": "Выполнить? Оператор удаляет данные или меняет все документы.",
+  "Run this on the production connection \"{0}\"?": "Выполнить это на production-подключении «{0}»?",
+  "$(plug) MongoDB: no connection": "$(plug) MongoDB: нет подключения",
+  "The connection and database this MongoDB query runs in": "Подключение и база, в которых выполняется этот запрос MongoDB",
+  "Inserted: {0}": "Добавлено: {0}",
+  "Deleted: {0}": "Удалено: {0}",
+  "Matched: {0}, modified: {1}, inserted by upsert: {2}": "Найдено: {0}, изменено: {1}, добавлено upsert: {2}",
+  "Matched: {0}, modified: {1}": "Найдено: {0}, изменено: {1}"
 }

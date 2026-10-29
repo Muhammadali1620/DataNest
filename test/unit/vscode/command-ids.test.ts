@@ -328,10 +328,14 @@ describe('editor menus', () => {
     }
   });
 
-  it('only ever appears for SQL documents', () => {
+  it('only ever appears for SQL documents, or for MongoDB queries (V7.7)', () => {
     for (const entry of entries) {
-      expect(entry.when).toContain('editorLangId == sql');
+      const mongo = entry.command.startsWith('datanest.mongo.');
+      expect(entry.when).toContain(
+        mongo ? 'editorLangId == datanest-mongo' : 'editorLangId == sql',
+      );
     }
+    expect(entries.some((entry) => entry.command === COMMAND_IDS.mongoRunQuery)).toBe(true);
   });
 
   it('offers Run and Run All in both places', () => {

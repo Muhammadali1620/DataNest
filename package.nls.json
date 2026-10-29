@@ -115,5 +115,9 @@
   "commands.mongo.dropCollection.title": "Drop Collection…",
   "commands.mongo.newIndex.title": "New Index…",
   "commands.mongo.dropIndex.title": "Drop Index…",
-  "commands.mongo.openCollection.title": "Open Documents"
+  "commands.mongo.openCollection.title": "Open Documents",
+  "commands.mongo.newQuery.title": "New MongoDB Query",
+  "commands.mongo.runQuery.title": "Run MongoDB Statement",
+  "commands.mongo.runStatement.title": "Run This Statement",
+  "commands.mongo.pickDatabase.title": "Pick the Database of the MongoDB Query…"
 }

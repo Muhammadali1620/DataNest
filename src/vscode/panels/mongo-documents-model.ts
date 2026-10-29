@@ -71,7 +71,24 @@ function problemFromError(error: unknown): TypedProblem | undefined {
   return problem;
 }
 
-export class MongoDocumentsModel {
+/** What the documents page talks to: a collection's model, or a statement's result (V7.7). */
+export interface DocumentsPage {
+  state(): MongoDocumentsState;
+  run(texts: DocumentQueryText): Promise<MongoDocumentsState>;
+  page(skip: number): Promise<MongoDocumentsState>;
+  refresh(): Promise<MongoDocumentsState>;
+  count(): Promise<MongoDocumentsState>;
+  edit(row: number): Promise<{ token: string; text: string }>;
+  save(token: string, text: string): Promise<{ problem?: TypedProblem }>;
+  insert(text: string): Promise<{ problem?: TypedProblem }>;
+  delete(rows: readonly number[]): Promise<number>;
+  copyText(rows: readonly number[]): string;
+  describe(rows: readonly number[]): string[];
+  /** Lets go of what the page holds on the server, e.g. a result's cursor. */
+  close?(): Promise<void>;
+}
+
+export class MongoDocumentsModel implements DocumentsPage {
   private texts: DocumentQueryText = EMPTY_QUERY;
   private parsed: Omit<DocumentQuery, 'skip' | 'maxTimeMS'> = {
     filter: { type: 'document', fields: [] },
@@ -103,6 +120,7 @@ export class MongoDocumentsModel {
   state(): MongoDocumentsState {
     const { columns, rows } = pageView(this.documents);
     return {
+      mode: 'collection',
       connectionName: this.deps.connectionName,
       database: this.deps.database,
       collection: this.deps.collection,

@@ -128,6 +128,14 @@ export const COMMAND_IDS = {
   mongoDropIndex: 'datanest.mongo.dropIndex',
   /** The documents of a collection or view as a table and as text (V7.6). */
   mongoOpenCollection: 'datanest.mongo.openCollection',
+  /** A query editor bound to a MongoDB connection and database (V7.7). */
+  mongoNewQuery: 'datanest.mongo.newQuery',
+  /** Runs the selection or the statement at the cursor of a MongoDB query (Ctrl+Enter). */
+  mongoRunQuery: 'datanest.mongo.runQuery',
+  /** Runs one statement by its offsets; used by the CodeLens above it. */
+  mongoRunStatement: 'datanest.mongo.runStatement',
+  /** Points a MongoDB query at another connection or database. */
+  mongoPickDatabase: 'datanest.mongo.pickDatabase',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

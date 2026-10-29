@@ -41,7 +41,8 @@
   "main": "./dist/extension.js",
   "l10n": "./l10n",
   "activationEvents": [
-    "onView:datanest.connections"
+    "onView:datanest.connections",
+    "onLanguage:datanest-mongo"
   ],
   "contributes": {
     "viewsContainers": {
@@ -507,6 +508,29 @@
         "title": "%commands.mongo.openCollection.title%",
         "category": "DataNest",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "datanest.mongo.newQuery",
+        "title": "%commands.mongo.newQuery.title%",
+        "category": "DataNest",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "datanest.mongo.runQuery",
+        "title": "%commands.mongo.runQuery.title%",
+        "category": "DataNest",
+        "icon": "$(play)"
+      },
+      {
+        "command": "datanest.mongo.runStatement",
+        "title": "%commands.mongo.runStatement.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.mongo.pickDatabase",
+        "title": "%commands.mongo.pickDatabase.title%",
+        "category": "DataNest",
+        "icon": "$(database)"
       }
     ],
     "menus": {
@@ -654,6 +678,18 @@
         {
           "command": "datanest.mongo.openCollection",
           "when": "false"
+        },
+        {
+          "command": "datanest.mongo.runStatement",
+          "when": "false"
+        },
+        {
+          "command": "datanest.mongo.runQuery",
+          "when": "editorLangId == datanest-mongo"
+        },
+        {
+          "command": "datanest.mongo.pickDatabase",
+          "when": "editorLangId == datanest-mongo"
         }
       ],
       "view/title": [
@@ -1078,6 +1114,16 @@
           "command": "datanest.mongo.openCollection",
           "when": "view == datanest.connections && (viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
           "group": "0_query@1"
+        },
+        {
+          "command": "datanest.mongo.newQuery",
+          "when": "view == datanest.connections && (viewItem == datanest.mongoConnection.connected || viewItem == datanest.projectMongoConnection.connected || viewItem == datanest.mongoDatabase || viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
+          "group": "inline@0"
+        },
+        {
+          "command": "datanest.mongo.newQuery",
+          "when": "view == datanest.connections && (viewItem == datanest.mongoConnection || viewItem == datanest.mongoConnection.connected || viewItem == datanest.projectMongoConnection || viewItem == datanest.projectMongoConnection.connected || viewItem == datanest.mongoDatabase || viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
+          "group": "0_query@0"
         }
       ],
       "editor/title": [
@@ -1115,6 +1161,11 @@
           "command": "datanest.object.apply",
           "when": "editorLangId == sql && datanest.objectEditor",
           "group": "navigation@0"
+        },
+        {
+          "command": "datanest.mongo.runQuery",
+          "when": "editorLangId == datanest-mongo",
+          "group": "navigation@1"
         }
       ],
       "editor/context": [
@@ -1358,12 +1409,38 @@
         "key": "ctrl+shift+enter",
         "mac": "cmd+shift+enter",
         "when": "editorTextFocus && editorLangId == sql"
+      },
+      {
+        "command": "datanest.mongo.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == datanest-mongo"
       }
     ],
     "jsonValidation": [
       {
         "fileMatch": ".vscode/datanest.json",
         "url": "./resources/schemas/connections.schema.json"
+      }
+    ],
+    "languages": [
+      {
+        "id": "datanest-mongo",
+        "aliases": [
+          "MongoDB Query",
+          "datanest-mongo"
+        ],
+        "extensions": [
+          ".mongo"
+        ],
+        "configuration": "./resources/languages/datanest-mongo.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "datanest-mongo",
+        "scopeName": "source.datanest-mongo",
+        "path": "./resources/syntaxes/datanest-mongo.tmLanguage.json"
       }
     ]
   },

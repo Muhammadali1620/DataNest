@@ -1,6 +1,7 @@
-// The documents page of a MongoDB collection (V7.6): one panel per collection. It asks
-// before every change on a production connection and always before a delete, and puts
-// documents on the clipboard as text.
+// The documents page of a MongoDB collection (V7.6): one panel per collection, and one
+// per query editor for the results of its statements (V7.7). It asks before every change
+// on a production connection and always before a delete, and puts documents on the
+// clipboard as text.
 
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
@@ -11,7 +12,7 @@ import {
   mongoDocumentsProtocol,
   type MongoDocumentsState,
 } from '../../shared/protocols/mongo-documents';
-import type { MongoDocumentsModel } from './mongo-documents-model';
+import type { DocumentsPage } from './mongo-documents-model';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface MongoDocumentsPanelDeps {
@@ -20,8 +21,13 @@ export interface MongoDocumentsPanelDeps {
   readonly connectionId: string;
   readonly database: string;
   readonly collection: string;
-  readonly model: MongoDocumentsModel;
+  readonly model: DocumentsPage;
   readonly policy: WritePolicy;
+  /**
+   * Names the panel when it is not a collection's own page: the results of an editor are
+   * shown in one panel beside it, each run replacing the last.
+   */
+  readonly results?: { readonly key: string; readonly title: string };
 }
 
 export class MongoDocumentsPanel implements vscode.Disposable {
@@ -33,14 +39,29 @@ export class MongoDocumentsPanel implements vscode.Disposable {
   private readonly rpc: RpcPeer<MongoDocumentsProtocol['host'], MongoDocumentsProtocol['webview']>;
   private readonly log: Logger;
   private state: MongoDocumentsState | undefined;
+  private model: DocumentsPage;
   private disposed = false;
 
-  /** Opens the page of a collection, or brings its open page forward. */
+  /**
+   * Opens the page of a collection, or brings its open page forward; results replace
+   * what their panel showed.
+   */
   static show(deps: MongoDocumentsPanelDeps): MongoDocumentsPanel {
-    const id = MongoDocumentsPanel.idOf(deps.connectionId, deps.database, deps.collection);
+    const id =
+      deps.results === undefined
+        ? MongoDocumentsPanel.idOf(deps.connectionId, deps.database, deps.collection)
+        : `results\u0000${deps.results.key}`;
     const existing = MongoDocumentsPanel.open.get(id);
     if (existing !== undefined && !existing.disposed) {
-      existing.panel.reveal();
+      if (deps.results !== undefined) {
+        void existing.model.close?.();
+        existing.model = deps.model;
+        existing.panel.title = deps.results.title;
+        existing.push(deps.model.state());
+        existing.panel.reveal(undefined, true);
+      } else {
+        existing.panel.reveal();
+      }
       return existing;
     }
     const panel = new MongoDocumentsPanel(deps);
@@ -75,11 +96,22 @@ export class MongoDocumentsPanel implements vscode.Disposable {
 
   private constructor(private readonly deps: MongoDocumentsPanelDeps) {
     this.log = deps.logger.child('mongo-documents');
+    this.model = deps.model;
+    const title =
+      deps.results?.title ??
+      (deps.collection.length > 60 ? `${deps.collection.slice(0, 57)}…` : deps.collection);
     this.panel = createWebviewAppPanel(deps.extensionUri, {
       viewType: MongoDocumentsPanel.viewType,
-      title: deps.collection.length > 60 ? `${deps.collection.slice(0, 57)}…` : deps.collection,
+      title,
       app: 'mongo-documents',
+      ...(deps.results === undefined
+        ? {}
+        : { column: vscode.ViewColumn.Beside, preserveFocus: true }),
     });
+    if (deps.results !== undefined) {
+      // The result is there already; the page gets it when it says it is ready.
+      this.state = deps.model.state();
+    }
     this.rpc = new RpcPeer({
       local: mongoDocumentsProtocol.host,
       remote: mongoDocumentsProtocol.webview,
@@ -88,43 +120,42 @@ export class MongoDocumentsPanel implements vscode.Disposable {
         this.log.warn(problem);
       },
     });
-    const model = deps.model;
     this.rpc.handle('run', async (query) => {
-      this.push(await model.run(query));
+      this.push(await this.model.run(query));
       return {};
     });
     this.rpc.handle('page', async ({ skip }) => {
-      this.push(await model.page(skip));
+      this.push(await this.model.page(skip));
       return {};
     });
     this.rpc.handle('refresh', async () => {
-      this.push(await model.refresh());
+      this.push(await this.model.refresh());
       return {};
     });
     this.rpc.handle('count', async () => {
-      this.push(await model.count());
+      this.push(await this.model.count());
       return {};
     });
-    this.rpc.handle('edit', async ({ row }) => await model.edit(row));
+    this.rpc.handle('edit', async ({ row }) => await this.model.edit(row));
     this.rpc.handle('save', async ({ token, text }) => {
       if (!(await this.allowed(vscode.l10n.t('Save the document in "{0}"', deps.collection)))) {
         return {};
       }
-      const result = await model.save(token, text);
-      this.push(model.state());
+      const result = await this.model.save(token, text);
+      this.push(this.model.state());
       return result;
     });
     this.rpc.handle('insert', async ({ text }) => {
       if (!(await this.allowed(vscode.l10n.t('Add a document to "{0}"', deps.collection)))) {
         return {};
       }
-      const result = await model.insert(text);
-      this.push(model.state());
+      const result = await this.model.insert(text);
+      this.push(this.model.state());
       return result;
     });
     this.rpc.handle('delete', async ({ rows }) => ({ deleted: await this.delete(rows) }));
     this.rpc.handle('copy', async ({ rows }) => {
-      await vscode.env.clipboard.writeText(model.copyText(rows));
+      await vscode.env.clipboard.writeText(this.model.copyText(rows));
       return {};
     });
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
@@ -145,6 +176,7 @@ export class MongoDocumentsPanel implements vscode.Disposable {
       return;
     }
     this.disposed = true;
+    void this.model.close?.();
     for (const [id, panel] of MongoDocumentsPanel.open) {
       if (panel === this) {
         MongoDocumentsPanel.open.delete(id);
@@ -156,7 +188,7 @@ export class MongoDocumentsPanel implements vscode.Disposable {
 
   private async firstRead(): Promise<void> {
     try {
-      this.push(await this.deps.model.refresh());
+      this.push(await this.model.refresh());
     } catch (error) {
       this.log.warn('Reading the documents failed', error);
       void vscode.window.showErrorMessage(
@@ -187,7 +219,7 @@ export class MongoDocumentsPanel implements vscode.Disposable {
   }
 
   private async delete(rows: readonly number[]): Promise<number> {
-    const ids = this.deps.model.describe(rows);
+    const ids = this.model.describe(rows);
     if (ids.length === 0) {
       return 0;
     }
@@ -214,7 +246,7 @@ export class MongoDocumentsPanel implements vscode.Disposable {
       }
     }
     // A read-only connection is refused by the model, with the reason.
-    const deleted = await this.deps.model.delete(rows);
+    const deleted = await this.model.delete(rows);
     this.push(this.deps.model.state());
     return deleted;
   }

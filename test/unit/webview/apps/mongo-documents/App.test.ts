@@ -14,6 +14,7 @@ type HostPeer = RpcPeer<MongoDocumentsProtocol['host'], MongoDocumentsProtocol['
 
 function state(overrides: Partial<MongoDocumentsState> = {}): MongoDocumentsState {
   return {
+    mode: 'collection',
     connectionName: 'Shop',
     database: 'shop',
     collection: 'orders',
@@ -272,5 +273,25 @@ describe('MongoDB documents page (V7.6)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('error').textContent).toContain('socket closed');
     });
+  });
+
+  it('shows the result of a statement without the query bar (V7.7)', async () => {
+    await open(
+      state({
+        mode: 'result',
+        statement: 'db.orders.deleteMany({ a: 1 })',
+        summary: 'Deleted: 3',
+        collection: '',
+        readOnly: true,
+        editable: false,
+        insertable: false,
+      }),
+    );
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('shop');
+    expect(screen.getByTestId('statement').textContent).toBe('db.orders.deleteMany({ a: 1 })');
+    expect(screen.getByTestId('summary').textContent).toBe('Deleted: 3');
+    expect(screen.queryByLabelText('Filter')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add document…' })).toBeNull();
   });
 });

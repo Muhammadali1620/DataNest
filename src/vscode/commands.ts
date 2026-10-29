@@ -43,7 +43,7 @@ import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
 import { showObjectSearch } from './search/object-search';
 import { templateCommandHandlers } from './tree/template-commands';
-import { createSettings, readSafeMode } from './settings';
+import { createSettings, readQueryTimeoutMs, readSafeMode } from './settings';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
@@ -60,6 +60,7 @@ import type { RedisKeyRef } from '../shared/redis-key';
 import { pickRedisKey } from './redis/find-key';
 import { mongoCommands } from './mongodb/mongo-commands';
 import { MongoDocumentsPanel } from './panels/mongo-documents-panel';
+import { MongoEditors } from './mongodb/mongo-editors';
 
 export interface CommandDeps {
   readonly logger: Logger;
@@ -417,6 +418,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
   });
   let pings: PingPanel[] = [];
+  const mongoEditors = new MongoEditors({
+    extensionUri: deps.extensionUri,
+    logger: deps.logger,
+    manager: deps.manager,
+    store: deps.store,
+    safeMode: readSafeMode,
+    // A connection's own timeout (V4.9) wins over the setting.
+    maxTimeMS: (connectionId) => {
+      const own = deps.store.get(connectionId)?.options?.queryTimeout;
+      return own === undefined ? readQueryTimeoutMs() : own * 1000;
+    },
+  });
   const handlers: Record<CommandId, (target?: CommandTarget, ...rest: unknown[]) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
       deps.channel.show(true);
@@ -554,6 +567,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.redisServerInfo]: redisKeyCommands.serverInfo,
     [COMMAND_IDS.redisDeleteKeys]: (target, selection) =>
       redisKeyCommands.deleteKeys(target, selection),
+    [COMMAND_IDS.mongoNewQuery]: async (target) => {
+      await mongoEditors.newQuery(target);
+    },
+    [COMMAND_IDS.mongoRunQuery]: async () => {
+      await mongoEditors.runAtCursor();
+    },
+    [COMMAND_IDS.mongoRunStatement]: async (range) => {
+      await mongoEditors.runStatement(range);
+    },
+    [COMMAND_IDS.mongoPickDatabase]: async () => {
+      await mongoEditors.pickDatabase();
+    },
     ...mongoCommands({
       extensionUri: deps.extensionUri,
       logger: deps.logger,
@@ -572,6 +597,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   );
   return [
     ...commands,
+    mongoEditors,
     {
       dispose: () => {
         for (const panel of pings) {

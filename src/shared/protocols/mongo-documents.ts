@@ -67,6 +67,12 @@ export const typedProblemSchema = object({
 });
 
 const stateSchema = object({
+  /** A collection's own page, or the result of a statement run in an editor (V7.7). */
+  mode: literal('collection', 'result'),
+  /** The statement whose result this is. */
+  statement: optional(string({ maxLength: MAX_QUERY_TEXT })),
+  /** What a write did or what a result holds, in words. */
+  summary: optional(string({ maxLength: 2000 })),
   connectionName: string({ maxLength: 500 }),
   database: string({ maxLength: 500 }),
   collection: string({ maxLength: 500 }),

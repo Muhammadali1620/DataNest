@@ -32,6 +32,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   the shell's syntax, page through them, see them as a table (sort by a click on a column)
   or as text, with the count of what matches. Edit a document as text, add, copy and
   delete documents; a save never overwrites a document someone else changed meanwhile.
+- MongoDB queries in the editor: a query document bound to a connection and a database
+  runs the statement under the cursor with Ctrl+Enter or the ▶ Run above it — `find` with
+  `.sort().limit()`, `aggregate`, counts, `distinct`, inserts, updates, deletes, indexes,
+  `db.runCommand`, `use` and `show`. Results open beside the editor, page by page.
+  Read-only connections refuse writes, production asks first, and safe mode asks before
+  `drop` or a `deleteMany({})` that takes every document.
 
 ### Fixed
 

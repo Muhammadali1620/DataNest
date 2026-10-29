@@ -167,7 +167,7 @@
     <p class="hint">{t('mongo.loading')}</p>
   {:else}
     <header>
-      <h1>{page.database}.{page.collection}</h1>
+      <h1>{page.collection === '' ? page.database : `${page.database}.${page.collection}`}</h1>
       <p class="meta" data-testid="meta">
         <span>{page.connectionName}</span>
         {#if page.collectionType !== 'collection'}
@@ -185,6 +185,12 @@
       </p>
     </header>
 
+    {#if page.mode === 'result'}
+      <pre class="code statement" data-testid="statement">{page.statement ?? ''}</pre>
+      {#if page.summary !== undefined}
+        <p data-testid="summary">{page.summary}</p>
+      {/if}
+    {:else}
     <section class="query" aria-label={t('mongo.query')}>
       <input
         class="control filter"
@@ -220,6 +226,7 @@
       </select>
       <button type="button" class="button" disabled={busy} onclick={runQuery}>{t('mongo.run')}</button>
     </section>
+    {/if}
 
     {#if problem !== undefined}
       <p class="error" role="alert" data-testid="query-problem">
@@ -272,9 +279,11 @@
         >
       {/if}
       <span class="grow"></span>
-      <button type="button" class="button secondary" disabled={busy} onclick={() => void act(() => rpc.request('refresh', {}))}
-        >{t('mongo.refresh')}</button
-      >
+      {#if page.mode === 'collection'}
+        <button type="button" class="button secondary" disabled={busy} onclick={() => void act(() => rpc.request('refresh', {}))}
+          >{t('mongo.refresh')}</button
+        >
+      {/if}
       {#if selected.length > 0}
         <button type="button" class="button secondary" disabled={busy} onclick={() => { copy(selected); }}
           >{t('mongo.copy', selected.length)}</button
@@ -522,6 +531,10 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+  .statement {
+    max-height: 120px;
+    margin: 0;
   }
   .code {
     font-family: var(--vscode-editor-font-family, monospace);

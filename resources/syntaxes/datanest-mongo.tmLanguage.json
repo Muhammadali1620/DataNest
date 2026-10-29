@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MongoDB Query",
+  "scopeName": "source.datanest-mongo",
+  "patterns": [
+    {
+      "comment": "use <database> and show dbs | collections, the statements that are not JavaScript",
+      "match": "^\\s*(use|show)\\b",
+      "name": "keyword.control.datanest-mongo"
+    },
+    { "include": "source.js" }
+  ]
+}

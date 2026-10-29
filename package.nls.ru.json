@@ -115,5 +115,9 @@
   "commands.mongo.dropCollection.title": "Удалить коллекцию…",
   "commands.mongo.newIndex.title": "Новый индекс…",
   "commands.mongo.dropIndex.title": "Удалить индекс…",
-  "commands.mongo.openCollection.title": "Открыть документы"
+  "commands.mongo.openCollection.title": "Открыть документы",
+  "commands.mongo.newQuery.title": "Новый запрос MongoDB",
+  "commands.mongo.runQuery.title": "Выполнить оператор MongoDB",
+  "commands.mongo.runStatement.title": "Выполнить этот оператор",
+  "commands.mongo.pickDatabase.title": "Выбрать базу запроса MongoDB…"
 }

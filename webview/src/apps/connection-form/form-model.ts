@@ -16,6 +16,8 @@ import {
   optionSupport,
   DEFAULT_PORTS,
   DEFAULT_SENTINEL_PORT,
+  type ElasticAuthMethod,
+  type ElasticSettings,
   type MongoAuthMechanism,
   type MongoMode,
   type MongoSettings,
@@ -148,6 +150,9 @@ export interface FormFields {
   authSource: string;
   /** Empty: the server and the driver agree on SCRAM. */
   authMechanism: MongoAuthMechanism | '';
+  /** Elasticsearch (V7.8): a user and password, or an API key in the password box. */
+  elasticAuth: ElasticAuthMethod;
+  elasticPrefix: string;
 }
 
 /** The option fields that hold seconds, with the problem a bad number gives. */
@@ -199,7 +204,20 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     sentinelUser: input.redis?.sentinelUser ?? '',
     sentinelPassword: emptySecret(),
     ...mongoFieldsFrom(input),
+    elasticAuth: input.elastic?.auth ?? 'basic',
+    elasticPrefix: input.elastic?.pathPrefix ?? '',
   };
+}
+
+/** The Elasticsearch settings to send; none for a user and password at the root. */
+export function toElastic(fields: FormFields): ElasticSettings | undefined {
+  if (fields.driver !== 'elasticsearch') {
+    return undefined;
+  }
+  const prefix = fields.elasticPrefix.trim();
+  return fields.elasticAuth === 'basic' && prefix === ''
+    ? undefined
+    : { auth: fields.elasticAuth, ...(prefix === '' ? {} : { pathPrefix: prefix }) };
 }
 
 type MongoFields = Pick<
@@ -473,13 +491,16 @@ export function toInput(fields: FormFields): ConnectionInput {
   const database = trim(fields.database);
   const redis = toRedis(fields);
   const mongo = toMongo(fields);
+  const elastic = toElastic(fields);
+  // An API key signs in alone: a user name would only confuse the server.
+  const signsWithKey = elastic?.auth === 'apiKey';
   return {
     name,
     driver: fields.driver,
     ...(host === undefined ? {} : { host }),
     ...(port === undefined ? {} : { port }),
-    ...(user === undefined ? {} : { user }),
-    ...(database === undefined ? {} : { database }),
+    ...(user === undefined || signsWithKey ? {} : { user }),
+    ...(database === undefined || fields.driver === 'elasticsearch' ? {} : { database }),
     ...(fields.useSsh && sshAllowed(fields)
       ? {
           ssh: {
@@ -494,6 +515,7 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(filter === undefined ? {} : { filter }),
     ...(redis === undefined ? {} : { redis }),
     ...(mongo === undefined ? {} : { mongo }),
+    ...(elastic === undefined ? {} : { elastic }),
   };
 }
 
@@ -636,6 +658,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'mongo-srv-port': 'form.mongo.error.srvPort',
   'mongo-name-invalid': 'form.mongo.error.name',
   'mongo-ssh-topology': 'form.mongo.error.ssh',
+  'elastic-prefix-invalid': 'form.elastic.error.prefix',
 };
 
 export { DEFAULT_SSH_PORT };
@@ -670,6 +693,8 @@ export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void 
   // A Redis URL names one server; a MongoDB one may name a replica set or an SRV record.
   fields.redisMode = 'standalone';
   Object.assign(fields, mongoFieldsFrom(input));
+  fields.elasticAuth = input.elastic?.auth ?? 'basic';
+  fields.elasticPrefix = input.elastic?.pathPrefix ?? '';
   if (password !== undefined) {
     fields.password = password;
     fields.passwordTouched = true;

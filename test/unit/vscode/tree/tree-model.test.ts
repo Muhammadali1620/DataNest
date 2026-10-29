@@ -16,6 +16,7 @@ import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helper
 import { bulk, FakeRedisDriver, type FakeRedisSession } from '../../../helpers/fake-redis';
 import { RedisKeyBrowser } from '../../../../src/services/redis/key-browser';
 import { bool, doc, int32, str } from '../../../../src/core/mongo/value';
+import { FakeElasticDriver, FakeElasticSession, json } from '../../../helpers/fake-elastic';
 import {
   collection,
   FakeMongoDriver,
@@ -1222,5 +1223,107 @@ describe('TreeModel with MongoDB (V7.5)', () => {
     expect(
       model.parentOf({ kind: 'mongoDatabase', connectionId: shop.id, database: 'shop' }),
     ).toBeUndefined();
+  });
+});
+
+describe('TreeModel with Elasticsearch (V7.8)', () => {
+  async function setup(showSystem = false) {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const server = new FakeElasticSession((request) =>
+      request.path.startsWith('/_cat/indices')
+        ? json([
+            { index: 'products', health: 'green', status: 'open', 'docs.count': '3' },
+            { index: '.hidden', health: 'green', status: 'open' },
+          ])
+        : request.path === '/empty/_mapping'
+          ? json({ empty: { mappings: {} } })
+          : json({
+              products: {
+                mappings: {
+                  properties: {
+                    name: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+                    stock: { type: 'long' },
+                  },
+                },
+              },
+            }),
+    );
+    const elastic = new FakeElasticDriver(() => server);
+    const drivers = Object.assign(new FakeDriverProvider(), {
+      getElastic: () => Promise.resolve(elastic),
+    });
+    const manager = new ConnectionManager({ store, drivers, logger });
+    const model = new TreeModel({
+      store,
+      manager,
+      cache: new MetadataCache({ logger }),
+      settings: { showSystemObjects: () => showSystem },
+      logger,
+      texts: { ...TEXTS, noIndices: 'No indices', noFields: 'No fields' },
+    });
+    const search = await store.add({ name: 'Search', driver: 'elasticsearch', host: 'h' });
+    return { model, search, elastic, drivers };
+  }
+
+  it('lists the indices of a connection, hidden ones only when asked', async () => {
+    const { model, search, drivers } = await setup();
+    expect(await model.children({ kind: 'connection', connectionId: search.id })).toEqual([
+      {
+        kind: 'elasticIndex',
+        connectionId: search.id,
+        index: { name: 'products', health: 'green', status: 'open', docs: '3', hidden: false },
+      },
+    ]);
+    expect(drivers.requested).toEqual([]);
+    const all = await setup(true);
+    expect(
+      await all.model.children({ kind: 'connection', connectionId: all.search.id }),
+    ).toHaveLength(2);
+  });
+
+  it('lists the fields of an index and the fields inside a field', async () => {
+    const { model, search } = await setup();
+    const fields = await model.children({
+      kind: 'elasticIndex',
+      connectionId: search.id,
+      index: { name: 'products', status: 'open', hidden: false },
+    });
+    expect(fields.map((node) => node.kind === 'elasticField' && node.field.path)).toEqual([
+      'name',
+      'stock',
+    ]);
+    const [name] = fields;
+    expect(
+      name === undefined
+        ? []
+        : (await model.children(name)).map(
+            (node) => node.kind === 'elasticField' && node.field.path,
+          ),
+    ).toEqual(['name.keyword']);
+    expect(
+      await model.children({
+        kind: 'elasticIndex',
+        connectionId: search.id,
+        index: { name: 'empty', status: 'open', hidden: false },
+      }),
+    ).toEqual([{ kind: 'message', text: 'No fields', connectionId: search.id }]);
+  });
+
+  it('says so when there is no index, and turns a failure into a leaf', async () => {
+    const { model, search, elastic } = await setup();
+    elastic.failure = new DbError('auth-failed', 'security_exception: unable to authenticate');
+    expect(await model.children({ kind: 'connection', connectionId: search.id })).toEqual([
+      {
+        kind: 'message',
+        text: 'security_exception: unable to authenticate',
+        failed: true,
+        connectionId: search.id,
+      },
+    ]);
   });
 });

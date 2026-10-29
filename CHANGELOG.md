@@ -38,6 +38,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   `db.runCommand`, `use` and `show`. Results open beside the editor, page by page.
   Read-only connections refuse writes, production asks first, and safe mode asks before
   `drop` or a `deleteMany({})` that takes every document.
+- Elasticsearch and OpenSearch: connect with a user and password or an API key, TLS and
+  SSH, behind a proxy path; `elasticsearch://` URLs and `ELASTICSEARCH_URL` in `.env` fill
+  the form. The tree lists indices with their health, documents and size, and the fields
+  of each mapping, nested ones inside their field. Create and delete indices. Requests are
+  written as in a console — `GET /products/_search` with a JSON body, `_bulk` line by line
+  — and sent with Ctrl+Enter; the answer shows the hits as a table and the whole answer
+  as text, 64-bit numbers exact. Read-only connections send only what reads, production
+  asks first, and safe mode asks before deleting an index or every document.
 
 ### Fixed
 

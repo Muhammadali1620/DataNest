@@ -1100,3 +1100,41 @@ describe('ConnectionStore MongoDB (V7.5)', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('ConnectionStore Elasticsearch (V7.8)', () => {
+  function store() {
+    return new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+  }
+
+  it('keeps an API key sign-in and a trimmed path, and drops the defaults', async () => {
+    const one = store();
+    const key = await one.add(
+      {
+        name: 'K',
+        driver: 'elasticsearch',
+        host: 'h',
+        elastic: { auth: 'apiKey', pathPrefix: ' /es/ ' },
+      },
+      'key',
+    );
+    expect(key.elastic).toEqual({ auth: 'apiKey', pathPrefix: '/es' });
+    const plain = await one.add({
+      name: 'P',
+      driver: 'elasticsearch',
+      host: 'h',
+      elastic: { auth: 'basic', pathPrefix: '' },
+    });
+    expect(plain.elastic).toBeUndefined();
+    const sql = await one.add({
+      name: 'S',
+      driver: 'mysql',
+      host: 'h',
+      elastic: { auth: 'apiKey' },
+    });
+    expect(sql.elastic).toBeUndefined();
+  });
+});

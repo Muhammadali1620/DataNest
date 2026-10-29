@@ -12,6 +12,7 @@ import type {
   TableKind,
   TableRef,
 } from '../../core/model/objects';
+import type { ElasticFieldInfo, ElasticIndexInfo } from '../../services/elasticsearch/catalog';
 import type { MongoIndexInfo } from '../../services/mongodb/catalog';
 import type { DriverFamily } from '../../shared/connection';
 import { type RedisKeyRef, redisKeyId } from '../../shared/redis-key';
@@ -56,6 +57,13 @@ export const TREE_CONTEXT = {
   mongoIndex: 'datanest.mongoIndex',
   /** The `_id_` index: every collection has it, and it cannot be dropped. */
   mongoIdIndex: 'datanest.mongoIdIndex',
+  /** Elasticsearch connections (V7.8) share the connection menus but none of the SQL ones. */
+  elasticConnection: 'datanest.elasticConnection',
+  elasticConnectionConnected: 'datanest.elasticConnection.connected',
+  projectElasticConnection: 'datanest.projectElasticConnection',
+  projectElasticConnectionConnected: 'datanest.projectElasticConnection.connected',
+  elasticIndex: 'datanest.elasticIndex',
+  elasticField: 'datanest.elasticField',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -261,6 +269,21 @@ export interface MongoIndexNode {
   readonly index: MongoIndexInfo;
 }
 
+/** An index of an Elasticsearch connection (V7.8). */
+export interface ElasticIndexNode {
+  readonly kind: 'elasticIndex';
+  readonly connectionId: string;
+  readonly index: ElasticIndexInfo;
+}
+
+/** A field of an index's mapping, with the fields inside it. */
+export interface ElasticFieldNode {
+  readonly kind: 'elasticField';
+  readonly connectionId: string;
+  readonly index: string;
+  readonly field: ElasticFieldInfo;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -293,6 +316,8 @@ export type TreeNode =
   | MongoDatabaseNode
   | MongoCollectionNode
   | MongoIndexNode
+  | ElasticIndexNode
+  | ElasticFieldNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -325,6 +350,8 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'mongoDatabase':
     case 'mongoCollection':
     case 'mongoIndex':
+    case 'elasticIndex':
+    case 'elasticField':
     case 'message':
       return {};
   }
@@ -425,6 +452,10 @@ export function nodeId(node: TreeNode): string {
         node.collection,
         node.index.name,
       ]);
+    case 'elasticIndex':
+      return join(['elasticIndex', node.connectionId, node.index.name]);
+    case 'elasticField':
+      return join(['elasticField', node.connectionId, node.index, node.field.path]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -474,6 +505,8 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'mongoDatabase' ||
     kind === 'mongoCollection' ||
     kind === 'mongoIndex' ||
+    kind === 'elasticIndex' ||
+    kind === 'elasticField' ||
     kind === 'message'
   );
 }
@@ -507,6 +540,10 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.collection;
     case 'mongoIndex':
       return node.index.name;
+    case 'elasticIndex':
+      return node.index.name;
+    case 'elasticField':
+      return node.field.path;
     case 'project':
     case 'connection':
     case 'group':
@@ -560,6 +597,8 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'mongoDatabase':
     case 'mongoCollection':
     case 'mongoIndex':
+    case 'elasticIndex':
+    case 'elasticField':
     case 'message':
       return undefined;
   }
@@ -572,6 +611,15 @@ export function connectionContext(options: {
   readonly family: DriverFamily;
 }): string {
   const { project, connected, family } = options;
+  if (family === 'elasticsearch') {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectElasticConnectionConnected
+        : TREE_CONTEXT.projectElasticConnection
+      : connected
+        ? TREE_CONTEXT.elasticConnectionConnected
+        : TREE_CONTEXT.elasticConnection;
+  }
   if (family === 'mongodb') {
     return project
       ? connected

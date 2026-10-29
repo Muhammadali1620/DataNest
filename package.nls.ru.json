@@ -119,5 +119,11 @@
   "commands.mongo.newQuery.title": "Новый запрос MongoDB",
   "commands.mongo.runQuery.title": "Выполнить оператор MongoDB",
   "commands.mongo.runStatement.title": "Выполнить этот оператор",
-  "commands.mongo.pickDatabase.title": "Выбрать базу запроса MongoDB…"
+  "commands.mongo.pickDatabase.title": "Выбрать базу запроса MongoDB…",
+  "commands.elastic.newIndex.title": "Новый индекс…",
+  "commands.elastic.deleteIndex.title": "Удалить индекс…",
+  "commands.elastic.newQuery.title": "Новый запрос Elasticsearch",
+  "commands.elastic.runQuery.title": "Отправить запрос Elasticsearch",
+  "commands.elastic.runRequest.title": "Отправить этот запрос",
+  "commands.elastic.pickConnection.title": "Выбрать подключение запроса Elasticsearch…"
 }

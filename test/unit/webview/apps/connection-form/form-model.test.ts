@@ -30,6 +30,7 @@ import {
   toRedis,
   toMongo,
   changeMongoMode,
+  toElastic,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
 import { parseConnectionUrl } from '../../../../../src/shared/connection-url';
@@ -77,6 +78,8 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     mongoNodes: '',
     authSource: '',
     authMechanism: '',
+    elasticAuth: 'basic',
+    elasticPrefix: '',
     ...overrides,
   };
 }
@@ -138,6 +141,8 @@ describe('fieldsFrom', () => {
       mongoNodes: '',
       authSource: '',
       authMechanism: '',
+      elasticAuth: 'basic',
+      elasticPrefix: '',
     });
   });
 
@@ -1118,5 +1123,48 @@ describe('MongoDB fields (V7.5)', () => {
     }
     applyUrl(state, plain.value);
     expect(state).toMatchObject({ driver: 'postgres', mongoMode: 'direct', authSource: '' });
+  });
+});
+
+describe('Elasticsearch fields (V7.8)', () => {
+  const elastic = (overrides: Partial<FormFields> = {}): FormFields =>
+    fields({
+      driver: 'elasticsearch',
+      port: '9200',
+      user: 'elastic',
+      database: 'ignored',
+      ...overrides,
+    });
+
+  it('sends nothing for a user and password at the root', () => {
+    expect(toElastic(elastic())).toBeUndefined();
+    expect(toElastic(fields({ elasticAuth: 'apiKey' }))).toBeUndefined();
+    expect(toInput(elastic())).toMatchObject({ user: 'elastic' });
+    expect(toInput(elastic())).not.toHaveProperty('database');
+  });
+
+  it('sends an API key sign-in without the user, and a trimmed path', () => {
+    expect(toElastic(elastic({ elasticAuth: 'apiKey', elasticPrefix: ' /es ' }))).toEqual({
+      auth: 'apiKey',
+      pathPrefix: '/es',
+    });
+    expect(toInput(elastic({ elasticAuth: 'apiKey' }))).not.toHaveProperty('user');
+  });
+
+  it('blocks a path that is not one, and fills the fields from a URL', () => {
+    expect(problemsOf(elastic({ elasticPrefix: 'es' }))).toContain('elastic-prefix-invalid');
+    expect(en[PROBLEM_MESSAGES['elastic-prefix-invalid']]).toBeTruthy();
+    const state = fields();
+    const parsed = parseConnectionUrl('elasticsearch+https://u:p@h/es');
+    if (!parsed.ok) {
+      throw new Error('URL');
+    }
+    applyUrl(state, parsed.value);
+    expect(state).toMatchObject({
+      driver: 'elasticsearch',
+      elasticPrefix: '/es',
+      sslMode: 'verify-full',
+      port: '443',
+    });
   });
 });

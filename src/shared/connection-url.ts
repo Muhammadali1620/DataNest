@@ -4,6 +4,7 @@
 // .env import) and the connection form, which can fill itself from a pasted URL.
 
 import type { ConnectionInput, DriverId, SslMode, SslSettings } from './connection';
+import { parseElasticUrl } from './elastic-url';
 import { parseMongoUrl } from './mongo-url';
 
 export interface ParsedConnectionUrl {
@@ -47,6 +48,10 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   valkeys: 'redis',
   // `mongodb+srv` is the same scheme with a DNS seed list (V7.5).
   mongodb: 'mongodb',
+  // `+https` asks for TLS (V7.8); OpenSearch speaks the same API.
+  elasticsearch: 'elasticsearch',
+  opensearch: 'elasticsearch',
+  es: 'elasticsearch',
 };
 
 /** Schemes that mean TLS by themselves, with the certificate checked. */
@@ -290,6 +295,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   // A seed list (`host1,host2`) and `+srv` are MongoDB's own.
   if (driver === 'mongodb') {
     return parseMongoUrl(trimmed.replace(/^jdbc:/i, ''));
+  }
+  if (driver === 'elasticsearch') {
+    return parseElasticUrl(trimmed);
   }
   // Strip `jdbc:` and `+driver`, so the rest parses as one plain URL.
   const plain = trimmed

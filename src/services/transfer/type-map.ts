@@ -342,6 +342,8 @@ export function targetType(
       throw new DbError('unsupported', 'Tables cannot be copied to Redis');
     case 'mongodb':
       throw new DbError('unsupported', 'Tables cannot be copied to MongoDB');
+    case 'elasticsearch':
+      throw new DbError('unsupported', 'Tables cannot be copied to Elasticsearch');
   }
 }
 

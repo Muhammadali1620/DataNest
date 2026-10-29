@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Elasticsearch Query",
+  "scopeName": "source.datanest-es",
+  "patterns": [
+    {
+      "comment": "A request line: the method and the path",
+      "match": "^\\s*(GET|POST|PUT|DELETE|HEAD|PATCH)\\s+(\\S+)",
+      "captures": {
+        "1": { "name": "keyword.control.datanest-es" },
+        "2": { "name": "string.unquoted.datanest-es" }
+      }
+    },
+    { "match": "^\\s*(#|//).*$", "name": "comment.line.datanest-es" },
+    { "include": "source.json" }
+  ]
+}

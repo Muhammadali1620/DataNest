@@ -136,6 +136,17 @@ export const COMMAND_IDS = {
   mongoRunStatement: 'datanest.mongo.runStatement',
   /** Points a MongoDB query at another connection or database. */
   mongoPickDatabase: 'datanest.mongo.pickDatabase',
+  /** Elasticsearch indices and requests (V7.8). */
+  elasticNewIndex: 'datanest.elastic.newIndex',
+  elasticDeleteIndex: 'datanest.elastic.deleteIndex',
+  /** A query editor bound to an Elasticsearch connection. */
+  elasticNewQuery: 'datanest.elastic.newQuery',
+  /** Sends the request at the cursor of an Elasticsearch query (Ctrl+Enter). */
+  elasticRunQuery: 'datanest.elastic.runQuery',
+  /** Sends one request by its offset; used by the CodeLens above it. */
+  elasticRunRequest: 'datanest.elastic.runRequest',
+  /** Points an Elasticsearch query at another connection. */
+  elasticPickConnection: 'datanest.elastic.pickConnection',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

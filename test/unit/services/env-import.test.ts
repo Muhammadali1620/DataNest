@@ -429,3 +429,38 @@ describe('MongoDB in .env files (V7.5)', () => {
     expect(byPort?.input).toMatchObject({ driver: 'mongodb', port: 27_017 });
   });
 });
+
+describe('Elasticsearch in .env files (V7.8)', () => {
+  it('reads ELASTICSEARCH_URL and OPENSEARCH_URL even as plain http(s) URLs', () => {
+    const found = connectionsFromEnv(
+      parseDotenv(
+        [
+          'ELASTICSEARCH_URL=https://elastic:pw@search.example.com:9243',
+          'OPENSEARCH_URL=http://localhost:9201',
+          'OTHER_URL=https://example.com',
+        ].join('\n'),
+      ),
+    );
+    expect(found.map((candidate) => [candidate.source, candidate.input.host])).toEqual([
+      ['ELASTICSEARCH_URL', 'search.example.com'],
+      ['OPENSEARCH_URL', 'localhost'],
+    ]);
+    expect(found[0]?.input).toMatchObject({
+      driver: 'elasticsearch',
+      user: 'elastic',
+      ssl: { mode: 'verify-full' },
+    });
+    expect(found[0]?.password).toBe('pw');
+  });
+
+  it('takes a group named ELASTIC_* or on port 9200', () => {
+    const [named] = connectionsFromEnv(
+      parseDotenv(['ELASTIC_HOST=es', 'ELASTIC_PASSWORD=pw'].join('\n')),
+    );
+    expect(named?.input).toMatchObject({ driver: 'elasticsearch', host: 'es' });
+    const [byPort] = connectionsFromEnv(
+      parseDotenv(['SEARCH_HOST=s', 'SEARCH_PORT=9200'].join('\n')),
+    );
+    expect(byPort?.input).toMatchObject({ driver: 'elasticsearch', port: 9200 });
+  });
+});

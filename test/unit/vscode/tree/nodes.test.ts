@@ -340,12 +340,12 @@ describe('Redis nodes (V7.1)', () => {
   it('marks Redis and MongoDB connections apart, so only the shared menus show', () => {
     const contexts = [false, true].flatMap((project) =>
       [false, true].flatMap((connected) =>
-        (['sql', 'redis', 'mongodb'] as const).map((family) =>
+        (['sql', 'redis', 'mongodb', 'elasticsearch'] as const).map((family) =>
           connectionContext({ project, connected, family }),
         ),
       ),
     );
-    expect(new Set(contexts).size).toBe(12);
+    expect(new Set(contexts).size).toBe(16);
     expect(connectionContext({ project: false, connected: true, family: 'mongodb' })).toBe(
       TREE_CONTEXT.mongoConnectionConnected,
     );
@@ -460,5 +460,43 @@ describe('MongoDB nodes (V7.5)', () => {
       expect(scopeOf(node)).toEqual({});
       expect(objectRefOf(node)).toBeUndefined();
     }
+  });
+});
+
+describe('Elasticsearch nodes (V7.8)', () => {
+  const index: TreeNode = {
+    kind: 'elasticIndex',
+    connectionId: 'c1',
+    index: { name: 'products', status: 'open', hidden: false },
+  };
+  const field: TreeNode = {
+    kind: 'elasticField',
+    connectionId: 'c1',
+    index: 'products',
+    field: { name: 'keyword', path: 'name.keyword', type: 'keyword', children: [] },
+  };
+
+  it('gives every node its own id and copies its name or path', () => {
+    expect(nodeId(index)).not.toBe(nodeId(field));
+    expect(nameOf(index)).toBe('products');
+    expect(nameOf(field)).toBe('name.keyword');
+  });
+
+  it('belongs to its connection, without a SQL scope or definition', () => {
+    for (const node of [index, field]) {
+      expect(isTreeNode(node)).toBe(true);
+      expect(connectionIdOf(node)).toBe('c1');
+      expect(scopeOf(node)).toEqual({});
+      expect(objectRefOf(node)).toBeUndefined();
+    }
+  });
+
+  it('marks Elasticsearch connections apart', () => {
+    expect(connectionContext({ project: false, connected: true, family: 'elasticsearch' })).toBe(
+      TREE_CONTEXT.elasticConnectionConnected,
+    );
+    expect(connectionContext({ project: true, connected: false, family: 'elasticsearch' })).toBe(
+      TREE_CONTEXT.projectElasticConnection,
+    );
   });
 });

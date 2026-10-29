@@ -408,3 +408,31 @@ services:
           'CMD-SHELL',
           'mongosh --port 7017 --quiet -u datanest -p datanest --authenticationDatabase admin --eval ''quit(db.getSiblingDB("datanest").seed.countDocuments() === 1 ? 0 : 1)''',
         ]
+
+  # Elasticsearch (V7.8), group `elasticsearch`: one node with security on over plain HTTP,
+  # the `elastic` user (password `datanest`) and a read-only `reader`.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.6
+    container_name: datanest-elasticsearch
+    profiles: [elasticsearch]
+    entrypoint: ['/bin/bash', '/datanest/start.sh']
+    environment:
+      discovery.type: single-node
+      ELASTIC_PASSWORD: datanest
+      xpack.security.enabled: 'true'
+      xpack.security.http.ssl.enabled: 'false'
+      xpack.security.transport.ssl.enabled: 'false'
+      xpack.license.self_generated.type: basic
+      cluster.routing.allocation.disk.threshold_enabled: 'false'
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - 127.0.0.1:7200:9200
+    volumes:
+      - ./elasticsearch:/datanest:ro
+      - ./seed/elasticsearch:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /usr/share/elasticsearch/data:uid=1000,gid=0
+    healthcheck:
+      <<: *healthcheck
+      test:
+        ['CMD-SHELL', 'curl -sf -u elastic:datanest http://localhost:9200/datanest-seed >/dev/null']

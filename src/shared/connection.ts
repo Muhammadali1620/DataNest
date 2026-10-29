@@ -10,6 +10,7 @@ export const DRIVER_IDS = [
   'oracle',
   'redis',
   'mongodb',
+  'elasticsearch',
 ] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
@@ -21,16 +22,16 @@ export function isDriverId(value: unknown): value is DriverId {
 /**
  * What a database speaks (D81): SQL drivers share the dialect, the result grid and the
  * SQL editor; Redis has commands and keys, MongoDB collections of documents (D88), each
- * with a UI of its own. Connections, folders, secrets, SSH and the connection form are
- * the same for all.
+ * with a UI of its own; Elasticsearch speaks HTTP and JSON (D91). Connections, folders,
+ * secrets, SSH and the connection form are the same for all.
  */
-export type DriverFamily = 'sql' | 'redis' | 'mongodb';
+export type DriverFamily = 'sql' | 'redis' | 'mongodb' | 'elasticsearch';
 
 export function driverFamily(driver: DriverId): DriverFamily {
-  return driver === 'redis' || driver === 'mongodb' ? driver : 'sql';
+  return driver === 'redis' || driver === 'mongodb' || driver === 'elasticsearch' ? driver : 'sql';
 }
 
-export type SqlDriverId = Exclude<DriverId, 'redis' | 'mongodb'>;
+export type SqlDriverId = Exclude<DriverId, 'redis' | 'mongodb' | 'elasticsearch'>;
 
 export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
   return driverFamily(driver) === 'sql';
@@ -54,6 +55,7 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   oracle: 1521,
   redis: 6379,
   mongodb: 27_017,
+  elasticsearch: 9200,
 };
 
 export const CONNECTION_LIMITS = {
@@ -175,6 +177,20 @@ export interface MongoSettings {
 /** The mode of a MongoDB config; settings left out mean one server, directly. */
 export function mongoModeOf(config: Pick<ConnectionInput, 'mongo'>): MongoMode {
   return config.mongo?.mode ?? 'direct';
+}
+
+/**
+ * How an Elasticsearch connection signs in (V7.8): with a user and password, or with an
+ * API key, which is then kept as the connection's password.
+ */
+export const ELASTIC_AUTH_METHODS = ['basic', 'apiKey'] as const;
+
+export type ElasticAuthMethod = (typeof ELASTIC_AUTH_METHODS)[number];
+
+export interface ElasticSettings {
+  readonly auth: ElasticAuthMethod;
+  /** Where Elasticsearch answers behind a proxy, e.g. `/es`; empty at the root. */
+  readonly pathPrefix?: string;
 }
 
 /** How DataNest proves who it is to an SSH server. */
@@ -348,7 +364,8 @@ export function optionSupport(driver: DriverId): OptionSupport {
         queryTimeout: false,
         init: true,
       };
-    // A query may run as long as `maxTimeMS` allows; nothing to run on connect.
+    // A query or a request may take as long as the timeout allows; nothing runs on connect.
+    case 'elasticsearch':
     case 'mongodb':
       return {
         connectTimeout: true,
@@ -395,6 +412,9 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
       return { databases: false, schemas: false };
     case 'mongodb':
       return { databases: true, schemas: false };
+    // Indices, all listed; the hidden ones only with system objects.
+    case 'elasticsearch':
+      return { databases: false, schemas: false };
   }
 }
 
@@ -434,6 +454,8 @@ export interface ConnectionInput {
   readonly redis?: RedisSettings;
   /** Replica set, SRV and sign-in (V7.5); MongoDB connections only. */
   readonly mongo?: MongoSettings;
+  /** Sign-in and path (V7.8); Elasticsearch connections only. */
+  readonly elastic?: ElasticSettings;
 }
 
 export interface ConnectionConfig extends ConnectionInput {
@@ -499,6 +521,7 @@ export type ConnectionProblem =
   | 'filter-too-long'
   | RedisProblem
   | MongoProblem
+  | 'elastic-prefix-invalid'
   | SshProblem;
 
 /** What is wrong with the Redis settings. */
@@ -729,6 +752,10 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     }
     problems.push(...redisProblems(input));
     problems.push(...mongoProblems(input));
+    const prefix = input.driver === 'elasticsearch' ? (input.elastic?.pathPrefix ?? '') : '';
+    if (prefix !== '' && !/^\/[A-Za-z0-9._~/-]*$/.test(prefix)) {
+      problems.push('elastic-prefix-invalid');
+    }
   }
   return problems;
 }

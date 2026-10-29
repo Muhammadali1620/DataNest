@@ -61,6 +61,9 @@ import { pickRedisKey } from './redis/find-key';
 import { mongoCommands } from './mongodb/mongo-commands';
 import { MongoDocumentsPanel } from './panels/mongo-documents-panel';
 import { MongoEditors } from './mongodb/mongo-editors';
+import { ElasticEditors } from './elastic/elastic-editors';
+import { elasticCommands } from './elastic/elastic-commands';
+import { ElasticResultPanel } from './panels/elastic-result-panel';
 
 export interface CommandDeps {
   readonly logger: Logger;
@@ -430,6 +433,17 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       return own === undefined ? readQueryTimeoutMs() : own * 1000;
     },
   });
+  const elasticEditors = new ElasticEditors({
+    extensionUri: deps.extensionUri,
+    logger: deps.logger,
+    manager: deps.manager,
+    store: deps.store,
+    safeMode: readSafeMode,
+    timeoutMs: (connectionId) => {
+      const own = deps.store.get(connectionId)?.options?.queryTimeout;
+      return own === undefined ? readQueryTimeoutMs() : own * 1000;
+    },
+  });
   const handlers: Record<CommandId, (target?: CommandTarget, ...rest: unknown[]) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
       deps.channel.show(true);
@@ -579,6 +593,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.mongoPickDatabase]: async () => {
       await mongoEditors.pickDatabase();
     },
+    ...elasticCommands({
+      manager: deps.manager,
+      store: deps.store,
+      tree: deps.tree,
+      editors: elasticEditors,
+    }),
     ...mongoCommands({
       extensionUri: deps.extensionUri,
       logger: deps.logger,
@@ -598,6 +618,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   return [
     ...commands,
     mongoEditors,
+    elasticEditors,
     {
       dispose: () => {
         for (const panel of pings) {
@@ -613,6 +634,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         RedisConsolePanel.disposeAll();
         RedisInfoPanel.disposeAll();
         MongoDocumentsPanel.disposeAll();
+        ElasticResultPanel.disposeAll();
       },
     },
   ];

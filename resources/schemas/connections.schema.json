@@ -87,9 +87,10 @@
             "clickhouse",
             "oracle",
             "redis",
-            "mongodb"
+            "mongodb",
+            "elasticsearch"
           ],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands and mongodb keeps documents in collections, not SQL."
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL."
         },
         "host": {
           "type": "string"
@@ -342,6 +343,23 @@
             "authMechanism": {
               "enum": ["SCRAM-SHA-256", "SCRAM-SHA-1", "PLAIN", "MONGODB-X509"],
               "description": "Left out: the server and DataNest agree on SCRAM. MONGODB-X509 signs in with the client certificate of ssl."
+            }
+          }
+        },
+        "elastic": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["auth"],
+          "description": "How an elasticsearch connection signs in; left out: user and password, at the root of host:port.",
+          "properties": {
+            "auth": {
+              "enum": ["basic", "apiKey"],
+              "description": "basic: user and password; apiKey: the encoded API key, kept on each computer as the password."
+            },
+            "pathPrefix": {
+              "type": "string",
+              "pattern": "^/[A-Za-z0-9._~/-]*$",
+              "description": "Where Elasticsearch answers behind a proxy, e.g. /es."
             }
           }
         }

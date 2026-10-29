@@ -22,6 +22,7 @@ import {
   connectionInputShape,
   filterSchema,
   optionsSchema,
+  elasticSchema,
   mongoSchema,
   redisSchema,
   sshHopShape,
@@ -151,5 +152,18 @@ describe('connections JSON schema: MongoDB (V7.5)', () => {
     expect(mongo.properties?.mode?.enum).toEqual([...MONGO_MODES]);
     expect(mongo.properties?.authMechanism?.enum).toEqual([...MONGO_AUTH_MECHANISMS]);
     expect(mongo.properties?.nodes?.maxItems).toBe(MAX_MONGO_NODES);
+  });
+});
+
+describe('connections JSON schema: Elasticsearch (V7.8)', () => {
+  const elastic = props.elastic ?? {};
+
+  it('describes the Elasticsearch settings as the code reads them', () => {
+    const parsed = elasticSchema.parse({ auth: 'apiKey', pathPrefix: '/es' });
+    expect(keys(parsed)).toEqual(keys(elastic.properties));
+    expect(elastic.additionalProperties).toBe(false);
+    expect(elastic.required).toEqual(['auth']);
+    expect(elastic.properties?.auth?.enum).toEqual(['basic', 'apiKey']);
+    expect(props.driver?.enum).toContain('elasticsearch');
   });
 });

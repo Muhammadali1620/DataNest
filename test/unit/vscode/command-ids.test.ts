@@ -328,14 +328,18 @@ describe('editor menus', () => {
     }
   });
 
-  it('only ever appears for SQL documents, or for MongoDB queries (V7.7)', () => {
+  it('only ever appears for SQL documents, or for MongoDB and Elasticsearch queries', () => {
+    const language = (command: string): string =>
+      command.startsWith('datanest.mongo.')
+        ? 'datanest-mongo'
+        : command.startsWith('datanest.elastic.')
+          ? 'datanest-es'
+          : 'sql';
     for (const entry of entries) {
-      const mongo = entry.command.startsWith('datanest.mongo.');
-      expect(entry.when).toContain(
-        mongo ? 'editorLangId == datanest-mongo' : 'editorLangId == sql',
-      );
+      expect(entry.when).toContain(`editorLangId == ${language(entry.command)}`);
     }
     expect(entries.some((entry) => entry.command === COMMAND_IDS.mongoRunQuery)).toBe(true);
+    expect(entries.some((entry) => entry.command === COMMAND_IDS.elasticRunQuery)).toBe(true);
   });
 
   it('offers Run and Run All in both places', () => {

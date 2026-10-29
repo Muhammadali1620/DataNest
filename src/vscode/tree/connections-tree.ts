@@ -14,6 +14,7 @@ import {
 import { affectsDataNest } from '../settings';
 import { connectionUri, tagText } from './connection-decorations';
 import { tagsOf } from './connection-look';
+import { elasticFieldItem, elasticIndexItem } from './elastic-items';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
 import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
 import {
@@ -86,6 +87,8 @@ export class ConnectionsTreeProvider
         noDatabases: vscode.l10n.t('No databases'),
         noColumns: vscode.l10n.t('No columns'),
         noCollections: vscode.l10n.t('No collections'),
+        noIndices: vscode.l10n.t('No indices'),
+        noFields: vscode.l10n.t('No fields in the mapping'),
         noKeys: (pattern) =>
           pattern === undefined
             ? vscode.l10n.t('No keys')
@@ -285,6 +288,10 @@ export class ConnectionsTreeProvider
         return mongoCollectionItem(node);
       case 'mongoIndex':
         return mongoIndexItem(node);
+      case 'elasticIndex':
+        return elasticIndexItem(node);
+      case 'elasticField':
+        return elasticFieldItem(node);
       case 'message': {
         const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
         item.id = nodeId(node);

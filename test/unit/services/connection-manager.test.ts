@@ -11,6 +11,7 @@ import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
 import { redisDatabaseOf } from '../../../src/services/connection-manager';
 import { bulk, FakeRedisDriver } from '../../helpers/fake-redis';
 import { FakeMongoDriver } from '../../helpers/fake-mongo';
+import { FakeElasticDriver } from '../../helpers/fake-elastic';
 
 async function drain(events: AsyncIterable<unknown>): Promise<void> {
   for await (const _event of events) {
@@ -970,6 +971,104 @@ describe('ConnectionManager with MongoDB (V7.5)', () => {
       logger: new RecordingLogger(),
     });
     await expect(plain.acquireMongo('a', { connectionId: shop.id })).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+  });
+});
+
+describe('ConnectionManager with Elasticsearch (V7.8)', () => {
+  async function setup() {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const elastic = new FakeElasticDriver();
+    const tunnels = new FakeTunnels();
+    const manager = new ConnectionManager({
+      store,
+      drivers: Object.assign(new FakeDriverProvider(), {
+        getElastic: () => Promise.resolve(elastic),
+      }),
+      logger,
+      tunnels,
+      checkHostKey: () => Promise.resolve(true),
+    });
+    const search = await store.add(
+      { name: 'Search', driver: 'elasticsearch', host: 'h', user: 'elastic' },
+      'pw',
+    );
+    return { store, elastic, manager, search, tunnels };
+  }
+
+  it('opens a session with the stored password and keeps the families apart', async () => {
+    const { manager, elastic, search, store } = await setup();
+    const session = await manager.acquireElastic('tree:x', { connectionId: search.id });
+    expect(elastic.configs[0]).toMatchObject({ host: 'h', user: 'elastic', password: 'pw' });
+    expect(manager.elasticSessionOf('tree:x')).toBe(session);
+    expect(manager.mongoSessionOf('tree:x')).toBeUndefined();
+    expect(manager.familyOf(search.id)).toBe('elasticsearch');
+    await expect(manager.acquire('a', { connectionId: search.id })).rejects.toMatchObject({
+      message: expect.stringContaining('Elasticsearch connection') as unknown,
+    });
+    const sql = await store.add({ name: 'Db', driver: 'mysql', host: 'h' });
+    await expect(manager.acquireElastic('b', { connectionId: sql.id })).rejects.toMatchObject({
+      message: expect.stringContaining('not an Elasticsearch connection') as unknown,
+    });
+    await expect(manager.driverOf(search.id)).rejects.toMatchObject({ code: 'unsupported' });
+  });
+
+  it('connects the tree, drops a lost session and closes all on disconnect', async () => {
+    const { manager, elastic, search } = await setup();
+    await manager.connectAny(search.id);
+    const tree = manager.elasticSessionOf(ConnectionManager.treeOwner(search.id));
+    expect(tree).toBeDefined();
+    await elastic.sessions[0]?.close();
+    await expect(tree?.request({ method: 'GET', path: '/' })).rejects.toMatchObject({
+      code: 'connection-failed',
+    });
+    expect(manager.elasticSessionOf(ConnectionManager.treeOwner(search.id))).toBeUndefined();
+    await manager.acquireElastic('a', { connectionId: search.id });
+    await manager.disconnect(search.id);
+    expect(elastic.sessions.every((session) => session.closed)).toBe(true);
+  });
+
+  it('goes through an SSH tunnel and tests settings with a throwaway session', async () => {
+    const { manager, elastic, store, tunnels } = await setup();
+    const tunnelled = await store.add({
+      name: 'T',
+      driver: 'elasticsearch',
+      host: 'es.internal',
+      ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'agent' },
+    });
+    await manager.acquireElastic('a', { connectionId: tunnelled.id });
+    expect(elastic.configs[0]).toMatchObject({
+      host: '127.0.0.1',
+      port: 40_000,
+      tlsServerName: 'es.internal',
+    });
+    await manager.disconnect(tunnelled.id);
+    expect(tunnels.released).toHaveLength(1);
+    await manager.test({ name: 't', driver: 'elasticsearch', host: 'h' }, 'secret');
+    expect(elastic.configs.at(-1)).toMatchObject({ id: 'test', password: 'secret' });
+    expect(elastic.sessions.at(-1)?.closed).toBe(true);
+    elastic.failure = new DbError('auth-failed', 'no');
+    await expect(
+      manager.test({ name: 't', driver: 'elasticsearch', host: 'h' }),
+    ).rejects.toMatchObject({
+      code: 'auth-failed',
+    });
+  });
+
+  it('says Elasticsearch is not available without the driver', async () => {
+    const { store, search } = await setup();
+    const plain = new ConnectionManager({
+      store,
+      drivers: new FakeDriverProvider(),
+      logger: new RecordingLogger(),
+    });
+    await expect(plain.acquireElastic('a', { connectionId: search.id })).rejects.toMatchObject({
       code: 'unsupported',
     });
   });

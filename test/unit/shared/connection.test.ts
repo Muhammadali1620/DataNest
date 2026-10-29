@@ -460,7 +460,9 @@ describe('Redis connections (V7.1)', () => {
       expect(driverFamily(id)).toBe('sql');
       expect(isSqlDriver(id)).toBe(true);
     }
-    expect([...SQL_DRIVER_IDS, 'redis', 'mongodb'].sort()).toEqual([...DRIVER_IDS].sort());
+    expect([...SQL_DRIVER_IDS, 'redis', 'mongodb', 'elasticsearch'].sort()).toEqual(
+      [...DRIVER_IDS].sort(),
+    );
     expect(isFileDriver('redis')).toBe(false);
   });
 
@@ -638,5 +640,43 @@ describe('MongoDB connections (V7.5)', () => {
     expect(mongoProblems({ name: 'x', driver: 'mysql', mongo: { mode: 'srv' }, port: 1 })).toEqual(
       [],
     );
+  });
+});
+
+describe('Elasticsearch connections (V7.8)', () => {
+  const base = { name: 'Search', driver: 'elasticsearch' as const, host: 'es' };
+
+  it('is a driver of its own family, on port 9200, with timeouts and TLS but nothing on connect', () => {
+    expect(driverFamily('elasticsearch')).toBe('elasticsearch');
+    expect(isSqlDriver('elasticsearch')).toBe(false);
+    expect(SQL_DRIVER_IDS).not.toContain('elasticsearch');
+    expect(effectivePort(base)).toBe(9200);
+    expect(optionSupport('elasticsearch')).toMatchObject({
+      tls: true,
+      queryTimeout: true,
+      init: false,
+    });
+    expect(filterSupport('elasticsearch')).toEqual({ databases: false, schemas: false });
+  });
+
+  it('accepts a path prefix like /es and refuses one that is not a path', () => {
+    expect(
+      connectionProblems({ ...base, elastic: { auth: 'basic', pathPrefix: '/es/v1' } }),
+    ).toEqual([]);
+    expect(connectionProblems({ ...base, elastic: { auth: 'apiKey', pathPrefix: 'es' } })).toEqual([
+      'elastic-prefix-invalid',
+    ]);
+    expect(connectionProblems({ ...base, elastic: { auth: 'basic', pathPrefix: '/a b' } })).toEqual(
+      ['elastic-prefix-invalid'],
+    );
+    // Other drivers do not have one.
+    expect(
+      connectionProblems({
+        name: 'x',
+        driver: 'mysql',
+        host: 'h',
+        elastic: { auth: 'basic', pathPrefix: 'x' },
+      }),
+    ).toEqual([]);
   });
 });

@@ -5,6 +5,7 @@
 
 import { createConnection } from 'node:net';
 import { testDatabase, testSshServer } from './databases';
+import { TEST_ELASTIC } from './elastic-servers';
 import { TEST_MONGO } from './mongo-servers';
 import { TEST_REDIS } from './redis-servers';
 
@@ -87,6 +88,11 @@ const DEFINITIONS = {
     always: false,
     folders: ['mongodb'],
     endpoints: () => [{ name: 'mongodb', host: TEST_MONGO.host, port: TEST_MONGO.port }],
+  },
+  elasticsearch: {
+    always: false,
+    folders: ['elasticsearch'],
+    endpoints: () => [{ name: 'elasticsearch', host: TEST_ELASTIC.host, port: TEST_ELASTIC.port }],
   },
 } as const satisfies Record<string, IntegrationGroup>;
 

@@ -19,10 +19,12 @@ import {
 } from '../shared/connection';
 import { setUpSession } from './session-setup';
 import type { Driver, Session, TransactionState } from '../drivers/driver';
+import type { ElasticDriver, ElasticSession } from '../drivers/elastic-driver';
 import type { MongoDriver, MongoSession } from '../drivers/mongo-driver';
 import type { RedisDriver, RedisSession } from '../drivers/redis-driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
+import { ManagedElasticSession } from './elasticsearch/managed-elastic-session';
 import { ManagedMongoSession } from './mongodb/managed-mongo-session';
 import { ManagedRedisSession } from './redis/managed-redis-session';
 import { setUpRedisSession } from './redis/redis-setup';
@@ -57,6 +59,8 @@ export interface DriverProvider {
   getRedis?(): Promise<RedisDriver>;
   /** Needed only by MongoDB connections. */
   getMongo?(): Promise<MongoDriver>;
+  /** Needed only by Elasticsearch connections. */
+  getElastic?(): Promise<ElasticDriver>;
 }
 
 /** The slice of TunnelPool the manager needs. */
@@ -86,7 +90,12 @@ interface Endpoint {
 type Holder =
   | { readonly family: 'sql'; readonly target: SessionTarget; readonly session: Session }
   | { readonly family: 'redis'; readonly target: SessionTarget; readonly session: RedisSession }
-  | { readonly family: 'mongodb'; readonly target: SessionTarget; readonly session: MongoSession };
+  | { readonly family: 'mongodb'; readonly target: SessionTarget; readonly session: MongoSession }
+  | {
+      readonly family: 'elasticsearch';
+      readonly target: SessionTarget;
+      readonly session: ElasticSession;
+    };
 
 const DISCONNECTED: ConnectionState = { status: 'disconnected' };
 
@@ -202,6 +211,12 @@ export class ConnectionManager implements Disposable {
     return held?.family === 'mongodb' ? held.session : undefined;
   }
 
+  /** The live Elasticsearch session of an owner, or undefined when it holds none. */
+  elasticSessionOf(owner: string): ElasticSession | undefined {
+    const held = this.holders.get(owner);
+    return held?.family === 'elasticsearch' ? held.session : undefined;
+  }
+
   /** Connection ids that currently hold at least one live session. */
   connectedIds(): string[] {
     return [...new Set([...this.holders.values()].map((held) => held.target.connectionId))];
@@ -235,6 +250,15 @@ export class ConnectionManager implements Disposable {
     const held = await this.acquireHolder(owner, target, 'mongodb');
     if (held.family !== 'mongodb') {
       throw new DbError('internal', 'Expected a MongoDB session');
+    }
+    return held.session;
+  }
+
+  /** Like `acquire`, for an Elasticsearch connection (V7.8). */
+  async acquireElastic(owner: string, target: SessionTarget): Promise<ElasticSession> {
+    const held = await this.acquireHolder(owner, target, 'elasticsearch');
+    if (held.family !== 'elasticsearch') {
+      throw new DbError('internal', 'Expected an Elasticsearch session');
     }
     return held.session;
   }
@@ -290,6 +314,10 @@ export class ConnectionManager implements Disposable {
   async connectAny(connectionId: string): Promise<void> {
     if (this.familyOf(connectionId) === 'mongodb') {
       await this.acquireMongo(ConnectionManager.treeOwner(connectionId), { connectionId });
+      return;
+    }
+    if (this.familyOf(connectionId) === 'elasticsearch') {
+      await this.acquireElastic(ConnectionManager.treeOwner(connectionId), { connectionId });
       return;
     }
     if (this.familyOf(connectionId) === 'redis') {
@@ -352,6 +380,10 @@ export class ConnectionManager implements Disposable {
     }
     if (input.driver === 'mongodb') {
       await this.testMongo(input, password, ssh);
+      return;
+    }
+    if (input.driver === 'elasticsearch') {
+      await this.testElastic(input, password, ssh);
       return;
     }
     const driver = await this.drivers.get(input.driver);
@@ -432,6 +464,28 @@ export class ConnectionManager implements Disposable {
     }
   }
 
+  private async testElastic(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+  ): Promise<void> {
+    const driver = await this.elasticDriver();
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
+    try {
+      let session: ElasticSession;
+      try {
+        // Opening asks the cluster who it is, signed in: that proves the link works.
+        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
+      } catch (error) {
+        throw tunnel?.forwardError() ?? error;
+      }
+      await session.close().catch(() => undefined);
+    } finally {
+      await tunnel?.close();
+    }
+  }
+
   /** True when the saved connection refuses every change (V4.6). */
   isReadOnly(connectionId: string): boolean {
     return this.store.get(connectionId)?.readOnly === true;
@@ -472,7 +526,9 @@ export class ConnectionManager implements Disposable {
           ? await this.openRedis(owner, target, config)
           : config.driver === 'mongodb'
             ? await this.openMongo(owner, target, config)
-            : await this.openSql(owner, target, config, config.driver);
+            : config.driver === 'elasticsearch'
+              ? await this.openElastic(owner, target, config)
+              : await this.openSql(owner, target, config, config.driver);
       this.holders.set(owner, holder);
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -596,6 +652,35 @@ export class ConnectionManager implements Disposable {
     return { family: 'mongodb', target, session };
   }
 
+  private async openElastic(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+  ): Promise<Holder> {
+    const driver = await this.elasticDriver();
+    const password = await this.store.getPassword(config.id);
+    const lease = await this.leaseTunnel(config);
+    let opened: ElasticSession;
+    try {
+      opened = await driver.openSession(resolve(config, target, password, lease));
+    } catch (error) {
+      await lease?.release();
+      throw lease?.forwardError() ?? error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedElasticSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+      keepAliveMs: keepAliveMsOf(config),
+    });
+    session.scheduleKeepAlive();
+    return { family: 'elasticsearch', target, session };
+  }
+
   /** A connect that finished after dispose() must not leave a live link behind. */
   private async closeIfDisposed(
     opened: { close(): Promise<void> },
@@ -613,6 +698,13 @@ export class ConnectionManager implements Disposable {
       throw new DbError('unsupported', 'Redis is not available');
     }
     return await this.drivers.getRedis();
+  }
+
+  private async elasticDriver(): Promise<ElasticDriver> {
+    if (this.drivers.getElastic === undefined) {
+      throw new DbError('unsupported', 'Elasticsearch is not available');
+    }
+    return await this.drivers.getElastic();
   }
 
   private async mongoDriver(): Promise<MongoDriver> {
@@ -716,13 +808,25 @@ export class ConnectionManager implements Disposable {
 function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string {
   const actual = driverFamily(config.driver);
   if (wanted === 'sql') {
-    return actual === 'redis'
-      ? `"${config.name}" is a Redis connection: it runs Redis commands, not SQL`
-      : `"${config.name}" is a MongoDB connection: it has collections, not SQL tables`;
+    switch (actual) {
+      case 'redis':
+        return `"${config.name}" is a Redis connection: it runs Redis commands, not SQL`;
+      case 'mongodb':
+        return `"${config.name}" is a MongoDB connection: it has collections, not SQL tables`;
+      case 'elasticsearch':
+        return `"${config.name}" is an Elasticsearch connection: it has indices, not SQL tables`;
+      case 'sql':
+        return `"${config.name}" is a SQL connection`;
+    }
   }
-  return wanted === 'redis'
-    ? `"${config.name}" is not a Redis connection`
-    : `"${config.name}" is not a MongoDB connection`;
+  switch (wanted) {
+    case 'redis':
+      return `"${config.name}" is not a Redis connection`;
+    case 'mongodb':
+      return `"${config.name}" is not a MongoDB connection`;
+    case 'elasticsearch':
+      return `"${config.name}" is not an Elasticsearch connection`;
+  }
 }
 
 /** What the driver last said about the transaction; Redis has none to report. */

@@ -119,5 +119,11 @@
   "commands.mongo.newQuery.title": "New MongoDB Query",
   "commands.mongo.runQuery.title": "Run MongoDB Statement",
   "commands.mongo.runStatement.title": "Run This Statement",
-  "commands.mongo.pickDatabase.title": "Pick the Database of the MongoDB Query…"
+  "commands.mongo.pickDatabase.title": "Pick the Database of the MongoDB Query…",
+  "commands.elastic.newIndex.title": "New Index…",
+  "commands.elastic.deleteIndex.title": "Delete Index…",
+  "commands.elastic.newQuery.title": "New Elasticsearch Query",
+  "commands.elastic.runQuery.title": "Send Elasticsearch Request",
+  "commands.elastic.runRequest.title": "Send This Request",
+  "commands.elastic.pickConnection.title": "Pick the Connection of the Elasticsearch Query…"
 }

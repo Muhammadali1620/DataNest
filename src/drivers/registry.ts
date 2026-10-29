@@ -6,12 +6,13 @@ import { DbError, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import { type DriverId, isDriverId, isSqlDriver, type SqlDriverId } from '../shared/connection';
 import type { Driver, DriverModule } from './driver';
+import type { ElasticDriver, ElasticDriverModule } from './elastic-driver';
 import type { MongoDriver, MongoDriverModule } from './mongo-driver';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
 
 export type DriverLoader = (
   id: DriverId,
-) => Promise<DriverModule | RedisDriverModule | MongoDriverModule>;
+) => Promise<DriverModule | RedisDriverModule | MongoDriverModule | ElasticDriverModule>;
 
 /**
  * Resolves `./drivers/<id>.js` relative to the running bundle (dist/extension.js).
@@ -23,7 +24,7 @@ export function createBundleDriverLoader(bundlePath: string): DriverLoader {
 }
 
 /** A SQL driver, the Redis one (D81) or the MongoDB one (D88), as the bundle exports it. */
-type AnyDriver = Driver | RedisDriver | MongoDriver;
+type AnyDriver = Driver | RedisDriver | MongoDriver | ElasticDriver;
 
 export class DriverRegistry {
   private readonly loader: DriverLoader;
@@ -65,6 +66,15 @@ export class DriverRegistry {
     return driver;
   }
 
+  /** Loads the Elasticsearch driver on first use (V7.8). */
+  async getElastic(): Promise<ElasticDriver> {
+    const driver = await this.loadOnce('elasticsearch');
+    if (isSqlDriverShaped(driver) || driver.id !== 'elasticsearch') {
+      throw new DbError('internal', 'Driver "elasticsearch" is broken: unexpected module shape');
+    }
+    return driver;
+  }
+
   private async loadOnce(id: DriverId): Promise<AnyDriver> {
     let promise = this.loading.get(id);
     if (!promise) {
@@ -85,7 +95,7 @@ export class DriverRegistry {
 
   private async load(id: DriverId): Promise<AnyDriver> {
     this.logger.debug(`Loading driver "${id}"`);
-    let module: DriverModule | RedisDriverModule | MongoDriverModule;
+    let module: DriverModule | RedisDriverModule | MongoDriverModule | ElasticDriverModule;
     try {
       module = await this.loader(id);
     } catch (error) {
@@ -118,6 +128,9 @@ function isSqlDriverShaped(value: unknown): value is Driver {
 }
 
 /** The Redis and MongoDB drivers: an id and `openSession`, no dialect. */
-function isFamilyDriverShaped(value: unknown, id: DriverId): value is RedisDriver | MongoDriver {
+function isFamilyDriverShaped(
+  value: unknown,
+  id: DriverId,
+): value is RedisDriver | MongoDriver | ElasticDriver {
   return isObject(value) && value.id === id && typeof value.openSession === 'function';
 }

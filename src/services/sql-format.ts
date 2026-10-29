@@ -55,6 +55,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
       return 'plsql';
     case 'redis':
     case 'mongodb':
+    case 'elasticsearch':
     case undefined:
       return 'sql';
   }

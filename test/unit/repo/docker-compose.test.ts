@@ -44,10 +44,11 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, MongoDB and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, MongoDB, Elasticsearch and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'clickhouse',
       'cockroach',
+      'elasticsearch',
       'mariadb',
       'mongodb',
       'mssql',

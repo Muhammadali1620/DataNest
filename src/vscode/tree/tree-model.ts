@@ -22,6 +22,12 @@ import {
   type MongoTreeDeps,
 } from './mongo-tree';
 import {
+  elasticFieldChildren,
+  elasticIndexChildren,
+  elasticSubfields,
+  type ElasticTreeDeps,
+} from './elastic-tree';
+import {
   GROUP_OF_KIND,
   KIND_OF_GROUP,
   type FolderNode,
@@ -57,6 +63,9 @@ export interface TreeTexts {
   readonly noKeys?: (pattern: string | undefined) => string;
   /** A MongoDB database without collections (V7.5). */
   readonly noCollections?: string;
+  /** An Elasticsearch cluster without indices, an index without fields (V7.8). */
+  readonly noIndices?: string;
+  readonly noFields?: string;
   /** The leaf after a list the connection's filter shortened (V4.10). */
   readonly hiddenByFilter?: (count: number) => string;
   /** What an empty folder says, per folder. */
@@ -219,6 +228,10 @@ export class TreeModel {
         return node.collectionType === 'view'
           ? []
           : await mongoIndexChildren(this.mongoDeps(), node);
+      case 'elasticIndex':
+        return await elasticFieldChildren(this.elasticDeps(), node);
+      case 'elasticField':
+        return elasticSubfields(node);
       case 'column':
       case 'object':
       case 'index':
@@ -229,6 +242,18 @@ export class TreeModel {
       case 'message':
         return [];
     }
+  }
+
+  private elasticDeps(): ElasticTreeDeps {
+    const { texts } = this.deps;
+    return {
+      manager: this.deps.manager,
+      showSystemObjects: () => this.deps.settings.showSystemObjects(),
+      texts: {
+        noIndices: texts.noIndices ?? texts.noTables,
+        noFields: texts.noFields ?? texts.noColumns,
+      },
+    };
   }
 
   /**
@@ -273,6 +298,8 @@ export class TreeModel {
       case 'mongoDatabase':
       case 'mongoCollection':
       case 'mongoIndex':
+      case 'elasticIndex':
+      case 'elasticField':
       case 'message':
         return undefined;
     }
@@ -290,6 +317,9 @@ export class TreeModel {
     }
     if (this.driverIdOf(connectionId) === 'mongodb') {
       return await mongoDatabaseChildren(this.mongoDeps(), this.configOf(connectionId));
+    }
+    if (this.driverIdOf(connectionId) === 'elasticsearch') {
+      return await elasticIndexChildren(this.elasticDeps(), connectionId);
     }
     const capabilities = await this.capabilitiesOf(connectionId);
     const metadata = await this.metadataOf(connectionId);

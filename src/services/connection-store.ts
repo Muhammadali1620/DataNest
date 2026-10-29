@@ -17,6 +17,7 @@ import {
   type ConnectionColor,
   type ConnectionOptions,
   type DriverId,
+  type ElasticSettings,
   type MongoSettings,
   type RedisSettings,
   filterSupport,
@@ -613,6 +614,7 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     filter: normalizeFilter(input.filter, input.driver),
     redis: input.driver === 'redis' ? normalizeRedis(input.redis) : undefined,
     mongo: input.driver === 'mongodb' ? normalizeMongo(input.mongo) : undefined,
+    elastic: input.driver === 'elasticsearch' ? normalizeElastic(input.elastic) : undefined,
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
@@ -740,6 +742,15 @@ function normalizeMongo(mongo: MongoSettings | undefined): MongoSettings | undef
   return Object.keys(normalized).length === 1 && normalized.mode === 'direct'
     ? undefined
     : normalized;
+}
+
+/** Basic sign-in at the root is the default and is not stored. */
+function normalizeElastic(elastic: ElasticSettings | undefined): ElasticSettings | undefined {
+  const prefix = elastic?.pathPrefix?.trim().replace(/\/+$/, '') ?? '';
+  if (elastic === undefined || (elastic.auth === 'basic' && prefix === '')) {
+    return undefined;
+  }
+  return { auth: elastic.auth, ...(prefix === '' ? {} : { pathPrefix: prefix }) };
 }
 
 /** True for a Redis connection that finds its master through Sentinels. */

@@ -77,6 +77,7 @@
     oracle: 'form.driver.oracle',
     redis: 'form.driver.redis',
     mongodb: 'form.driver.mongodb',
+    elasticsearch: 'form.driver.elasticsearch',
   };
 
   const REDIS_MODE_LABELS: Readonly<Record<RedisMode, MessageKey>> = {
@@ -94,6 +95,8 @@
   const isFile = $derived(fields !== undefined && isFileDriver(fields.driver));
   const isRedis = $derived(fields?.driver === 'redis');
   const isMongo = $derived(fields?.driver === 'mongodb');
+  const isElastic = $derived(fields?.driver === 'elasticsearch');
+  const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
   const defaultPort = $derived(
     formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
   );
@@ -530,8 +533,35 @@
         {#if isMongo}
           <MongoFields {fields} {t} {errorFor} />
         {/if}
+        {#if isElastic}
+          <div class="pair">
+            <Field label={t('form.elastic.auth')}>
+              <select class="control" bind:value={fields.elasticAuth} aria-label={t('form.elastic.auth')}>
+                <option value="basic">{t('form.elastic.auth.basic')}</option>
+                <option value="apiKey">{t('form.elastic.auth.apiKey')}</option>
+              </select>
+            </Field>
+            <Field
+              label={t('form.elastic.pathPrefix')}
+              hint={t('form.elastic.pathPrefixHint')}
+              error={errorFor('elastic-prefix-invalid')}
+            >
+              <input
+                class="control"
+                bind:value={fields.elasticPrefix}
+                maxlength={CONNECTION_LIMITS.field}
+                placeholder="/es"
+                aria-invalid={errorFor('elastic-prefix-invalid') !== undefined}
+                aria-label={t('form.elastic.pathPrefix')}
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </Field>
+          </div>
+        {/if}
 
         <div class="pair">
+          {#if !withApiKey}
           <Field label={t('form.user')} hint={isRedis ? t('form.redis.userHint') : undefined}>
             <input
               class="control"
@@ -541,10 +571,13 @@
               autocomplete="off"
             />
           </Field>
+          {/if}
           <Field
-            label={t('form.password')}
+            label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
             hint={fields.passwordTouched
-              ? undefined
+              ? withApiKey
+                ? t('form.elastic.apiKeyHint')
+                : undefined
               : formState?.hasStoredPassword
                 ? t('form.passwordStored')
                 : formState?.importedPassword === true
@@ -562,7 +595,7 @@
               }}
               maxlength={PASSWORD_MAX_LENGTH}
               disabled={fields.erasePassword}
-              aria-label={t('form.password')}
+              aria-label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
               autocomplete="off"
             />
           </Field>
@@ -618,6 +651,7 @@
           {/if}
         {/if}
 
+        {#if !isElastic}
         <Field
           label={isRedis ? t('form.redis.database') : t('form.database')}
           hint={isRedis
@@ -639,6 +673,7 @@
             autocomplete="off"
           />
         </Field>
+        {/if}
 
         {#if optionSupport(fields.driver).tls}
         <fieldset class="section">

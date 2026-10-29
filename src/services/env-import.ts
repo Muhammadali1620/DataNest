@@ -4,6 +4,7 @@
 
 import { type ConnectionInput, type DriverId, isFileDriver } from '../shared/connection';
 import { parseConnectionUrl, suggestedName, urlDriver } from '../shared/connection-url';
+import { parseElasticHttpUrl } from '../shared/elastic-url';
 
 const KEY = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
 
@@ -136,6 +137,9 @@ function driverFromWord(word: string): DriverId | undefined {
   if (text.includes('mongo')) {
     return 'mongodb';
   }
+  if (/elastic|opensearch/.test(text)) {
+    return 'elasticsearch';
+  }
   return undefined;
 }
 
@@ -171,7 +175,9 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
                 ? 'redis'
                 : port === 27_017
                   ? 'mongodb'
-                  : undefined);
+                  : port === 9200
+                    ? 'elasticsearch'
+                    : undefined);
   if (driver === undefined) {
     return undefined;
   }
@@ -234,6 +240,14 @@ export function connectionsFromEnv(vars: ReadonlyMap<string, string>): EnvCandid
     }
   };
   for (const [key, value] of vars) {
+    // ELASTICSEARCH_URL=https://…: the variable's name says what the plain URL is (V7.8).
+    if (/ELASTIC|OPENSEARCH/i.test(key) && /^\s*https?:\/\//i.test(value)) {
+      const elastic = parseElasticHttpUrl(value);
+      if (elastic.ok) {
+        add({ ...elastic.value, source: key });
+      }
+      continue;
+    }
     if (urlDriver(value) === undefined) {
       continue;
     }

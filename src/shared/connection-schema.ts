@@ -13,6 +13,8 @@ import {
   MONGO_AUTH_MECHANISMS,
   MONGO_MODES,
   type MongoSettings,
+  ELASTIC_AUTH_METHODS,
+  type ElasticSettings,
   OPTION_LIMITS,
   REDIS_MODES,
   type RedisSettings,
@@ -103,6 +105,11 @@ export const mongoSchema: Schema<MongoSettings> = object({
   authMechanism: optional(literal(...MONGO_AUTH_MECHANISMS)),
 });
 
+export const elasticSchema: Schema<ElasticSettings> = object({
+  auth: literal(...ELASTIC_AUTH_METHODS),
+  pathPrefix: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -122,6 +129,7 @@ export const connectionInputShape = {
   filter: optional(filterSchema),
   redis: optional(redisSchema),
   mongo: optional(mongoSchema),
+  elastic: optional(elasticSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

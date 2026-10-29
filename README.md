@@ -150,8 +150,9 @@ Requirements: Node.js 22+, npm, Docker (for integration tests).
 npm install
 npm run build          # build the extension
 npm test               # unit tests
-npm run db:up          # start the test databases (ports 7000–7999)
-npm run test:integration
+npm run db:up          # start the core test databases (ports 7000–7999)
+npm run db:up -- all   # …or every group; `-- <group>` for one
+npm run test:integration  # core, plus every group that is running
 npm run test:e2e       # smoke tests in a real VS Code
 ```
 

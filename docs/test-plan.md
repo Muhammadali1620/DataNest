@@ -15,7 +15,7 @@
 
 ```sh
 npm ci
-npm run db:up          # MySQL 7306, MariaDB 7307, PostgreSQL 7432
+npm run db:up          # группа core: MySQL 7306, MariaDB 7307, PostgreSQL 7432, SSH 7022
 npm run package        # соберёт datanest-<версия>.vsix
 ```
 

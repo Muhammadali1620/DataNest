@@ -1,41 +1,35 @@
-import { createConnection } from 'node:net';
-import { testDatabase, type TestDatabaseId, testSshServer } from './databases';
+import {
+  canConnect,
+  GROUP_IDS,
+  INTEGRATION_GROUPS,
+  type IntegrationGroupId,
+  parseGroups,
+} from './integration-groups';
 
-const IDS: TestDatabaseId[] = ['mysql', 'mariadb', 'postgres'];
-
-function canConnect(host: string, port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ host, port, timeout: 1000 });
-    socket.once('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once('error', () => {
-      resolve(false);
-    });
-    socket.once('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-  });
-}
-
-/** Vitest global setup: fail fast with a clear hint when the databases are not running. */
+/**
+ * Vitest global setup: fail fast with a clear hint when a database of the groups this
+ * run tests is not running. The config has already written the groups to
+ * `DATANEST_IT`; without it, the groups that always run are checked.
+ */
 export async function setup(): Promise<void> {
+  const groups = parseGroups() ?? GROUP_IDS.filter((id) => INTEGRATION_GROUPS[id].always);
   const down: string[] = [];
-  for (const id of IDS) {
-    const db = testDatabase(id);
-    if (!(await canConnect(db.host, db.port))) {
-      down.push(`${id} (${db.host}:${db.port})`);
+  const downGroups = new Set<IntegrationGroupId>();
+  for (const id of GROUP_IDS.filter((group) => groups.includes(group))) {
+    for (const endpoint of INTEGRATION_GROUPS[id].endpoints(process.env)) {
+      if (!(await canConnect(endpoint))) {
+        down.push(`${endpoint.name} (${endpoint.host}:${endpoint.port})`);
+        downGroups.add(id);
+      }
     }
   }
-  const ssh = testSshServer();
-  if (!(await canConnect(ssh.host, ssh.port))) {
-    down.push(`ssh (${ssh.host}:${ssh.port})`);
-  }
   if (down.length > 0) {
+    // `db:up` alone starts the groups that always run; any other has to be named.
+    const start = [...downGroups].every((id) => INTEGRATION_GROUPS[id].always)
+      ? 'npm run db:up'
+      : `npm run db:up -- ${[...downGroups].join(' ')}`;
     const error = new Error(
-      `Test databases are not reachable: ${down.join(', ')}. Run "npm run db:up".`,
+      `Test databases are not reachable: ${down.join(', ')}. Run "${start}".`,
     );
     // Vitest crashes while source-mapping stack frames of global setup errors,
     // which hides this message; a frameless stack avoids that.

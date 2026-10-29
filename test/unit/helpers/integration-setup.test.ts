@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:net';
+import { GROUPS_ENV } from '../../helpers/integration-groups';
 import { setup } from '../../helpers/integration-setup';
 
 // Ports for these tests also stay in 7000-7999 (D17); pick free ones near the top.
@@ -38,6 +39,7 @@ describe('integration global setup', () => {
     const probe = await listenOnFreePort();
     closedPort = probe.port;
     await close(probe.server);
+    vi.stubEnv(GROUPS_ENV, '');
   });
 
   afterEach(async () => {
@@ -50,6 +52,15 @@ describe('integration global setup', () => {
     vi.stubEnv('DATANEST_POSTGRES_PORT', String(open.port));
     vi.stubEnv('DATANEST_SSH_PORT', String(open.port));
     await expect(setup()).resolves.toBeUndefined();
+  });
+
+  it('checks the groups the config chose', async () => {
+    vi.stubEnv(GROUPS_ENV, 'core');
+    vi.stubEnv('DATANEST_MYSQL_PORT', String(open.port));
+    vi.stubEnv('DATANEST_MARIADB_PORT', String(open.port));
+    vi.stubEnv('DATANEST_POSTGRES_PORT', String(closedPort));
+    vi.stubEnv('DATANEST_SSH_PORT', String(open.port));
+    await expect(setup()).rejects.toThrow(`postgres (127.0.0.1:${closedPort})`);
   });
 
   it('also needs the SSH server the tunnel tests go through', async () => {
@@ -69,6 +80,11 @@ describe('integration global setup', () => {
       `Test databases are not reachable: mariadb (127.0.0.1:${closedPort}), ` +
         `postgres (127.0.0.1:${closedPort}). Run "npm run db:up".`,
     );
+  });
+
+  it('refuses an unknown group before connecting anywhere', async () => {
+    vi.stubEnv(GROUPS_ENV, 'db2');
+    await expect(setup()).rejects.toThrow(/unknown groups: db2/u);
   });
 
   it('throws an error without stack frames, so Vitest can print it', async () => {

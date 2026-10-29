@@ -19,6 +19,7 @@ interface Service {
   volumes?: string[];
   tmpfs?: string[];
   healthcheck?: { test: string[] };
+  profiles?: string[];
 }
 
 const compose = parse(readFileSync(join(ROOT, 'docker/compose.yml'), 'utf8')) as {
@@ -50,6 +51,16 @@ describe('docker/compose.yml (D17)', () => {
       'ssh',
       'ssh-inner',
     ]);
+  });
+
+  it.each(all)('puts %s in exactly one profile, its test group (V6.1)', (_id, service) => {
+    expect(service.profiles).toHaveLength(1);
+    expect(service.profiles?.[0]).toMatch(/^[a-z]+$/);
+  });
+
+  it('keeps MySQL, MariaDB, PostgreSQL and SSH together in core', () => {
+    const core = all.filter(([, service]) => service.profiles?.[0] === 'core').map(([id]) => id);
+    expect(core.sort()).toEqual(['mariadb', 'mysql', 'postgres', 'ssh', 'ssh-inner']);
   });
 
   it.each(all)('names the %s container with the datanest- prefix', (id, service) => {

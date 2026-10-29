@@ -51,10 +51,18 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage
 
+  # One job per database group (a compose profile, V6.1): each starts only its own
+  # databases, so a heavy server does not slow down or starve the others.
   integration:
-    name: Integration tests (Docker databases)
+    name: Integration tests (${{ matrix.group }})
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      DATANEST_IT: ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -62,11 +70,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npm run db:up
-      - run: npm run test:integration
+      - run: npm run db:up -- ${{ matrix.group }}
+      - run: node scripts/annotate-failures.mjs "Integration (${{ matrix.group }})" npm run test:integration
       - name: Database logs on failure
         if: failure()
-        run: docker compose -f docker/compose.yml logs --no-color
+        run: docker compose -f docker/compose.yml --profile '*' logs --no-color
       - if: always()
         run: npm run db:down
 

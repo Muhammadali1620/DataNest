@@ -1,5 +1,7 @@
 # Local databases for development and integration tests (ARCHITECTURE.md D17):
 # host ports 7000-7999 on 127.0.0.1 only, data in tmpfs, so every `npm run db:up` starts from the seed.
+# Each service belongs to one profile, its test group (V6.1): `npm run db:up -- <group>`
+# starts only that group, `npm run db:up` starts `core`, `npm run db:down` stops them all.
 name: datanest
 
 x-healthcheck: &healthcheck
@@ -12,6 +14,7 @@ services:
   mysql:
     image: mysql:8.4
     container_name: datanest-mysql
+    profiles: [core]
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -53,6 +56,7 @@ services:
   mariadb:
     image: mariadb:11.4
     container_name: datanest-mariadb
+    profiles: [core]
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -88,6 +92,7 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: datanest-postgres
+    profiles: [core]
     # PostgreSQL wants its TLS key owned by itself and private, which a bind mount
     # from the host cannot be; copy it into place first, then start as usual.
     entrypoint:
@@ -139,6 +144,7 @@ services:
     build: ./ssh
     image: datanest-ssh:1
     container_name: datanest-ssh
+    profiles: [core]
     ports:
       - 127.0.0.1:7022:22
     healthcheck:
@@ -150,6 +156,7 @@ services:
     build: ./ssh
     image: datanest-ssh:1
     container_name: datanest-ssh-inner
+    profiles: [core]
     healthcheck:
       <<: *healthcheck
       test: ['CMD', 'nc', '-z', '127.0.0.1', '22']

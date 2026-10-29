@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
+import { composeGroups } from '../../../scripts/db.mjs';
 import { readJson, ROOT } from '../../helpers/repo';
 
 interface Step {
@@ -15,7 +16,8 @@ interface Job {
   'runs-on': string;
   'timeout-minutes'?: number;
   needs?: string[];
-  strategy?: { matrix: { os: string[] } };
+  env?: Record<string, string>;
+  strategy?: { 'fail-fast'?: boolean; matrix: { os?: string[]; group?: string[] } };
   steps: Step[];
 }
 
@@ -113,13 +115,35 @@ describe('.github/workflows/ci.yml (V0.11)', () => {
     }
   });
 
-  it('runs integration tests against the compose databases and always stops them', () => {
-    const steps = workflow.jobs.integration?.steps ?? [];
-    const commands = steps.flatMap((s) => (s.run ? [s.run] : []));
-    expect(commands.indexOf('npm run db:up')).toBeLessThan(
-      commands.indexOf('npm run test:integration'),
-    );
-    expect(steps.find((s) => s.run === 'npm run db:down')?.if).toBe('always()');
+  describe('integration tests (V6.1)', () => {
+    const job = workflow.jobs.integration ?? ({ steps: [] } as unknown as Job);
+    const commands = runs(job);
+
+    it('runs one job per database group, each group of the compose file once', () => {
+      const profiles = composeGroups(readFileSync(join(ROOT, 'docker/compose.yml'), 'utf8'));
+      expect([...(job.strategy?.matrix.group ?? [])].sort()).toEqual([...profiles].sort());
+      expect(job.strategy?.['fail-fast']).toBe(false);
+    });
+
+    it('starts only the databases of its group and tests only that group', () => {
+      expect(job.env).toEqual({ DATANEST_IT: '${{ matrix.group }}' });
+      const start = commands.indexOf('npm run db:up -- ${{ matrix.group }}');
+      const test = commands.findIndex((run) => run.endsWith(' npm run test:integration'));
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(start).toBeLessThan(test);
+    });
+
+    it('repeats failures as annotations', () => {
+      const test = commands.find((run) => run.includes('npm run test:integration'));
+      expect(test?.startsWith('node scripts/annotate-failures.mjs ')).toBe(true);
+    });
+
+    it('prints the logs of every group on failure and always stops them', () => {
+      const logs = job.steps.find((s) => s.run?.includes(' logs '));
+      expect(logs?.if).toBe('failure()');
+      expect(logs?.run).toContain("--profile '*'");
+      expect(job.steps.find((s) => s.run === 'npm run db:down')?.if).toBe('always()');
+    });
   });
 
   it('packages the .vsix after checks pass and keeps it as an artifact', () => {

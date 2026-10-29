@@ -51,12 +51,21 @@ export function testHostKey(): string {
   return hostKey;
 }
 
-/** A user key pair; with a passphrase the private key is encrypted. */
+/**
+ * A user key pair; with a passphrase the private key is encrypted. ssh2 now and then
+ * (about one key in 400) writes an encrypted key it cannot read back itself, which
+ * made the key tests fail at random in CI; such a key is simply made again.
+ */
 export function testUserKey(passphrase?: string): { private: string; public: string } {
-  return utils.generateKeyPairSync(
-    'ed25519',
-    passphrase === undefined ? {} : { passphrase, cipher: 'aes256-ctr', rounds: 4 },
-  );
+  for (let attempt = 0; ; attempt += 1) {
+    const key = utils.generateKeyPairSync(
+      'ed25519',
+      passphrase === undefined ? {} : { passphrase, cipher: 'aes256-ctr', rounds: 4 },
+    );
+    if (!(utils.parseKey(key.private, passphrase) instanceof Error) || attempt >= 20) {
+      return key;
+    }
+  }
 }
 
 export async function startSshServer(options: {

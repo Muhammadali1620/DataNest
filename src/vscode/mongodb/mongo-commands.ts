@@ -2,15 +2,24 @@
 // mongo-tree-commands.ts, the questions in mongo-questions.ts; this file joins them.
 
 import * as vscode from 'vscode';
+import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
+import { policyOf } from '../../services/write-policy';
 import type { ConnectionStore } from '../../services/connection-store';
 import { describeTarget } from '../../shared/connection';
 import { COMMAND_IDS } from '../command-ids';
+import { MongoDocumentsModel } from '../panels/mongo-documents-model';
+import { MongoDocumentsPanel } from '../panels/mongo-documents-panel';
+import { readQueryTimeoutMs } from '../settings';
+import { isTreeNode, type MongoCollectionNode } from '../tree/nodes';
+import { mongoTreeSession } from '../tree/mongo-tree';
 import type { CommandTarget, RefreshableTree } from '../tree/tree-commands';
 import { askIndex, askNewCollection, askText } from './mongo-questions';
 import { mongoTreeCommandHandlers } from './mongo-tree-commands';
 
 export interface MongoCommandDeps {
+  readonly extensionUri: vscode.Uri;
+  readonly logger: Logger;
   readonly manager: ConnectionManager;
   readonly store: ConnectionStore;
   readonly tree: RefreshableTree;
@@ -23,7 +32,8 @@ type MongoCommandId = (typeof COMMAND_IDS)[
   | 'mongoRenameCollection'
   | 'mongoDropCollection'
   | 'mongoNewIndex'
-  | 'mongoDropIndex'];
+  | 'mongoDropIndex'
+  | 'mongoOpenCollection'];
 
 export function mongoCommands(
   deps: MongoCommandDeps,
@@ -49,6 +59,9 @@ export function mongoCommands(
     askText,
     askNewCollection,
     askIndex,
+    closePages: (connectionId, database, collection) => {
+      MongoDocumentsPanel.closeCollection(connectionId, database, collection);
+    },
     confirm: async (message, detail, action) =>
       (await vscode.window.showWarningMessage(
         message,
@@ -93,5 +106,40 @@ export function mongoCommands(
     [COMMAND_IDS.mongoDropCollection]: handlers.dropCollection,
     [COMMAND_IDS.mongoNewIndex]: handlers.newIndex,
     [COMMAND_IDS.mongoDropIndex]: handlers.dropIndex,
+    [COMMAND_IDS.mongoOpenCollection]: (target) => {
+      if (isTreeNode(target) && target.kind === 'mongoCollection') {
+        openCollection(deps, target);
+      }
+      return undefined;
+    },
   };
+}
+
+/** Opens the documents page of a collection or view (V7.6). */
+function openCollection(deps: MongoCommandDeps, node: MongoCollectionNode): void {
+  const config = deps.store.get(node.connectionId);
+  if (config === undefined) {
+    return;
+  }
+  MongoDocumentsPanel.show({
+    extensionUri: deps.extensionUri,
+    logger: deps.logger,
+    connectionId: node.connectionId,
+    database: node.database,
+    collection: node.collection,
+    policy: policyOf(config),
+    model: new MongoDocumentsModel({
+      connectionName: config.name,
+      database: node.database,
+      collection: node.collection,
+      collectionType: node.collectionType,
+      readOnly: config.readOnly === true,
+      session: async () => await mongoTreeSession(deps.manager, node.connectionId),
+      // A connection's own timeout (V4.9) wins over the setting.
+      maxTimeMS: () => {
+        const own = deps.store.get(node.connectionId)?.options?.queryTimeout;
+        return own === undefined ? readQueryTimeoutMs() : own * 1000;
+      },
+    }),
+  });
 }

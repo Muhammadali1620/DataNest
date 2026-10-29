@@ -126,6 +126,8 @@ export const COMMAND_IDS = {
   mongoDropCollection: 'datanest.mongo.dropCollection',
   mongoNewIndex: 'datanest.mongo.newIndex',
   mongoDropIndex: 'datanest.mongo.dropIndex',
+  /** The documents of a collection or view as a table and as text (V7.6). */
+  mongoOpenCollection: 'datanest.mongo.openCollection',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

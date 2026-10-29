@@ -58,6 +58,11 @@ export function mongoCollectionItem(node: MongoCollectionNode): vscode.TreeItem 
   }
   item.tooltip = `${node.database}.${node.collection}`;
   item.contextValue = view ? TREE_CONTEXT.mongoView : TREE_CONTEXT.mongoCollection;
+  item.command = {
+    command: 'datanest.mongo.openCollection',
+    title: vscode.l10n.t('Open Documents'),
+    arguments: [node],
+  };
   return item;
 }
 

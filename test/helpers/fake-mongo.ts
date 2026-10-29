@@ -35,6 +35,10 @@ export class FakeMongoSession implements MongoSession {
   documents = new Map<string, MongoDocument[]>();
   /** Thrown by the next listing or command when set. */
   failure: Error | undefined;
+  /** What an aggregation returns; by default the documents of its collection. */
+  aggregate: ((request: MongoCursorRequest) => MongoDocument[] | Error | undefined) | undefined;
+  /** What a find returns instead of the documents of its collection, e.g. by its filter. */
+  find: ((request: MongoCursorRequest) => MongoDocument[] | Error | undefined) | undefined;
   closed = false;
 
   constructor(
@@ -81,7 +85,11 @@ export class FakeMongoSession implements MongoSession {
     this.check();
     this.cursors.push({ database, request });
     const name = request.kind === 'find' ? request.collection : (request.collection ?? '');
-    const all = this.documents.get(`${database}.${name}`) ?? [];
+    const custom = request.kind === 'find' ? this.find?.(request) : this.aggregate?.(request);
+    if (custom instanceof Error) {
+      throw custom;
+    }
+    const all = custom ?? this.documents.get(`${database}.${name}`) ?? [];
     const skip = request.kind === 'find' ? (request.skip ?? 0) : 0;
     const limit =
       request.kind === 'find' && request.limit !== undefined && request.limit > 0

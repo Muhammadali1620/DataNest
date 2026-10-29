@@ -45,6 +45,11 @@ const BY_CODE: ReadonlyMap<number, DbErrorCode> = new Map([
   [20, 'unsupported'], // IllegalOperation
 ]);
 
+/** The kind of error a server code means; undefined for codes DataNest does not know. */
+export function mongoErrorKind(code: number): DbErrorCode | undefined {
+  return BY_CODE.get(code);
+}
+
 /** Classes of the driver that mean the link is gone or never came up. */
 const LINK_ERRORS = new Set([
   'MongoNetworkError',

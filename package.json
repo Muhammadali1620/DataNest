@@ -501,6 +501,12 @@
         "title": "%commands.mongo.dropIndex.title%",
         "category": "DataNest",
         "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.mongo.openCollection",
+        "title": "%commands.mongo.openCollection.title%",
+        "category": "DataNest",
+        "icon": "$(open-preview)"
       }
     ],
     "menus": {
@@ -643,6 +649,10 @@
         },
         {
           "command": "datanest.mongo.dropIndex",
+          "when": "false"
+        },
+        {
+          "command": "datanest.mongo.openCollection",
           "when": "false"
         }
       ],
@@ -1058,6 +1068,16 @@
           "command": "datanest.mongo.dropIndex",
           "when": "view == datanest.connections && viewItem == datanest.mongoIndex",
           "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.mongo.openCollection",
+          "when": "view == datanest.connections && (viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.mongo.openCollection",
+          "when": "view == datanest.connections && (viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
+          "group": "0_query@1"
         }
       ],
       "editor/title": [

@@ -38,6 +38,7 @@ interface Harness {
   confirmAnswer: boolean;
   connections: Map<string, ConnectionInput & { id: string }>;
   picked: string | undefined;
+  readonly closed: string[];
   readonly handlers: ReturnType<typeof mongoTreeCommandHandlers>;
 }
 
@@ -57,6 +58,7 @@ function harness(): Harness {
       ['s', { id: 's', name: 'Sql', driver: 'mysql', host: 'h' }],
     ]),
     picked: 'm',
+    closed: [],
     handlers: undefined as never,
   };
   (state as { handlers: Harness['handlers'] }).handlers = mongoTreeCommandHandlers({
@@ -83,6 +85,9 @@ function harness(): Harness {
       return Promise.resolve(state.confirmAnswer);
     },
     texts: TEXTS,
+    closePages: (connectionId, database, collection) => {
+      state.closed.push(`${connectionId}/${database}/${collection ?? '*'}`);
+    },
   });
   return state;
 }
@@ -257,5 +262,13 @@ describe('MongoDB tree commands (V7.5)', () => {
   it('passes the server’s refusal on', async () => {
     h.session.failure = new DbError('constraint', 'Collection already exists');
     await expect(h.handlers.newCollection(database('m'))).rejects.toThrow('already exists');
+  });
+
+  it('closes the documents pages of what it drops or renames (V7.6)', async () => {
+    h.answers = ['shop', 'orders_old'];
+    await h.handlers.dropDatabase(database('m'));
+    await h.handlers.renameCollection(orders('m'));
+    await h.handlers.dropCollection(orders('m'));
+    expect(h.closed).toEqual(['m/shop/*', 'm/shop/orders', 'm/shop/orders']);
   });
 });

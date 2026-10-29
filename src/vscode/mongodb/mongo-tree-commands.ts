@@ -75,6 +75,8 @@ export interface MongoTreeCommandDeps {
     action: string,
   ) => Promise<boolean>;
   readonly texts: MongoTreeTexts;
+  /** Closes the documents pages of a collection that is gone, or of a whole database. */
+  readonly closePages?: (connectionId: string, database: string, collection?: string) => void;
 }
 
 export type MongoTreeCommandName =
@@ -190,6 +192,7 @@ export function mongoTreeCommandHandlers(
         return undefined;
       }
       await dropDatabase(await session(node.connectionId), node.database);
+      deps.closePages?.(node.connectionId, node.database);
       deps.tree.refresh({ kind: 'connection', connectionId: node.connectionId });
       return undefined;
     },
@@ -236,6 +239,7 @@ export function mongoTreeCommandHandlers(
         node.collection,
         name,
       );
+      deps.closePages?.(node.connectionId, node.database, node.collection);
       refreshDatabase(node.connectionId, node.database);
       return undefined;
     },
@@ -250,6 +254,7 @@ export function mongoTreeCommandHandlers(
         return undefined;
       }
       await dropCollection(await session(node.connectionId), node.database, node.collection);
+      deps.closePages?.(node.connectionId, node.database, node.collection);
       refreshDatabase(node.connectionId, node.database);
       return undefined;
     },

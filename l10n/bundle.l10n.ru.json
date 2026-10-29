@@ -467,5 +467,11 @@
   "TTL {0} s": "TTL {0} с",
   "partial": "частичный",
   "hidden": "скрытый",
-  "Only documents that match {0}": "Только документы, подходящие под {0}"
+  "Only documents that match {0}": "Только документы, подходящие под {0}",
+  "Save the document in \"{0}\"": "Сохранить документ в «{0}»",
+  "Add a document to \"{0}\"": "Добавить документ в «{0}»",
+  "{0} on the production connection \"{1}\"?": "{0} на production-подключении «{1}»?",
+  "Delete the document {0}?": "Удалить документ {0}?",
+  "Delete {0} documents?": "Удалить документов: {0}?",
+  "Open Documents": "Открыть документы"
 }

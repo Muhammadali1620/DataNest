@@ -59,6 +59,7 @@ import { RedisKeyModel } from './panels/redis-key-model';
 import type { RedisKeyRef } from '../shared/redis-key';
 import { pickRedisKey } from './redis/find-key';
 import { mongoCommands } from './mongodb/mongo-commands';
+import { MongoDocumentsPanel } from './panels/mongo-documents-panel';
 
 export interface CommandDeps {
   readonly logger: Logger;
@@ -553,7 +554,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.redisServerInfo]: redisKeyCommands.serverInfo,
     [COMMAND_IDS.redisDeleteKeys]: (target, selection) =>
       redisKeyCommands.deleteKeys(target, selection),
-    ...mongoCommands({ manager: deps.manager, store: deps.store, tree: deps.tree }),
+    ...mongoCommands({
+      extensionUri: deps.extensionUri,
+      logger: deps.logger,
+      manager: deps.manager,
+      store: deps.store,
+      tree: deps.tree,
+    }),
     [COMMAND_IDS.openPing]: () => {
       const panel = new PingPanel(deps.extensionUri, deps.logger);
       pings = [...pings.filter((open) => !open.isDisposed), panel];
@@ -579,6 +586,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         RedisKeyPanel.disposeAll();
         RedisConsolePanel.disposeAll();
         RedisInfoPanel.disposeAll();
+        MongoDocumentsPanel.disposeAll();
       },
     },
   ];

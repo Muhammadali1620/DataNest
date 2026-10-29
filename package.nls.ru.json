@@ -114,5 +114,6 @@
   "commands.mongo.renameCollection.title": "Переименовать коллекцию…",
   "commands.mongo.dropCollection.title": "Удалить коллекцию…",
   "commands.mongo.newIndex.title": "Новый индекс…",
-  "commands.mongo.dropIndex.title": "Удалить индекс…"
+  "commands.mongo.dropIndex.title": "Удалить индекс…",
+  "commands.mongo.openCollection.title": "Открыть документы"
 }

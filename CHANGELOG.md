@@ -28,6 +28,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   views, and the indexes of each collection with their keys and options (unique, TTL,
   partial, text, geo, hashed). Create and drop databases, collections and indexes, rename
   collections. Values keep their exact BSON type and documents their field order.
+- A page per MongoDB collection: find documents with a filter, a sort and a projection in
+  the shell's syntax, page through them, see them as a table (sort by a click on a column)
+  or as text, with the count of what matches. Edit a document as text, add, copy and
+  delete documents; a save never overwrites a document someone else changed meanwhile.
 
 ### Fixed
 

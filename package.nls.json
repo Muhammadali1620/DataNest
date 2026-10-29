@@ -114,5 +114,6 @@
   "commands.mongo.renameCollection.title": "Rename Collection…",
   "commands.mongo.dropCollection.title": "Drop Collection…",
   "commands.mongo.newIndex.title": "New Index…",
-  "commands.mongo.dropIndex.title": "Drop Index…"
+  "commands.mongo.dropIndex.title": "Drop Index…",
+  "commands.mongo.openCollection.title": "Open Documents"
 }

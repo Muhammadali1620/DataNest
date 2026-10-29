@@ -23,7 +23,12 @@ const CRC_TABLE = (() => {
 })();
 
 export function crc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
+  return crc32Update(0, data);
+}
+
+/** Continues a CRC over the next part of the data; start with 0. */
+export function crc32Update(previous: number, data: Uint8Array): number {
+  let crc = (previous ^ 0xffffffff) >>> 0;
   for (const byte of data) {
     crc = (CRC_TABLE[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8);
   }
@@ -31,7 +36,7 @@ export function crc32(data: Uint8Array): number {
 }
 
 /** MS-DOS date and time, which is what ZIP stores; the clock is only a label here. */
-function dosDateTime(date: Date): { time: number; date: number } {
+export function dosDateTime(date: Date): { time: number; date: number } {
   const year = Math.max(1980, date.getFullYear());
   return {
     time: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),

@@ -56,6 +56,12 @@ export class FileSink implements TextSink {
     }
   }
 
+  /** Bytes as they are, after any text written before them. */
+  async writeBytes(data: Uint8Array): Promise<void> {
+    await this.flush();
+    await this.writeChunk(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
+  }
+
   /** Writes what is left and puts the file in place under its name. */
   async close(): Promise<void> {
     await this.flush();
@@ -93,6 +99,11 @@ export class FileSink implements TextSink {
     const chunk = Buffer.from(this.pending.join(''), 'utf8');
     this.pending = [];
     this.pendingChars = 0;
+    await this.writeChunk(chunk);
+  }
+
+  private async writeChunk(chunk: Buffer): Promise<void> {
+    this.check();
     this.written += chunk.length;
     if (!this.stream.write(chunk)) {
       await new Promise<void>((resolve, reject) => {

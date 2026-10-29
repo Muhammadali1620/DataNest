@@ -14,13 +14,8 @@ import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
 import { policyOf } from './services/write-policy';
-import {
-  type ExportError,
-  type ExportFormat,
-  exportBytes,
-  extensionOf,
-  suggestedFileName,
-} from './services/result-export';
+import { StreamExporter } from './services/stream-export';
+import { exportCommandHandlers } from './vscode/export-commands';
 import { ResultLinks } from './services/result-links';
 import type { TableFilter } from './shared/table-filter';
 import { ResultCopier } from './services/result-copier';
@@ -164,49 +159,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
   });
 
-  /** Writes a result to a file the user picks; the whole result, not just a page. */
-  const exportErrorMessage = (error: ExportError): string =>
-    error === 'too-large'
-      ? vscode.l10n.t('The result does not fit this format (Excel holds about a million rows)')
-      : error === 'no-rows'
-        ? vscode.l10n.t('There is nothing to export')
-        : vscode.l10n.t(
-            'This format needs rows and writable columns; computed columns are skipped',
-          );
-
-  const exportResult = async (resultId: string, format: ExportFormat): Promise<void> => {
-    const summary = results.get(resultId);
-    const rows = results.allRows(resultId);
-    if (summary === undefined || rows === undefined) {
-      void vscode.window.showInformationMessage(
-        vscode.l10n.t('This result is no longer available'),
-      );
-      return;
-    }
-    const target = await vscode.window.showSaveDialog({
-      title: vscode.l10n.t('Export Result'),
-      defaultUri: vscode.Uri.file(suggestedFileName(summary.statement, format)),
-      filters: { [format.toUpperCase()]: [extensionOf(format)] },
-    });
-    if (target === undefined) {
-      return;
-    }
-    const dialect =
-      summary.origin === undefined
-        ? undefined
-        : (await manager.driverOf(summary.origin.target.connectionId)).dialect;
-    const outcome = exportBytes(
-      { columns: summary.columns, rows, dialect, edit: summary.edit },
-      format,
-    );
-    if (!outcome.ok) {
-      void vscode.window.showWarningMessage(exportErrorMessage(outcome.error));
-      return;
-    }
-    await vscode.workspace.fs.writeFile(target, outcome.data);
-    logger.info(`Exported ${rows.length} rows to ${target.fsPath}`);
-    void vscode.window.showInformationMessage(vscode.l10n.t('Exported {0} rows', rows.length));
-  };
+  const exports = exportCommandHandlers({
+    results,
+    manager,
+    tables,
+    exporter: new StreamExporter({ manager, logger }),
+    logger,
+  });
+  const exportResult = exports.exportResult;
 
   const editor = new ResultEditor(results);
   const copier = new ResultCopier({ results, manager });
@@ -316,6 +276,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       showResults,
       openTable,
       exportResult,
+      exportTable: exports.exportTable,
       objectEdits,
       diagnostics,
       reloadProjects: () => projects.reloadAll(),

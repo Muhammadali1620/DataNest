@@ -464,4 +464,37 @@ describe('TableViewer', () => {
       expect(summary.page?.pageSize).toBe(1);
     });
   });
+
+  describe('fullQuery', () => {
+    it('reads the whole table a view shows, filtered and sorted, without a page', async () => {
+      const table = { name: 'orders' };
+      await viewer.open({
+        target: target(),
+        table,
+        filter: { conditions: [{ column: 'a', operator: 'notNull' }] },
+        sort: { column: 'a', direction: 'desc' },
+        offset: 300,
+      });
+      const query = await viewer.fullQuery(tableDocumentUri(target(), table));
+      expect(query?.target).toEqual(target());
+      expect(query?.table).toEqual(table);
+      expect(query?.sql).toBe('SELECT * FROM "orders" WHERE "a" IS NOT NULL ORDER BY "a" DESC');
+      expect(query?.sql).not.toContain('LIMIT');
+    });
+
+    it('lists the asked columns and follows a later reload', async () => {
+      const table = { name: 'orders' };
+      const first = await viewer.open({ target: target(), table });
+      const uri = tableDocumentUri(target(), table);
+      expect((await viewer.fullQuery(uri, ['a', 'b"c']))?.sql).toBe(
+        'SELECT "a", "b"c" FROM "orders"',
+      );
+      await viewer.reload(first.id, { sort: { column: 'a', direction: 'asc' } });
+      expect((await viewer.fullQuery(uri))?.sql).toBe('SELECT * FROM "orders" ORDER BY "a" ASC');
+    });
+
+    it('knows nothing of a document that is no table view', async () => {
+      expect(await viewer.fullQuery('file:///query.sql')).toBeUndefined();
+    });
+  });
 });

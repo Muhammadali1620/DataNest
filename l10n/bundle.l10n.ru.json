@@ -334,5 +334,14 @@
   "Import Data into {0}": "Импорт данных в {0}",
   "Import into {0}": "Импорт в {0}",
   "PRODUCTION \"{0}\": import \"{1}\" into {2}?": "PRODUCTION «{0}»: импортировать «{1}» в {2}?",
-  "Pick a table in the DataNest view to import into": "Выберите таблицу в панели DataNest, в которую импортировать"
+  "Pick a table in the DataNest view to import into": "Выберите таблицу в панели DataNest, в которую импортировать",
+  "All Rows": "Все строки",
+  "All rows: the query runs again and its rows go straight to the file.": "Все строки: запрос выполнится заново, и строки сразу пойдут в файл.",
+  "Export Data of {0}": "Экспорт данных {0}",
+  "Exported {0} rows ({1}) in {2}": "Экспортировано строк: {0} ({1}) за {2}",
+  "Exporting {0}": "Экспорт {0}",
+  "Only These {0} Rows": "Только эти {0} строк",
+  "The export was cancelled": "Экспорт отменён",
+  "The result holds only the first {0} rows. Export all of them?": "В результате только первые {0} строк. Экспортировать все?",
+  "the result": "результата"
 }

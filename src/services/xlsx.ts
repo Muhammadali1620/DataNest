@@ -80,7 +80,7 @@ function textCell(reference: string, text: string, style = ''): string {
   return `<c r="${reference}" t="inlineStr"${style}><is><t${preserve}>${value}</t></is></c>`;
 }
 
-function cellXml(reference: string, value: CellValue): string {
+export function cellXml(reference: string, value: CellValue): string {
   if (value === null) {
     return '';
   }
@@ -110,7 +110,7 @@ function cellXml(reference: string, value: CellValue): string {
 }
 
 /** Column width in characters from the header and the first rows, within sane bounds. */
-function widthsOf(input: XlsxInput): number[] {
+export function widthsOf(input: XlsxInput): number[] {
   return input.header.map((name, column) => {
     let longest = name.length;
     for (const row of input.rows.slice(0, 200)) {
@@ -123,12 +123,16 @@ function widthsOf(input: XlsxInput): number[] {
   });
 }
 
-function sheetXml(input: XlsxInput): string {
+/**
+ * The sheet up to its first data row: header, frozen pane, widths from `sample`.
+ * `rows` is known for a whole result; a streamed one leaves the dimension out.
+ */
+export function sheetHead(input: XlsxInput, rows?: number): string {
   const lastColumn = columnLetters(Math.max(0, input.header.length - 1));
-  const parts: string[] = [
+  return [
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
-    `<dimension ref="A1:${lastColumn}${input.rows.length + 1}"/>`,
+    rows === undefined ? '' : `<dimension ref="A1:${lastColumn}${rows + 1}"/>`,
     // The header row stays in view while the data scrolls.
     '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>',
     '<sheetFormatPr defaultRowHeight="15"/>',
@@ -139,15 +143,25 @@ function sheetXml(input: XlsxInput): string {
     `<row r="1">${input.header
       .map((name, column) => textCell(`${columnLetters(column)}1`, name, ' s="1"'))
       .join('')}</row>`,
-  ];
+  ].join('');
+}
+
+/** One data row; `number` is the sheet's row number, the header being row 1. */
+export function rowXml(columns: number, row: readonly CellValue[], number: number): string {
+  const cells = Array.from({ length: columns }, (_, column) =>
+    cellXml(`${columnLetters(column)}${number}`, row[column] ?? null),
+  ).join('');
+  return `<row r="${number}">${cells}</row>`;
+}
+
+export const SHEET_TAIL = '</sheetData></worksheet>';
+
+function sheetXml(input: XlsxInput): string {
+  const parts = [sheetHead(input, input.rows.length)];
   input.rows.forEach((row, index) => {
-    const number = index + 2;
-    const cells = input.header
-      .map((_, column) => cellXml(`${columnLetters(column)}${number}`, row[column] ?? null))
-      .join('');
-    parts.push(`<row r="${number}">${cells}</row>`);
+    parts.push(rowXml(input.header.length, row, index + 2));
   });
-  parts.push('</sheetData></worksheet>');
+  parts.push(SHEET_TAIL);
   return parts.join('');
 }
 
@@ -163,6 +177,22 @@ const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 const WORKBOOK_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
 
+/** The parts of a workbook around its one sheet, in the order they go into the archive. */
+export function workbookParts(sheetName: string | undefined): { name: string; xml: string }[] {
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlText(sheetNameOf(sheetName))}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+  return [
+    { name: '[Content_Types].xml', xml: CONTENT_TYPES },
+    { name: '_rels/.rels', xml: ROOT_RELS },
+    { name: 'xl/workbook.xml', xml: workbook },
+    { name: 'xl/_rels/workbook.xml.rels', xml: WORKBOOK_RELS },
+    { name: 'xl/styles.xml', xml: STYLES },
+  ];
+}
+
+/** Where the sheet lives inside the archive. */
+export const SHEET_PATH = 'xl/worksheets/sheet1.xml';
+
 /** The bytes of an .xlsx file; throws XlsxLimitError when the data does not fit the format. */
 export function toXlsx(input: XlsxInput): Uint8Array {
   if (input.rows.length + 1 > XLSX_MAX_ROWS) {
@@ -171,15 +201,9 @@ export function toXlsx(input: XlsxInput): Uint8Array {
   if (input.header.length > XLSX_MAX_COLUMNS) {
     throw new XlsxLimitError(`Excel holds at most ${XLSX_MAX_COLUMNS} columns`);
   }
-  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlText(sheetNameOf(input.sheetName))}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
   const text = (value: string): Uint8Array => Buffer.from(value, 'utf8');
   return zip([
-    { name: '[Content_Types].xml', data: text(CONTENT_TYPES) },
-    { name: '_rels/.rels', data: text(ROOT_RELS) },
-    { name: 'xl/workbook.xml', data: text(workbook) },
-    { name: 'xl/_rels/workbook.xml.rels', data: text(WORKBOOK_RELS) },
-    { name: 'xl/styles.xml', data: text(STYLES) },
-    { name: 'xl/worksheets/sheet1.xml', data: text(sheetXml(input)) },
+    ...workbookParts(input.sheetName).map((part) => ({ name: part.name, data: text(part.xml) })),
+    { name: SHEET_PATH, data: text(sheetXml(input)) },
   ]);
 }

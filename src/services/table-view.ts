@@ -129,6 +129,34 @@ export class TableViewer {
     return true;
   }
 
+  /**
+   * The whole table an open view shows, with its filter and order but no page, so an
+   * export writes every row (V5.4). `columns` narrows the select list; all by default.
+   */
+  async fullQuery(
+    documentUri: string,
+    columns?: readonly string[],
+  ): Promise<{ target: SessionTarget; table: TableRef; sql: string } | undefined> {
+    const view = this.views.get(documentUri);
+    if (view === undefined) {
+      return undefined;
+    }
+    const driver = await this.deps.manager.driverOf(view.target.connectionId);
+    const { dialect } = driver;
+    const where = buildWhere(dialect, driver.id, view.filter);
+    const orderBy = buildOrderBy(dialect, view.sort);
+    const list =
+      columns === undefined ? '*' : columns.map((name) => dialect.quoteIdentifier(name)).join(', ');
+    return {
+      target: view.target,
+      table: view.table,
+      sql:
+        `SELECT ${list} FROM ${dialect.quoteTable(view.table)}` +
+        (where === undefined ? '' : ` WHERE ${where}`) +
+        (orderBy === undefined ? '' : ` ORDER BY ${orderBy}`),
+    };
+  }
+
   async open(request: OpenTableRequest): Promise<ResultSummary> {
     const documentUri = tableDocumentUri(request.target, request.table);
     const filter = isEmptyFilter(request.filter) ? undefined : request.filter;

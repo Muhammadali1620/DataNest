@@ -66,6 +66,8 @@ export interface CommandDeps {
   readonly objectEdits: ObjectEditRegistry;
   /** Writes a result to a file the user picks. */
   readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
+  /** Writes every row of a tree table to a file (V5.4). */
+  readonly exportTable: (target?: unknown) => Promise<void>;
   /** Reads the project connection files again. */
   readonly reloadProjects?: () => Promise<void>;
   /** The transaction of the active editor: its status and Commit/Rollback (V4.8). */
@@ -302,6 +304,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       ),
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.importData]: (target) => imports.importData(target),
+    [COMMAND_IDS.exportData]: (target) => deps.exportTable(target),
     [COMMAND_IDS.dumpSql]: (target, ...rest: unknown[]) => dumps.dump(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;

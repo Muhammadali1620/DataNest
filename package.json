@@ -446,6 +446,18 @@
         "title": "%commands.redis.deleteKeys.title%",
         "category": "DataNest",
         "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.redis.openConsole",
+        "title": "%commands.redis.openConsole.title%",
+        "category": "DataNest",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "datanest.redis.serverInfo",
+        "title": "%commands.redis.serverInfo.title%",
+        "category": "DataNest",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -924,6 +936,21 @@
           "command": "datanest.redis.deleteKeys",
           "when": "view == datanest.connections && viewItem == datanest.redisKey",
           "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.redis.openConsole",
+          "when": "view == datanest.connections && (viewItem == datanest.redisConnection.connected || viewItem == datanest.projectRedisConnection.connected || viewItem == datanest.redisDatabase)",
+          "group": "inline@0"
+        },
+        {
+          "command": "datanest.redis.openConsole",
+          "when": "view == datanest.connections && (viewItem == datanest.redisConnection || viewItem == datanest.redisConnection.connected || viewItem == datanest.projectRedisConnection || viewItem == datanest.projectRedisConnection.connected || viewItem == datanest.redisDatabase)",
+          "group": "0_query@1"
+        },
+        {
+          "command": "datanest.redis.serverInfo",
+          "when": "view == datanest.connections && (viewItem == datanest.redisConnection || viewItem == datanest.redisConnection.connected || viewItem == datanest.projectRedisConnection || viewItem == datanest.projectRedisConnection.connected)",
+          "group": "0_query@2"
         }
       ],
       "editor/title": [

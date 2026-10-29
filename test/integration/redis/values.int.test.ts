@@ -81,7 +81,10 @@ describe('reading a key (V7.3)', () => {
       type: 'string',
       length: 5,
     });
-    expect((await readOverview(session, key('session:abc'))).ttlMs).toBeGreaterThan(80_000_000);
+    // The seed gives it a day; how much is left depends on when the server started.
+    const ttl = (await readOverview(session, key('session:abc'))).ttlMs;
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(86_400_000);
     expect(await readOverview(session, key('user:1'))).toMatchObject({
       type: 'hash',
       ttlMs: null,

@@ -420,5 +420,12 @@
   "Write a number, inf or -inf": "Введите число, inf или -inf",
   "The first field; Redis keeps no empty {0}": "Первое поле: пустой {0} Redis не хранит",
   "The value of \"{0}\"": "Значение «{0}»",
-  "Open Key": "Открыть ключ"
+  "Open Key": "Открыть ключ",
+  "({0} more lines)": "(ещё строк: {0})",
+  "Redis: {0} db{1}": "Redis: {0} db{1}",
+  "Run": "Выполнить",
+  "Run \"{0}\"? It can change or stop the whole server.": "Выполнить «{0}»? Это может изменить или остановить весь сервер.",
+  "Run \"{0}\" on the production connection \"{1}\"?": "Выполнить «{0}» на production-подключении «{1}»?",
+  "Server: {0}": "Сервер: {0}",
+  "master {0}": "мастер {0}"
 }

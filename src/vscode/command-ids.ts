@@ -113,6 +113,10 @@ export const COMMAND_IDS = {
   redisRenameKey: 'datanest.redis.renameKey',
   /** Deletes the clicked key, or every selected one. */
   redisDeleteKeys: 'datanest.redis.deleteKeys',
+  /** A console that runs Redis commands, with suggestions (V7.4). */
+  redisOpenConsole: 'datanest.redis.openConsole',
+  /** What a Redis server reports about itself (INFO). */
+  redisServerInfo: 'datanest.redis.serverInfo',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

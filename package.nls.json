@@ -105,5 +105,7 @@
   "commands.redis.openKey.title": "Open Key",
   "commands.redis.newKey.title": "New Key…",
   "commands.redis.renameKey.title": "Rename Key…",
-  "commands.redis.deleteKeys.title": "Delete Key"
+  "commands.redis.deleteKeys.title": "Delete Key",
+  "commands.redis.openConsole.title": "Open Redis Console",
+  "commands.redis.serverInfo.title": "Redis Server Info"
 }

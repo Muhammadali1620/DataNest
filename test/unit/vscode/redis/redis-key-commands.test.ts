@@ -40,6 +40,8 @@ function setup(
   };
   const openKey = vi.fn((_place: RedisPlace, _key: RedisKeyRef) => Promise.resolve());
   const askNewKey = vi.fn((_prefix: string) => Promise.resolve(options.newKey));
+  const openConsole = vi.fn((_place: RedisPlace) => undefined);
+  const openServerInfo = vi.fn((_place: RedisPlace) => undefined);
   const confirm = vi.fn((_message: string, _detail: string | undefined, _action: string) =>
     Promise.resolve(options.confirm ?? true),
   );
@@ -60,6 +62,8 @@ function setup(
     openKey,
     askNewKey,
     askName: () => Promise.resolve(options.name),
+    openConsole,
+    openServerInfo,
     confirm,
     texts: {
       deleteKeys: (names) => `delete ${names.join(',')}?`,
@@ -83,6 +87,8 @@ function setup(
     confirm,
     session,
     askNewKey,
+    openConsole,
+    openServerInfo,
   };
 }
 
@@ -358,5 +364,33 @@ describe('deleteKeys (V7.3)', () => {
       code: 'permission-denied',
     });
     expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe('openConsole / serverInfo (V7.4)', () => {
+  it('opens on the clicked database, or the one a connection opens', async () => {
+    const { handlers, openConsole, openServerInfo } = setup();
+    await handlers.openConsole(db);
+    await handlers.openConsole({ kind: 'connection', connectionId: 'r1' });
+    await handlers.serverInfo({ kind: 'connection', connectionId: 'r2' });
+    expect(openConsole.mock.calls).toEqual([
+      [{ connectionId: 'r1', database: 2 }],
+      [{ connectionId: 'r1', database: 4 }],
+    ]);
+    expect(openServerInfo).toHaveBeenCalledWith({ connectionId: 'r2', database: 0 });
+  });
+
+  it('asks which Redis connection from the palette, and opens nothing when dismissed', async () => {
+    const { handlers, openConsole, pickConnection } = setup();
+    await handlers.openConsole();
+    expect(openConsole).toHaveBeenCalledWith({ connectionId: 'r2', database: 0 });
+    pickConnection.mockResolvedValueOnce(undefined);
+    await handlers.serverInfo();
+    await expect(
+      handlers.openConsole({ kind: 'connection', connectionId: 's1' }),
+    ).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    expect(openConsole).toHaveBeenCalledTimes(1);
   });
 });

@@ -77,6 +77,8 @@ describe('connections view', () => {
       'datanest.redis.newKey',
       'datanest.redis.renameKey',
       'datanest.redis.deleteKeys',
+      'datanest.redis.openConsole',
+      'datanest.redis.serverInfo',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }

@@ -5,6 +5,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Added
+
+- Redis: connect to one server, through Sentinels or to a cluster, with a password or an
+  ACL user, TLS and SSH (to one server); `redis://`, `rediss://` and `valkey://` URLs and
+  Laravel's `REDIS_*` in `.env` fill the form. The tree lists the numbered databases with
+  their key counts, and the keys of each grouped into folders by `:` (or any separator),
+  loaded with `SCAN` a portion at a time so even millions of keys never block the server.
+  Find a key as you type, filter a database by a pattern.
+- A page per Redis key: type, size, memory, TTL that counts down; strings as text, JSON
+  or hex; hashes, lists, sets, sorted sets and streams a page at a time, with editing,
+  adding and deleting; rename, delete and new keys. Binary keys and values stay exact.
+- A Redis console with suggestions for every command the server documents, the syntax
+  of the one being typed and key names where a key goes, history, and replies printed as
+  redis-cli prints them; and a server information page (INFO, by master in a cluster).
+- Production connections ask before every Redis change, read-only ones refuse them, and
+  safe mode asks before `FLUSHALL`, `FLUSHDB`, `CONFIG SET`, `KEYS` and the like.
+
+### Fixed
+
+- Errors of the database drivers kept their kind in the packaged extension: a dropped
+  connection now reconnects on the next statement, and a cancelled statement stays quiet.
+
 ## [0.6.0] - 2026-10-29
 
 More SQL databases: Microsoft SQL Server, ClickHouse and Oracle with drivers of their own,

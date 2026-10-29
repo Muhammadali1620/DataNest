@@ -72,10 +72,22 @@ export interface RedisKeyCommandDeps {
     action: string,
   ) => Promise<boolean>;
   readonly texts: RedisKeyTexts;
+  /** Opens a console on a database (V7.4). */
+  readonly openConsole: (place: RedisPlace) => void;
+  /** Opens what the server reports about itself (V7.4). */
+  readonly openServerInfo: (place: RedisPlace) => void;
 }
 
 export type RedisKeyCommandName =
-  'loadMoreKeys' | 'filterKeys' | 'findKey' | 'openKey' | 'newKey' | 'renameKey' | 'deleteKeys';
+  | 'loadMoreKeys'
+  | 'filterKeys'
+  | 'findKey'
+  | 'openKey'
+  | 'newKey'
+  | 'renameKey'
+  | 'deleteKeys'
+  | 'openConsole'
+  | 'serverInfo';
 
 function databaseNode(place: RedisPlace): RedisDatabaseNode {
   // The key count does not matter to refresh: nodes are matched by id.
@@ -231,6 +243,22 @@ export function redisKeyCommandHandlers(
         ...(target.keyType === undefined ? {} : { type: target.keyType }),
       });
       deps.tree.refresh(databaseNode(place));
+      return undefined;
+    },
+
+    openConsole: async (target?: CommandTarget) => {
+      const place = await placeOf(target);
+      if (place !== undefined) {
+        deps.openConsole(place);
+      }
+      return undefined;
+    },
+
+    serverInfo: async (target?: CommandTarget) => {
+      const place = await placeOf(target);
+      if (place !== undefined) {
+        deps.openServerInfo(place);
+      }
       return undefined;
     },
 

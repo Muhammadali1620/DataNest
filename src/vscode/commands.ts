@@ -43,7 +43,7 @@ import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
 import { showObjectSearch } from './search/object-search';
 import { templateCommandHandlers } from './tree/template-commands';
-import { createSettings } from './settings';
+import { createSettings, readSafeMode } from './settings';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
@@ -53,6 +53,8 @@ import { describeTarget } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
 import { askNewKey } from './redis/new-key';
 import { RedisKeyPanel } from './panels/redis-key-panel';
+import { RedisConsolePanel } from './panels/redis-console-panel';
+import { RedisInfoPanel } from './panels/redis-info-panel';
 import { RedisKeyModel } from './panels/redis-key-model';
 import type { RedisKeyRef } from '../shared/redis-key';
 import { pickRedisKey } from './redis/find-key';
@@ -266,6 +268,31 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         { modal: true, ...(detail === undefined ? {} : { detail }) },
         action,
       )) === action,
+    openConsole: (place) => {
+      const config = deps.store.get(place.connectionId);
+      if (config !== undefined) {
+        RedisConsolePanel.show({
+          extensionUri: deps.extensionUri,
+          logger: deps.logger,
+          manager: deps.manager,
+          config,
+          database: place.database,
+          policy: policyOf(config),
+          safeMode: readSafeMode,
+        });
+      }
+    },
+    openServerInfo: (place) => {
+      const config = deps.store.get(place.connectionId);
+      if (config !== undefined) {
+        RedisInfoPanel.show({
+          extensionUri: deps.extensionUri,
+          logger: deps.logger,
+          config,
+          session: async () => await deps.redisKeys.session(place.connectionId, place.database),
+        });
+      }
+    },
     texts: {
       deleteKeys: (names) =>
         names.length === 1
@@ -521,6 +548,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.redisOpenKey]: redisKeyCommands.openKey,
     [COMMAND_IDS.redisNewKey]: redisKeyCommands.newKey,
     [COMMAND_IDS.redisRenameKey]: redisKeyCommands.renameKey,
+    [COMMAND_IDS.redisOpenConsole]: redisKeyCommands.openConsole,
+    [COMMAND_IDS.redisServerInfo]: redisKeyCommands.serverInfo,
     [COMMAND_IDS.redisDeleteKeys]: (target, selection) =>
       redisKeyCommands.deleteKeys(target, selection),
     [COMMAND_IDS.openPing]: () => {
@@ -546,6 +575,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         TestDataPanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
+        RedisConsolePanel.disposeAll();
+        RedisInfoPanel.disposeAll();
       },
     },
   ];

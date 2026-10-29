@@ -105,5 +105,7 @@
   "commands.redis.openKey.title": "Открыть ключ",
   "commands.redis.newKey.title": "Новый ключ…",
   "commands.redis.renameKey.title": "Переименовать ключ…",
-  "commands.redis.deleteKeys.title": "Удалить ключ"
+  "commands.redis.deleteKeys.title": "Удалить ключ",
+  "commands.redis.openConsole.title": "Открыть консоль Redis",
+  "commands.redis.serverInfo.title": "Информация о сервере Redis"
 }

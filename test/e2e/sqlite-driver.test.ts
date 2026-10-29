@@ -40,7 +40,8 @@ describe('sqlite driver in the real editor', () => {
   });
 
   after(() => {
-    rmSync(dir, { recursive: true, force: true });
+    // Windows keeps the file locked for a moment after the worker that had it open ends.
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('opens a database through the shipped bundle and runs SQL', async function () {

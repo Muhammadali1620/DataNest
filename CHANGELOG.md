@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-29
+
+More SQL databases: Microsoft SQL Server, ClickHouse and Oracle with drivers of their own,
+and TiDB, CockroachDB, YugabyteDB and Amazon Aurora through the MySQL and PostgreSQL ones.
+
 ### Added
 
 - Microsoft SQL Server (2016 and newer, Azure SQL) with everything the other databases

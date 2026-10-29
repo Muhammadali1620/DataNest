@@ -25,7 +25,8 @@ describe('mysql alterTable', () => {
       comment: 'free text',
     });
     expect(alter(after).statements).toEqual([
-      "ALTER TABLE `shop`.`orders`\n  CHANGE COLUMN `note` `remark` text NOT NULL DEFAULT '-' COMMENT 'free text'",
+      // MySQL takes a TEXT default only as an expression in parentheses.
+      "ALTER TABLE `shop`.`orders`\n  CHANGE COLUMN `note` `remark` text NOT NULL DEFAULT ('-') COMMENT 'free text'",
     ]);
   });
 

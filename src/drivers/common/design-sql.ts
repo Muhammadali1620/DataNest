@@ -16,6 +16,8 @@ export interface ColumnSqlParts {
   readonly autoIncrement: (column: ColumnDesign) => string;
   /** Text after DEFAULT, e.g. a comment clause; empty when the dialect keeps none inline. */
   readonly trailer: (column: ColumnDesign) => string;
+  /** The default as the dialect writes it; the expression as given when absent. */
+  readonly defaultSql?: (column: ColumnDesign) => string;
 }
 
 /** `"name" type(len) [auto] [NOT NULL] [DEFAULT …] [trailer]`. */
@@ -30,7 +32,7 @@ export function columnSql(column: ColumnDesign, parts: ColumnSqlParts): string {
     pieces.push('NOT NULL');
   }
   if (column.defaultValue.trim() !== '') {
-    pieces.push(`DEFAULT ${column.defaultValue.trim()}`);
+    pieces.push(`DEFAULT ${parts.defaultSql?.(column) ?? column.defaultValue.trim()}`);
   }
   const trailer = parts.trailer(column);
   if (trailer !== '') {

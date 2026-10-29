@@ -133,6 +133,12 @@ export interface DumpDialect {
    */
   readonly routinesFirst: boolean;
   /**
+   * Foreign keys are added after the rows, because their checks cannot be switched
+   * off for a load (PostgreSQL, without superuser rights). Elsewhere the header turns
+   * the checks off and tables keep their keys inline.
+   */
+  readonly keysAfterData: boolean;
+  /**
    * One INSERT of rows already written as `(…)` lists. `identity` is set when values
    * go into identity columns, which some databases refuse without a clause.
    */

@@ -80,6 +80,7 @@ export const fakeDialect: Dialect = {
     header: ['HEADER 1', 'HEADER 2'],
     footer: ['FOOTER'],
     routinesFirst: false,
+    keysAfterData: false,
     insert: (table, columns, rows, identity) =>
       `INSERT INTO ${table} (${columns.join(', ')})${identity ? ' IDENTITY' : ''} VALUES ${rows.join(', ')}`,
     resetSequence: (table, column) => `RESET ${table.name}.${column}`,

@@ -28,6 +28,7 @@ export const postgresDump: DumpDialect = {
     EMPTY_PATH,
   ],
   footer: ['RESET search_path', 'RESET check_function_bodies', 'RESET client_min_messages'],
+  keysAfterData: true,
   routinesFirst: true,
   createSchema: (name) => `CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(name)}`,
   insert: (quotedTable, quotedColumns, rows, identity) =>

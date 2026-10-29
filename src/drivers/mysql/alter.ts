@@ -7,6 +7,7 @@ import { diffTables, isEmptyDiff } from '../../shared/table-diff';
 import type { TableRef } from '../../core/model/objects';
 import { type AlterPlan, EMPTY_PLAN } from '../driver';
 import { columnList, columnSql, foreignKeySql } from '../common/design-sql';
+import { mysqlDefault } from './defaults';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 function definition(column: ColumnDesign): string {
@@ -14,6 +15,7 @@ function definition(column: ColumnDesign): string {
     quote: quoteIdentifier,
     autoIncrement: () => 'AUTO_INCREMENT',
     trailer: (c) => (c.comment === '' ? '' : `COMMENT ${quoteString(c.comment)}`),
+    defaultSql: mysqlDefault,
   });
 }
 

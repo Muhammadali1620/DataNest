@@ -2,6 +2,8 @@
 // Shared by the SQL editors and the file tasks (run a script, dump, transfer).
 
 import * as vscode from 'vscode';
+import type { ObjectScope } from '../core/model/objects';
+import { browseSession } from '../services/browse-session';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
 import { describeTarget } from '../shared/connection';
@@ -43,4 +45,35 @@ export async function pickDatabase(
   return await vscode.window.showQuickPick(databases, {
     placeHolder: vscode.l10n.t('Pick a database'),
   });
+}
+
+/**
+ * Where to work in a connection: the scope already known, or the database (and, where
+ * there are schemas, the schema) the user picks now. Undefined when the user backs out.
+ */
+export async function pickScope(
+  manager: Pick<ConnectionManager, 'driverOf' | 'connect' | 'acquire'>,
+  connectionId: string,
+  known: ObjectScope | undefined,
+  schemaPlaceHolder: string,
+): Promise<ObjectScope | undefined> {
+  const { capabilities } = await manager.driverOf(connectionId);
+  let scope: ObjectScope = known ?? {};
+  if (known === undefined && capabilities.databases) {
+    const database = await pickDatabase(manager, connectionId);
+    if (database === undefined) {
+      return undefined;
+    }
+    scope = { database };
+  }
+  if (capabilities.schemas && scope.schema === undefined) {
+    const session = await browseSession(manager, connectionId, scope.database);
+    const schemas = await session.metadata.listSchemas(scope.database);
+    const schema = await vscode.window.showQuickPick(schemas, { placeHolder: schemaPlaceHolder });
+    if (schema === undefined) {
+      return undefined;
+    }
+    scope = { ...scope, schema };
+  }
+  return scope;
 }

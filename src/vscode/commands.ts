@@ -30,6 +30,8 @@ import { filterCommandHandlers } from './tree/filter-commands';
 import { transferCommandHandlers } from './connection-transfer-commands';
 import { scriptCommandHandlers } from './script-commands';
 import { dumpCommandHandlers } from './dump-commands';
+import { tableTransferCommandHandlers } from './transfer-commands';
+import { TableTransferService } from '../services/transfer/table-transfer';
 import { importCommandHandlers } from './import-commands';
 import { DataImportPanel } from './panels/data-import-panel';
 import { TestDataPanel } from './panels/test-data-panel';
@@ -114,6 +116,17 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     cache: deps.cache,
     dumper: new SqlDumper({ manager: deps.manager, logger: deps.logger }),
+    logger: deps.logger,
+  });
+  const transfers = tableTransferCommandHandlers({
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
+    service: new TableTransferService({ manager: deps.manager, logger: deps.logger }),
+    refresh: (connectionId) => {
+      deps.cache.invalidate(connectionId);
+      deps.tree.refresh();
+    },
     logger: deps.logger,
   });
   const imports = importCommandHandlers({
@@ -307,6 +320,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.importData]: (target) => imports.importData(target),
     [COMMAND_IDS.generateData]: (target) => imports.generateData(target),
+    [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
+      transfers.transfer(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportData]: (target) => deps.exportTable(target),
     [COMMAND_IDS.dumpSql]: (target, ...rest: unknown[]) => dumps.dump(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportResult]: async () => {

@@ -50,6 +50,7 @@ export const mysqlDump: DumpDialect = {
     'SET FOREIGN_KEY_CHECKS = @OLD_FOREIGN_KEY_CHECKS',
     'SET TIME_ZONE = @OLD_TIME_ZONE',
   ],
+  keysAfterData: false,
   routinesFirst: false,
   portable: withoutDefiner,
   insert: (quotedTable, quotedColumns, rows) =>

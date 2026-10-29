@@ -15,7 +15,7 @@ import { formatDuration } from '../services/history-format';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { DumpContent, DumpReport, SqlDumper } from '../services/sql-dump';
 import { formatSize } from '../shared/byte-size';
-import { pickConnection, pickDatabase } from './connection-pick';
+import { pickConnection, pickScope } from './connection-pick';
 import { dumpFileName, type DumpStart, dumpStartOf } from './tree/dump-target';
 import { isTreeNode, type TreeNode } from './tree/nodes';
 
@@ -171,27 +171,12 @@ async function startOf(
 
 /** The scope the start names, or the database (and schema) the user picks now. */
 async function scopeOf(deps: DumpCommandDeps, start: DumpStart): Promise<ObjectScope | undefined> {
-  const { capabilities } = await deps.manager.driverOf(start.connectionId);
-  let scope: ObjectScope = start.scope ?? {};
-  if (start.scope === undefined && capabilities.databases) {
-    const database = await pickDatabase(deps.manager, start.connectionId);
-    if (database === undefined) {
-      return undefined;
-    }
-    scope = { database };
-  }
-  if (capabilities.schemas && scope.schema === undefined) {
-    const session = await browseSession(deps.manager, start.connectionId, scope.database);
-    const schemas = await session.metadata.listSchemas(scope.database);
-    const schema = await vscode.window.showQuickPick(schemas, {
-      placeHolder: vscode.l10n.t('Pick the schema to dump'),
-    });
-    if (schema === undefined) {
-      return undefined;
-    }
-    scope = { ...scope, schema };
-  }
-  return scope;
+  return await pickScope(
+    deps.manager,
+    start.connectionId,
+    start.scope,
+    vscode.l10n.t('Pick the schema to dump'),
+  );
 }
 
 async function pickRelations(

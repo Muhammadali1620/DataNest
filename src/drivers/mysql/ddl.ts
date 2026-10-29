@@ -11,6 +11,7 @@ import {
 } from '../common/design-sql';
 import { mysqlAlterTable } from './alter';
 import { mysqlReplaceObject } from './replace';
+import { mysqlDefault } from './defaults';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 
 const TYPES = [
@@ -63,6 +64,7 @@ export const mysqlDdl: SchemaDdl = {
         quote: quoteIdentifier,
         autoIncrement: () => 'AUTO_INCREMENT',
         trailer: (c) => (c.comment === '' ? '' : `COMMENT ${quoteString(c.comment)}`),
+        defaultSql: mysqlDefault,
       }),
     );
     // MySQL keeps indexes and keys inside CREATE TABLE.

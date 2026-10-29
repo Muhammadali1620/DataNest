@@ -13,6 +13,7 @@ export const sqliteDump: DumpDialect = {
   // PRAGMA foreign_keys does nothing inside a transaction, so it comes first.
   header: ['PRAGMA foreign_keys = OFF', 'BEGIN'],
   footer: ['COMMIT', 'PRAGMA foreign_keys = ON'],
+  keysAfterData: false,
   routinesFirst: false,
   insert: (quotedTable, quotedColumns, rows) =>
     `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')}) VALUES\n${rows.join(',\n')}`,

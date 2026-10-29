@@ -7,22 +7,23 @@ import {
   type Token,
   type TokenKind,
 } from '../../../../src/core/sql/tokenizer';
+import type { DriverId } from '../../../../src/shared/connection';
 
 /** Tokens as `kind:text` pairs, which reads much better in expectations. */
-function shape(sql: string, driver?: 'mysql' | 'postgres' | 'sqlite'): string[] {
+function shape(sql: string, driver?: DriverId): string[] {
   return tokenize(sql, syntaxOf(driver)).map((token) => `${token.kind}:${textOf(sql, token)}`);
 }
 
-function kinds(sql: string, driver?: 'mysql' | 'postgres' | 'sqlite'): TokenKind[] {
+function kinds(sql: string, driver?: DriverId): TokenKind[] {
   return tokenize(sql, syntaxOf(driver)).map((token) => token.kind);
 }
 
-function only(sql: string, kind: TokenKind, driver?: 'mysql' | 'postgres' | 'sqlite'): Token[] {
+function only(sql: string, kind: TokenKind, driver?: DriverId): Token[] {
   return tokenize(sql, syntaxOf(driver)).filter((token) => token.kind === kind);
 }
 
 /** Text of the first token of a kind; fails loudly when there is none. */
-function firstText(sql: string, kind: TokenKind, driver?: 'mysql' | 'postgres' | 'sqlite'): string {
+function firstText(sql: string, kind: TokenKind, driver?: DriverId): string {
   const [token] = only(sql, kind, driver);
   if (token === undefined) {
     throw new Error(`No ${kind} token in: ${sql}`);
@@ -252,5 +253,50 @@ describe('tokenize', () => {
 
   it('returns nothing for empty input', () => {
     expect(tokenize('')).toEqual([]);
+  });
+});
+
+describe('tokenize: SQL Server (V6.2)', () => {
+  it('reads [bracketed] names as quoted identifiers, ]] standing for one ]', () => {
+    expect(shape('SELECT [a]]b] FROM [dbo].[t;x]', 'mssql')).toEqual([
+      'word:SELECT',
+      'whitespace: ',
+      'quoted-identifier:[a]]b]',
+      'whitespace: ',
+      'word:FROM',
+      'whitespace: ',
+      'quoted-identifier:[dbo]',
+      'punctuation:.',
+      'quoted-identifier:[t;x]',
+    ]);
+  });
+
+  it('marks an unclosed bracket as unterminated to the end', () => {
+    const [token] = only('SELECT [open; SELECT 2', 'quoted-identifier', 'mssql');
+    expect(token?.unterminated).toBe(true);
+    expect(token?.end).toBe('SELECT [open; SELECT 2'.length);
+  });
+
+  it('keeps double quotes as identifiers and N strings as strings', () => {
+    expect(firstText('SELECT "a b"', 'quoted-identifier', 'mssql')).toBe('"a b"');
+    expect(firstText("SELECT N'текст'", 'string', 'mssql')).toBe("'текст'");
+  });
+
+  it('nests block comments', () => {
+    expect(kinds('/* a /* b */ c */ SELECT', 'mssql')).toEqual(['comment', 'whitespace', 'word']);
+  });
+
+  it('has no backticks, $$ bodies or backslash escapes', () => {
+    expect(kinds('`x`', 'mssql')[0]).toBe('punctuation');
+    expect(firstText("SELECT 'a\\'", 'string', 'mssql')).toBe("'a\\'");
+  });
+
+  it('is the only syntax with brackets and batch separators', () => {
+    expect(syntaxOf('mssql')).toMatchObject({ bracketIdentifiers: true, batchSeparator: true });
+    for (const driver of [undefined, 'mysql', 'postgres', 'sqlite'] as const) {
+      expect(syntaxOf(driver)).toMatchObject({ bracketIdentifiers: false, batchSeparator: false });
+    }
+    // An array subscript in PostgreSQL stays punctuation.
+    expect(kinds('a[1]')).toEqual(['word', 'punctuation', 'number', 'punctuation']);
   });
 });

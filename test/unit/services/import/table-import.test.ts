@@ -193,4 +193,25 @@ describe('TableImporter', () => {
     expect(harness.inserts).toEqual([`INSERT INTO "people" ("name") VALUES ('n1')`]);
     expect(harness.session.executed).not.toContain('RESET people.id');
   });
+
+  it('speaks the transaction words of the dialect (SQL Server, V6.2)', async () => {
+    const harness = new Harness();
+    harness.driver.dialect = {
+      ...harness.driver.dialect,
+      transaction: {
+        ...harness.driver.dialect.transaction,
+        begin: 'BEGIN TRANSACTION',
+        commit: 'COMMIT TRANSACTION',
+        rollback: 'ROLLBACK TRANSACTION',
+      },
+    };
+    await harness.importer().run(harness.request(rows(1)));
+    expect(harness.session.executed[0]).toBe('BEGIN TRANSACTION');
+    expect(harness.session.executed[2]).toBe('COMMIT TRANSACTION');
+    const failing = new Harness();
+    failing.driver.dialect = harness.driver.dialect;
+    failing.session.failExecuteWhen = (sql) => sql.startsWith('INSERT');
+    await failing.importer().run(failing.request(rows(1)));
+    expect(failing.session.executed.at(-1)).toBe('ROLLBACK TRANSACTION');
+  });
 });

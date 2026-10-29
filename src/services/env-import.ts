@@ -116,6 +116,10 @@ function driverFromWord(word: string): DriverId | undefined {
   if (/mysql|maria/.test(text)) {
     return 'mysql';
   }
+  // Laravel says `sqlsrv`, Prisma and JDBC `sqlserver`.
+  if (/sqlsrv|sqlserver|mssql/.test(text)) {
+    return 'mssql';
+  }
   return undefined;
 }
 
@@ -137,7 +141,7 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
   const driver =
     (named === undefined ? undefined : driverFromWord(named)) ??
     driverFromWord(prefix) ??
-    (port === 5432 ? 'postgres' : port === 3306 ? 'mysql' : undefined);
+    (port === 5432 ? 'postgres' : port === 3306 ? 'mysql' : port === 1433 ? 'mssql' : undefined);
   if (driver === undefined) {
     return undefined;
   }

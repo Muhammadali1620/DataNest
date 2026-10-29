@@ -128,7 +128,9 @@
       ? 'SET search_path = app, public;'
       : fields.driver === 'sqlite'
         ? 'PRAGMA foreign_keys = ON;'
-        : "SET SESSION sql_mode = 'STRICT_ALL_TABLES';"}
+        : fields.driver === 'mssql'
+          ? 'SET DATEFORMAT ymd;'
+          : "SET SESSION sql_mode = 'STRICT_ALL_TABLES';"}
     aria-invalid={errorFor('init-sql-too-long') !== undefined}
     aria-label={t('form.options.initSql')}
     spellcheck="false"

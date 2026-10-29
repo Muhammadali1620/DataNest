@@ -2,6 +2,7 @@ import { mysqlDump } from './dump';
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
+import { STANDARD_TRANSACTION } from '../common/transaction';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 import { mysqlDdl } from './ddl';
 
@@ -65,6 +66,7 @@ export const mysqlDialect: Dialect = {
     `CAST(${quotedColumn} AS CHAR) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} () VALUES ()`,
+  transaction: STANDARD_TRANSACTION,
   ddl: mysqlDdl,
   dump: mysqlDump,
 };

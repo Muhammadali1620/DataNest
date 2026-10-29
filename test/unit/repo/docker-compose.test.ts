@@ -43,9 +43,10 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'mariadb',
+      'mssql',
       'mysql',
       'postgres',
       'ssh',
@@ -90,16 +91,36 @@ describe('docker/compose.yml (D17)', () => {
   });
 
   it.each(services)('pins the %s image to a version', (_id, service) => {
-    expect(service.image).toMatch(/^[a-z]+:\d+(\.\d+)*(-[a-z]+)?$/);
-    expect(service.image).not.toContain(':latest');
+    expect(service.image).toMatch(/^([a-z0-9.-]+\/)*[a-z0-9-]+:\d+(\.\d+)*(-[a-z0-9.]+)*$/i);
+    expect(service.image).not.toMatch(/:latest$|-latest$/);
   });
 
   it.each(services)('waits for the %s seed with a healthcheck', (_id, service) => {
-    expect(service.healthcheck?.test.join(' ')).toContain('big_table');
+    // SQL Server loads its seed after the server is up, so it waits for the last table.
+    expect(service.healthcheck?.test.join(' ')).toMatch(/big_table|inventory\.stock_levels/);
   });
 
-  it.each(services)('keeps %s data in tmpfs so every start is clean', (_id, service) => {
-    expect(service.tmpfs?.length).toBeGreaterThan(0);
+  it.each(services.filter(([id]) => id !== 'mssql'))(
+    'keeps %s data in tmpfs so every start is clean',
+    (_id, service) => {
+      expect(service.tmpfs?.length).toBeGreaterThan(0);
+    },
+  );
+
+  describe('mssql (V6.2)', () => {
+    const mssql = compose.services.mssql;
+
+    it('keeps its data in the container, which db:down removes (no O_DIRECT in tmpfs)', () => {
+      expect(mssql?.tmpfs).toBeUndefined();
+      expect((mssql?.volumes ?? []).every((volume) => volume.endsWith(':ro'))).toBe(true);
+    });
+
+    it('loads the seed by its own entrypoint, which exists', () => {
+      expect(existsSync(join(ROOT, 'docker/mssql/entrypoint.sh'))).toBe(true);
+      const entrypoint = readFileSync(join(ROOT, 'docker/mssql/entrypoint.sh'), 'utf8');
+      expect(entrypoint).toContain('/docker-entrypoint-initdb.d/*.sql');
+      expect(entrypoint).toContain('tlscert');
+    });
   });
 
   it.each(services)('mounts an existing seed folder into %s read-only', (_id, service) => {

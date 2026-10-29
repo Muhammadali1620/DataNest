@@ -47,6 +47,21 @@ describe('inputKindOf', () => {
     ['text', 'text'],
     ['uuid', 'text'],
     ['', 'text'],
+    // SQL Server (V6.2): BIT is its boolean; MySQL's bit(n) is not.
+    ['bit', 'boolean'],
+    ['bit(8)', 'text'],
+    ['tinyint', 'integer'],
+    ['money', 'number'],
+    ['smallmoney', 'number'],
+    ['datetime2(7)', 'datetime'],
+    ['datetimeoffset(7)', 'datetime'],
+    ['smalldatetime', 'datetime'],
+    ['time(7)', 'time'],
+    ['image', 'binary'],
+    ['varbinary(max)', 'binary'],
+    ['nvarchar(max)', 'text'],
+    ['uniqueidentifier', 'text'],
+    ['xml', 'text'],
   ] as const)('reads %s as %s', (type, kind) => {
     expect(inputKindOf(type)).toBe(kind);
   });

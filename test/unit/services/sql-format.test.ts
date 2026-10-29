@@ -37,7 +37,19 @@ describe('languageOf', () => {
     expect(languageOf('mysql')).toBe('mysql');
     expect(languageOf('postgres')).toBe('postgresql');
     expect(languageOf('sqlite')).toBe('sqlite');
+    expect(languageOf('mssql')).toBe('transactsql');
     expect(languageOf(undefined)).toBe('sql');
+  });
+
+  it('formats T-SQL with brackets and TOP through the real formatter (V6.2)', () => {
+    const text = formatter.format(
+      'select top (5) [order id] from [dbo].[orders] where id=1',
+      'transactsql',
+      DEFAULT_FORMAT_STYLE,
+    );
+    expect(text).toContain('[order id]');
+    expect(text).toContain('[dbo].[orders]');
+    expect(text).toMatch(/TOP\s*\(5\)/u);
   });
 });
 

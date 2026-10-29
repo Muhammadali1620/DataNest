@@ -3,6 +3,7 @@
 // `SELECT <columns> FROM <table> [WHERE …] [ORDER BY …] [LIMIT …]` is refused, so an
 // edit is never aimed at rows the statement did not plainly read from one table.
 
+import { unquoteIdentifier } from './identifiers';
 import { isTrivia, textOf, tokenize, type SqlSyntax, type Token } from './tokenizer';
 
 /** One entry of the select list. */
@@ -114,7 +115,7 @@ export function parseSelectSource(sql: string, syntax: SqlSyntax): SelectParse {
   if (first === 'DISTINCT' || first === 'DISTINCTROW' || first === 'UNIQUE') {
     return refuse('distinct');
   }
-  const items = parseItems(first === 'ALL' ? list.slice(1) : list);
+  const items = parseItems(withoutTop(first === 'ALL' ? list.slice(1) : list));
 
   index++; // FROM
   if (upper(pieces[index]) === 'ONLY') {
@@ -275,11 +276,38 @@ function isReserved(piece: Piece): boolean {
 }
 
 /** A name without its quotes; doubled quote characters become one. */
+/**
+ * `TOP (10)`, `TOP 10 PERCENT`, `TOP (5) WITH TIES` (SQL Server) only limit the rows;
+ * what follows is the select list.
+ */
+function withoutTop(list: readonly Piece[]): readonly Piece[] {
+  if (upper(list[0]) !== 'TOP') {
+    return list;
+  }
+  let index = 1;
+  if (list[index]?.text === '(') {
+    let depth = 0;
+    for (; index < list.length; index++) {
+      const text = list[index]?.text;
+      depth += text === '(' ? 1 : text === ')' ? -1 : 0;
+      if (depth === 0) {
+        break;
+      }
+    }
+  }
+  index++;
+  if (upper(list[index]) === 'PERCENT') {
+    index++;
+  }
+  if (upper(list[index]) === 'WITH' && upper(list[index + 1]) === 'TIES') {
+    index += 2;
+  }
+  return list.slice(index);
+}
+
 function nameOf(piece: Piece): string {
   if (piece.kind !== 'quoted-identifier') {
     return piece.text;
   }
-  const quote = piece.text[0] ?? '"';
-  const inner = piece.text.slice(1, piece.text.endsWith(quote) ? -1 : undefined);
-  return inner.replaceAll(quote + quote, quote);
+  return unquoteIdentifier(piece.text);
 }

@@ -1,6 +1,6 @@
 // Splitting a script into statements. Semicolons inside strings, comments and
-// dollar-quoted bodies are not terminators, and MySQL's `DELIMITER` command can
-// change what a terminator even is.
+// dollar-quoted bodies are not terminators, MySQL's `DELIMITER` command can change
+// what a terminator even is, and SQL Server's `GO` lines end batches.
 
 import type { DriverId } from '../../shared/connection';
 import { isTrivia, type SqlSyntax, syntaxOf, textOf, tokenize, type Token } from './tokenizer';
@@ -65,6 +65,7 @@ export function splitScript(
   let index = 0;
 
   const body = new TriggerBody(sql, syntax.triggerBodies);
+  const batch = new TsqlBody(sql, syntax.batchSeparator);
 
   const push = (start: number, end: number): void => {
     const statement = trimmed(sql, start, end, syntax);
@@ -72,6 +73,7 @@ export function splitScript(
       pieces.push({ ...statement, kind: 'statement', delimiter });
     }
     body.reset();
+    batch.reset();
   };
 
   while (index < tokens.length) {
@@ -104,8 +106,20 @@ export function splitScript(
       index = psql.nextToken;
       continue;
     }
+    // `GO` belongs to the client like DELIMITER: it ends whatever is open.
+    const separator = syntax.batchSeparator ? readBatchSeparator(sql, tokens, index) : undefined;
+    if (separator) {
+      push(from, token.start);
+      from = separator.end;
+      index = separator.nextToken;
+      continue;
+    }
     body.see(token);
-    const terminator = body.open ? undefined : matchDelimiter(sql, token, delimiter);
+    batch.see(tokens, index);
+    const terminator =
+      body.open || batch.open || (batch.enabled && continuesWithElse(sql, tokens, index))
+        ? undefined
+        : matchDelimiter(sql, token, delimiter);
     if (terminator !== undefined) {
       push(from, token.start);
       from = terminator;
@@ -315,6 +329,108 @@ class TriggerBody {
   reset(): void {
     this.words = [];
     this.inTrigger = false;
+    this.depth = 0;
+  }
+}
+
+/** A line of nothing but `GO` (and an optional count or comment), from its first token. */
+function readBatchSeparator(
+  sql: string,
+  tokens: readonly Token[],
+  index: number,
+): DelimiterCommand | undefined {
+  const token = tokens[index];
+  if (token?.kind !== 'word' || textOf(sql, token).toUpperCase() !== 'GO') {
+    return undefined;
+  }
+  const lineStart = sql.lastIndexOf('\n', token.start - 1) + 1;
+  if (sql.slice(lineStart, token.start).trim() !== '') {
+    return undefined;
+  }
+  const lineEnd = sql.indexOf('\n', token.end);
+  const end = lineEnd === -1 ? sql.length : lineEnd + 1;
+  const rest = sql.slice(token.end, lineEnd === -1 ? sql.length : lineEnd);
+  if (!/^\s*(\d+\s*)?(--.*)?$/u.test(rest)) {
+    return undefined;
+  }
+  let nextToken = index + 1;
+  while (nextToken < tokens.length && (tokens[nextToken]?.start ?? 0) < end) {
+    nextToken++;
+  }
+  return { delimiter: DEFAULT_DELIMITER, end, nextToken };
+}
+
+/** The first token after `index` that is not trivia. */
+function nextCode(tokens: readonly Token[], index: number): Token | undefined {
+  for (let next = index + 1; next < tokens.length; next++) {
+    const token = tokens[next];
+    if (token !== undefined && !isTrivia(token)) {
+      return token;
+    }
+  }
+  return undefined;
+}
+
+/** `IF … SELECT 1; ELSE SELECT 2;` is one statement: the ELSE goes on with the IF. */
+function continuesWithElse(sql: string, tokens: readonly Token[], index: number): boolean {
+  const next = nextCode(tokens, index);
+  return next?.kind === 'word' && textOf(sql, next).toUpperCase() === 'ELSE';
+}
+
+/** Words after BEGIN that start a transaction or a dialog, not a block that END closes. */
+const BEGIN_NOT_BLOCK = new Set(['TRAN', 'TRANSACTION', 'DISTRIBUTED', 'DIALOG', 'CONVERSATION']);
+
+/**
+ * T-SQL statements whose semicolons do not end them (SQL Server). A routine or trigger
+ * body, and a batch that declares variables, run up to the next `GO`: the server wants
+ * the body as one batch, and variables live only as long as theirs. Elsewhere a
+ * `BEGIN … END` or `CASE … END` block keeps the statement open until it closes.
+ */
+class TsqlBody {
+  private words: string[] = [];
+  private untilBatch = false;
+  private depth = 0;
+
+  constructor(
+    private readonly sql: string,
+    readonly enabled: boolean,
+  ) {}
+
+  get open(): boolean {
+    return this.untilBatch || this.depth > 0;
+  }
+
+  see(tokens: readonly Token[], index: number): void {
+    const token = tokens[index];
+    if (!this.enabled || token?.kind !== 'word') {
+      return;
+    }
+    const word = textOf(this.sql, token).toUpperCase();
+    if (this.words.length < 4) {
+      this.words.push(word);
+      const [first, second, third, fourth] = this.words;
+      const kind = second === 'OR' && third === 'ALTER' ? fourth : second;
+      this.untilBatch =
+        first === 'DECLARE' ||
+        ((first === 'CREATE' || first === 'ALTER') &&
+          (kind === 'PROC' || kind === 'PROCEDURE' || kind === 'FUNCTION' || kind === 'TRIGGER'));
+    }
+    if (word === 'BEGIN' || word === 'CASE' || word === 'END') {
+      const after = nextCode(tokens, index);
+      const next = after?.kind === 'word' ? textOf(this.sql, after).toUpperCase() : '';
+      if (word === 'BEGIN' && !BEGIN_NOT_BLOCK.has(next)) {
+        this.depth += 1;
+      } else if (word === 'CASE') {
+        this.depth += 1;
+      } else if (word === 'END' && next !== 'CONVERSATION' && this.depth > 0) {
+        this.depth -= 1;
+      }
+    }
+  }
+
+  reset(): void {
+    this.words = [];
+    this.untilBatch = false;
     this.depth = 0;
   }
 }

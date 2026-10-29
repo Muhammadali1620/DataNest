@@ -47,6 +47,13 @@ describe('integration groups (V6.1)', () => {
     expect(new Set(endpoints.map((e) => e.host))).toEqual(new Set(['127.0.0.1']));
   });
 
+  it('checks only SQL Server for mssql, which does not run unless it is up', () => {
+    expect(INTEGRATION_GROUPS.mssql.always).toBe(false);
+    expect(INTEGRATION_GROUPS.mssql.endpoints({})).toEqual([
+      { name: 'mssql', host: '127.0.0.1', port: 7143 },
+    ]);
+  });
+
   it('turns groups into include patterns', () => {
     expect(includePatterns(['core'])).toEqual([
       'test/integration/drivers/**/*.int.test.ts',
@@ -94,6 +101,14 @@ describe('selectGroups', () => {
     expect(selection.groups[0]).toBe('core');
     expect(selection.groups).toHaveLength(1);
     expect(selection.skipped).toEqual(GROUP_IDS.filter((id) => !INTEGRATION_GROUPS[id].always));
+  });
+
+  it('leaves out a group whose server does not answer', async () => {
+    const selection = await selectGroups({}, (endpoint) =>
+      Promise.resolve(endpoint.name !== 'mssql'),
+    );
+    expect(selection.groups).not.toContain('mssql');
+    expect(selection.skipped).toContain('mssql');
   });
 
   it('adds every other group whose servers all answer', async () => {

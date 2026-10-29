@@ -293,17 +293,17 @@ class Job {
     let columns: ColumnDesign[] = loaded.columns.map((column) =>
       this.translateColumn(column, detailOf.get(column.name), indexed.has(column.name), notes),
     );
+    // Index names belong to the schema in PostgreSQL and SQLite, to the table in MySQL;
+    // constraint names to the schema in SQL Server and to the database in MySQL. A name
+    // that does not say its table (SQLite calls every key fk_1) gets the table in front.
+    const own = (original: string): string =>
+      from === to || original.toLowerCase().includes(name.toLowerCase())
+        ? original
+        : `${name}_${original}`.slice(0, 63);
     let design: TableDesign = {
       ...loaded,
       columns,
-      indexes: loaded.indexes.map((index) => ({
-        ...index,
-        // Index names belong to the schema in PostgreSQL and SQLite, to the table in MySQL.
-        name:
-          from === to || index.name.toLowerCase().includes(name.toLowerCase())
-            ? index.name
-            : `${name}_${index.name}`.slice(0, 63),
-      })),
+      indexes: loaded.indexes.map((index) => ({ ...index, name: own(index.name) })),
       // A key goes along when its table does, from the same scope; it then points at
       // the copy in the target scope.
       foreignKeys: loaded.foreignKeys.flatMap((key) => {
@@ -314,7 +314,7 @@ class Job {
           notes.push({ kind: 'key-dropped', key: key.name, target: key.targetTable });
           return [];
         }
-        return [key];
+        return [{ ...key, name: own(key.name) }];
       }),
     };
     // The target may refuse what the source allowed (auto-numbering a non-key column).

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { toUtc, transferValue } from '../../../../src/services/transfer/transfer-values';
+import {
+  toUtc,
+  transferValue,
+  withFullOffset,
+} from '../../../../src/services/transfer/transfer-values';
 
 describe('toUtc', () => {
   it('moves a moment with a zone to UTC, keeping the fraction', () => {
@@ -37,7 +41,23 @@ describe('transferValue', () => {
       ),
     ).toEqual({ kind: 'datetime', text: '2024-02-29 22:30:00' });
     const zoned = { kind: 'datetime', text: '2024-03-01 01:30:00+03' } as const;
-    expect(transferValue(zoned, { kind: 'datetime', zone: true })).toBe(zoned);
+    expect(transferValue(zoned, { kind: 'datetime', zone: true })).toEqual({
+      kind: 'datetime',
+      text: '2024-03-01 01:30:00+03:00',
+    });
+    const local = { kind: 'datetime', text: '2024-03-01 01:30:00' } as const;
+    expect(transferValue(local, { kind: 'datetime', zone: true })).toBe(local);
+  });
+
+  it('spells every offset in full, the one form SQL Server reads', () => {
+    expect(withFullOffset('2024-03-01 01:30:00+03')).toBe('2024-03-01 01:30:00+03:00');
+    expect(withFullOffset('2024-03-01 01:30:00.5-0530')).toBe('2024-03-01 01:30:00.5-05:30');
+    expect(withFullOffset('2024-03-01T01:30:00Z')).toBe('2024-03-01T01:30:00+00:00');
+    expect(withFullOffset('2024-06-15 12:00:00.1234567 +03:00')).toBe(
+      '2024-06-15 12:00:00.1234567+03:00',
+    );
+    expect(withFullOffset('2024-03-01 01:30:00')).toBeUndefined();
+    expect(withFullOffset('not a date')).toBeUndefined();
   });
 
   it('marks text for a JSON column and unwraps JSON for a text one', () => {

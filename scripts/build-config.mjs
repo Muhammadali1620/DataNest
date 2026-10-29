@@ -48,6 +48,35 @@ export const nativeOptionalsPlugin = {
 };
 
 /**
+ * Modules a bundled library loads but uses only for features DataNest does not offer:
+ * tedious signs in to Azure AD and reads Always Encrypted keys from Key Vault through
+ * them, which would add megabytes to the SQL Server bundle. Each becomes a stub that
+ * throws the moment anything is taken from it, so nothing can half-work.
+ */
+export const UNUSED_MODULES = /^@azure\/(identity|keyvault-keys)$/;
+
+/** @type {import('esbuild').Plugin} */
+export const unusedModulesPlugin = {
+  name: 'datanest-unused-modules',
+  setup(build) {
+    build.onResolve({ filter: UNUSED_MODULES }, (args) => ({
+      path: args.path,
+      namespace: 'datanest-unused-module',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'datanest-unused-module' }, (args) => ({
+      contents: `module.exports = new Proxy({}, { get(_target, name) {
+  if (name === '__esModule' || typeof name === 'symbol') return undefined;
+  throw new Error(${JSON.stringify(`DataNest does not ship "${args.path}"`)} + ': ' + String(name));
+} });`,
+      loader: 'js',
+    }));
+  },
+};
+
+/** Plugins of every Node bundle. */
+export const HOST_PLUGINS = [nativeOptionalsPlugin, unusedModulesPlugin];
+
+/**
  * Each driver lives in src/drivers/<id>/index.ts and is bundled separately to
  * dist/drivers/<id>.js, so it is loaded only on the first connection to that DBMS.
  * A driver may also ship a worker (src/drivers/<id>/worker.ts), bundled next to it
@@ -117,7 +146,7 @@ export function createHostBuildOptions({ rootDir, outDir, production = false }) 
     platform: 'node',
     target: NODE_TARGET,
     external: EXTERNALS,
-    plugins: [nativeOptionalsPlugin],
+    plugins: HOST_PLUGINS,
     sourcemap: production ? false : 'linked',
     sourcesContent: false,
     minify: production,
@@ -217,7 +246,7 @@ export function createE2eBuildOptions({ rootDir, outDir }) {
     platform: 'node',
     target: NODE_TARGET,
     external: [...EXTERNALS, 'mocha'],
-    plugins: [nativeOptionalsPlugin],
+    plugins: HOST_PLUGINS,
     sourcemap: 'inline',
     logLevel: 'warning',
   };

@@ -36,7 +36,7 @@ export const DEFAULT_FORMAT_STYLE: FormatStyle = {
 };
 
 /** Dialects the formatter knows; `sql` is plain standard SQL. */
-export type FormatLanguage = 'mysql' | 'postgresql' | 'sqlite' | 'sql';
+export type FormatLanguage = 'mysql' | 'postgresql' | 'sqlite' | 'transactsql' | 'sql';
 
 export function languageOf(driver: DriverId | undefined): FormatLanguage {
   switch (driver) {
@@ -46,6 +46,8 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
       return 'postgresql';
     case 'sqlite':
       return 'sqlite';
+    case 'mssql':
+      return 'transactsql';
     case undefined:
       return 'sql';
   }

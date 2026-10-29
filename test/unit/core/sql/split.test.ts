@@ -8,10 +8,11 @@ import {
   statementAt,
   statementsIn,
 } from '../../../../src/core/sql/split';
+import type { DriverId } from '../../../../src/shared/connection';
 import { ROOT } from '../../../helpers/repo';
 
 /** Statement texts, which is what most expectations care about. */
-function texts(sql: string, driver?: 'mysql' | 'postgres' | 'sqlite'): string[] {
+function texts(sql: string, driver?: DriverId): string[] {
   return splitStatements(sql, driver).map((statement) => statement.text);
 }
 
@@ -375,6 +376,131 @@ describe('against the real seed scripts', () => {
       for (const statement of splitStatements(sql, driver)) {
         expect(sql.slice(statement.start, statement.end)).toBe(statement.text);
       }
+    }
+  });
+});
+
+describe('SQL Server batches (V6.2)', () => {
+  const t = (sql: string): string[] => texts(sql, 'mssql');
+
+  it('splits on semicolons like everywhere else', () => {
+    expect(t('SELECT 1; SELECT 2;')).toEqual(['SELECT 1', 'SELECT 2']);
+  });
+
+  it('ends a statement at a GO line, which belongs to no statement', () => {
+    expect(t('SELECT 1\nGO\nSELECT 2\ngo\n')).toEqual(['SELECT 1', 'SELECT 2']);
+  });
+
+  it('accepts GO with spaces, a count or a comment', () => {
+    expect(t('SELECT 1\n   GO 5  \nSELECT 2\nGO -- next\nSELECT 3')).toEqual([
+      'SELECT 1',
+      'SELECT 2',
+      'SELECT 3',
+    ]);
+  });
+
+  it('does not take GO inside a line, a string, a comment or a name for a separator', () => {
+    expect(t("SELECT 'x\nGO\n' AS a")).toEqual(["SELECT 'x\nGO\n' AS a"]);
+    expect(t('SELECT 1 /*\nGO\n*/ + 1')).toEqual(['SELECT 1 /*\nGO\n*/ + 1']);
+    expect(t('SELECT 1 GO')).toEqual(['SELECT 1 GO']);
+    expect(t('SELECT 1\nGO now')).toEqual(['SELECT 1\nGO now']);
+    expect(t('SELECT [x\nGO\n] FROM t')).toEqual(['SELECT [x\nGO\n] FROM t']);
+  });
+
+  it('keeps a procedure body whole up to GO', () => {
+    const sql = [
+      'CREATE PROCEDURE p AS',
+      'BEGIN',
+      '  SELECT 1;',
+      '  SELECT 2;',
+      'END;',
+      'GO',
+      'EXEC p;',
+    ].join('\n');
+    expect(t(sql)).toEqual([
+      'CREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND;',
+      'EXEC p',
+    ]);
+  });
+
+  it('treats CREATE OR ALTER and ALTER of routines and triggers the same', () => {
+    expect(
+      t('CREATE OR ALTER FUNCTION f() RETURNS INT AS BEGIN RETURN 1; END; SELECT 1'),
+    ).toHaveLength(1);
+    expect(t('ALTER PROC p AS SELECT 1; SELECT 2')).toHaveLength(1);
+    expect(t('CREATE TRIGGER tr ON t AFTER INSERT AS SELECT 1; SELECT 2')).toHaveLength(1);
+  });
+
+  it('runs a batch that declares variables to GO, statements before it stay apart', () => {
+    expect(t('SELECT 0;\nDECLARE @n INT = 1;\nSELECT @n;\nGO\nSELECT 2;')).toEqual([
+      'SELECT 0',
+      'DECLARE @n INT = 1;\nSELECT @n;',
+      'SELECT 2',
+    ]);
+  });
+
+  it('does not end a statement inside BEGIN … END or CASE … END', () => {
+    expect(t('IF 1 = 1 BEGIN SELECT 1; SELECT 2; END; SELECT 3')).toEqual([
+      'IF 1 = 1 BEGIN SELECT 1; SELECT 2; END',
+      'SELECT 3',
+    ]);
+    expect(t('BEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH; SELECT 3')).toEqual([
+      'BEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH',
+      'SELECT 3',
+    ]);
+  });
+
+  it('does not count BEGIN TRAN or END CONVERSATION as blocks', () => {
+    expect(t('BEGIN TRAN; UPDATE t SET a = 1; COMMIT;')).toEqual([
+      'BEGIN TRAN',
+      'UPDATE t SET a = 1',
+      'COMMIT',
+    ]);
+    expect(t('BEGIN TRANSACTION; BEGIN DISTRIBUTED TRAN; SELECT 1')).toHaveLength(3);
+    expect(t('BEGIN SELECT 1; END CONVERSATION @h; SELECT 2; END; SELECT 3')).toEqual([
+      'BEGIN SELECT 1; END CONVERSATION @h; SELECT 2; END',
+      'SELECT 3',
+    ]);
+  });
+
+  it('goes on with an IF when the next statement starts with ELSE', () => {
+    expect(t('IF @a = 1 SELECT 1; ELSE SELECT 2; SELECT 3')).toEqual([
+      'IF @a = 1 SELECT 1; ELSE SELECT 2',
+      'SELECT 3',
+    ]);
+  });
+
+  it('closes everything open at GO', () => {
+    expect(t('BEGIN\nSELECT 1;\nGO\nSELECT 2; SELECT 3')).toEqual([
+      'BEGIN\nSELECT 1;',
+      'SELECT 2',
+      'SELECT 3',
+    ]);
+  });
+
+  it('applies the T-SQL rules to SQL Server only', () => {
+    expect(texts('BEGIN; SELECT 1; END', 'postgres')).toEqual(['BEGIN', 'SELECT 1', 'END']);
+    expect(texts('SELECT 1\nGO\nSELECT 2', 'postgres')).toEqual(['SELECT 1\nGO\nSELECT 2']);
+  });
+
+  it('maps every statement back to its source', () => {
+    const sql = seed();
+    for (const statement of splitStatements(sql, 'mssql')) {
+      expect(sql.slice(statement.start, statement.end)).toBe(statement.text);
+      expect(statement.text).not.toMatch(/^GO\b/mu);
+    }
+  });
+
+  function seed(): string {
+    return readFileSync(join(ROOT, 'docker/seed/mssql/01-schema.sql'), 'utf8');
+  }
+
+  it('splits the SQL Server seed, keeping routine and trigger bodies whole', () => {
+    const statements = splitStatements(seed(), 'mssql');
+    const routines = statements.filter((s) => /^CREATE (FUNCTION|PROCEDURE|TRIGGER)/u.test(s.text));
+    expect(routines).toHaveLength(4);
+    for (const routine of routines) {
+      expect(routine.text).toMatch(/END;?$/u);
     }
   });
 });

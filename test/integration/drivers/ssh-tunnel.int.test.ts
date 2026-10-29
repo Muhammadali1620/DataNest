@@ -12,7 +12,7 @@ import { ConnectionStore } from '../../../src/services/connection-store';
 import { ssh } from '../../../src/services/ssh';
 import { type HostKeyInfo, TunnelPool } from '../../../src/services/tunnels';
 import type { ConnectionInput, DriverId, SshHop } from '../../../src/shared/connection';
-import { testDatabase, type TestDatabaseId, testSshServer } from '../../helpers/databases';
+import { type CoreDatabaseId, testDatabase, testSshServer } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { startTestAgent } from '../../helpers/ssh-server';
 
@@ -34,7 +34,7 @@ const DRIVERS: Readonly<Record<'mysql' | 'postgres', Driver>> = {
   postgres: postgresDriver,
 };
 
-const TARGETS: readonly { id: TestDatabaseId; driver: 'mysql' | 'postgres' }[] = [
+const TARGETS: readonly { id: CoreDatabaseId; driver: 'mysql' | 'postgres' }[] = [
   { id: 'mysql', driver: 'mysql' },
   { id: 'mariadb', driver: 'mysql' },
   { id: 'postgres', driver: 'postgres' },
@@ -47,7 +47,7 @@ describe('SSH tunnel to real databases', () => {
   let pool: TunnelPool;
   let manager: ConnectionManager;
 
-  function input(id: TestDatabaseId, driver: DriverId, hop: Partial<SshHop> = {}): ConnectionInput {
+  function input(id: CoreDatabaseId, driver: DriverId, hop: Partial<SshHop> = {}): ConnectionInput {
     const db = testDatabase(id);
     const target = server.targets[id];
     return {
@@ -191,7 +191,7 @@ describe('SSH tunnel to real databases', () => {
   });
 
   describe('through a jump host', () => {
-    function deep(id: TestDatabaseId, driver: DriverId, jumps: SshHop[]): ConnectionInput {
+    function deep(id: CoreDatabaseId, driver: DriverId, jumps: SshHop[]): ConnectionInput {
       const base = input(id, driver);
       return {
         ...base,

@@ -11,6 +11,8 @@ const SYSTEM_DATABASES: Readonly<Record<DriverId, readonly string[]>> = {
   mysql: ['information_schema', 'performance_schema', 'mysql', 'sys'],
   postgres: ['template0', 'template1'],
   sqlite: [],
+  // The server's own tools keep these four apart as "system databases" too.
+  mssql: ['master', 'model', 'msdb', 'tempdb'],
 };
 
 /** Schemas the server keeps for itself. */
@@ -18,6 +20,7 @@ const SYSTEM_SCHEMAS: Readonly<Record<DriverId, readonly string[]>> = {
   mysql: [],
   postgres: ['pg_catalog', 'information_schema'],
   sqlite: [],
+  mssql: ['sys', 'INFORMATION_SCHEMA', 'guest'],
 };
 
 /** Prefixes of generated schemas: PostgreSQL numbers them per session. */
@@ -25,6 +28,7 @@ const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<DriverId, readonly string[]>> = {
   mysql: [],
   postgres: ['pg_toast', 'pg_temp_', 'pg_toast_temp_'],
   sqlite: [],
+  mssql: [],
 };
 
 function equalsAny(name: string, names: readonly string[]): boolean {

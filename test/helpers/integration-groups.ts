@@ -35,6 +35,14 @@ const DEFINITIONS = {
       { name: 'ssh', host: testSshServer(env).host, port: testSshServer(env).port },
     ],
   },
+  mssql: {
+    always: false,
+    folders: ['mssql'],
+    endpoints: (env) => {
+      const db = testDatabase('mssql', env);
+      return [{ name: 'mssql', host: db.host, port: db.port }];
+    },
+  },
 } as const satisfies Record<string, IntegrationGroup>;
 
 export type IntegrationGroupId = keyof typeof DEFINITIONS;

@@ -1,6 +1,7 @@
 // What the user is typing, so completion can offer the right thing: a table after
 // FROM, a column after SELECT or after `alias.`, a keyword anywhere else.
 
+import { unquoteIdentifier } from './identifiers';
 import type { DriverId } from '../../shared/connection';
 import { statementAt } from './split';
 import { isTrivia, syntaxOf, textOf, tokenize, type Token } from './tokenizer';
@@ -240,8 +241,12 @@ export function unquote(name: string): string {
   if (name.length >= 2) {
     const first = name[0];
     const last = name[name.length - 1];
-    if ((first === '"' && last === '"') || (first === '`' && last === '`')) {
-      return name.slice(1, -1).replaceAll(`${first}${first}`, first);
+    if (
+      (first === '"' && last === '"') ||
+      (first === '`' && last === '`') ||
+      (first === '[' && last === ']')
+    ) {
+      return unquoteIdentifier(name);
     }
   }
   return name;

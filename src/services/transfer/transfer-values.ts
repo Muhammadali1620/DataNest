@@ -40,6 +40,25 @@ export function toUtc(text: string): string | undefined {
   );
 }
 
+/**
+ * `…+03` and `…Z` as `…+03:00`: the one spelling every server reads (SQL Server
+ * refuses the short ones); undefined when there is no zone.
+ */
+export function withFullOffset(text: string): string | undefined {
+  const match = ZONED.exec(text.trim());
+  const zone = match?.[8];
+  if (match === null || zone === undefined) {
+    return undefined;
+  }
+  const sign = zone === 'Z' ? '+' : zone.slice(0, 1);
+  const digits = zone === 'Z' ? '0000' : zone.slice(1).replace(':', '').padEnd(4, '0');
+  const head = text
+    .trim()
+    .slice(0, text.trim().length - zone.length)
+    .trimEnd();
+  return `${head}${sign}${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+}
+
 function textOf(cell: CellValue): string | undefined {
   if (typeof cell === 'string') {
     return cell;
@@ -79,7 +98,9 @@ export function transferValue(cell: CellValue, target: NeutralType): CellValue {
       return typeof cell === 'boolean' ? (cell ? 1 : 0) : cell;
     case 'datetime': {
       if (target.zone) {
-        return cell;
+        const text = textOf(cell);
+        const full = text === undefined ? undefined : withFullOffset(text);
+        return full === undefined ? cell : { kind: 'datetime', text: full };
       }
       const text = textOf(cell);
       const utc = text === undefined ? undefined : toUtc(text);

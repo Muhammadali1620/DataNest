@@ -58,3 +58,13 @@ describe('keywordsOf', () => {
     expect([...all]).toEqual([...all].sort());
   });
 });
+
+describe('SQL Server keywords (V6.2)', () => {
+  it('offers T-SQL words for SQL Server and in the union', () => {
+    for (const word of ['TOP', 'GO', 'IDENTITY', 'NVARCHAR', 'CROSS APPLY', 'BEGIN TRAN']) {
+      expect(KEYWORDS.mssql, word).toContain(word);
+      expect(keywordsOf(), word).toContain(word);
+    }
+    expect(KEYWORDS.mssql).not.toContain('LIMIT');
+  });
+});

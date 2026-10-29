@@ -13,6 +13,7 @@ import { ResultEditor } from '../../../src/services/result-editor';
 import { ResultSaver } from '../../../src/services/result-saver';
 import { type NewResult, ResultStore } from '../../../src/services/result-store';
 import type { CellValue } from '../../../src/shared/cell-value';
+import { mssqlDialect } from '../../../src/drivers/mssql/dialect';
 import { postgresDialect } from '../../../src/drivers/postgres/dialect';
 import { RecordingLogger } from '../../helpers/fakes';
 
@@ -421,6 +422,67 @@ describe('ResultSaver', () => {
       expect(await saver.preview(id)).toMatchObject({ ok: false, code: 'no-changes' });
       const readOnly = addResult({ edit: { editable: false, reason: 'view' } });
       expect(await saver.preview(readOnly)).toMatchObject({ ok: false, code: 'not-editable' });
+    });
+  });
+
+  describe('on SQL Server (V6.2)', () => {
+    beforeEach(() => {
+      const driver = { id: 'mssql', dialect: mssqlDialect } as unknown as Driver;
+      saver = new ResultSaver({
+        manager: {
+          acquire: () => Promise.resolve(session),
+          driverOf: () => Promise.resolve(driver),
+          transactionState: () => session.transaction,
+        },
+        results: store,
+        isBusy: () => busy,
+        rowLimit: () => 1000,
+        logger: new RecordingLogger(),
+      });
+    });
+
+    it('fences a save with BEGIN TRANSACTION and COMMIT TRANSACTION', async () => {
+      makeChanges();
+      expect(await saver.save(id)).toMatchObject({ ok: true, inTransaction: false });
+      expect(session.executed[0]).toBe('BEGIN TRANSACTION');
+      expect(session.executed[4]).toBe('COMMIT TRANSACTION');
+      expect(session.executed[1]).toBe('DELETE FROM [users] WHERE [id] = 2');
+    });
+
+    it('joins an open transaction with SAVE TRANSACTION and lets nothing go after it', async () => {
+      makeChanges();
+      session.transaction = 'open';
+      expect(await saver.save(id)).toMatchObject({ ok: true, inTransaction: true });
+      expect(session.executed).toEqual([
+        'SAVE TRANSACTION datanest_save',
+        'DELETE FROM [users] WHERE [id] = 2',
+        "UPDATE [users] SET [name] = N'alicia' WHERE [id] = 1",
+        "INSERT INTO [users] ([name]) VALUES (N'dave')",
+        'SELECT * FROM users',
+      ]);
+    });
+
+    it('goes back to the savepoint when a statement fails inside the transaction', async () => {
+      makeChanges();
+      session.transaction = 'open';
+      session.fail = (sql) =>
+        sql.startsWith('UPDATE') ? new DbError('constraint', 'Duplicate key') : undefined;
+      expect(await saver.save(id)).toMatchObject({ ok: false, code: 'constraint' });
+      expect(session.executed.at(-1)).toBe('ROLLBACK TRANSACTION datanest_save');
+    });
+
+    it('previews the savepoint without a release line', async () => {
+      makeChanges();
+      session.transaction = 'open';
+      const outcome = await saver.preview(id);
+      expect(outcome.ok && outcome.sql.split('\n')).toEqual([
+        '-- DataNest: pending changes of  SELECT * FROM users',
+        'SAVE TRANSACTION datanest_save;',
+        'DELETE FROM [users] WHERE [id] = 2;',
+        "UPDATE [users] SET [name] = N'alicia' WHERE [id] = 1;",
+        "INSERT INTO [users] ([name]) VALUES (N'dave');",
+        '',
+      ]);
     });
   });
 });

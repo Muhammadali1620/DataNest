@@ -76,6 +76,23 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlSnippet[]>> = {
       body: 'INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})\nON CONFLICT (${4:key}) DO UPDATE SET ${5:column} = excluded.${5:column};',
     },
   ],
+  mssql: [
+    {
+      prefix: 'upsert',
+      title: 'MERGE … WHEN MATCHED … WHEN NOT MATCHED',
+      body: 'MERGE INTO ${1:table} AS t\nUSING (VALUES (${2:values})) AS s (${3:columns})\nON t.${4:key} = s.${4:key}\nWHEN MATCHED THEN UPDATE SET ${5:column} = s.${5:column}\nWHEN NOT MATCHED THEN INSERT (${3:columns}) VALUES (${2:values});',
+    },
+    {
+      prefix: 'top',
+      title: 'SELECT TOP … FROM … ORDER BY',
+      body: 'SELECT TOP (${1:100}) ${2:*}\nFROM ${3:table}\nORDER BY ${4:column};',
+    },
+    {
+      prefix: 'proc',
+      title: 'CREATE OR ALTER PROCEDURE … AS BEGIN … END',
+      body: 'CREATE OR ALTER PROCEDURE ${1:name}\n  @${2:id} INT\nAS\nBEGIN\n  SET NOCOUNT ON;\n  ${3:SELECT 1;}\nEND\nGO',
+    },
+  ],
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {

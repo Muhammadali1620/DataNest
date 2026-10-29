@@ -4,7 +4,10 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type TestDatabaseId = 'mysql' | 'mariadb' | 'postgres';
+export type TestDatabaseId = 'mysql' | 'mariadb' | 'postgres' | 'mssql';
+
+/** The databases of the `core` group, which the SSH server can reach. */
+export type CoreDatabaseId = 'mysql' | 'mariadb' | 'postgres';
 
 export interface TestDatabase {
   readonly id: TestDatabaseId;
@@ -23,12 +26,14 @@ export const DEFAULT_PORTS: Readonly<Record<TestDatabaseId, number>> = {
   mysql: 7306,
   mariadb: 7307,
   postgres: 7432,
+  mssql: 7143,
 };
 
 export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
   mysql: 'DATANEST_MYSQL_PORT',
   mariadb: 'DATANEST_MARIADB_PORT',
   postgres: 'DATANEST_POSTGRES_PORT',
+  mssql: 'DATANEST_MSSQL_PORT',
 };
 
 /** Reads a port from `env`, falling back to the default; rejects ports outside 7000-7999. */
@@ -76,7 +81,7 @@ export interface TestSshServer {
   readonly keyFile: string;
   readonly passphrase: string;
   /** How the databases are named inside the compose network, as the server sees them. */
-  readonly targets: Readonly<Record<TestDatabaseId, { host: string; port: number }>>;
+  readonly targets: Readonly<Record<CoreDatabaseId, { host: string; port: number }>>;
   /** A second server with the same users, reachable only through this one. */
   readonly inner: { readonly host: string; readonly port: number };
 }

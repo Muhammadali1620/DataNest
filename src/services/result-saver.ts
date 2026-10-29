@@ -44,19 +44,25 @@ export type SaverConnections = Pick<ConnectionManager, 'acquire' | 'driverOf' | 
  */
 interface Fence {
   readonly begin: string;
-  readonly commit: string;
+  /** Absent where a savepoint is let go only with the transaction (SQL Server). */
+  readonly commit: string | undefined;
   readonly rollback: string;
+  readonly joined: boolean;
 }
-
-const OWN_TRANSACTION: Fence = { begin: 'BEGIN', commit: 'COMMIT', rollback: 'ROLLBACK' };
 
 const SAVEPOINT = 'datanest_save';
 
-const JOINED_TRANSACTION: Fence = {
-  begin: `SAVEPOINT ${SAVEPOINT}`,
-  commit: `RELEASE SAVEPOINT ${SAVEPOINT}`,
-  rollback: `ROLLBACK TO SAVEPOINT ${SAVEPOINT}`,
-};
+function fenceOf(dialect: Dialect, joined: boolean): Fence {
+  const words = dialect.transaction;
+  return joined
+    ? {
+        begin: words.savepoint(SAVEPOINT),
+        commit: words.releaseSavepoint?.(SAVEPOINT),
+        rollback: words.rollbackToSavepoint(SAVEPOINT),
+        joined,
+      }
+    : { begin: words.begin, commit: words.commit, rollback: words.rollback, joined };
+}
 
 export interface ResultSaverDeps {
   readonly manager: SaverConnections;
@@ -95,15 +101,15 @@ export class ResultSaver {
       return prepared;
     }
     const origin = prepared.summary.origin;
-    const fence =
-      origin !== undefined && this.deps.manager.transactionState(origin.owner) === 'open'
-        ? JOINED_TRANSACTION
-        : OWN_TRANSACTION;
+    const fence = fenceOf(
+      prepared.dialect,
+      origin !== undefined && this.deps.manager.transactionState(origin.owner) === 'open',
+    );
     const lines = [
       `-- DataNest: pending changes of  ${oneLine(prepared.summary.statement)}`,
       `${fence.begin};`,
       ...prepared.statements.map((statement) => `${statement.sql};`),
-      `${fence.commit};`,
+      ...(fence.commit === undefined ? [] : [`${fence.commit};`]),
       '',
     ];
     return { ok: true, sql: lines.join('\n') };
@@ -126,7 +132,7 @@ export class ResultSaver {
     if ('ok' in prepared) {
       return prepared;
     }
-    const { summary, statements } = prepared;
+    const { summary, statements, dialect } = prepared;
     const origin = summary.origin;
     if (origin === undefined) {
       return failure('not-editable', 'This result cannot be saved');
@@ -146,7 +152,7 @@ export class ResultSaver {
         'The open transaction of this editor failed; roll it back before saving',
       );
     }
-    const fence = state === 'open' ? JOINED_TRANSACTION : OWN_TRANSACTION;
+    const fence = fenceOf(dialect, state === 'open');
     let current: string | undefined;
     try {
       await runStatement(session, fence.begin);
@@ -164,8 +170,10 @@ export class ResultSaver {
           );
         }
       }
-      current = fence.commit;
-      await runStatement(session, fence.commit);
+      if (fence.commit !== undefined) {
+        current = fence.commit;
+        await runStatement(session, fence.commit);
+      }
     } catch (error) {
       await this.rollback(session, fence);
       const dbError = toDbError(error);
@@ -179,7 +187,7 @@ export class ResultSaver {
       ok: true,
       statements: statements.length,
       refreshed,
-      inTransaction: fence === JOINED_TRANSACTION,
+      inTransaction: fence.joined,
     };
   }
 

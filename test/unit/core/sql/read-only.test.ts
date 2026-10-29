@@ -111,3 +111,31 @@ describe('changingStatements', () => {
     expect(changingStatements([])).toEqual([]);
   });
 });
+
+describe('isReadOnlyStatement: T-SQL (V6.2)', () => {
+  const mssql = syntaxOf('mssql');
+
+  it('takes a bare BEGIN for a block that may write, BEGIN TRAN for a transaction', () => {
+    expect(isReadOnlyStatement('BEGIN UPDATE t SET a = 1; END', mssql)).toBe(false);
+    expect(isReadOnlyStatement('BEGIN', mssql)).toBe(false);
+    expect(isReadOnlyStatement('BEGIN TRAN', mssql)).toBe(true);
+    expect(isReadOnlyStatement('BEGIN TRANSACTION', mssql)).toBe(true);
+    expect(isReadOnlyStatement('BEGIN DISTRIBUTED TRAN', mssql)).toBe(true);
+    // Elsewhere BEGIN is the transaction itself.
+    expect(isReadOnlyStatement('BEGIN', syntaxOf('postgres'))).toBe(true);
+  });
+
+  it('lets savepoints and PRINT through', () => {
+    expect(isReadOnlyStatement('SAVE TRANSACTION s', mssql)).toBe(true);
+    expect(isReadOnlyStatement('SAVE TRAN s', mssql)).toBe(true);
+    expect(isReadOnlyStatement('SAVE x', mssql)).toBe(false);
+    expect(isReadOnlyStatement("PRINT 'hi'", mssql)).toBe(true);
+  });
+
+  it('counts writes T-SQL hides: SELECT INTO, EXEC, a declaring batch', () => {
+    expect(isReadOnlyStatement('SELECT TOP (5) * FROM [dbo].[t]', mssql)).toBe(true);
+    expect(isReadOnlyStatement('SELECT * INTO #copy FROM t', mssql)).toBe(false);
+    expect(isReadOnlyStatement('EXEC restock 1, 2', mssql)).toBe(false);
+    expect(isReadOnlyStatement('DECLARE @n INT; DELETE FROM t', mssql)).toBe(false);
+  });
+});

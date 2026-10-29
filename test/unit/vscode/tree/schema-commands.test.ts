@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import type { Driver } from '../../../../src/drivers/driver';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
+import { mssqlDialect } from '../../../../src/drivers/mssql/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
@@ -48,7 +49,12 @@ const TEXTS: SchemaTexts = {
   onProduction: (connection, title) => `PROD ${connection}: ${title}`,
 };
 
-const DIALECTS = { mysql: mysqlDialect, postgres: postgresDialect, sqlite: sqliteDialect };
+const DIALECTS = {
+  mysql: mysqlDialect,
+  postgres: postgresDialect,
+  sqlite: sqliteDialect,
+  mssql: mssqlDialect,
+};
 
 interface Script {
   /** Answers to askName in order; undefined cancels. */

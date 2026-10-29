@@ -53,9 +53,110 @@ function wordsOf(sql: string, syntax: SqlSyntax): Word[] {
   return words;
 }
 
+/**
+ * A T-SQL batch runs as one statement up to `GO` (a procedure body, a script that
+ * declares variables), so each of its parts is looked at: a DROP after a DECLARE
+ * is as dangerous as one alone.
+ */
+function batchParts(sql: string, syntax: SqlSyntax): string[] {
+  const parts: string[] = [];
+  let from = 0;
+  let depth = 0;
+  for (const token of tokenize(sql, syntax)) {
+    const text = textOf(sql, token);
+    if (token.kind !== 'punctuation') {
+      continue;
+    }
+    if (text === '(') {
+      depth += 1;
+    } else if (text === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (text === ';' && depth === 0) {
+      parts.push(sql.slice(from, token.start));
+      from = token.end;
+    }
+  }
+  parts.push(sql.slice(from));
+  return parts;
+}
+
 /** What is dangerous about one statement; empty for a harmless one. */
 export function dangersOf(sql: string, syntax: SqlSyntax = syntaxOf()): Danger[] {
-  const words = wordsOf(sql, syntax);
+  const leading = wordsOf(sql, syntax)[0]?.text;
+  // Creating a procedure or trigger runs none of its body.
+  if (syntax.batchSeparator && leading !== 'CREATE' && leading !== 'ALTER') {
+    const plain = { ...syntax, batchSeparator: false };
+    const found = new Set(
+      batchParts(sql, syntax).flatMap((part) => statementDangers(part, plain, true)),
+    );
+    return DANGERS.filter((danger) => found.has(danger));
+  }
+  return statementDangers(sql, syntax, false);
+}
+
+/** Words that start a T-SQL statement after IF … or WHILE …, at the condition's depth. */
+const TSQL_STATEMENTS = new Set([
+  'SELECT',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'MERGE',
+  'DROP',
+  'TRUNCATE',
+  'EXEC',
+  'EXECUTE',
+  'SET',
+  'PRINT',
+  'RETURN',
+  'THROW',
+  'RAISERROR',
+  'BEGIN',
+  'CREATE',
+  'ALTER',
+  'DECLARE',
+  'WITH',
+  'BREAK',
+  'CONTINUE',
+]);
+
+/**
+ * Where the statement proper starts in a part of a T-SQL batch: past the control flow
+ * around it (`BEGIN`, `BEGIN TRY`, `END`, `ELSE`, and the condition of `IF`/`WHILE`).
+ */
+function statementStart(words: readonly Word[]): number {
+  let index = 0;
+  for (;;) {
+    const word = words[index];
+    const next = words[index + 1]?.text;
+    if (word === undefined) {
+      return index;
+    }
+    if (
+      (word.text === 'BEGIN' && next !== 'TRAN' && next !== 'TRANSACTION') ||
+      word.text === 'ELSE' ||
+      word.text === 'END'
+    ) {
+      index += next === 'TRY' || next === 'CATCH' ? 2 : 1;
+      continue;
+    }
+    if (word.text === 'IF' || word.text === 'WHILE') {
+      const found = words.findIndex(
+        (candidate, at) =>
+          at > index && candidate.depth === word.depth && TSQL_STATEMENTS.has(candidate.text),
+      );
+      if (found === -1) {
+        return words.length;
+      }
+      index = found;
+      continue;
+    }
+    return index;
+  }
+}
+
+function statementDangers(sql: string, syntax: SqlSyntax, controlFlow: boolean): Danger[] {
+  const all = wordsOf(sql, syntax);
+  const words = controlFlow ? all.slice(statementStart(all)) : all;
   const first = words[0];
   if (first === undefined) {
     return [];

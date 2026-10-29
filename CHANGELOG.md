@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Microsoft SQL Server (2016 and newer, Azure SQL) with everything the other databases
+  have: the tree with schemas, routines, triggers and sequences, the SQL editor with
+  `GO`, `[names]`, procedure bodies and batch variables, exact values (`DECIMAL`,
+  `MONEY`, `datetime2(7)`, `datetimeoffset` with its offset), cancel, transactions, the
+  table designer, editing, dumps, imports, exports, test data and copies to and from the
+  other databases. Connect by host, `host\INSTANCE` or port, with TLS checks of your choice,
+  or paste a `sqlserver://` URL.
+
+### Fixed
+
+- A statement that returns several sets of rows (a MySQL `CALL`, a SQL Server batch)
+  shows the first set instead of mixing the rows of all of them under its columns.
+- Copying tables between database systems gives foreign keys names of their own: keys
+  from SQLite are all called `fk_1`, which MySQL and SQL Server refuse twice.
+
 ## [0.5.0] - 2026-10-29
 
 Moving data in and out without other tools: SQL files of any size, dumps, imports,

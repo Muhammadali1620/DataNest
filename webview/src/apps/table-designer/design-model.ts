@@ -16,8 +16,9 @@ export function addColumn(design: TableDesign, driver: DriverId): TableDesign {
   const column: ColumnDesign = {
     id: nextColumnId(design),
     name: '',
-    type: driver === 'mysql' ? 'varchar' : 'text',
-    length: driver === 'mysql' ? '255' : '',
+    // SQL Server's TEXT is deprecated; NVARCHAR keeps any language.
+    type: driver === 'mysql' ? 'varchar' : driver === 'mssql' ? 'nvarchar' : 'text',
+    length: driver === 'mysql' || driver === 'mssql' ? '255' : '',
     nullable: true,
     defaultValue: '',
     autoIncrement: false,

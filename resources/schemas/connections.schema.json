@@ -79,8 +79,8 @@
           "maxLength": 200
         },
         "driver": {
-          "enum": ["mysql", "postgres", "sqlite"],
-          "description": "mysql also covers MariaDB."
+          "enum": ["mysql", "postgres", "sqlite", "mssql"],
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server."
         },
         "host": {
           "type": "string"

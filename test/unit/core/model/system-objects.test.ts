@@ -106,3 +106,19 @@ describe('withoutSystemSchemas', () => {
     expect(withoutSystemSchemas('mysql', ['whatever'])).toEqual(['whatever']);
   });
 });
+
+describe('SQL Server system objects (V6.2)', () => {
+  it('hides the four system databases, case-insensitively', () => {
+    for (const name of ['master', 'model', 'msdb', 'tempdb', 'TempDB']) {
+      expect(isSystemDatabase('mssql', name), name).toBe(true);
+    }
+    expect(withoutSystemDatabases('mssql', ['master', 'shop', 'tempdb'])).toEqual(['shop']);
+  });
+
+  it('hides sys, INFORMATION_SCHEMA and guest, keeps dbo and user schemas', () => {
+    expect(
+      withoutSystemSchemas('mssql', ['dbo', 'sys', 'INFORMATION_SCHEMA', 'guest', 'app']),
+    ).toEqual(['dbo', 'app']);
+    expect(isSystemSchema('mssql', 'dbo')).toBe(false);
+  });
+});

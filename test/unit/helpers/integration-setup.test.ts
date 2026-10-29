@@ -82,6 +82,22 @@ describe('integration global setup', () => {
     );
   });
 
+  it('names the group to start when it is not core', async () => {
+    vi.stubEnv(GROUPS_ENV, 'mssql');
+    vi.stubEnv('DATANEST_MSSQL_PORT', String(closedPort));
+    await expect(setup()).rejects.toThrow(
+      `Test databases are not reachable: mssql (127.0.0.1:${closedPort}). ` +
+        'Run "npm run db:up -- mssql".',
+    );
+  });
+
+  it('checks only the named groups', async () => {
+    vi.stubEnv(GROUPS_ENV, 'mssql');
+    vi.stubEnv('DATANEST_MSSQL_PORT', String(open.port));
+    vi.stubEnv('DATANEST_MYSQL_PORT', String(closedPort));
+    await expect(setup()).resolves.toBeUndefined();
+  });
+
   it('refuses an unknown group before connecting anywhere', async () => {
     vi.stubEnv(GROUPS_ENV, 'db2');
     await expect(setup()).rejects.toThrow(/unknown groups: db2/u);

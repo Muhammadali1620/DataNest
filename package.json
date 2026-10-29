@@ -26,6 +26,8 @@
     "mariadb",
     "postgresql",
     "sqlite",
+    "sql server",
+    "mssql",
     "client"
   ],
   "engines": {
@@ -1102,7 +1104,7 @@
     "db:down": "node scripts/db.mjs down",
     "db:reset": "node scripts/db.mjs reset",
     "db:logs": "node scripts/db.mjs logs",
-    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "test:integration": "vitest run --config vitest.integration.config.mts --configLoader runner",
     "icon": "node scripts/make-icon.mjs"
   },
   "devDependencies": {
@@ -1132,6 +1134,7 @@
     "ssh2": "1.17.0",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",
+    "tedious": "20.3.8",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
     "vite": "8.3.5",

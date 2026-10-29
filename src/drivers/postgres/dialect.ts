@@ -2,6 +2,7 @@ import { postgresDump } from './dump';
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
+import { STANDARD_TRANSACTION } from '../common/transaction';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 import { postgresDdl } from './ddl';
 
@@ -67,6 +68,7 @@ export const postgresDialect: Dialect = {
     `CAST(${quotedColumn} AS TEXT) ILIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
+  transaction: STANDARD_TRANSACTION,
   ddl: postgresDdl,
   dump: postgresDump,
 };

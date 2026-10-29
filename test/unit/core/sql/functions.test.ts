@@ -58,3 +58,31 @@ describe('snippetsOf', () => {
     }
   });
 });
+
+describe('SQL Server functions and snippets (V6.2)', () => {
+  it('offers LEN and SUBSTRING instead of LENGTH and SUBSTR', () => {
+    const names = functionsOf('mssql').map((f) => f.name);
+    expect(names).toEqual(expect.arrayContaining(['LEN', 'SUBSTRING', 'GETDATE', 'ISNULL', 'IIF']));
+    expect(names).not.toContain('LENGTH');
+    expect(names).not.toContain('SUBSTR');
+    for (const driver of ['mysql', 'postgres', 'sqlite'] as const) {
+      expect(
+        functionsOf(driver).map((f) => f.name),
+        driver,
+      ).toContain('LENGTH');
+    }
+    expect(functionsOf().map((f) => f.name)).not.toContain('LENGTH');
+  });
+
+  it('names each function once per dialect', () => {
+    const names = functionsOf('mssql').map((f) => f.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('offers MERGE, TOP and a procedure skeleton with GO', () => {
+    const snippets = snippetsOf('mssql');
+    expect(snippets.find((s) => s.prefix === 'upsert')?.body).toMatch(/^MERGE INTO/u);
+    expect(snippets.find((s) => s.prefix === 'top')?.body).toContain('TOP (${1:100})');
+    expect(snippets.find((s) => s.prefix === 'proc')?.body).toMatch(/\nGO$/u);
+  });
+});

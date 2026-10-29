@@ -33,16 +33,17 @@ export function inputKindOf(dataType: string | undefined): InputKind {
   if (/^enum\s*\(/u.test(type)) {
     return 'enum';
   }
-  if (/blob|binary|bytea|^raw\b/u.test(type)) {
+  if (/blob|binary|bytea|^raw\b|^image$/u.test(type)) {
     return 'binary';
   }
   if (/^jsonb?$/u.test(type)) {
     return 'json';
   }
-  if (/^bool(ean)?$/u.test(type)) {
+  // SQL Server's BIT is its boolean; MySQL's always says its width, `bit(8)`.
+  if (/^bool(ean)?$|^bit$/u.test(type)) {
     return 'boolean';
   }
-  if (/^(timestamp|datetime)/u.test(type)) {
+  if (/^(timestamp|datetime|smalldatetime)/u.test(type)) {
     return 'datetime';
   }
   if (/^date$/u.test(type)) {
@@ -54,7 +55,9 @@ export function inputKindOf(dataType: string | undefined): InputKind {
   if (/^(tiny|small|medium|big)?int(eger)?\d*(\s|\(|$)|^(big|small)?serial\d*$|^year/u.test(type)) {
     return 'integer';
   }
-  if (/^(decimal|numeric|dec|fixed|float\d*|double|real|money|number)(\s|\(|$)/u.test(type)) {
+  if (
+    /^(decimal|numeric|dec|fixed|float\d*|double|real|(small)?money|number)(\s|\(|$)/u.test(type)
+  ) {
     return 'number';
   }
   return 'text';

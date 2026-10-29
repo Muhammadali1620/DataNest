@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [core]
+        group: [core, mssql]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

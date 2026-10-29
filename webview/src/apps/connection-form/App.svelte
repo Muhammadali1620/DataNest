@@ -7,6 +7,7 @@
     isFileDriver,
     MAX_SSH_JUMPS,
   } from '../../../../src/shared/connection';
+  import type { DriverId } from '../../../../src/shared/connection';
   import type {
     ConnectionFormProtocol,
     ConnectionFormState,
@@ -54,10 +55,11 @@
   let urlText = $state('');
   let urlError = $state<string | undefined>(undefined);
 
-  const DRIVER_LABELS: Readonly<Record<string, MessageKey>> = {
+  const DRIVER_LABELS: Readonly<Record<DriverId, MessageKey>> = {
     mysql: 'form.driver.mysql',
     postgres: 'form.driver.postgres',
     sqlite: 'form.driver.sqlite',
+    mssql: 'form.driver.mssql',
   };
 
   const problems = $derived(fields === undefined ? [] : problemsOf(fields));
@@ -331,7 +333,7 @@
           aria-label={t('form.driver')}
         >
           {#each formState?.drivers ?? [] as driver (driver.id)}
-            <option value={driver.id}>{t(DRIVER_LABELS[driver.id] ?? 'form.driver')}</option>
+            <option value={driver.id}>{t(DRIVER_LABELS[driver.id])}</option>
           {/each}
         </select>
       </Field>

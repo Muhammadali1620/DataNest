@@ -8,9 +8,6 @@ import { commitsImplicitly, transactionControl } from '../core/sql/transaction-c
 import type { TransactionState } from '../drivers/driver';
 import type { DriverId } from '../shared/connection';
 
-/** Opens a transaction in MySQL/MariaDB, PostgreSQL and SQLite alike. */
-export const BEGIN_STATEMENT = 'BEGIN';
-
 /**
  * True when manual mode must run BEGIN before `sql`: the session is idle (not when
  * the driver cannot tell), the statement changes data, it does not manage the

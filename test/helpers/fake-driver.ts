@@ -28,6 +28,7 @@ import type {
   TransactionState,
   TypeDump,
 } from '../../src/drivers/driver';
+import { STANDARD_TRANSACTION } from '../../src/drivers/common/transaction';
 import type { CellValue } from '../../src/shared/cell-value';
 
 export const fakeDialect: Dialect = {
@@ -40,6 +41,7 @@ export const fakeDialect: Dialect = {
   paginate: (sql, limit, offset) => `${sql} LIMIT ${limit} OFFSET ${offset}`,
   defaultKeyword: true,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
+  transaction: STANDARD_TRANSACTION,
   ddl: {
     createDatabase: (name) => `CREATE DATABASE "${name}"`,
     dropDatabase: (name) => `DROP DATABASE "${name}"`,

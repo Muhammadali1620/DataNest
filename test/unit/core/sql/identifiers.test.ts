@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { identifierLimit, identifierProblem } from '../../../../src/core/sql/identifiers';
+import {
+  identifierLimit,
+  identifierProblem,
+  unquoteIdentifier,
+} from '../../../../src/core/sql/identifiers';
 
 describe('identifierProblem', () => {
   it('accepts ordinary names, unicode and names that need quoting', () => {
@@ -41,5 +45,30 @@ describe('identifierLimit', () => {
     expect(identifierLimit('mysql')).toBe(64);
     expect(identifierLimit('postgres')).toBe(63);
     expect(identifierLimit('sqlite')).toBeUndefined();
+  });
+});
+
+describe('SQL Server names (V6.2)', () => {
+  it('allows 128 characters', () => {
+    expect(identifierLimit('mssql')).toBe(128);
+    expect(identifierProblem('ы'.repeat(128), 'mssql')).toBeUndefined();
+    expect(identifierProblem('a'.repeat(129), 'mssql')).toBe('too-long');
+    expect(identifierProblem(' ', 'mssql')).toBe('empty');
+  });
+});
+
+describe('unquoteIdentifier', () => {
+  it('takes the quotes of every dialect off and undoubles them', () => {
+    expect(unquoteIdentifier('"a""b"')).toBe('a"b');
+    expect(unquoteIdentifier('`a``b`')).toBe('a`b');
+    expect(unquoteIdentifier('[a]]b]')).toBe('a]b');
+    expect(unquoteIdentifier('[a [b]')).toBe('a [b');
+  });
+
+  it('leaves plain text alone and drops only the opening quote of an unclosed one', () => {
+    expect(unquoteIdentifier('plain')).toBe('plain');
+    expect(unquoteIdentifier('')).toBe('');
+    expect(unquoteIdentifier('[open')).toBe('open');
+    expect(unquoteIdentifier('"')).toBe('');
   });
 });

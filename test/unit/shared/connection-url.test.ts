@@ -163,3 +163,85 @@ describe('suggestedName', () => {
     expect(suggestedName({ name: '', driver: 'sqlite' })).toBe('');
   });
 });
+
+describe('SQL Server URLs (V6.2)', () => {
+  it('knows the mssql and sqlserver schemes, with jdbc: too', () => {
+    expect(urlDriver('mssql://h')).toBe('mssql');
+    expect(urlDriver('sqlserver://h')).toBe('mssql');
+    expect(urlDriver('jdbc:sqlserver://h;databaseName=x')).toBe('mssql');
+  });
+
+  it('reads the URL form with user, password, port and database', () => {
+    expect(ok(parseConnectionUrl('mssql://sa:p%40ss@db.example:1444/shop'))).toEqual({
+      input: {
+        name: 'shop',
+        driver: 'mssql',
+        host: 'db.example',
+        port: 1444,
+        user: 'sa',
+        database: 'shop',
+      },
+      password: 'p@ss',
+    });
+  });
+
+  it('reads the JDBC form with ;key=value properties, which win over URL parts', () => {
+    const value = ok(
+      parseConnectionUrl(
+        'jdbc:sqlserver://db.example:1433;databaseName=shop;user=app;password=s3cret;encrypt=true;trustServerCertificate=true',
+      ),
+    );
+    expect(value.input).toMatchObject({
+      driver: 'mssql',
+      host: 'db.example',
+      port: 1433,
+      user: 'app',
+      database: 'shop',
+      ssl: { mode: 'require' },
+    });
+    expect(value.password).toBe('s3cret');
+  });
+
+  it('reads the Prisma form and property names without case or spaces', () => {
+    const value = ok(
+      parseConnectionUrl('sqlserver://localhost;Initial Catalog=app;User ID=sa;PWD=x;Encrypt=True'),
+    );
+    expect(value.input).toMatchObject({
+      host: 'localhost',
+      user: 'sa',
+      database: 'app',
+      ssl: { mode: 'verify-full' },
+    });
+    expect(value.password).toBe('x');
+  });
+
+  it('keeps a named instance in the host, from the URL or the properties', () => {
+    expect(ok(parseConnectionUrl('sqlserver://srv\\SQLEXPRESS;database=a')).input.host).toBe(
+      'srv\\SQLEXPRESS',
+    );
+    expect(ok(parseConnectionUrl('sqlserver://srv;instanceName=TWO')).input.host).toBe('srv\\TWO');
+  });
+
+  it('turns encrypt into TLS modes, and nothing when it is off', () => {
+    const mode = (url: string) => ok(parseConnectionUrl(url)).input.ssl?.mode;
+    expect(mode('mssql://h/db?encrypt=true')).toBe('verify-full');
+    expect(mode('mssql://h/db?encrypt=true&trustServerCertificate=true')).toBe('require');
+    expect(mode('sqlserver://h;encrypt=strict')).toBe('verify-full');
+    expect(mode('sqlserver://h;encrypt=false')).toBeUndefined();
+    expect(mode('sqlserver://h')).toBeUndefined();
+  });
+
+  it('takes the port from a property and drops one out of range', () => {
+    expect(ok(parseConnectionUrl('sqlserver://h;port=7143')).input.port).toBe(7143);
+    expect(ok(parseConnectionUrl('sqlserver://h:70000')).input.port).toBeUndefined();
+  });
+
+  it('names the problem of a URL without a host', () => {
+    expect(parseConnectionUrl('sqlserver://')).toEqual({ ok: false, problem: 'no-host' });
+    expect(parseConnectionUrl('sqlserver://;database=x')).toEqual({
+      ok: false,
+      problem: 'no-host',
+    });
+    expect(parseConnectionUrl('mssql://a:b@:1433/db')).toMatchObject({ ok: false });
+  });
+});

@@ -187,6 +187,40 @@ describe('ScriptReader', () => {
   });
 });
 
+describe('ScriptReader: SQL Server (V6.2)', () => {
+  it('reads GO-separated batches the same however the text is cut', () => {
+    const sql = [
+      'CREATE TABLE t (a INT);',
+      'GO',
+      'CREATE PROCEDURE p AS',
+      'BEGIN',
+      '  SELECT 1;',
+      'END;',
+      'GO',
+      'DECLARE @n INT = 1;',
+      'SELECT @n;',
+      'GO',
+      'SELECT 2;',
+    ].join('\n');
+    expect(expectStable(sql, 'mssql')).toEqual([
+      { kind: 'statement', text: 'CREATE TABLE t (a INT)', line: 1 },
+      { kind: 'statement', text: 'CREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\nEND;', line: 3 },
+      { kind: 'statement', text: 'DECLARE @n INT = 1;\nSELECT @n;', line: 8 },
+      { kind: 'statement', text: 'SELECT 2', line: 11 },
+    ]);
+  });
+
+  it('never lets a declaring batch out before its GO', () => {
+    const reader = new ScriptReader('mssql');
+    expect(reader.push('DECLARE @n INT;\nSELECT @n;\n')).toEqual([]);
+    expect(reader.push('SELECT @n + 1;\n')).toEqual([]);
+    expect([...reader.push('GO\nSELECT 2;\n'), ...reader.end()]).toEqual([
+      { kind: 'statement', text: 'DECLARE @n INT;\nSELECT @n;\nSELECT @n + 1;', line: 1 },
+      { kind: 'statement', text: 'SELECT 2', line: 5 },
+    ]);
+  });
+});
+
 describe('isCopyFromStdin', () => {
   it('recognizes COPY … FROM STDIN in any case and form', () => {
     expect(isCopyFromStdin('COPY public.t (a, b) FROM stdin')).toBe(true);

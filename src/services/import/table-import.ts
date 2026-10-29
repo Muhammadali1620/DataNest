@@ -120,7 +120,7 @@ export class TableImporter {
     let rolledBack = false;
     try {
       if (all) {
-        await run(session, 'BEGIN');
+        await run(session, dialect.transaction.begin);
       }
       const flush = async (rows: readonly PendingRow[]): Promise<boolean> =>
         await this.insertRows(session, rows, insert, request.mode, state);
@@ -154,10 +154,10 @@ export class TableImporter {
       }
       if (all) {
         if (state.outcome === 'done') {
-          await run(session, 'COMMIT');
+          await run(session, dialect.transaction.commit);
         } else {
           // Should ROLLBACK itself fail, closing the session below undoes the same.
-          await run(session, 'ROLLBACK').catch((error: unknown) => {
+          await run(session, dialect.transaction.rollback).catch((error: unknown) => {
             this.logger.warn('ROLLBACK after a stopped import failed', error);
           });
           rolledBack = true;
@@ -168,7 +168,7 @@ export class TableImporter {
       }
     } catch (error) {
       if (all) {
-        await run(session, 'ROLLBACK').catch(() => undefined);
+        await run(session, dialect.transaction.rollback).catch(() => undefined);
       }
       if (aborted(request.signal)) {
         throw new DbError('cancelled', 'The import was cancelled');

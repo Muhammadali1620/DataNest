@@ -69,6 +69,7 @@ export const en = {
   'form.driver.mysql': 'MySQL / MariaDB',
   'form.driver.postgres': 'PostgreSQL',
   'form.driver.sqlite': 'SQLite',
+  'form.driver.mssql': 'Microsoft SQL Server',
   'form.host': 'Host',
   'form.port': 'Port',
   'form.portHint': 'Default: {0}',

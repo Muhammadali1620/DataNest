@@ -13,6 +13,12 @@ function fn(name: string, ...args: string[]): SqlFunction {
   return { name, args };
 }
 
+/** LENGTH and SUBSTR are spelled LEN and SUBSTRING in SQL Server. */
+const LENGTH_SUBSTR: readonly SqlFunction[] = [
+  fn('LENGTH', 'text'),
+  fn('SUBSTR', 'text', 'start', 'length'),
+];
+
 const COMMON: readonly SqlFunction[] = [
   fn('COUNT', 'expression'),
   fn('SUM', 'expression'),
@@ -25,8 +31,6 @@ const COMMON: readonly SqlFunction[] = [
   fn('LOWER', 'text'),
   fn('UPPER', 'text'),
   fn('TRIM', 'text'),
-  fn('LENGTH', 'text'),
-  fn('SUBSTR', 'text', 'start', 'length'),
   fn('REPLACE', 'text', 'from', 'to'),
   fn('ABS', 'number'),
   fn('ROUND', 'number', 'digits'),
@@ -38,6 +42,7 @@ const COMMON: readonly SqlFunction[] = [
 
 const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
   mysql: [
+    ...LENGTH_SUBSTR,
     fn('NOW'),
     fn('CURDATE'),
     fn('DATE_FORMAT', 'date', 'format'),
@@ -54,6 +59,7 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
     fn('LAST_INSERT_ID'),
   ],
   postgres: [
+    ...LENGTH_SUBSTR,
     fn('NOW'),
     fn('CURRENT_DATE'),
     fn('DATE_TRUNC', 'unit', 'timestamp'),
@@ -70,6 +76,7 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
     fn('REGEXP_REPLACE', 'text', 'pattern', 'replacement'),
   ],
   sqlite: [
+    ...LENGTH_SUBSTR,
     fn('DATETIME', 'value'),
     fn('DATE', 'value'),
     fn('STRFTIME', 'format', 'value'),
@@ -82,6 +89,29 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
     fn('PRINTF', 'format', 'value'),
     fn('RANDOM'),
     fn('TYPEOF', 'value'),
+  ],
+  mssql: [
+    fn('LEN', 'text'),
+    fn('SUBSTRING', 'text', 'start', 'length'),
+    fn('GETDATE'),
+    fn('SYSDATETIME'),
+    fn('SYSDATETIMEOFFSET'),
+    fn('DATEADD', 'day', 'number', 'date'),
+    fn('DATEDIFF', 'day', 'start', 'end'),
+    fn('DATEPART', 'part', 'date'),
+    fn('FORMAT', 'value', 'format'),
+    fn('CONVERT', 'type', 'value', 'style'),
+    fn('TRY_CAST', 'value AS type'),
+    fn('TRY_CONVERT', 'type', 'value'),
+    fn('ISNULL', 'value', 'fallback'),
+    fn('IIF', 'condition', 'then', 'else'),
+    fn('CONCAT', 'a', 'b'),
+    fn('STRING_AGG', 'expression', 'separator'),
+    fn('CHARINDEX', 'part', 'text'),
+    fn('JSON_VALUE', 'document', 'path'),
+    fn('NEWID'),
+    fn('SCOPE_IDENTITY'),
+    fn('OBJECT_ID', 'name'),
   ],
 };
 

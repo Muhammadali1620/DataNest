@@ -1,7 +1,7 @@
 // The saved description of a connection. Passwords never live here: they are
 // kept in SecretStorage and joined in only at connect time (ARCHITECTURE.md §8).
 
-export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite'] as const;
+export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite', 'mssql'] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
 
@@ -18,6 +18,7 @@ export function isFileDriver(driver: DriverId): boolean {
 export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   mysql: 3306,
   postgres: 5432,
+  mssql: 1433,
 };
 
 export const CONNECTION_LIMITS = {
@@ -153,6 +154,9 @@ export function optionSupport(driver: DriverId): OptionSupport {
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
       return { connectTimeout: false, keepAlive: false, timeZone: false, charset: false };
+    // SQL Server sessions have no time zone of their own, and N'…' text needs no charset.
+    case 'mssql':
+      return { connectTimeout: true, keepAlive: true, timeZone: false, charset: false };
   }
 }
 
@@ -177,6 +181,8 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
       return { databases: true, schemas: true };
     case 'sqlite':
       return { databases: false, schemas: false };
+    case 'mssql':
+      return { databases: true, schemas: true };
   }
 }
 

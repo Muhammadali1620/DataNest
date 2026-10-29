@@ -504,6 +504,31 @@ describe('QueryRunner', () => {
     });
   });
 
+  describe('several result sets (V6.2)', () => {
+    it('shows the first set and does not mix later rows in under its columns', async () => {
+      await runner.run(request('SELECT 0'));
+      const session = drivers.driver('mysql').lastSession;
+      if (session === undefined) {
+        throw new Error('no session');
+      }
+      session.execute = (sql) => {
+        session.executed.push(sql);
+        return (async function* stream() {
+          await Promise.resolve();
+          yield { kind: 'columns' as const, columns: [{ name: 'a' }] };
+          yield { kind: 'rows' as const, rows: [[1], [2]] };
+          yield { kind: 'columns' as const, columns: [{ name: 'b' }, { name: 'c' }] };
+          yield { kind: 'rows' as const, rows: [['x', 'y']] };
+          yield { kind: 'done' as const };
+        })();
+      };
+      const outcome = await runner.run(request('EXEC two_sets'));
+      const summary = outcome.results[0];
+      expect(summary?.columns).toEqual([{ name: 'a' }]);
+      expect(results.allRows(summary?.id ?? '')).toEqual([[1], [2]]);
+    });
+  });
+
   describe('manual commit (V4.8)', () => {
     beforeEach(() => {
       drivers.driver('mysql').tracksTransactions = true;
@@ -547,6 +572,25 @@ describe('QueryRunner', () => {
       const outcome = await runner.run(manual('UPDATE t SET a = 1'));
       expect(outcome.results[0]?.error?.message).toBe('Not allowed: BEGIN');
       expect(drivers.driver('mysql').lastSession?.executed).toEqual(['BEGIN']);
+    });
+
+    it('opens the transaction in the words of the dialect (BEGIN TRANSACTION on SQL Server)', async () => {
+      const mssql = await store.add({ name: 'Sql', driver: 'mssql', host: 'h' });
+      drivers.driver('mssql').tracksTransactions = true;
+      drivers.driver('mssql').dialect = {
+        ...drivers.driver('mssql').dialect,
+        transaction: { ...drivers.driver('mssql').dialect.transaction, begin: 'BEGIN TRANSACTION' },
+      };
+      await runner.run({
+        documentUri: DOC,
+        target: { connectionId: mssql.id },
+        statements: splitStatements('UPDATE t SET a = 1', 'mssql'),
+        manualCommit: true,
+      });
+      expect(drivers.driver('mssql').lastSession?.executed).toEqual([
+        'BEGIN TRANSACTION',
+        'UPDATE t SET a = 1',
+      ]);
     });
   });
 });

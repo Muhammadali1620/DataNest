@@ -343,3 +343,26 @@ describe('visibility filter (V4.10)', () => {
     expect(filterSupport('sqlite')).toEqual({ databases: false, schemas: false });
   });
 });
+
+describe('SQL Server connections (V6.2)', () => {
+  it('is a known network driver on port 1433', () => {
+    expect(isDriverId('mssql')).toBe(true);
+    expect(isFileDriver('mssql')).toBe(false);
+    expect(DEFAULT_PORTS.mssql).toBe(1433);
+    expect(effectivePort({ name: 'n', driver: 'mssql', host: 'h' })).toBe(1433);
+    expect(effectivePort({ name: 'n', driver: 'mssql', host: 'h', port: 7143 })).toBe(7143);
+  });
+
+  it('offers connect timeout and keep-alive, but no time zone or charset', () => {
+    expect(optionSupport('mssql')).toEqual({
+      connectTimeout: true,
+      keepAlive: true,
+      timeZone: false,
+      charset: false,
+    });
+  });
+
+  it('filters both databases and schemas', () => {
+    expect(filterSupport('mssql')).toEqual({ databases: true, schemas: true });
+  });
+});

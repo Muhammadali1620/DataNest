@@ -17,6 +17,7 @@ function fakeDriver(id: DriverId): Driver {
       likeText: () => '',
       defaultKeyword: true,
       insertDefaultRow: () => '',
+      transaction: fakeDialect.transaction,
       ddl: {
         designer: { columnComments: false, tableComment: false, types: [], reorder: false },
         createTable: () => [],

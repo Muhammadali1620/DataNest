@@ -211,6 +211,7 @@ const INTEGER_TYPES: Readonly<Record<DriverId, ReadonlySet<string>>> = {
   postgres: new Set(['smallint', 'integer', 'int', 'bigint', 'int2', 'int4', 'int8']),
   // Only INTEGER PRIMARY KEY is the rowid; INT or BIGINT would not auto-number.
   sqlite: new Set(['integer']),
+  mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
 };
 
 /**
@@ -325,8 +326,9 @@ function autoIncrementProblems(design: TableDesign, driver: DriverId): DesignPro
       (driver === 'sqlite' && (!column.primaryKey || keys.length !== 1))
     ) {
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'key' });
-    } else if (driver === 'postgres' && column.defaultValue.trim() !== '') {
-      // An identity column numbers itself; PostgreSQL refuses a default next to it.
+    } else if ((driver === 'postgres' || driver === 'mssql') && column.defaultValue.trim() !== '') {
+      // An identity column numbers itself; PostgreSQL and SQL Server refuse a default
+      // next to it.
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'default' });
     }
   }
@@ -342,7 +344,7 @@ export function newTableDesign(driver: DriverId, name = ''): TableDesign {
       {
         id: 'new-1',
         name: 'id',
-        type: driver === 'mysql' ? 'int' : 'integer',
+        type: driver === 'mysql' || driver === 'mssql' ? 'int' : 'integer',
         length: '',
         nullable: false,
         defaultValue: '',

@@ -69,6 +69,7 @@ export const ru: Record<MessageKey, string> = {
   'form.driver.mysql': 'MySQL / MariaDB',
   'form.driver.postgres': 'PostgreSQL',
   'form.driver.sqlite': 'SQLite',
+  'form.driver.mssql': 'Microsoft SQL Server',
   'form.host': 'Хост',
   'form.port': 'Порт',
   'form.portHint': 'По умолчанию: {0}',

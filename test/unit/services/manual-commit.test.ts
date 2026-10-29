@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEGIN_STATEMENT, needsBegin } from '../../../src/services/manual-commit';
+import { needsBegin } from '../../../src/services/manual-commit';
 
 describe('needsBegin', () => {
   it('opens a transaction before a change on an idle session', () => {
@@ -31,7 +31,10 @@ describe('needsBegin', () => {
     expect(needsBegin('UPDATE t SET a = 1', 'postgres', undefined)).toBe(false);
   });
 
-  it('opens it with a statement every supported database accepts', () => {
-    expect(BEGIN_STATEMENT).toBe('BEGIN');
+  it('opens no transaction for T-SQL transaction control or blocks (SQL Server)', () => {
+    expect(needsBegin('BEGIN TRAN', 'mssql', 'idle')).toBe(false);
+    expect(needsBegin('SAVE TRANSACTION s', 'mssql', 'idle')).toBe(false);
+    expect(needsBegin('UPDATE t SET a = 1', 'mssql', 'idle')).toBe(true);
+    expect(needsBegin('SELECT TOP (5) * FROM t', 'mssql', 'idle')).toBe(false);
   });
 });

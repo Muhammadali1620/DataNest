@@ -18,6 +18,9 @@ export type TransactionControl =
   | 'savepoint'
   | 'none';
 
+/** What follows BEGIN when it starts a transaction in T-SQL; alone it opens a block. */
+const TSQL_BEGIN_FOLLOWERS = new Set(['TRAN', 'TRANSACTION', 'DISTRIBUTED']);
+
 const BEGIN_FOLLOWERS = new Set([
   'TRANSACTION',
   'WORK',
@@ -49,6 +52,9 @@ function leadingWords(sql: string, driver: DriverId | undefined, count: number):
 
 export function transactionControl(sql: string, driver?: DriverId): TransactionControl {
   const [first, second, third] = leadingWords(sql, driver, 3);
+  if (driver === 'mssql') {
+    return tsqlControl(first, second, third);
+  }
   switch (first ?? '') {
     case 'BEGIN':
       // `BEGIN;`, `BEGIN WORK`, `BEGIN IMMEDIATE`, `BEGIN ISOLATION LEVEL …`.
@@ -70,6 +76,31 @@ export function transactionControl(sql: string, driver?: DriverId): TransactionC
     case 'SAVEPOINT':
     case 'RELEASE':
       return 'savepoint';
+    default:
+      return 'none';
+  }
+}
+
+/**
+ * T-SQL: `BEGIN TRAN`, `COMMIT [TRAN]`, `ROLLBACK [TRAN]`, `SAVE TRAN s`, and
+ * `ROLLBACK TRAN s`, which goes back to the savepoint `s`. `BEGIN` and `END` alone
+ * are a block.
+ */
+function tsqlControl(
+  first: string | undefined,
+  second: string | undefined,
+  third: string | undefined,
+): TransactionControl {
+  const tran = second === 'TRAN' || second === 'TRANSACTION';
+  switch (first ?? '') {
+    case 'BEGIN':
+      return second !== undefined && TSQL_BEGIN_FOLLOWERS.has(second) ? 'begin' : 'none';
+    case 'COMMIT':
+      return 'commit';
+    case 'ROLLBACK':
+      return tran && third !== undefined ? 'savepoint' : 'rollback';
+    case 'SAVE':
+      return tran ? 'savepoint' : 'none';
     default:
       return 'none';
   }

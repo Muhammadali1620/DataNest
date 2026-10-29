@@ -140,6 +140,9 @@ describe('TableTransferService', () => {
     expect(harness.writer.executed[alter]).toContain(
       'FOREIGN KEY ("customer_id") REFERENCES "public"."customers"',
     );
+    // Constraint and index names belong to the schema in PostgreSQL: they get the table.
+    expect(sql).toContain('ADD CONSTRAINT "orders_fk_customer" FOREIGN KEY');
+    expect(sql).toContain('CREATE INDEX "orders_ix_customer"');
     expect(harness.writer.executed.at(-1)).toBe('RESET client_min_messages');
     const orders = report.tables.find((table) => table.table === 'orders');
     expect(orders).toMatchObject({ outcome: 'copied', created: true, rows: 2 });

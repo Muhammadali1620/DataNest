@@ -13,7 +13,7 @@ import { analyzeEditability } from './result-editability';
 import { ConnectionManager, type SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import type { HistoryRecorder } from './history';
-import { BEGIN_STATEMENT, needsBegin } from './manual-commit';
+import { needsBegin } from './manual-commit';
 import type { ResultStore, ResultSummary, ResultRow } from './result-store';
 
 /** Limits the user controls through settings (V1.25). */
@@ -179,7 +179,7 @@ export class QueryRunner {
     if (!needsBegin(sql, driver.id, session.transactionState?.())) {
       return;
     }
-    for await (const _event of session.execute(BEGIN_STATEMENT)) {
+    for await (const _event of session.execute(driver.dialect.transaction.begin)) {
       // BEGIN returns nothing worth keeping; a failure becomes this statement's error.
     }
     this.logger.debug(`Opened a transaction in ${request.documentUri} (manual commit)`);
@@ -241,12 +241,21 @@ export class QueryRunner {
           void this.cancel(request.documentUri);
         }, timeoutMs);
       }
+      // A batch or procedure may return several sets of rows; the first is shown, and
+      // the others are not mixed into it under its column names.
+      let sets = 0;
       for await (const event of session.execute(statement.text, { rowLimit })) {
         switch (event.kind) {
           case 'columns':
-            columns = event.columns;
+            sets += 1;
+            if (sets === 1) {
+              columns = event.columns;
+            }
             break;
           case 'rows':
+            if (sets > 1) {
+              break;
+            }
             for (const row of event.rows) {
               if (rows.length >= rowLimit) {
                 truncated = true;

@@ -210,6 +210,14 @@ describe('tableMentions', () => {
   });
 });
 
+describe('unquote: SQL Server brackets (V6.2)', () => {
+  it('takes brackets off and undoubles ]]', () => {
+    expect(unquote('[order details]')).toBe('order details');
+    expect(unquote('[a]]b]')).toBe('a]b');
+    expect(unquote('[half')).toBe('[half');
+  });
+});
+
 describe('unquote', () => {
   it('removes matching quotes and un-doubles the inner ones', () => {
     expect(unquote('"name"')).toBe('name');

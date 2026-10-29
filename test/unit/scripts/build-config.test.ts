@@ -10,6 +10,8 @@ import {
   EXTERNALS,
   NATIVE_OPTIONALS,
   nativeOptionalsPlugin,
+  UNUSED_MODULES,
+  unusedModulesPlugin,
   findE2eTests,
   findDriverEntries,
   findLazyEntries,
@@ -132,7 +134,7 @@ describe('build-config', () => {
       expect(options.bundle).toBe(true);
       expect(options.target).toBe(NODE_TARGET);
       expect(options.external).toEqual(EXTERNALS);
-      expect(options.plugins).toEqual([nativeOptionalsPlugin]);
+      expect(options.plugins).toEqual([nativeOptionalsPlugin, unusedModulesPlugin]);
       expect(EXTERNALS).toContain('vscode');
       expect(options.entryPoints).toEqual({ extension: join(tmp.path, 'src', 'extension.ts') });
       expect(options.outdir).toBe(join(tmp.path, 'dist'));
@@ -174,6 +176,31 @@ describe('build-config', () => {
       expect(NATIVE_OPTIONALS.test('./crypto/build/Release/sshcrypto.node')).toBe(true);
       expect(NATIVE_OPTIONALS.test('cpu-features-extra')).toBe(false);
       expect(NATIVE_OPTIONALS.test('node:crypto')).toBe(false);
+    });
+
+    it('leaves the Azure sign-in libraries of tedious out, and nothing else', () => {
+      expect(UNUSED_MODULES.test('@azure/identity')).toBe(true);
+      expect(UNUSED_MODULES.test('@azure/keyvault-keys')).toBe(true);
+      expect(UNUSED_MODULES.test('@azure/core-auth')).toBe(false);
+      expect(UNUSED_MODULES.test('@azure/identity-extra')).toBe(false);
+    });
+
+    it('makes a stub that loads but throws when used', async () => {
+      write(tmp.path, 'entry.js', "module.exports = require('@azure/identity');");
+      await build({
+        entryPoints: [join(tmp.path, 'entry.js')],
+        outfile: join(tmp.path, 'stubbed.js'),
+        bundle: true,
+        format: 'cjs',
+        platform: 'node',
+        logLevel: 'silent',
+        plugins: [unusedModulesPlugin],
+      });
+      const stub = createRequire(join(tmp.path, 'x.js'))('./stubbed.js') as Record<string, unknown>;
+      expect(stub.__esModule).toBeUndefined();
+      expect(() => stub.DefaultAzureCredential).toThrow(
+        'DataNest does not ship "@azure/identity": DefaultAzureCredential',
+      );
     });
 
     it('adds driver bundles as separate entry points', () => {
@@ -218,7 +245,7 @@ describe('build-config', () => {
       expect(options.format).toBe('cjs');
       expect(options.platform).toBe('node');
       expect(options.external).toEqual(['vscode', 'mocha']);
-      expect(options.plugins).toEqual([nativeOptionalsPlugin]);
+      expect(options.plugins).toEqual([nativeOptionalsPlugin, unusedModulesPlugin]);
       expect(options.outdir).toBe(join(tmp.path, E2E_OUT_DIR));
       expect(Object.keys(options.entryPoints ?? {})).toEqual(['smoke.test']);
     });

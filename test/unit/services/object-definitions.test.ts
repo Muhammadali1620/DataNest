@@ -16,6 +16,26 @@ BEGIN
   SELECT 2;
 END`;
 
+describe('definitionDocument: SQL Server (V6.2)', () => {
+  it('ends every statement with GO, so a routine starts its own batch', () => {
+    const document = definitionDocument(
+      ['CREATE TABLE [t] (a INT)', 'CREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\nEND;', ' '],
+      'mssql',
+    );
+    expect(document).toBe(
+      'CREATE TABLE [t] (a INT)\nGO\n\nCREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\nEND;\nGO\n',
+    );
+    expect(splitStatements(document, 'mssql').map((s) => s.text)).toEqual([
+      'CREATE TABLE [t] (a INT)',
+      'CREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\nEND;',
+    ]);
+  });
+
+  it('is empty without statements', () => {
+    expect(definitionDocument([], 'mssql')).toBe('');
+  });
+});
+
 describe('definitionDocument', () => {
   it('ends every statement with a semicolon and separates them by a blank line', () => {
     expect(

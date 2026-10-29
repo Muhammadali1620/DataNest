@@ -219,3 +219,10 @@ describe('problems of indexes and keys', () => {
     );
   });
 });
+
+describe('addColumn on SQL Server (V6.2)', () => {
+  it('adds a nullable nvarchar(255), not the deprecated text', () => {
+    const next = addColumn(newTableDesign('mssql', 't'), 'mssql');
+    expect(next.columns.at(-1)).toMatchObject({ type: 'nvarchar', length: '255', nullable: true });
+  });
+});

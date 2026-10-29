@@ -2,6 +2,7 @@ import { sqliteDump } from './dump';
 import { KEYWORDS } from '../../core/sql/keywords';
 import { type CellValue, isTaggedValue } from '../../shared/cell-value';
 import type { Dialect } from '../driver';
+import { STANDARD_TRANSACTION } from '../common/transaction';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
 import { sqliteDdl } from './ddl';
 
@@ -60,6 +61,7 @@ export const sqliteDialect: Dialect = {
     `CAST(${quotedColumn} AS TEXT) LIKE ${quotedPattern} ESCAPE '!'`,
   defaultKeyword: false,
   insertDefaultRow: (quotedTable) => `INSERT INTO ${quotedTable} DEFAULT VALUES`,
+  transaction: STANDARD_TRANSACTION,
   ddl: sqliteDdl,
   dump: sqliteDump,
 };

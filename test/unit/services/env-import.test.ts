@@ -220,3 +220,32 @@ describe('sameTarget', () => {
     expect(sameTarget(a, { ...a, driver: 'postgres' })).toBe(false);
   });
 });
+
+describe('SQL Server in .env files (V6.2)', () => {
+  it('reads Laravel sqlsrv, Prisma sqlserver and plain mssql words', () => {
+    for (const word of ['sqlsrv', 'sqlserver', 'mssql']) {
+      const found = connectionsFromEnv(
+        parseDotenv([`DB_CONNECTION=${word}`, 'DB_HOST=db', 'DB_DATABASE=shop'].join('\n')),
+      );
+      expect(
+        found.map((candidate) => candidate.input.driver),
+        word,
+      ).toEqual(['mssql']);
+    }
+  });
+
+  it('guesses SQL Server from port 1433 when nothing names the driver', () => {
+    const [found] = connectionsFromEnv(
+      parseDotenv(['DB_HOST=db', 'DB_PORT=1433', 'DB_USER=sa', 'DB_PASSWORD=x'].join('\n')),
+    );
+    expect(found?.input).toMatchObject({ driver: 'mssql', host: 'db', port: 1433, user: 'sa' });
+    expect(found?.password).toBe('x');
+  });
+
+  it('reads a sqlserver:// URL', () => {
+    const [found] = connectionsFromEnv(
+      parseDotenv('DATABASE_URL=sqlserver://db:1433;database=shop;user=sa;password=p'),
+    );
+    expect(found?.input).toMatchObject({ driver: 'mssql', host: 'db', database: 'shop' });
+  });
+});

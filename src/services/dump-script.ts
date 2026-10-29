@@ -1,6 +1,7 @@
 // Pieces of a dump script (V5.2) that need no server: how one statement is written,
 // in which order views can be created, how rows become INSERT statements.
 
+import { unquoteIdentifier } from '../core/sql/identifiers';
 import { splitStatements } from '../core/sql/split';
 import { syntaxOf, textOf, tokenize } from '../core/sql/tokenizer';
 import type { DriverId } from '../shared/connection';
@@ -10,10 +11,16 @@ export const BODY_DELIMITER = '//';
 
 /**
  * One statement as script text. A MySQL routine or trigger has semicolons in its
- * body, so it is wrapped in DELIMITER lines, as the mysql client expects.
+ * body, so it is wrapped in DELIMITER lines, as the mysql client expects; in SQL
+ * Server every statement is followed by GO.
  */
 export function scriptStatement(sql: string, driver: DriverId): string {
   const text = sql.trim();
+  if (syntaxOf(driver).batchSeparator) {
+    // Each statement in its own batch, as sqlcmd and the server's own tools expect:
+    // a routine or view must start one.
+    return `${text}\nGO\n`;
+  }
   if (driver === 'mysql' && splitStatements(text, driver).length > 1) {
     return `DELIMITER ${BODY_DELIMITER}\n${text}${BODY_DELIMITER}\nDELIMITER ;\n`;
   }
@@ -36,14 +43,7 @@ export function mentionedNames(sql: string, driver: DriverId | undefined): Set<s
     if (token.kind === 'word') {
       names.add(textOf(sql, token).toLowerCase());
     } else if (token.kind === 'quoted-identifier') {
-      const raw = textOf(sql, token);
-      const quote = raw[0] ?? '';
-      names.add(
-        raw
-          .slice(1, -1)
-          .replaceAll(quote + quote, quote)
-          .toLowerCase(),
-      );
+      names.add(unquoteIdentifier(textOf(sql, token)).toLowerCase());
     }
   }
   return names;

@@ -277,3 +277,45 @@ describe('columnNames', () => {
     expect(columnNames(d, ['gone', 'a'])).toEqual(['first']);
   });
 });
+
+describe('SQL Server designs (V6.2)', () => {
+  it('starts a new table with an int identity key', () => {
+    expect(newTableDesign('mssql').columns[0]).toMatchObject({
+      name: 'id',
+      type: 'int',
+      autoIncrement: true,
+      primaryKey: true,
+    });
+    expect(designProblems(newTableDesign('mssql', 't'), 'mssql')).toEqual([]);
+  });
+
+  it('allows IDENTITY on any integer type, even outside the primary key', () => {
+    for (const type of ['tinyint', 'smallint', 'int', 'BIGINT']) {
+      expect(
+        designProblems(design([column({ id: 'a', type, autoIncrement: true })]), 'mssql'),
+        type,
+      ).toEqual([]);
+    }
+  });
+
+  it('refuses IDENTITY on other types, on a second column and next to a default', () => {
+    expect(
+      designProblems(design([column({ id: 'a', type: 'decimal', autoIncrement: true })]), 'mssql'),
+    ).toEqual([{ kind: 'auto-increment', column: 'a', reason: 'type' }]);
+    expect(
+      designProblems(
+        design([
+          column({ id: 'a', name: 'a', type: 'int', autoIncrement: true }),
+          column({ id: 'b', name: 'b', type: 'int', autoIncrement: true }),
+        ]),
+        'mssql',
+      ),
+    ).toEqual([{ kind: 'auto-increment', column: 'b', reason: 'several' }]);
+    expect(
+      designProblems(
+        design([column({ id: 'a', type: 'int', autoIncrement: true, defaultValue: '0' })]),
+        'mssql',
+      ),
+    ).toEqual([{ kind: 'auto-increment', column: 'a', reason: 'default' }]);
+  });
+});

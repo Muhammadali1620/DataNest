@@ -157,3 +157,67 @@ describe('dangersOf: odd input', () => {
     expect(dangersOf('SELECT $$DROP TABLE x$$', postgres)).toEqual([]);
   });
 });
+
+describe('dangersOf: T-SQL batches (V6.2)', () => {
+  const mssql = syntaxOf('mssql');
+
+  it('finds a DROP or a DELETE without WHERE anywhere in the batch', () => {
+    expect(dangersOf('DECLARE @n INT = 1;\nDROP TABLE t;', mssql)).toEqual(['drop']);
+    expect(dangersOf('DECLARE @n INT;\nSELECT 1;\nDELETE FROM t;', mssql)).toEqual([
+      'delete-without-where',
+    ]);
+    expect(dangersOf('BEGIN SELECT 1; UPDATE t SET a = 1; TRUNCATE TABLE u; END', mssql)).toEqual([
+      'update-without-where',
+      'truncate',
+    ]);
+  });
+
+  it('reports each danger once, in the usual order', () => {
+    expect(dangersOf('TRUNCATE TABLE a; DROP TABLE b; DROP TABLE c', mssql)).toEqual([
+      'drop',
+      'truncate',
+    ]);
+  });
+
+  it('sees the WHERE of each part and ignores semicolons in strings and parentheses', () => {
+    expect(dangersOf("DELETE FROM t WHERE a = ';'; SELECT 1", mssql)).toEqual([]);
+    expect(dangersOf('DELETE t WHERE id IN (SELECT 1; )', mssql)).toEqual([]);
+    expect(dangersOf('DELETE customers', mssql)).toEqual(['delete-without-where']);
+  });
+
+  it('looks past BEGIN, IF, WHILE, ELSE and TRY blocks to the statement inside', () => {
+    expect(dangersOf('BEGIN UPDATE t SET a = 1; TRUNCATE TABLE u; END', mssql)).toEqual([
+      'update-without-where',
+      'truncate',
+    ]);
+    expect(dangersOf('IF @x = 1 DELETE FROM t', mssql)).toEqual(['delete-without-where']);
+    expect(dangersOf('IF EXISTS (SELECT 1 FROM t) DROP TABLE t', mssql)).toEqual(['drop']);
+    expect(dangersOf('IF @x = 1 SELECT 1; ELSE DELETE FROM t;', mssql)).toEqual([
+      'delete-without-where',
+    ]);
+    expect(
+      dangersOf('BEGIN TRY DELETE FROM t; END TRY BEGIN CATCH SELECT 1; END CATCH', mssql),
+    ).toEqual(['delete-without-where']);
+    expect(dangersOf('WHILE @i < 3 BEGIN DELETE FROM t WHERE id = @i; END', mssql)).toEqual([]);
+    expect(dangersOf('IF @x = 1', mssql)).toEqual([]);
+  });
+
+  it('does not count BEGIN TRAN as a block', () => {
+    expect(dangersOf('BEGIN TRAN; DELETE FROM t; COMMIT', mssql)).toEqual(['delete-without-where']);
+    expect(dangersOf('BEGIN TRANSACTION UPDATE t SET a = 1', mssql)).toEqual([]);
+  });
+
+  it('leaves the body of a procedure or trigger alone: creating it runs nothing', () => {
+    expect(
+      dangersOf('CREATE PROCEDURE p AS BEGIN SELECT 1; IF @a = 1 DELETE FROM t; END', mssql),
+    ).toEqual([]);
+    expect(dangersOf('ALTER TRIGGER tr ON t AFTER UPDATE AS DELETE FROM audit;', mssql)).toEqual(
+      [],
+    );
+  });
+
+  it('is empty for a harmless batch', () => {
+    expect(dangersOf('DECLARE @n INT = 1;\nSELECT @n;', mssql)).toEqual([]);
+    expect(dangersOf('', mssql)).toEqual([]);
+  });
+});

@@ -166,6 +166,20 @@ export interface DumpDialect {
   readonly portable?: (sql: string) => string;
 }
 
+/**
+ * How a dialect spells transaction control (V4.8). Savepoint names are DataNest's own
+ * constants, never user text.
+ */
+export interface TransactionSql {
+  readonly begin: string;
+  readonly commit: string;
+  readonly rollback: string;
+  savepoint(name: string): string;
+  /** Lets a savepoint go; absent where savepoints live until the transaction ends. */
+  readonly releaseSavepoint?: (name: string) => string;
+  rollbackToSavepoint(name: string): string;
+}
+
 /** Everything that differs between SQL dialects. UI builds SQL only through this. */
 export interface Dialect {
   /** Keywords for completion and highlighting, uppercase. */
@@ -199,6 +213,8 @@ export interface Dialect {
   readonly defaultKeyword: boolean;
   /** An INSERT that fills every column with its default; the table is already quoted. */
   insertDefaultRow(quotedTable: string): string;
+  /** BEGIN, COMMIT, savepoints. */
+  readonly transaction: TransactionSql;
   /** Structure changes: databases, schemas, tables and other objects. */
   readonly ddl: SchemaDdl;
   /** Dumps to a SQL script (V5.2). */

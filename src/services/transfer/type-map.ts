@@ -47,6 +47,12 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
   if (/\[\]$|^array/u.test(type)) {
     return { kind: 'text' };
   }
+  if (driver === 'mssql') {
+    const own = mssqlNeutral(type);
+    if (own !== undefined) {
+      return own;
+    }
+  }
   if (type.startsWith('year')) {
     return { kind: 'integer', bytes: 2, unsigned: false };
   }
@@ -76,16 +82,17 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
   if (type.startsWith('float4')) {
     return { kind: 'float', double: false };
   }
-  // REAL is four bytes in PostgreSQL, eight in MySQL and SQLite; FLOAT the other way round.
+  // REAL is four bytes in PostgreSQL and SQL Server, eight in MySQL and SQLite; FLOAT
+  // the other way round.
+  const standardFloats = driver === 'postgres' || driver === 'mssql';
   if (type.startsWith('real')) {
-    return { kind: 'float', double: driver !== 'postgres' };
+    return { kind: 'float', double: !standardFloats };
   }
   if (type.startsWith('float')) {
     const [bits] = numbers;
     return {
       kind: 'float',
-      double:
-        driver === 'postgres' ? bits === undefined || bits > 24 : bits !== undefined && bits > 24,
+      double: standardFloats ? bits === undefined || bits > 24 : bits !== undefined && bits > 24,
     };
   }
   if (/^(n?varchar|character varying|varchar2|nvarchar2)/u.test(type)) {
@@ -125,6 +132,42 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
   return { kind: 'text' };
 }
 
+/** SQL Server types that mean something else elsewhere, or exist only there. */
+function mssqlNeutral(type: string): NeutralType | undefined {
+  if (type === 'bit') {
+    return { kind: 'boolean' };
+  }
+  // TINYINT holds 0 to 255 here.
+  if (type === 'tinyint') {
+    return { kind: 'integer', bytes: 1, unsigned: true };
+  }
+  if (type === 'smallmoney') {
+    return { kind: 'decimal', precision: 10, scale: 4 };
+  }
+  // TIMESTAMP is a row version: eight bytes that change with every write.
+  if (type === 'timestamp' || type === 'rowversion' || type === 'image') {
+    return { kind: 'binary' };
+  }
+  if (type.startsWith('datetimeoffset')) {
+    const digits = /\((\d+)\)/u.exec(type)?.[1];
+    return {
+      kind: 'datetime',
+      zone: true,
+      ...precisionOf(digits === undefined ? [] : [Number(digits)]),
+    };
+  }
+  if (type === 'smalldatetime') {
+    return { kind: 'datetime', zone: false, precision: 0 };
+  }
+  if (type === 'datetime') {
+    return { kind: 'datetime', zone: false, precision: 3 };
+  }
+  if (type === 'ntext' || type === 'xml' || type === 'sysname') {
+    return { kind: 'text' };
+  }
+  return undefined;
+}
+
 function precisionOf(numbers: readonly number[]): { precision?: number } {
   return numbers[0] === undefined ? {} : { precision: Math.min(numbers[0], 6) };
 }
@@ -145,6 +188,8 @@ export function targetType(
       return postgresType(neutral);
     case 'sqlite':
       return sqliteType(neutral);
+    case 'mssql':
+      return mssqlType(neutral, indexed);
   }
 }
 
@@ -264,6 +309,64 @@ function sqliteType(neutral: NeutralType): { type: string; length: string } {
   }
 }
 
+/** Longest NVARCHAR that is not MAX; index keys must stay under 900 bytes as well. */
+const MSSQL_NVARCHAR = 4000;
+const MSSQL_INDEXED_NVARCHAR = 450;
+
+function mssqlType(neutral: NeutralType, indexed: boolean): { type: string; length: string } {
+  switch (neutral.kind) {
+    case 'boolean':
+      return t('bit');
+    case 'integer':
+      switch (neutral.bytes) {
+        case 1:
+          return t(neutral.unsigned ? 'tinyint' : 'smallint');
+        case 2:
+          return t(neutral.unsigned ? 'int' : 'smallint');
+        case 3:
+          return t('int');
+        case 4:
+          return t(neutral.unsigned ? 'bigint' : 'int');
+        case 8:
+          return neutral.unsigned ? t('decimal', '20,0') : t('bigint');
+      }
+      break;
+    case 'decimal':
+      return neutral.precision === undefined
+        ? t('decimal', '38,10')
+        : t('decimal', `${Math.min(neutral.precision, 38)},${Math.min(neutral.scale ?? 0, 38)}`);
+    case 'float':
+      return t(neutral.double ? 'float' : 'real');
+    case 'string':
+      if (neutral.length <= MSSQL_NVARCHAR) {
+        return t(neutral.fixed ? 'nchar' : 'nvarchar', String(neutral.length));
+      }
+      return t('nvarchar', indexed ? String(MSSQL_INDEXED_NVARCHAR) : 'max');
+    case 'text':
+    case 'json':
+      return t('nvarchar', indexed ? String(MSSQL_INDEXED_NVARCHAR) : 'max');
+    case 'enum': {
+      const longest = Math.max(1, ...neutral.values.map((value) => value.length));
+      return t(
+        'nvarchar',
+        String(neutral.values.length === 0 ? 255 : Math.min(longest, MSSQL_NVARCHAR)),
+      );
+    }
+    case 'date':
+      return t('date');
+    case 'time':
+      return t('time');
+    case 'datetime': {
+      const precision = String(neutral.precision ?? 7);
+      return t(neutral.zone ? 'datetimeoffset' : 'datetime2', precision);
+    }
+    case 'binary':
+      return t('varbinary', indexed ? '900' : 'max');
+    case 'uuid':
+      return t('uniqueidentifier');
+  }
+}
+
 /** The type of a column for the target: as it is between the same databases. */
 export function mapColumnType(
   dataType: string,
@@ -278,7 +381,7 @@ export function mapColumnType(
 }
 
 const NOW =
-  /^(current_timestamp|now|localtimestamp|transaction_timestamp|statement_timestamp)\s*(\(\s*\d*\s*\))?$/iu;
+  /^(current_timestamp|now|localtimestamp|transaction_timestamp|statement_timestamp|getdate|sysdatetime|getutcdate|sysutcdatetime|sysdatetimeoffset)\s*(\(\s*\d*\s*\))?$/iu;
 
 /**
  * A default for the target, or undefined when it cannot be carried over (a function
@@ -298,16 +401,20 @@ export function mapDefault(
     .trim()
     .replace(/::[\w\s"[\]().,]+$/u, '')
     .trim();
-  const bare = text.replace(/^\((.*)\)$/u, '$1').trim();
+  // SQL Server writes Unicode literals as N'…'.
+  const bare = text
+    .replace(/^\((.*)\)$/u, '$1')
+    .trim()
+    .replace(/^N'/u, "'");
   if (/^null$/iu.test(bare)) {
     return undefined;
   }
   if (neutral.kind === 'boolean') {
     if (/^(true|'t'|'true'|b?'1'|1)$/iu.test(bare)) {
-      return to === 'mysql' ? '1' : 'TRUE';
+      return to === 'mysql' || to === 'mssql' ? '1' : 'TRUE';
     }
     if (/^(false|'f'|'false'|b?'0'|0)$/iu.test(bare)) {
-      return to === 'mysql' ? '0' : 'FALSE';
+      return to === 'mysql' || to === 'mssql' ? '0' : 'FALSE';
     }
     return undefined;
   }
@@ -319,7 +426,11 @@ export function mapDefault(
   }
   if (NOW.test(bare) || /^current_(date|time)$/iu.test(bare)) {
     if (/^current_date$/iu.test(bare)) {
-      return 'CURRENT_DATE';
+      // SQL Server 2022 has no CURRENT_DATE.
+      return to === 'mssql' ? 'CAST(GETDATE() AS date)' : 'CURRENT_DATE';
+    }
+    if (to === 'mssql') {
+      return neutral.kind === 'datetime' && neutral.zone ? 'SYSDATETIMEOFFSET()' : 'SYSDATETIME()';
     }
     if (neutral.kind === 'datetime' && to === 'mysql' && (neutral.precision ?? 6) > 0) {
       return `CURRENT_TIMESTAMP(${neutral.precision ?? 6})`;

@@ -2,6 +2,7 @@
 // read, ready to run again in the same editor (ARCHITECTURE.md §6).
 
 import { splitStatements } from '../core/sql/split';
+import { syntaxOf } from '../core/sql/tokenizer';
 import type { ObjectRef } from '../core/model/objects';
 import type { DriverId } from '../shared/connection';
 import type { ConnectionManager } from './connection-manager';
@@ -13,12 +14,16 @@ const BODY_DELIMITER = '//';
 /**
  * Joins statements into a script. A MySQL routine or trigger has semicolons in its
  * body, so the script switches the delimiter around it, as the mysql client does;
- * every other dialect understands its bodies without help.
+ * SQL Server ends every statement with GO; the others understand bodies without help.
  */
 export function definitionDocument(statements: readonly string[], driver: DriverId): string {
   const trimmed = statements.map((statement) => statement.trim()).filter((s) => s !== '');
   if (trimmed.length === 0) {
     return '';
+  }
+  if (syntaxOf(driver).batchSeparator) {
+    // A routine or view must be alone in its batch, which GO ends (SQL Server).
+    return `${trimmed.map((statement) => `${statement}\nGO`).join('\n\n')}\n`;
   }
   const needsDelimiter =
     driver === 'mysql' &&

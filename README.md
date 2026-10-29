@@ -3,7 +3,7 @@
 [![CI](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml)
 
 A free, open-source database client for VS Code and its forks — MySQL, MariaDB,
-PostgreSQL and SQLite, without accounts, limits or telemetry.
+PostgreSQL, SQLite and Microsoft SQL Server, without accounts, limits or telemetry.
 
 **Install:** [Open VSX](https://open-vsx.org/extension/datanest/datanest) —
 or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/DataNest/releases).
@@ -18,15 +18,18 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 
 **Connections**
 
-- MySQL, MariaDB, PostgreSQL and SQLite, each driver loaded only when you first use it.
+- MySQL, MariaDB, PostgreSQL, SQLite and Microsoft SQL Server (2016 and newer, Azure SQL),
+  each driver loaded only when you first use it.
 - A form with “Test connection”, editing, duplicating and deleting; fill it from a
-  `postgres://` or `mysql://` URL, or import connections from the workspace's `.env` files.
+  `postgres://`, `mysql://` or `sqlserver://` URL, or import connections from the
+  workspace's `.env` files.
 - SSH tunnels with a password, a key or an SSH agent, through up to five jump hosts,
   with the server key checked like OpenSSH does.
 - SSL/TLS with a choice of checks, your own CA and client certificates.
 - Folders, drag and drop and color labels in the tree.
 - Production connections stand out in red and confirm every change; read-only
-  connections refuse changes, and the server session is read-only too.
+  connections refuse changes, and the server session is read-only too (SQL Server has
+  no such session, so there DataNest alone refuses).
 - Project connections in `.vscode/datanest.json`, committed for the team without passwords.
 - Per connection: timeouts, keep-alive, time zone, character set, init SQL, and which
   databases and schemas to show.
@@ -54,7 +57,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Queries run in a normal editor tab, so your keybindings, themes and extensions work.
 - `Ctrl+Enter` runs the statement under the cursor or the selection,
   `Ctrl+Shift+Enter` runs the whole file, and a “▶ Run” lens sits above every statement.
-- The statement splitter understands strings, comments, `$$ … $$` and MySQL's `DELIMITER`.
+- The statement splitter understands strings, comments, `$$ … $$`, MySQL's `DELIMITER`
+  and SQL Server's `GO`, procedure bodies and variables of a batch.
 - Completion knows aliases, the columns of every joined table, CTEs and subqueries,
   dialect functions and statement snippets.
 - Hover over a table or column for its type, keys and comment; F12 opens its DDL.

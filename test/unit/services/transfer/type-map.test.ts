@@ -223,3 +223,203 @@ describe('mapDefault', () => {
     expect(mapDefault("nextval('s'::regclass)", text, 'postgres', 'mysql')).toBeUndefined();
   });
 });
+
+describe('SQL Server types (V6.2)', () => {
+  it('reads the types that mean something else in SQL Server', () => {
+    expect(neutralType('bit', 'mssql')).toEqual({ kind: 'boolean' });
+    expect(neutralType('tinyint', 'mssql')).toEqual({ kind: 'integer', bytes: 1, unsigned: true });
+    expect(neutralType('real', 'mssql')).toEqual({ kind: 'float', double: false });
+    expect(neutralType('float', 'mssql')).toEqual({ kind: 'float', double: true });
+    expect(neutralType('float(24)', 'mssql')).toEqual({ kind: 'float', double: false });
+    expect(neutralType('float(53)', 'mssql')).toEqual({ kind: 'float', double: true });
+    expect(neutralType('timestamp', 'mssql')).toEqual({ kind: 'binary' });
+    expect(neutralType('rowversion', 'mssql')).toEqual({ kind: 'binary' });
+    expect(neutralType('image', 'mssql')).toEqual({ kind: 'binary' });
+    expect(neutralType('smallmoney', 'mssql')).toEqual({
+      kind: 'decimal',
+      precision: 10,
+      scale: 4,
+    });
+    expect(neutralType('money', 'mssql')).toEqual({ kind: 'decimal', precision: 19, scale: 4 });
+    expect(neutralType('ntext', 'mssql')).toEqual({ kind: 'text' });
+    expect(neutralType('xml', 'mssql')).toEqual({ kind: 'text' });
+    expect(neutralType('sysname', 'mssql')).toEqual({ kind: 'text' });
+  });
+
+  it('reads SQL Server moments with and without an offset', () => {
+    expect(neutralType('datetimeoffset(7)', 'mssql')).toEqual({
+      kind: 'datetime',
+      zone: true,
+      precision: 6,
+    });
+    expect(neutralType('datetimeoffset', 'mssql')).toEqual({ kind: 'datetime', zone: true });
+    expect(neutralType('datetime2(3)', 'mssql')).toEqual({
+      kind: 'datetime',
+      zone: false,
+      precision: 3,
+    });
+    expect(neutralType('datetime', 'mssql')).toEqual({
+      kind: 'datetime',
+      zone: false,
+      precision: 3,
+    });
+    expect(neutralType('smalldatetime', 'mssql')).toEqual({
+      kind: 'datetime',
+      zone: false,
+      precision: 0,
+    });
+    expect(neutralType('time(7)', 'mssql')).toEqual({ kind: 'time' });
+    expect(neutralType('date', 'mssql')).toEqual({ kind: 'date' });
+  });
+
+  it('reads strings of every length, max among them', () => {
+    expect(neutralType('nvarchar(50)', 'mssql')).toEqual({
+      kind: 'string',
+      length: 50,
+      fixed: false,
+    });
+    expect(neutralType('nvarchar(max)', 'mssql')).toEqual({ kind: 'text' });
+    expect(neutralType('nchar(3)', 'mssql')).toEqual({ kind: 'string', length: 3, fixed: true });
+    expect(neutralType('varbinary(max)', 'mssql')).toEqual({ kind: 'binary' });
+    expect(neutralType('uniqueidentifier', 'mssql')).toEqual({ kind: 'uuid' });
+  });
+
+  it('keeps MySQL bit and PostgreSQL real as they were', () => {
+    expect(neutralType('bit', 'mysql')).toEqual({ kind: 'binary' });
+    expect(neutralType('real', 'postgres')).toEqual({ kind: 'float', double: false });
+    expect(neutralType('real', 'mysql')).toEqual({ kind: 'float', double: true });
+    expect(neutralType('tinyint', 'mysql')).toEqual({ kind: 'integer', bytes: 1, unsigned: false });
+  });
+
+  it('writes every neutral kind in SQL Server words', () => {
+    const to = (neutral: Parameters<typeof targetType>[0], indexed = false) =>
+      targetType(neutral, 'mssql', indexed);
+    expect(to({ kind: 'boolean' })).toEqual({ type: 'bit', length: '' });
+    expect(to({ kind: 'integer', bytes: 1, unsigned: true })).toEqual({
+      type: 'tinyint',
+      length: '',
+    });
+    expect(to({ kind: 'integer', bytes: 1, unsigned: false })).toEqual({
+      type: 'smallint',
+      length: '',
+    });
+    expect(to({ kind: 'integer', bytes: 2, unsigned: false })).toEqual({
+      type: 'smallint',
+      length: '',
+    });
+    expect(to({ kind: 'integer', bytes: 2, unsigned: true })).toEqual({ type: 'int', length: '' });
+    expect(to({ kind: 'integer', bytes: 3, unsigned: false })).toEqual({ type: 'int', length: '' });
+    expect(to({ kind: 'integer', bytes: 4, unsigned: false })).toEqual({ type: 'int', length: '' });
+    expect(to({ kind: 'integer', bytes: 4, unsigned: true })).toEqual({
+      type: 'bigint',
+      length: '',
+    });
+    expect(to({ kind: 'integer', bytes: 8, unsigned: false })).toEqual({
+      type: 'bigint',
+      length: '',
+    });
+    expect(to({ kind: 'integer', bytes: 8, unsigned: true })).toEqual({
+      type: 'decimal',
+      length: '20,0',
+    });
+    expect(to({ kind: 'decimal' })).toEqual({ type: 'decimal', length: '38,10' });
+    expect(to({ kind: 'decimal', precision: 65, scale: 40 })).toEqual({
+      type: 'decimal',
+      length: '38,38',
+    });
+    expect(to({ kind: 'decimal', precision: 10, scale: 2 })).toEqual({
+      type: 'decimal',
+      length: '10,2',
+    });
+    expect(to({ kind: 'float', double: true })).toEqual({ type: 'float', length: '' });
+    expect(to({ kind: 'float', double: false })).toEqual({ type: 'real', length: '' });
+    expect(to({ kind: 'string', length: 40, fixed: false })).toEqual({
+      type: 'nvarchar',
+      length: '40',
+    });
+    expect(to({ kind: 'string', length: 2, fixed: true })).toEqual({ type: 'nchar', length: '2' });
+    expect(to({ kind: 'string', length: 9000, fixed: false })).toEqual({
+      type: 'nvarchar',
+      length: 'max',
+    });
+    expect(to({ kind: 'string', length: 9000, fixed: false }, true)).toEqual({
+      type: 'nvarchar',
+      length: '450',
+    });
+    expect(to({ kind: 'text' })).toEqual({ type: 'nvarchar', length: 'max' });
+    expect(to({ kind: 'text' }, true)).toEqual({ type: 'nvarchar', length: '450' });
+    expect(to({ kind: 'json' })).toEqual({ type: 'nvarchar', length: 'max' });
+    expect(to({ kind: 'enum', values: ['new', 'shipped'] })).toEqual({
+      type: 'nvarchar',
+      length: '7',
+    });
+    expect(to({ kind: 'enum', values: [] })).toEqual({ type: 'nvarchar', length: '255' });
+    expect(to({ kind: 'date' })).toEqual({ type: 'date', length: '' });
+    expect(to({ kind: 'time' })).toEqual({ type: 'time', length: '' });
+    expect(to({ kind: 'datetime', zone: false })).toEqual({ type: 'datetime2', length: '7' });
+    expect(to({ kind: 'datetime', zone: true, precision: 3 })).toEqual({
+      type: 'datetimeoffset',
+      length: '3',
+    });
+    expect(to({ kind: 'binary' })).toEqual({ type: 'varbinary', length: 'max' });
+    expect(to({ kind: 'binary' }, true)).toEqual({ type: 'varbinary', length: '900' });
+    expect(to({ kind: 'uuid' })).toEqual({ type: 'uniqueidentifier', length: '' });
+  });
+
+  it('carries types across: PostgreSQL to SQL Server and back', () => {
+    expect(mapColumnType('timestamp with time zone', 'postgres', 'mssql', false)).toEqual({
+      type: 'datetimeoffset',
+      length: '7',
+    });
+    expect(mapColumnType('boolean', 'postgres', 'mssql', false)).toEqual({
+      type: 'bit',
+      length: '',
+    });
+    expect(mapColumnType('bit', 'mssql', 'postgres', false)).toEqual({
+      type: 'boolean',
+      length: '',
+    });
+    expect(mapColumnType('tinyint', 'mssql', 'mysql', false)).toEqual({
+      type: 'tinyint unsigned',
+      length: '',
+    });
+    expect(mapColumnType('nvarchar(max)', 'mssql', 'mssql', false)).toEqual({
+      type: 'nvarchar',
+      length: 'max',
+    });
+  });
+
+  it('carries defaults to SQL Server', () => {
+    const datetime = { kind: 'datetime', zone: false } as const;
+    expect(mapDefault('true', { kind: 'boolean' }, 'postgres', 'mssql')).toBe('1');
+    expect(mapDefault('false', { kind: 'boolean' }, 'postgres', 'mssql')).toBe('0');
+    expect(mapDefault('now()', datetime, 'postgres', 'mssql')).toBe('SYSDATETIME()');
+    expect(
+      mapDefault('CURRENT_TIMESTAMP', { kind: 'datetime', zone: true }, 'mysql', 'mssql'),
+    ).toBe('SYSDATETIMEOFFSET()');
+    expect(mapDefault('CURRENT_DATE', { kind: 'date' }, 'postgres', 'mssql')).toBe(
+      'CAST(GETDATE() AS date)',
+    );
+    expect(mapDefault("'new'::character varying", { kind: 'text' }, 'postgres', 'mssql')).toBe(
+      "'new'",
+    );
+    expect(
+      mapDefault(
+        "nextval('s'::regclass)",
+        { kind: 'integer', bytes: 4, unsigned: false },
+        'postgres',
+        'mssql',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('carries SQL Server defaults elsewhere: N strings, getdate() and bit values', () => {
+    const datetime = { kind: 'datetime', zone: false } as const;
+    expect(mapDefault("N'new'", { kind: 'text' }, 'mssql', 'postgres')).toBe("'new'");
+    expect(mapDefault('getdate()', datetime, 'mssql', 'postgres')).toBe('CURRENT_TIMESTAMP');
+    expect(mapDefault('sysdatetime()', datetime, 'mssql', 'mysql')).toBe('CURRENT_TIMESTAMP(6)');
+    expect(mapDefault('1', { kind: 'boolean' }, 'mssql', 'postgres')).toBe('TRUE');
+    expect(mapDefault('newid()', { kind: 'uuid' }, 'mssql', 'postgres')).toBeUndefined();
+    expect(mapDefault('NULL', { kind: 'text' }, 'mssql', 'postgres')).toBeUndefined();
+  });
+});

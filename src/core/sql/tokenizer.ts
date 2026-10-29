@@ -42,6 +42,13 @@ export interface SqlSyntax {
   readonly triggerBodies: boolean;
   /** Block comments opening with `/*!` are code the server runs (MySQL, MariaDB). */
   readonly executableComments: boolean;
+  /** `[…]` quotes identifiers, `]]` inside (SQL Server). */
+  readonly bracketIdentifiers: boolean;
+  /**
+   * A line holding only `GO` ends a batch (the sqlcmd convention, SQL Server). Routine
+   * bodies and batches that declare variables then run as one statement up to it.
+   */
+  readonly batchSeparator: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -55,6 +62,8 @@ const MYSQL: SqlSyntax = {
   delimiterCommand: true,
   triggerBodies: false,
   executableComments: true,
+  bracketIdentifiers: false,
+  batchSeparator: false,
 };
 
 const POSTGRES: SqlSyntax = {
@@ -68,6 +77,8 @@ const POSTGRES: SqlSyntax = {
   delimiterCommand: false,
   triggerBodies: false,
   executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
 };
 
 const SQLITE: SqlSyntax = {
@@ -81,12 +92,31 @@ const SQLITE: SqlSyntax = {
   delimiterCommand: false,
   triggerBodies: true,
   executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+};
+
+const MSSQL: SqlSyntax = {
+  backslashEscapes: false,
+  hashComments: false,
+  backtickIdentifiers: false,
+  // QUOTED_IDENTIFIER is on in every session clients open.
+  doubleQuoteIdentifiers: true,
+  escapeStrings: false,
+  dollarQuotes: false,
+  nestedBlockComments: true,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: true,
+  batchSeparator: true,
 };
 
 const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,
+  mssql: MSSQL,
 };
 
 /** The syntax of a driver; the safest common set when none is known. */
@@ -104,6 +134,9 @@ export function syntaxOf(driver?: DriverId): SqlSyntax {
       delimiterCommand: true,
       triggerBodies: false,
       executableComments: false,
+      // `[` is an array subscript in PostgreSQL; `GO` is a word anywhere else.
+      bracketIdentifiers: false,
+      batchSeparator: false,
     };
   }
   return BY_DRIVER[driver];
@@ -153,6 +186,9 @@ function readToken(sql: string, start: number, syntax: SqlSyntax): Token {
   }
   if (char === '`' && syntax.backtickIdentifiers) {
     return quoted(sql, start, '`', false, 'quoted-identifier');
+  }
+  if (char === '[' && syntax.bracketIdentifiers) {
+    return bracketed(sql, start);
   }
   if (char === '$' && syntax.dollarQuotes) {
     const dollar = dollarQuoted(sql, start);
@@ -240,6 +276,22 @@ function quoted(
     index++;
   }
   return { kind, start, end: sql.length, unterminated: true };
+}
+
+/** `[name]`, where `]]` stands for one `]`. */
+function bracketed(sql: string, start: number): Token {
+  let index = start + 1;
+  while (index < sql.length) {
+    if (sql[index] === ']') {
+      if (sql[index + 1] === ']') {
+        index += 2;
+        continue;
+      }
+      return { kind: 'quoted-identifier', start, end: index + 1 };
+    }
+    index++;
+  }
+  return { kind: 'quoted-identifier', start, end: sql.length, unterminated: true };
 }
 
 const DOLLAR_TAG = /^\$([A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/;

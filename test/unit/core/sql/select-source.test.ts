@@ -145,3 +145,22 @@ describe('parseSelectSource', () => {
     }
   });
 });
+
+describe('parseSelectSource: SQL Server (V6.2)', () => {
+  const mssql = syntaxOf('mssql');
+
+  it('reads bracketed and qualified names', () => {
+    expect(source('SELECT [id], [full name] FROM [dbo].[order]]s]', mssql)).toEqual({
+      tableParts: ['dbo', 'order]s'],
+      items: [
+        { kind: 'column', name: 'id', output: 'id' },
+        { kind: 'column', name: 'full name', output: 'full name' },
+      ],
+    });
+    expect(source('SELECT * FROM shop.dbo.customers', mssql).tableParts).toEqual([
+      'shop',
+      'dbo',
+      'customers',
+    ]);
+  });
+});

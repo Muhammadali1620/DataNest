@@ -10,6 +10,23 @@ import {
 } from '../../../src/services/dump-script';
 import { splitStatements } from '../../../src/core/sql/split';
 
+describe('scriptStatement: SQL Server (V6.2)', () => {
+  it('puts every statement in a batch of its own', () => {
+    expect(scriptStatement('  INSERT INTO [t] VALUES (1)  ', 'mssql')).toBe(
+      'INSERT INTO [t] VALUES (1)\nGO\n',
+    );
+    expect(scriptStatement('CREATE VIEW v AS SELECT 1;', 'mssql')).toBe(
+      'CREATE VIEW v AS SELECT 1;\nGO\n',
+    );
+  });
+
+  it('reads bracketed names when ordering views', () => {
+    expect(mentionedNames('SELECT * FROM [dbo].[Order]]s]', 'mssql')).toEqual(
+      new Set(['select', 'from', 'dbo', 'order]s']),
+    );
+  });
+});
+
 describe('scriptStatement', () => {
   it('ends a statement with a semicolon and a line break', () => {
     expect(scriptStatement('  SELECT 1  ', 'postgres')).toBe('SELECT 1;\n');

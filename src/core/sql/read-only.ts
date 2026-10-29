@@ -128,6 +128,9 @@ function mainVerbIndex(words: readonly Word[]): number {
   );
 }
 
+/** What follows BEGIN when T-SQL starts a transaction rather than a block. */
+const TSQL_TRANSACTION = new Set(['TRAN', 'TRANSACTION', 'DISTRIBUTED']);
+
 /** True when running the statement can only read; false when it may change anything. */
 export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf()): boolean {
   const { words, topPunctuation, hasParentheses } = scan(sql, syntax);
@@ -145,7 +148,14 @@ export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf())
     case 'DESCRIBE':
     case 'DESC':
     case 'USE':
+    case 'PRINT':
+      return true;
     case 'BEGIN':
+      // In T-SQL a bare BEGIN opens a block of statements, which may write anything;
+      // only BEGIN TRAN starts a transaction.
+      return !syntax.batchSeparator || TSQL_TRANSACTION.has(words[1]?.text ?? '');
+    case 'SAVE':
+      return words[1]?.text === 'TRAN' || words[1]?.text === 'TRANSACTION';
     case 'COMMIT':
     case 'END':
     case 'ROLLBACK':

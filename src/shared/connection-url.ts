@@ -1,6 +1,6 @@
 // Connection URLs as frameworks and hosting providers print them:
 // `postgres://user:pass@host:5432/db?sslmode=require`, `mysql://…`, `sqlite:///file.db`,
-// with `jdbc:` and SQLAlchemy-style `+driver` prefixes. Shared by the host (commands,
+// `sqlserver://host;databaseName=db`, with `jdbc:` and SQLAlchemy-style `+driver` prefixes. Shared by the host (commands,
 // .env import) and the connection form, which can fill itself from a pasted URL.
 
 import type { ConnectionInput, DriverId, SslMode, SslSettings } from './connection';
@@ -27,6 +27,8 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   sqlite: 'sqlite',
   sqlite3: 'sqlite',
   file: 'sqlite',
+  mssql: 'mssql',
+  sqlserver: 'mssql',
 };
 
 /** The driver a URL is for, or undefined when DataNest does not know the scheme. */
@@ -125,6 +127,79 @@ export function suggestedName(input: ConnectionInput): string {
   return input.database ?? input.host ?? input.driver;
 }
 
+const SQL_SERVER_HEAD =
+  /^(?:([^:@/;]*)(?::([^@/;]*))?@)?([^:/?;\\]+)(?:\\([^:/?;]+))?(?::(\d+))?(?:\/([^?;]*))?(?:\?([^;]*))?$/u;
+
+/**
+ * SQL Server URLs come in two shapes: `mssql://user:pass@host:1433/db?encrypt=true`
+ * and the JDBC one, `sqlserver://host\\instance:1433;databaseName=db;user=sa;encrypt=true`.
+ * Both are read; properties after `;` win over the URL parts.
+ */
+function sqlServerUrl(plain: string): UrlResult {
+  const rest = plain.replace(/^[a-z][a-z0-9.-]*:(?:\/\/)?/iu, '');
+  const [head = '', ...pairs] = rest.split(';');
+  const match = SQL_SERVER_HEAD.exec(head.trim());
+  if (match === null) {
+    return { ok: false, problem: head.trim() === '' ? 'no-host' : 'not-a-url' };
+  }
+  const props = new Map<string, string>();
+  for (const [key, value] of new URLSearchParams(match[7] ?? '')) {
+    props.set(key.toLowerCase(), value);
+  }
+  for (const pair of pairs) {
+    const equals = pair.indexOf('=');
+    if (equals > 0) {
+      props.set(
+        pair.slice(0, equals).trim().toLowerCase().replace(/\s+/gu, ''),
+        pair.slice(equals + 1).trim(),
+      );
+    }
+  }
+  const prop = (...names: string[]): string | undefined => {
+    for (const name of names) {
+      const value = nonEmpty(props.get(name));
+      if (value !== undefined) {
+        return value;
+      }
+    }
+    return undefined;
+  };
+  const server = nonEmpty(decode(match[3] ?? ''));
+  if (server === undefined) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const instance = prop('instancename') ?? nonEmpty(match[4]);
+  const host = instance === undefined ? server : `${server}\\${instance}`;
+  const portText = prop('port') ?? match[5];
+  const port = portText !== undefined && /^\d+$/u.test(portText) ? Number(portText) : undefined;
+  const user = prop('user', 'userid', 'username', 'uid') ?? nonEmpty(decode(match[1] ?? ''));
+  const password = prop('password', 'pwd') ?? nonEmpty(decode(match[2] ?? ''));
+  const database =
+    prop('databasename', 'database', 'initialcatalog') ?? nonEmpty(decode(match[6] ?? ''));
+  const encrypt = prop('encrypt')?.toLowerCase();
+  const trust = prop('trustservercertificate')?.toLowerCase();
+  const ssl: SslSettings | undefined =
+    encrypt === 'true' || encrypt === 'yes' || encrypt === 'strict' || encrypt === 'mandatory'
+      ? { mode: trust === 'true' || trust === 'yes' ? 'require' : 'verify-full' }
+      : undefined;
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'mssql',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
+    ...(database === undefined ? {} : { database }),
+    ...(ssl === undefined ? {} : { ssl }),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(password === undefined ? {} : { password }),
+    },
+  };
+}
+
 /** Reads a connection URL. Unknown query parameters are ignored. */
 export function parseConnectionUrl(text: string): UrlResult {
   const trimmed = text.trim();
@@ -146,6 +221,9 @@ export function parseConnectionUrl(text: string): UrlResult {
     }
     const input: ConnectionInput = { name: '', driver, file };
     return { ok: true, value: { input: { ...input, name: suggestedName(input) } } };
+  }
+  if (driver === 'mssql') {
+    return sqlServerUrl(plain);
   }
   let url: URL;
   try {

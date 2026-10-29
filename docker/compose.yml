@@ -160,3 +160,42 @@ services:
     healthcheck:
       <<: *healthcheck
       test: ['CMD', 'nc', '-z', '127.0.0.1', '22']
+
+  # SQL Server (V6.2). Its data cannot live in tmpfs (the server needs O_DIRECT), so it
+  # stays in the container, which `npm run db:down` removes; every start is still clean.
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04
+    container_name: datanest-mssql
+    profiles: [mssql]
+    # The entrypoint copies the TLS key into place, which the image's own user cannot.
+    user: root
+    entrypoint: ['/bin/bash', '/datanest/entrypoint.sh']
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: Datanest_Root1
+      MSSQL_MEMORY_LIMIT_MB: '2048'
+      TZ: UTC
+    ports:
+      - 127.0.0.1:7143:1433
+    volumes:
+      - ./mssql:/datanest:ro
+      - ./seed/mssql:/docker-entrypoint-initdb.d:ro
+      - ./tls:/etc/datanest-tls:ro
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          '/opt/mssql-tools18/bin/sqlcmd',
+          '-C',
+          '-S',
+          '127.0.0.1',
+          '-U',
+          'datanest',
+          '-P',
+          'datanest',
+          '-b',
+          '-Q',
+          "IF NOT EXISTS (SELECT 1 FROM datanest_test.inventory.stock_levels) THROW 50000, 'seed not loaded', 1",
+        ]

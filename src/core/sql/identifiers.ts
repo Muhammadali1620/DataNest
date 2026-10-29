@@ -13,6 +13,7 @@ const LIMITS: Readonly<
   mysql: { max: 64, bytes: false },
   postgres: { max: 63, bytes: true },
   sqlite: undefined,
+  mssql: { max: 128, bytes: false },
 };
 
 export function identifierProblem(name: string, driver: DriverId): IdentifierProblem | undefined {
@@ -35,4 +36,19 @@ export function identifierProblem(name: string, driver: DriverId): IdentifierPro
 /** The longest name a driver accepts, for the message; undefined means no limit. */
 export function identifierLimit(driver: DriverId): number | undefined {
   return LIMITS[driver]?.max;
+}
+
+/**
+ * The name inside a quoted identifier: `"a""b"`, `` `a``b` `` and `[a]]b]` (SQL Server)
+ * all give `a"b`, ``a`b``, `a]b`. Text that is not quoted comes back as it is; an
+ * unterminated one loses only its opening quote.
+ */
+export function unquoteIdentifier(raw: string): string {
+  const open = raw[0];
+  if (open !== '"' && open !== '`' && open !== '[') {
+    return raw;
+  }
+  const close = open === '[' ? ']' : open;
+  const inner = raw.slice(1, raw.length > 1 && raw.endsWith(close) ? -1 : undefined);
+  return inner.replaceAll(close + close, close);
 }

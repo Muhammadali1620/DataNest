@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Driver } from '../../../src/drivers/driver';
 import { driver as mysqlDriver } from '../../../src/drivers/mysql';
 import { driver as postgresDriver } from '../../../src/drivers/postgres';
+import { driver as mssqlDriver } from '../../../src/drivers/mssql';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
@@ -64,6 +65,7 @@ async function managerFor(input: ConnectionInput, password?: string) {
     mysql: mysqlDriver,
     postgres: postgresDriver,
     sqlite,
+    mssql: mssqlDriver,
   };
   const manager = new ConnectionManager({
     store,

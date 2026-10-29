@@ -86,3 +86,33 @@ describe('commitsImplicitly', () => {
     expect(commitsImplicitly('DROP TABLE t', undefined)).toBe(false);
   });
 });
+
+describe('transactionControl: T-SQL (V6.2)', () => {
+  it.each([
+    ['BEGIN TRAN', 'begin'],
+    ['begin transaction t1', 'begin'],
+    ['BEGIN DISTRIBUTED TRANSACTION', 'begin'],
+    ['BEGIN', 'none'],
+    ['BEGIN SELECT 1 END', 'none'],
+    ['BEGIN TRY SELECT 1 END TRY', 'none'],
+    ['COMMIT', 'commit'],
+    ['COMMIT TRAN', 'commit'],
+    ['COMMIT TRANSACTION t1', 'commit'],
+    ['END', 'none'],
+    ['ROLLBACK', 'rollback'],
+    ['ROLLBACK TRANSACTION', 'rollback'],
+    ['ROLLBACK TRAN sp1', 'savepoint'],
+    ['SAVE TRANSACTION sp1', 'savepoint'],
+    ['SAVE TRAN sp1', 'savepoint'],
+    ['SAVE x', 'none'],
+    ['SAVEPOINT a', 'none'],
+    ['/* BEGIN TRAN */ SELECT 1', 'none'],
+  ] as const)('reads %s as %s', (sql, expected) => {
+    expect(transactionControl(sql, 'mssql')).toBe(expected);
+  });
+
+  it('never commits implicitly', () => {
+    expect(commitsImplicitly('CREATE TABLE t (a INT)', 'mssql')).toBe(false);
+    expect(commitsImplicitly('BEGIN TRAN', 'mssql')).toBe(false);
+  });
+});

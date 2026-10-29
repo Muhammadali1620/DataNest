@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Driver } from '../../../src/drivers/driver';
 import { driver as mysqlDriver } from '../../../src/drivers/mysql';
 import { driver as postgresDriver } from '../../../src/drivers/postgres';
+import { driver as mssqlDriver } from '../../../src/drivers/mssql';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { browseSession } from '../../../src/services/browse-session';
 import { ConnectionManager } from '../../../src/services/connection-manager';
@@ -86,6 +87,7 @@ beforeAll(async () => {
     mysql: mysqlDriver,
     postgres: postgresDriver,
     sqlite: createSqliteDriver({ workerPath: worker.workerPath }),
+    mssql: mssqlDriver,
   };
 }, 60_000);
 

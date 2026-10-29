@@ -24,8 +24,11 @@ export function addColumn(design: TableDesign, driver: DriverId): TableDesign {
           ? 'nvarchar'
           : driver === 'clickhouse'
             ? 'String'
-            : 'text',
-    length: driver === 'mysql' || driver === 'mssql' ? '255' : '',
+            : driver === 'oracle'
+              ? 'VARCHAR2'
+              : 'text',
+    length:
+      driver === 'mysql' || driver === 'mssql' ? '255' : driver === 'oracle' ? '255 CHAR' : '',
     nullable: true,
     defaultValue: '',
     autoIncrement: false,

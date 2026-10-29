@@ -9,6 +9,7 @@ import {
   parseCellInput,
 } from '../../shared/cell-input';
 import type { CellValue } from '../../shared/cell-value';
+import type { DriverId } from '../../shared/connection';
 import type { JsonField } from './json-parser';
 
 /** What a file holds in one field: CSV gives text, JSON a little more. */
@@ -27,16 +28,17 @@ export type Converted =
   | { readonly ok: true; readonly value: CellValue }
   | { readonly ok: false; readonly problem: ImportProblem };
 
-/** Converts one field for a column of `dataType`. Never throws. */
+/** Converts one field for a column of `dataType` (of `driver`'s database). Never throws. */
 export function convertValue(
   source: SourceValue,
   dataType: string,
   options: ValueOptions,
+  driver?: DriverId,
 ): Converted {
   if (source === undefined || source === null) {
     return { ok: true, value: null };
   }
-  const kind = inputKindOf(dataType);
+  const kind = inputKindOf(dataType, driver);
   if (typeof source === 'boolean') {
     // A JSON true goes into a boolean column, and into a 0/1 integer one.
     if (kind === 'integer') {

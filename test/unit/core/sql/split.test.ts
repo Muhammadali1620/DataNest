@@ -524,3 +524,204 @@ describe('splitStatements: ClickHouse (V6.3)', () => {
     expect(texts('SELECT 1\nGO\nSELECT 2', 'clickhouse')).toEqual(['SELECT 1\nGO\nSELECT 2']);
   });
 });
+
+describe('splitStatements: Oracle (V6.4)', () => {
+  const t = (sql: string): string[] => texts(sql, 'oracle');
+  const pieces = (sql: string): [string, string][] =>
+    splitScript(sql, 'oracle', { sqlplusCommands: true }).pieces.map((piece) => [
+      piece.kind,
+      piece.text,
+    ]);
+
+  it('splits plain SQL on semicolons', () => {
+    expect(t('SELECT 1 FROM dual; SELECT 2 FROM dual;')).toEqual([
+      'SELECT 1 FROM dual',
+      'SELECT 2 FROM dual',
+    ]);
+  });
+
+  it('ends a statement at a line of nothing but `/`, spaces allowed', () => {
+    expect(t('SELECT 1 FROM dual\n/\nSELECT 2 FROM dual\n  /  \nSELECT 3 FROM dual')).toEqual([
+      'SELECT 1 FROM dual',
+      'SELECT 2 FROM dual',
+      'SELECT 3 FROM dual',
+    ]);
+    expect(t('SELECT 1 FROM dual\r\n/\r\nSELECT 2 FROM dual\r\n')).toEqual([
+      'SELECT 1 FROM dual',
+      'SELECT 2 FROM dual',
+    ]);
+  });
+
+  it('runs a statement ended by both `;` and `/` only once', () => {
+    expect(t('SELECT 1 FROM dual;\n/\n/\n')).toEqual(['SELECT 1 FROM dual']);
+  });
+
+  it('keeps the offsets of statements around a `/` line', () => {
+    const sql = 'SELECT 1 FROM dual\n/\nSELECT 2 FROM dual';
+    for (const statement of splitStatements(sql, 'oracle')) {
+      expect(sql.slice(statement.start, statement.end)).toBe(statement.text);
+    }
+  });
+
+  it('does not take a division, a comment or a slash inside a line for a terminator', () => {
+    expect(t('SELECT a / b FROM t; SELECT 1 /* c */ FROM dual;')).toEqual([
+      'SELECT a / b FROM t',
+      'SELECT 1 /* c */ FROM dual',
+    ]);
+    expect(t('SELECT a\n/ b FROM t')).toEqual(['SELECT a\n/ b FROM t']);
+    expect(t('SELECT a /\nb FROM t')).toEqual(['SELECT a /\nb FROM t']);
+    expect(t("SELECT 'a\n/\nb' FROM dual")).toEqual(["SELECT 'a\n/\nb' FROM dual"]);
+    expect(t('SELECT 1 /*\n/\n*/ FROM dual')).toEqual(['SELECT 1 /*\n/\n*/ FROM dual']);
+    expect(t("SELECT q'[a\n/\nb]' FROM dual")).toEqual(["SELECT q'[a\n/\nb]' FROM dual"]);
+  });
+
+  it('ignores semicolons inside q-quoted strings', () => {
+    expect(t("SELECT q'[a;b]' FROM dual; SELECT 2 FROM dual")).toEqual([
+      "SELECT q'[a;b]' FROM dual",
+      'SELECT 2 FROM dual',
+    ]);
+  });
+
+  it('keeps an anonymous block whole up to `/`, its last semicolon included', () => {
+    expect(t('BEGIN\n  NULL;\n  DELETE FROM t;\nEND;\n/\nSELECT 1 FROM dual;')).toEqual([
+      'BEGIN\n  NULL;\n  DELETE FROM t;\nEND;',
+      'SELECT 1 FROM dual',
+    ]);
+    expect(t('DECLARE\n  n NUMBER;\nBEGIN\n  n := 1;\nEND;\n/')).toEqual([
+      'DECLARE\n  n NUMBER;\nBEGIN\n  n := 1;\nEND;',
+    ]);
+    expect(t('begin null; end;\n/\ndeclare x number; begin null; end;\n/')).toEqual([
+      'begin null; end;',
+      'declare x number; begin null; end;',
+    ]);
+  });
+
+  it('runs an unfinished block to the end of the text', () => {
+    expect(t('BEGIN NULL; END;')).toEqual(['BEGIN NULL; END;']);
+    expect(t('BEGIN NULL; END;\nSELECT 1 FROM dual;')).toEqual([
+      'BEGIN NULL; END;\nSELECT 1 FROM dual;',
+    ]);
+  });
+
+  it('keeps routines, packages, triggers and types whole up to `/`', () => {
+    for (const head of [
+      'CREATE PROCEDURE p IS',
+      'CREATE OR REPLACE PROCEDURE p IS',
+      'CREATE OR REPLACE EDITIONABLE FUNCTION f RETURN NUMBER IS',
+      'CREATE OR REPLACE NONEDITIONABLE PACKAGE pk AS',
+      'CREATE OR REPLACE PACKAGE BODY pk AS',
+      'CREATE EDITIONABLE PACKAGE BODY pk AS',
+      'CREATE OR REPLACE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW',
+      'create or replace type body tp as',
+    ]) {
+      const body = `${head}\nBEGIN\n  NULL;\n  SELECT 1 INTO x FROM dual;\nEND;`;
+      expect(t(`${body}\n/\nSELECT 2 FROM dual;`), head).toEqual([body, 'SELECT 2 FROM dual']);
+    }
+  });
+
+  it('reads the head of a routine past comments between its words', () => {
+    const sql =
+      '-- note\nCREATE /* x */ OR REPLACE PACKAGE pk AS\n  PROCEDURE a;\nEND pk;\n/\nSELECT 1 FROM dual';
+    expect(t(sql)).toEqual([
+      '-- note\nCREATE /* x */ OR REPLACE PACKAGE pk AS\n  PROCEDURE a;\nEND pk;',
+      'SELECT 1 FROM dual',
+    ]);
+  });
+
+  it('keeps a type specification whole up to `/`', () => {
+    expect(t('CREATE TYPE tp AS OBJECT (a NUMBER);\n/\nSELECT 1 FROM dual;')).toEqual([
+      'CREATE TYPE tp AS OBJECT (a NUMBER);',
+      'SELECT 1 FROM dual',
+    ]);
+  });
+
+  it('splits tables, views, sequences and indexes on semicolons: they are not PL/SQL', () => {
+    expect(
+      t(
+        [
+          'CREATE TABLE t (a NUMBER);',
+          'CREATE OR REPLACE VIEW v AS SELECT 1 a FROM dual;',
+          'CREATE OR REPLACE EDITIONABLE VIEW w AS SELECT 2 b FROM dual;',
+          'CREATE OR REPLACE FORCE VIEW x AS SELECT 3 c FROM dual;',
+          'CREATE SEQUENCE s;',
+          'CREATE INDEX i ON t (a);',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      'CREATE TABLE t (a NUMBER)',
+      'CREATE OR REPLACE VIEW v AS SELECT 1 a FROM dual',
+      'CREATE OR REPLACE EDITIONABLE VIEW w AS SELECT 2 b FROM dual',
+      'CREATE OR REPLACE FORCE VIEW x AS SELECT 3 c FROM dual',
+      'CREATE SEQUENCE s',
+      'CREATE INDEX i ON t (a)',
+    ]);
+  });
+
+  it('treats `/` lines as division in other dialects', () => {
+    expect(texts('SELECT 1\n/\n2', 'mysql')).toEqual(['SELECT 1\n/\n2']);
+    expect(texts('BEGIN; SELECT 1; END;', 'postgres')).toEqual(['BEGIN', 'SELECT 1', 'END']);
+  });
+
+  it('reads SQL*Plus command lines as client pieces when asked', () => {
+    const sql = [
+      'SET DEFINE OFF',
+      'SET SERVEROUTPUT ON',
+      'set echo off',
+      'PROMPT Creating; the table',
+      'REM a note',
+      'remark another',
+      'WHENEVER SQLERROR EXIT SQL.SQLCODE',
+      'SPOOL out.log',
+      'CREATE TABLE t (a NUMBER);',
+      'EXIT',
+    ].join('\n');
+    expect(pieces(sql)).toEqual([
+      ['psql-command', 'SET DEFINE OFF'],
+      ['psql-command', 'SET SERVEROUTPUT ON'],
+      ['psql-command', 'set echo off'],
+      ['psql-command', 'PROMPT Creating; the table'],
+      ['psql-command', 'REM a note'],
+      ['psql-command', 'remark another'],
+      ['psql-command', 'WHENEVER SQLERROR EXIT SQL.SQLCODE'],
+      ['psql-command', 'SPOOL out.log'],
+      ['statement', 'CREATE TABLE t (a NUMBER)'],
+      ['psql-command', 'EXIT'],
+    ]);
+    for (const piece of splitScript(sql, 'oracle', { sqlplusCommands: true }).pieces) {
+      expect(sql.slice(piece.start, piece.end)).toBe(piece.text);
+    }
+  });
+
+  it('leaves SET TRANSACTION, SET ROLE and other SQL to the server', () => {
+    expect(pieces('SET TRANSACTION READ ONLY;\nSET ROLE ALL;\nQUIT')).toEqual([
+      ['statement', 'SET TRANSACTION READ ONLY'],
+      ['statement', 'SET ROLE ALL'],
+      ['psql-command', 'QUIT'],
+    ]);
+  });
+
+  it('does not take a command word inside a statement for a command', () => {
+    expect(pieces('SELECT 1, prompt FROM t\nWHERE x = 1;\nUPDATE t\nSET LONG = 1;')).toEqual([
+      ['statement', 'SELECT 1, prompt FROM t\nWHERE x = 1'],
+      ['statement', 'UPDATE t\nSET LONG = 1'],
+    ]);
+    expect(pieces('SELECT 1 FROM dual\nPROMPT x;')).toEqual([
+      ['statement', 'SELECT 1 FROM dual\nPROMPT x'],
+    ]);
+    expect(pieces('SELECT 1 FROM dual; PROMPT hi')).toEqual([
+      ['statement', 'SELECT 1 FROM dual'],
+      ['statement', 'PROMPT hi'],
+    ]);
+  });
+
+  it('leaves EXIT inside a PL/SQL loop to the block', () => {
+    const block = 'BEGIN\n  LOOP\n    EXIT WHEN x > 1;\n  END LOOP;\nEND;';
+    expect(pieces(`${block}\n/\n`)).toEqual([['statement', block]]);
+  });
+
+  it('sends SQL*Plus lines to the server unless asked', () => {
+    expect(texts('SET DEFINE OFF\nSELECT 1 FROM dual;', 'oracle')).toEqual([
+      'SET DEFINE OFF\nSELECT 1 FROM dual',
+    ]);
+  });
+});

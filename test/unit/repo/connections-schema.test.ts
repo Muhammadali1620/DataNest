@@ -63,6 +63,8 @@ describe('connections JSON schema', () => {
 
   it('offers the same choices as the code', () => {
     expect(props.driver?.enum).toEqual([...DRIVER_IDS]);
+    // Oracle joined in V6.4: a project file may name it.
+    expect(props.driver?.enum).toContain('oracle');
     expect(props.color?.enum).toEqual([...CONNECTION_COLORS]);
     expect(props.ssl?.properties?.mode?.enum).toEqual([...SSL_MODES]);
     expect(hop.properties?.auth?.enum).toEqual([...SSH_AUTH_METHODS]);

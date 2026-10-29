@@ -72,4 +72,19 @@ describe('convertValue', () => {
       problem: 'not-a-value',
     });
   });
+
+  it('reads an Oracle DATE with its time, and refuses a bare day for it (V6.4)', () => {
+    expect(convertValue('2024-02-29 10:11:12', 'DATE', CSV, 'oracle')).toEqual({
+      ok: true,
+      value: { kind: 'datetime', text: '2024-02-29 10:11:12' },
+    });
+    expect(convertValue('2024-02-29', 'DATE', CSV, 'oracle')).toEqual({
+      ok: false,
+      problem: 'invalid-datetime',
+    });
+    expect(convertValue('2024-02-29 10:11:12', 'DATE', CSV)).toEqual({
+      ok: false,
+      problem: 'invalid-date',
+    });
+  });
 });

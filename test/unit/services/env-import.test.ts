@@ -269,3 +269,57 @@ describe('ClickHouse in .env files (V6.3)', () => {
     expect(found?.input).toMatchObject({ driver: 'clickhouse', host: 'ch', database: 'events' });
   });
 });
+
+describe('Oracle in .env files (V6.4)', () => {
+  it('reads Laravel DB_CONNECTION=oracle with the service as the database', () => {
+    const [found, ...rest] = connectionsFromEnv(
+      parseDotenv(
+        [
+          'DB_CONNECTION=oracle',
+          'DB_HOST=db',
+          'DB_PORT=1521',
+          'DB_DATABASE=ORCLPDB1',
+          'DB_USERNAME=app',
+          'DB_PASSWORD=pw',
+        ].join('\n'),
+      ),
+    );
+    expect(rest).toEqual([]);
+    expect(found?.input).toMatchObject({
+      driver: 'oracle',
+      host: 'db',
+      port: 1521,
+      user: 'app',
+      database: 'ORCLPDB1',
+    });
+    expect(found?.password).toBe('pw');
+  });
+
+  it("reads PHP's oci8 as Oracle", () => {
+    const [found] = connectionsFromEnv(
+      parseDotenv(['DB_CONNECTION=oci8', 'DB_HOST=db'].join('\n')),
+    );
+    expect(found?.input).toMatchObject({ driver: 'oracle', host: 'db' });
+  });
+
+  it('guesses Oracle from port 1521 when nothing names the driver', () => {
+    const [found] = connectionsFromEnv(parseDotenv(['DB_HOST=db', 'DB_PORT=1521'].join('\n')));
+    expect(found?.input).toMatchObject({ driver: 'oracle', host: 'db', port: 1521 });
+  });
+
+  it('reads an ORACLE_* group by its prefix', () => {
+    const [found] = connectionsFromEnv(
+      parseDotenv(['ORACLE_HOST=ora', 'ORACLE_USER=u', 'ORACLE_PASSWORD=p'].join('\n')),
+    );
+    expect(found?.input).toMatchObject({ driver: 'oracle', host: 'ora', user: 'u' });
+    expect(found?.password).toBe('p');
+  });
+
+  it('reads oracle:// and JDBC thin URLs', () => {
+    const [url] = connectionsFromEnv(parseDotenv('ORACLE_URL=oracle://u:p@ora:1521/SVC'));
+    expect(url?.input).toMatchObject({ driver: 'oracle', host: 'ora', database: 'SVC' });
+    expect(url?.password).toBe('p');
+    const [jdbc] = connectionsFromEnv(parseDotenv('DATABASE_URL=jdbc:oracle:thin:@//ora:1521/SVC'));
+    expect(jdbc?.input).toMatchObject({ driver: 'oracle', host: 'ora', port: 1521 });
+  });
+});

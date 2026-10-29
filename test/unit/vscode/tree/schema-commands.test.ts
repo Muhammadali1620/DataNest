@@ -5,6 +5,7 @@ import type { Driver } from '../../../../src/drivers/driver';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
 import { mssqlDialect } from '../../../../src/drivers/mssql/dialect';
 import { clickhouseDialect } from '../../../../src/drivers/clickhouse/dialect';
+import { oracleDialect } from '../../../../src/drivers/oracle/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
@@ -56,6 +57,7 @@ const DIALECTS = {
   sqlite: sqliteDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
+  oracle: oracleDialect,
 };
 
 interface Script {

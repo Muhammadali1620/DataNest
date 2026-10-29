@@ -25,6 +25,11 @@ export interface SplitOptions {
    * (`\connect`, `\restrict`), which pg_dump writes and the server cannot run.
    */
   readonly psqlCommands?: boolean;
+  /**
+   * Lines that are SQL*Plus commands where a statement could begin (`SET DEFINE OFF`,
+   * `PROMPT …`, `WHENEVER SQLERROR …`, `REM …`), which Oracle scripts carry.
+   */
+  readonly sqlplusCommands?: boolean;
 }
 
 /** A piece of a script: a statement for the server, or a line for the psql client. */
@@ -66,6 +71,7 @@ export function splitScript(
 
   const body = new TriggerBody(sql, syntax.triggerBodies);
   const batch = new TsqlBody(sql, syntax.batchSeparator);
+  const plsql = new PlsqlBody(sql, syntax.slashTerminator);
 
   const push = (start: number, end: number): void => {
     const statement = trimmed(sql, start, end, syntax);
@@ -74,6 +80,7 @@ export function splitScript(
     }
     body.reset();
     batch.reset();
+    plsql.reset();
   };
 
   while (index < tokens.length) {
@@ -91,7 +98,12 @@ export function splitScript(
       index = command.nextToken;
       continue;
     }
-    const psql = options.psqlCommands === true ? readPsqlCommand(sql, tokens, index) : undefined;
+    const psql =
+      options.psqlCommands === true
+        ? readPsqlCommand(sql, tokens, index)
+        : options.sqlplusCommands === true
+          ? readSqlplusCommand(sql, tokens, index)
+          : undefined;
     if (psql && isStatementStart(tokens, index, from)) {
       push(from, token.start);
       const text = sql.slice(token.start, psql.end).trimEnd();
@@ -107,7 +119,11 @@ export function splitScript(
       continue;
     }
     // `GO` belongs to the client like DELIMITER: it ends whatever is open.
-    const separator = syntax.batchSeparator ? readBatchSeparator(sql, tokens, index) : undefined;
+    const separator = syntax.batchSeparator
+      ? readBatchSeparator(sql, tokens, index)
+      : syntax.slashTerminator
+        ? readSlashLine(sql, tokens, index)
+        : undefined;
     if (separator) {
       push(from, token.start);
       from = separator.end;
@@ -116,8 +132,12 @@ export function splitScript(
     }
     body.see(token);
     batch.see(tokens, index);
+    plsql.see(token);
     const terminator =
-      body.open || batch.open || (batch.enabled && continuesWithElse(sql, tokens, index))
+      body.open ||
+      batch.open ||
+      plsql.open ||
+      (batch.enabled && continuesWithElse(sql, tokens, index))
         ? undefined
         : matchDelimiter(sql, token, delimiter);
     if (terminator !== undefined) {
@@ -358,6 +378,150 @@ function readBatchSeparator(
     nextToken++;
   }
   return { delimiter: DEFAULT_DELIMITER, end, nextToken };
+}
+
+/** A line of nothing but `/`: SQL*Plus runs what came before it. */
+function readSlashLine(
+  sql: string,
+  tokens: readonly Token[],
+  index: number,
+): DelimiterCommand | undefined {
+  const token = tokens[index];
+  if (token?.kind !== 'punctuation' || sql[token.start] !== '/') {
+    return undefined;
+  }
+  const lineStart = sql.lastIndexOf('\n', token.start - 1) + 1;
+  const lineEnd = sql.indexOf('\n', token.end);
+  const end = lineEnd === -1 ? sql.length : lineEnd + 1;
+  if (
+    sql.slice(lineStart, token.start).trim() !== '' ||
+    sql.slice(token.end, lineEnd === -1 ? sql.length : lineEnd).trim() !== ''
+  ) {
+    return undefined;
+  }
+  let nextToken = index + 1;
+  while (nextToken < tokens.length && (tokens[nextToken]?.start ?? 0) < end) {
+    nextToken++;
+  }
+  return { delimiter: DEFAULT_DELIMITER, end, nextToken };
+}
+
+/** SQL*Plus settings that look like SQL `SET` but belong to the client. */
+const SQLPLUS_SETTINGS = new Set([
+  'DEFINE',
+  'ECHO',
+  'SERVEROUTPUT',
+  'FEEDBACK',
+  'LINESIZE',
+  'PAGESIZE',
+  'VERIFY',
+  'TERMOUT',
+  'HEADING',
+  'TIMING',
+  'SQLBLANKLINES',
+  'TRIMSPOOL',
+  'TRIMOUT',
+  'LONG',
+  'NUMWIDTH',
+  'COLSEP',
+  'ESCAPE',
+  'CONCAT',
+  'SCAN',
+  'AUTOCOMMIT',
+  'WRAP',
+  'TAB',
+]);
+
+const SQLPLUS_COMMANDS = new Set(['REM', 'REMARK', 'PROMPT', 'WHENEVER', 'SPOOL', 'EXIT', 'QUIT']);
+
+/** A SQL*Plus command line, from its first word to the end of its line. */
+function readSqlplusCommand(
+  sql: string,
+  tokens: readonly Token[],
+  index: number,
+): PsqlCommand | undefined {
+  const token = tokens[index];
+  if (token?.kind !== 'word') {
+    return undefined;
+  }
+  const word = textOf(sql, token).toUpperCase();
+  const next = tokens.slice(index + 1).find((candidate) => !isTrivia(candidate));
+  const setting = next?.kind === 'word' ? textOf(sql, next).toUpperCase() : '';
+  if (!SQLPLUS_COMMANDS.has(word) && !(word === 'SET' && SQLPLUS_SETTINGS.has(setting))) {
+    return undefined;
+  }
+  const lineStart = sql.lastIndexOf('\n', token.start - 1) + 1;
+  if (sql.slice(lineStart, token.start).trim() !== '') {
+    return undefined;
+  }
+  const lineEnd = sql.indexOf('\n', token.end);
+  const end = lineEnd === -1 ? sql.length : lineEnd + 1;
+  let nextToken = index + 1;
+  while (nextToken < tokens.length && (tokens[nextToken]?.start ?? 0) < end) {
+    nextToken++;
+  }
+  return { end, nextToken };
+}
+
+/** Words that, after CREATE [OR REPLACE] [EDITIONABLE …], start PL/SQL. */
+const PLSQL_UNITS = new Set([
+  'PROCEDURE',
+  'FUNCTION',
+  'PACKAGE',
+  'TRIGGER',
+  'TYPE',
+  'LIBRARY',
+  'JAVA',
+]);
+const EDITIONING = new Set(['EDITIONABLE', 'NONEDITIONABLE', 'EDITIONING']);
+
+/**
+ * PL/SQL in an Oracle script: a routine, trigger, package or type body, or an anonymous
+ * block (`BEGIN …`, `DECLARE …`), runs as one statement up to the `/` line, its own
+ * semicolons included.
+ */
+class PlsqlBody {
+  private words: string[] = [];
+  private inBody = false;
+
+  constructor(
+    private readonly sql: string,
+    private readonly enabled: boolean,
+  ) {}
+
+  get open(): boolean {
+    return this.inBody;
+  }
+
+  see(token: Token): void {
+    if (!this.enabled || token.kind !== 'word' || this.words.length >= 6) {
+      return;
+    }
+    this.words.push(textOf(this.sql, token).toUpperCase());
+    const [first, ...rest] = this.words;
+    if (first === 'BEGIN' || first === 'DECLARE') {
+      this.inBody = true;
+      return;
+    }
+    if (first !== 'CREATE') {
+      return;
+    }
+    let at = 0;
+    if (rest[at] === 'OR' && rest[at + 1] === 'REPLACE') {
+      at += 2;
+    }
+    if (rest[at] !== undefined && EDITIONING.has(rest[at] ?? '')) {
+      at += 1;
+    }
+    if (rest[at] !== undefined) {
+      this.inBody = PLSQL_UNITS.has(rest[at] ?? '');
+    }
+  }
+
+  reset(): void {
+    this.words = [];
+    this.inBody = false;
+  }
 }
 
 /** The first token after `index` that is not trivia. */

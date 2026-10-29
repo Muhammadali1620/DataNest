@@ -71,6 +71,7 @@ export const ru: Record<MessageKey, string> = {
   'form.driver.sqlite': 'SQLite',
   'form.driver.mssql': 'Microsoft SQL Server',
   'form.driver.clickhouse': 'ClickHouse',
+  'form.driver.oracle': 'Oracle',
   'form.host': 'Хост',
   'form.port': 'Порт',
   'form.portHint': 'По умолчанию: {0}',

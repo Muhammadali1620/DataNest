@@ -1,7 +1,7 @@
 // The saved description of a connection. Passwords never live here: they are
 // kept in SecretStorage and joined in only at connect time (ARCHITECTURE.md §8).
 
-export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite', 'mssql', 'clickhouse'] as const;
+export const DRIVER_IDS = ['mysql', 'postgres', 'sqlite', 'mssql', 'clickhouse', 'oracle'] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
 
@@ -21,6 +21,7 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   mssql: 1433,
   // The HTTP interface; HTTPS is 8443, which DataNest picks when TLS is on.
   clickhouse: 8123,
+  oracle: 1521,
 };
 
 export const CONNECTION_LIMITS = {
@@ -144,24 +145,35 @@ export interface OptionSupport {
   readonly keepAlive: boolean;
   readonly timeZone: boolean;
   readonly charset: boolean;
+  /** TLS to the server (not for files, and not yet for Oracle's TCPS). */
+  readonly tls: boolean;
 }
 
 export function optionSupport(driver: DriverId): OptionSupport {
   switch (driver) {
     case 'mysql':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: true };
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: true, tls: true };
     // pg decodes every result as UTF-8, so another client encoding would garble text.
     case 'postgres':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false };
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false, tls: true };
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
-      return { connectTimeout: false, keepAlive: false, timeZone: false, charset: false };
+      return {
+        connectTimeout: false,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: false,
+      };
     // SQL Server sessions have no time zone of their own, and N'…' text needs no charset.
     case 'mssql':
-      return { connectTimeout: true, keepAlive: true, timeZone: false, charset: false };
+      return { connectTimeout: true, keepAlive: true, timeZone: false, charset: false, tls: true };
     // HTTP carries UTF-8; the time zone is the session_timezone setting.
     case 'clickhouse':
-      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false };
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false, tls: true };
+    // TCPS needs a wallet on the server; until it is supported, Oracle goes plain or via SSH.
+    case 'oracle':
+      return { connectTimeout: true, keepAlive: true, timeZone: true, charset: false, tls: false };
   }
 }
 
@@ -190,6 +202,9 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
       return { databases: true, schemas: true };
     case 'clickhouse':
       return { databases: true, schemas: false };
+    // The database is the one service the connection names.
+    case 'oracle':
+      return { databases: false, schemas: true };
   }
 }
 

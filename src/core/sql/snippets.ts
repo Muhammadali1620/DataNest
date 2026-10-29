@@ -105,6 +105,23 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlSnippet[]>> = {
       body: 'SELECT ${1:*}\nFROM ${2:table} FINAL\nWHERE ${3:condition};',
     },
   ],
+  oracle: [
+    {
+      prefix: 'top',
+      title: 'SELECT … FETCH FIRST n ROWS ONLY',
+      body: 'SELECT ${1:*}\nFROM ${2:table}\nORDER BY ${3:column}\nFETCH FIRST ${4:100} ROWS ONLY;',
+    },
+    {
+      prefix: 'proc',
+      title: 'CREATE OR REPLACE PROCEDURE … IS BEGIN … END',
+      body: 'CREATE OR REPLACE PROCEDURE ${1:name}(${2:p_id} IN NUMBER) IS\nBEGIN\n  ${3:NULL;}\nEND;\n/',
+    },
+    {
+      prefix: 'block',
+      title: 'BEGIN … EXCEPTION … END',
+      body: 'BEGIN\n  ${1:NULL;}\nEXCEPTION\n  WHEN OTHERS THEN\n    ${2:RAISE;}\nEND;\n/',
+    },
+  ],
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {

@@ -55,6 +55,9 @@ export function transactionControl(sql: string, driver?: DriverId): TransactionC
   if (driver === 'mssql') {
     return tsqlControl(first, second, third);
   }
+  if (driver === 'oracle') {
+    return oracleControl(first, second, third);
+  }
   switch (first ?? '') {
     case 'BEGIN':
       // `BEGIN;`, `BEGIN WORK`, `BEGIN IMMEDIATE`, `BEGIN ISOLATION LEVEL …`.
@@ -106,6 +109,46 @@ function tsqlControl(
   }
 }
 
+/**
+ * Oracle: a transaction starts with the first change or with `SET TRANSACTION`; `BEGIN`
+ * and `END` belong to PL/SQL blocks. `ROLLBACK [WORK] TO [SAVEPOINT] s` goes back to `s`.
+ */
+function oracleControl(
+  first: string | undefined,
+  second: string | undefined,
+  third: string | undefined,
+): TransactionControl {
+  switch (first ?? '') {
+    case 'SET':
+      return second === 'TRANSACTION' ? 'begin' : 'none';
+    case 'COMMIT':
+      return 'commit';
+    case 'ROLLBACK':
+      return second === 'TO' || (second === 'WORK' && third === 'TO') ? 'savepoint' : 'rollback';
+    case 'SAVEPOINT':
+      return 'savepoint';
+    default:
+      return 'none';
+  }
+}
+
+/** DDL and account statements, after which Oracle commits an open transaction itself. */
+const ORACLE_COMMITTING = new Set([
+  'CREATE',
+  'ALTER',
+  'DROP',
+  'RENAME',
+  'TRUNCATE',
+  'GRANT',
+  'REVOKE',
+  'COMMENT',
+  'ANALYZE',
+  'AUDIT',
+  'NOAUDIT',
+  'PURGE',
+  'FLASHBACK',
+]);
+
 /** Statements after which MySQL commits by itself, as its manual lists them. */
 const MYSQL_COMMITTING = new Set([
   'CREATE',
@@ -131,9 +174,19 @@ const MYSQL_COMMITTING = new Set([
 /**
  * True when MySQL or MariaDB commit an open transaction before running this
  * statement: DDL, account changes, table locks, maintenance, and `BEGIN` itself.
- * Temporary tables are the exception. PostgreSQL and SQLite never do this.
+ * Temporary tables are the exception. Oracle commits before DDL too (except ALTER
+ * SESSION and ALTER SYSTEM); PostgreSQL, SQLite and SQL Server never do this.
  */
 export function commitsImplicitly(sql: string, driver: DriverId | undefined): boolean {
+  if (driver === 'oracle') {
+    const [first, second] = leadingWords(sql, driver, 2);
+    // ALTER SESSION and ALTER SYSTEM only change settings; every other DDL commits first.
+    return (
+      first !== undefined &&
+      ORACLE_COMMITTING.has(first) &&
+      !(first === 'ALTER' && (second === 'SESSION' || second === 'SYSTEM'))
+    );
+  }
   if (driver !== 'mysql') {
     return false;
   }

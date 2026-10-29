@@ -29,7 +29,7 @@ describe('isDriverId', () => {
   });
 
   it('rejects unknown ids and non-strings', () => {
-    expect(isDriverId('oracle')).toBe(false);
+    expect(isDriverId('db2')).toBe(false);
     expect(isDriverId('')).toBe(false);
     expect(isDriverId(undefined)).toBe(false);
     expect(isDriverId(42)).toBe(false);
@@ -309,6 +309,7 @@ describe('session options (V4.9)', () => {
       keepAlive: true,
       timeZone: true,
       charset: true,
+      tls: true,
     });
     expect(optionSupport('postgres').charset).toBe(false);
     expect(optionSupport('sqlite')).toEqual({
@@ -316,6 +317,7 @@ describe('session options (V4.9)', () => {
       keepAlive: false,
       timeZone: false,
       charset: false,
+      tls: false,
     });
   });
 });
@@ -359,6 +361,7 @@ describe('SQL Server connections (V6.2)', () => {
       keepAlive: true,
       timeZone: false,
       charset: false,
+      tls: true,
     });
   });
 
@@ -382,10 +385,47 @@ describe('ClickHouse connections (V6.3)', () => {
       keepAlive: true,
       timeZone: true,
       charset: false,
+      tls: true,
     });
   });
 
   it('filters databases only: ClickHouse has no schemas', () => {
     expect(filterSupport('clickhouse')).toEqual({ databases: true, schemas: false });
+  });
+});
+
+describe('Oracle connections (V6.4)', () => {
+  it('is a network driver on port 1521', () => {
+    expect(isDriverId('oracle')).toBe(true);
+    expect(DRIVER_IDS).toContain('oracle');
+    expect(isFileDriver('oracle')).toBe(false);
+    expect(DEFAULT_PORTS.oracle).toBe(1521);
+    expect(effectivePort({ name: 'o', driver: 'oracle', host: 'h' })).toBe(1521);
+    expect(effectivePort({ name: 'o', driver: 'oracle', host: 'h', port: 1522 })).toBe(1522);
+  });
+
+  it('needs a host like any network driver', () => {
+    expect(connectionProblems({ name: 'o', driver: 'oracle', host: ' ' })).toContain('host-empty');
+    expect(connectionProblems({ name: 'o', driver: 'oracle', host: 'h', port: 1521 })).toEqual([]);
+  });
+
+  it('honours timeouts, keep-alive and a time zone, but no charset and no TLS yet', () => {
+    expect(optionSupport('oracle')).toEqual({
+      connectTimeout: true,
+      keepAlive: true,
+      timeZone: true,
+      charset: false,
+      tls: false,
+    });
+  });
+
+  it('offers TLS to every network driver except Oracle, and never for files', () => {
+    for (const driver of DRIVER_IDS) {
+      expect(optionSupport(driver).tls, driver).toBe(driver !== 'oracle' && !isFileDriver(driver));
+    }
+  });
+
+  it('filters schemas only: the database is the service it connects to', () => {
+    expect(filterSupport('oracle')).toEqual({ databases: false, schemas: true });
   });
 });

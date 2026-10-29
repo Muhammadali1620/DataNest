@@ -166,10 +166,16 @@ describe('generating rows', () => {
   it('writes the rows as INSERT statements', () => {
     const choices = suggestChoices(COLUMNS);
     const columns = filledColumns(COLUMNS, choices);
-    const script = insertScript(postgresDialect, { schema: 'public', name: 'orders' }, columns, [
-      [null, 'a@example.com', '7', '42', "it's", null],
-      [null, 'b@example.com', null, 'x', null, null],
-    ]);
+    const script = insertScript(
+      postgresDialect,
+      'postgres',
+      { schema: 'public', name: 'orders' },
+      columns,
+      [
+        [null, 'a@example.com', '7', '42', "it's", null],
+        [null, 'b@example.com', null, 'x', null, null],
+      ],
+    );
     expect(script).toBe(
       'INSERT INTO "public"."orders" ("email", "customer_id", "code", "note") VALUES\n' +
         "('a@example.com', 7, 42, 'it''s'),\n('b@example.com', NULL, NULL, NULL);\n",

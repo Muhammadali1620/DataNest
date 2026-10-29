@@ -36,6 +36,23 @@ describe('definitionDocument: SQL Server (V6.2)', () => {
   });
 });
 
+describe('definitionDocument: Oracle (V6.4)', () => {
+  it('ends every statement with a `/` line, so PL/SQL keeps its semicolons', () => {
+    const body = 'CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  NULL;\nEND;';
+    const document = definitionDocument(['CREATE TABLE "T" ("A" NUMBER)', body, '  '], 'oracle');
+    expect(document).toBe(`CREATE TABLE "T" ("A" NUMBER)\n/\n\n${body}\n/\n`);
+    expect(splitStatements(document, 'oracle').map((s) => s.text)).toEqual([
+      'CREATE TABLE "T" ("A" NUMBER)',
+      body,
+    ]);
+  });
+
+  it('is empty without statements', () => {
+    expect(definitionDocument([], 'oracle')).toBe('');
+    expect(definitionDocument([' '], 'oracle')).toBe('');
+  });
+});
+
 describe('definitionDocument', () => {
   it('ends every statement with a semicolon and separates them by a blank line', () => {
     expect(

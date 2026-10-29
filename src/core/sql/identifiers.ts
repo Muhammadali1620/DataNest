@@ -16,6 +16,7 @@ const LIMITS: Readonly<
   mssql: { max: 128, bytes: false },
   // Names are file names on the server's disk; it allows long ones.
   clickhouse: undefined,
+  oracle: { max: 128, bytes: true },
 };
 
 export function identifierProblem(name: string, driver: DriverId): IdentifierProblem | undefined {

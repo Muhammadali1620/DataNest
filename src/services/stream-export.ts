@@ -13,8 +13,9 @@ import { toCsv } from '../shared/csv';
 import { columnNames } from './column-names';
 import { ConnectionManager, type SessionTarget } from './connection-manager';
 import { PLACEHOLDER_TABLE } from './copy-as';
-import { RowBatcher } from './dump-script';
+import { insertStatement, RowBatcher } from './dump-script';
 import type { ExportFormat } from './result-export';
+import type { DriverId } from '../shared/connection';
 import { exactLiteralOf } from './sql-literal';
 import {
   rowXml,
@@ -83,7 +84,7 @@ export class StreamExporter {
 
   async export(request: StreamExportRequest): Promise<StreamExportReport> {
     const started = this.now();
-    const { dialect } = await this.manager.driverOf(request.target.connectionId);
+    const { id: driver, dialect } = await this.manager.driverOf(request.target.connectionId);
     const owner = ConnectionManager.taskOwner(`export-${nextExport++}`);
     const session = await this.manager.acquire(owner, request.target);
     const cancel = (): void => {
@@ -93,7 +94,7 @@ export class StreamExporter {
     };
     request.signal?.addEventListener('abort', cancel);
     try {
-      const rows = await this.stream(session, writerFor(request, dialect), request);
+      const rows = await this.stream(session, writerFor(request, dialect, driver), request);
       this.logger.info(`Exported ${rows} rows as ${request.format}`);
       return { rows, durationMs: this.now() - started };
     } catch (error) {
@@ -150,7 +151,7 @@ function withAllBytes(cell: CellValue): CellValue {
   return cell;
 }
 
-function writerFor(request: StreamExportRequest, dialect: Dialect): RowWriter {
+function writerFor(request: StreamExportRequest, dialect: Dialect, driver: DriverId): RowWriter {
   switch (request.format) {
     case 'csv':
       return csvWriter(request.sink);
@@ -159,7 +160,7 @@ function writerFor(request: StreamExportRequest, dialect: Dialect): RowWriter {
     case 'markdown':
       return markdownWriter(request.sink);
     case 'sql':
-      return sqlWriter(request, dialect);
+      return sqlWriter(request, dialect, driver);
     case 'xlsx':
       return xlsxWriter(request);
   }
@@ -247,14 +248,14 @@ function markdownWriter(sink: ExportSink): RowWriter {
   };
 }
 
-function sqlWriter(request: StreamExportRequest, dialect: Dialect): RowWriter {
+function sqlWriter(request: StreamExportRequest, dialect: Dialect, driver: DriverId): RowWriter {
   const batcher = new RowBatcher();
   let table = '';
   let columns: string[] = [];
   const flush = async (tuples: string[]): Promise<void> => {
     if (tuples.length > 0) {
       const sql = dialect.dump.insert(table, columns, tuples, request.identity === true);
-      await request.sink.write(`${sql};\n`);
+      await request.sink.write(insertStatement(sql, driver));
     }
   };
   return {

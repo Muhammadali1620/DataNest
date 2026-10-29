@@ -3,7 +3,8 @@
 [![CI](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml)
 
 A free, open-source database client for VS Code and its forks — MySQL, MariaDB,
-PostgreSQL, SQLite, Microsoft SQL Server and ClickHouse, without accounts, limits or telemetry.
+PostgreSQL, SQLite, Microsoft SQL Server, ClickHouse and Oracle, without accounts, limits or
+telemetry.
 
 **Install:** [Open VSX](https://open-vsx.org/extension/datanest/datanest) —
 or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/DataNest/releases).
@@ -18,14 +19,16 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 
 **Connections**
 
-- MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server (2016 and newer, Azure SQL)
-  and ClickHouse, each driver loaded only when you first use it.
+- MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server (2016 and newer, Azure SQL),
+  ClickHouse and Oracle (12.2 and newer, no Instant Client needed), each driver loaded only
+  when you first use it.
 - A form with “Test connection”, editing, duplicating and deleting; fill it from a
-  `postgres://`, `mysql://`, `sqlserver://` or `clickhouse://` URL, or import connections from the
-  workspace's `.env` files.
+  `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://` or `oracle://` URL (or a JDBC
+  `oracle:thin:@…` one), or import connections from the workspace's `.env` files.
 - SSH tunnels with a password, a key or an SSH agent, through up to five jump hosts,
   with the server key checked like OpenSSH does.
-- SSL/TLS with a choice of checks, your own CA and client certificates.
+- SSL/TLS with a choice of checks, your own CA and client certificates (not yet for
+  Oracle: connect to it directly or through SSH).
 - Folders, drag and drop and color labels in the tree.
 - Production connections stand out in red and confirm every change; read-only
   connections refuse changes, and the server session is read-only too (SQL Server has

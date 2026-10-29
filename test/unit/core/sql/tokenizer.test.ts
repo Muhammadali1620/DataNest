@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isTrivia,
+  scriptTerminator,
   syntaxOf,
   textOf,
   tokenize,
@@ -334,5 +335,104 @@ describe('tokenize: ClickHouse (V6.3)', () => {
       bracketIdentifiers: false,
       batchSeparator: false,
     });
+  });
+});
+
+describe('tokenize: Oracle (V6.4)', () => {
+  it('has double-quoted names, `/` lines and q-quotes, but no backslashes or hashes', () => {
+    expect(syntaxOf('oracle')).toMatchObject({
+      doubleQuoteIdentifiers: true,
+      slashTerminator: true,
+      quoteOperator: true,
+      backslashEscapes: false,
+      hashComments: false,
+      backtickIdentifiers: false,
+      dollarQuotes: false,
+      bracketIdentifiers: false,
+      batchSeparator: false,
+      delimiterCommand: false,
+    });
+    expect(firstText("SELECT 'a\\'", 'string', 'oracle')).toBe("'a\\'");
+    expect(kinds('# x', 'oracle')[0]).toBe('punctuation');
+  });
+
+  it('reads q-quoted strings with bracket pairs as closing delimiters', () => {
+    expect(firstText("SELECT q'[it's; here]' FROM dual", 'string', 'oracle')).toBe(
+      "q'[it's; here]'",
+    );
+    expect(firstText("SELECT q'{a}b}' FROM dual", 'string', 'oracle')).toBe("q'{a}b}'");
+    expect(firstText("SELECT Q'(x ' y)' FROM dual", 'string', 'oracle')).toBe("Q'(x ' y)'");
+    expect(firstText("SELECT q'<a > b>' FROM dual", 'string', 'oracle')).toBe("q'<a > b>'");
+  });
+
+  it('reads q-quoted strings closed by the same character they open with', () => {
+    expect(firstText("SELECT q'!it's!' FROM dual", 'string', 'oracle')).toBe("q'!it's!'");
+    expect(firstText("SELECT q'#a]b#' FROM dual", 'string', 'oracle')).toBe("q'#a]b#'");
+  });
+
+  it('reads national nq and Nq strings as one string each', () => {
+    expect(shape("SELECT nq'[n;1]', Nq'#k#' FROM dual", 'oracle')).toEqual([
+      'word:SELECT',
+      'whitespace: ',
+      "string:nq'[n;1]'",
+      'punctuation:,',
+      'whitespace: ',
+      "string:Nq'#k#'",
+      'whitespace: ',
+      'word:FROM',
+      'whitespace: ',
+      'word:dual',
+    ]);
+  });
+
+  it('keeps line breaks and slashes inside a q-quoted string', () => {
+    expect(firstText("q'[a\n/\nb]'", 'string', 'oracle')).toBe("q'[a\n/\nb]'");
+  });
+
+  it('marks an unclosed q-quoted string as unterminated to the end', () => {
+    const sql = "SELECT q'[never ends]";
+    expect(firstText(sql, 'string', 'oracle')).toBe("q'[never ends]");
+    const [token] = only(sql, 'string', 'oracle');
+    expect(token?.unterminated).toBe(true);
+    expect(token?.end).toBe(sql.length);
+  });
+
+  it('does not take q followed by a quote and whitespace for a q-quote', () => {
+    expect(shape("SELECT q' x' FROM dual", 'oracle').slice(2, 4)).toEqual([
+      'word:q',
+      "string:' x'",
+    ]);
+    expect(shape("SELECT q'", 'oracle').slice(2)).toEqual(['word:q', "string:'"]);
+  });
+
+  it('reads q-quotes only in Oracle', () => {
+    for (const driver of [
+      undefined,
+      'mysql',
+      'postgres',
+      'sqlite',
+      'mssql',
+      'clickhouse',
+    ] as const) {
+      expect(syntaxOf(driver).quoteOperator, String(driver)).toBe(false);
+      expect(syntaxOf(driver).slashTerminator, String(driver)).toBe(false);
+      expect(shape("q'[a]'", driver).slice(0, 2), String(driver)).toEqual([
+        'word:q',
+        "string:'[a]'",
+      ]);
+    }
+  });
+});
+
+describe('scriptTerminator (V6.4)', () => {
+  it('ends statements with GO for SQL Server and `/` for Oracle', () => {
+    expect(scriptTerminator(syntaxOf('mssql'))).toBe('GO');
+    expect(scriptTerminator(syntaxOf('oracle'))).toBe('/');
+  });
+
+  it('needs no terminator line elsewhere', () => {
+    for (const driver of [undefined, 'mysql', 'postgres', 'sqlite', 'clickhouse'] as const) {
+      expect(scriptTerminator(syntaxOf(driver)), String(driver)).toBeUndefined();
+    }
   });
 });

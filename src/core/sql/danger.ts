@@ -84,8 +84,12 @@ function batchParts(sql: string, syntax: SqlSyntax): string[] {
 export function dangersOf(sql: string, syntax: SqlSyntax = syntaxOf()): Danger[] {
   const leading = wordsOf(sql, syntax)[0]?.text;
   // Creating a procedure or trigger runs none of its body.
-  if (syntax.batchSeparator && leading !== 'CREATE' && leading !== 'ALTER') {
-    const plain = { ...syntax, batchSeparator: false };
+  if (
+    (syntax.batchSeparator || syntax.slashTerminator) &&
+    leading !== 'CREATE' &&
+    leading !== 'ALTER'
+  ) {
+    const plain = { ...syntax, batchSeparator: false, slashTerminator: false };
     const found = new Set(
       batchParts(sql, syntax).flatMap((part) => statementDangers(part, plain, true)),
     );
@@ -94,7 +98,10 @@ export function dangersOf(sql: string, syntax: SqlSyntax = syntaxOf()): Danger[]
   return statementDangers(sql, syntax, false);
 }
 
-/** Words that start a T-SQL statement after IF … or WHILE …, at the condition's depth. */
+/**
+ * Words that start a statement after IF …, WHILE … (T-SQL) or FOR … LOOP, ELSIF … THEN,
+ * WHEN … THEN (PL/SQL), at the condition's depth.
+ */
 const TSQL_STATEMENTS = new Set([
   'SELECT',
   'INSERT',
@@ -119,9 +126,16 @@ const TSQL_STATEMENTS = new Set([
   'CONTINUE',
 ]);
 
+/** Control words that come right before a statement in a PL/SQL block. */
+const PLSQL_LEADS = new Set(['LOOP', 'EXCEPTION', 'THEN', 'CASE']);
+
+/** Control words followed by a condition, then the statement. */
+const CONDITIONS = new Set(['IF', 'WHILE', 'ELSIF', 'FOR', 'WHEN']);
+
 /**
- * Where the statement proper starts in a part of a T-SQL batch: past the control flow
- * around it (`BEGIN`, `BEGIN TRY`, `END`, `ELSE`, and the condition of `IF`/`WHILE`).
+ * Where the statement proper starts in a part of a T-SQL batch or PL/SQL block: past the
+ * control flow around it (`BEGIN`, `BEGIN TRY`, `END`, `ELSE`, `LOOP`, `EXCEPTION`, and
+ * the condition of `IF`/`WHILE`/`ELSIF`/`FOR`/`WHEN`).
  */
 function statementStart(words: readonly Word[]): number {
   let index = 0;
@@ -134,12 +148,13 @@ function statementStart(words: readonly Word[]): number {
     if (
       (word.text === 'BEGIN' && next !== 'TRAN' && next !== 'TRANSACTION') ||
       word.text === 'ELSE' ||
-      word.text === 'END'
+      word.text === 'END' ||
+      PLSQL_LEADS.has(word.text)
     ) {
       index += next === 'TRY' || next === 'CATCH' ? 2 : 1;
       continue;
     }
-    if (word.text === 'IF' || word.text === 'WHILE') {
+    if (CONDITIONS.has(word.text)) {
       const found = words.findIndex(
         (candidate, at) =>
           at > index && candidate.depth === word.depth && TSQL_STATEMENTS.has(candidate.text),

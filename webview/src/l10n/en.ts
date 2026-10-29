@@ -71,6 +71,7 @@ export const en = {
   'form.driver.sqlite': 'SQLite',
   'form.driver.mssql': 'Microsoft SQL Server',
   'form.driver.clickhouse': 'ClickHouse',
+  'form.driver.oracle': 'Oracle',
   'form.host': 'Host',
   'form.port': 'Port',
   'form.portHint': 'Default: {0}',

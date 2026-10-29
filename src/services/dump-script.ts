@@ -3,7 +3,7 @@
 
 import { unquoteIdentifier } from '../core/sql/identifiers';
 import { splitStatements } from '../core/sql/split';
-import { syntaxOf, textOf, tokenize } from '../core/sql/tokenizer';
+import { scriptTerminator, syntaxOf, textOf, tokenize } from '../core/sql/tokenizer';
 import type { DriverId } from '../shared/connection';
 
 /** Used around MySQL bodies, as in an object's definition document (D41). */
@@ -16,15 +16,24 @@ export const BODY_DELIMITER = '//';
  */
 export function scriptStatement(sql: string, driver: DriverId): string {
   const text = sql.trim();
-  if (syntaxOf(driver).batchSeparator) {
-    // Each statement in its own batch, as sqlcmd and the server's own tools expect:
-    // a routine or view must start one.
-    return `${text}\nGO\n`;
+  const terminator = scriptTerminator(syntaxOf(driver));
+  if (terminator !== undefined) {
+    // Each statement on its own, ended the way sqlcmd (GO) and SQL*Plus (`/`) expect:
+    // a T-SQL routine must start a batch, PL/SQL must end with its own semicolon.
+    return `${text}\n${terminator}\n`;
   }
   if (driver === 'mysql' && splitStatements(text, driver).length > 1) {
     return `DELIMITER ${BODY_DELIMITER}\n${text}${BODY_DELIMITER}\nDELIMITER ;\n`;
   }
   return `${text};\n`;
+}
+
+/**
+ * A generated INSERT as script text: ended by `;`, except in Oracle, where several
+ * rows go in as a PL/SQL block, which SQL*Plus runs at the `/` after it.
+ */
+export function insertStatement(sql: string, driver: DriverId): string {
+  return driver === 'oracle' ? scriptStatement(sql, driver) : `${sql.trim()};\n`;
 }
 
 /** A line of comment text; line breaks in names cannot end the comment early. */

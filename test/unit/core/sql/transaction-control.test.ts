@@ -116,3 +116,79 @@ describe('transactionControl: T-SQL (V6.2)', () => {
     expect(commitsImplicitly('BEGIN TRAN', 'mssql')).toBe(false);
   });
 });
+
+describe('transactionControl: Oracle (V6.4)', () => {
+  it.each([
+    ['SET TRANSACTION READ ONLY', 'begin'],
+    ['set transaction isolation level serializable', 'begin'],
+    ['SET ROLE ALL', 'none'],
+    ['SET CONSTRAINTS ALL DEFERRED', 'none'],
+    ['COMMIT', 'commit'],
+    ['COMMIT WORK', 'commit'],
+    ['ROLLBACK', 'rollback'],
+    ['ROLLBACK WORK', 'rollback'],
+    ['ROLLBACK TO a', 'savepoint'],
+    ['ROLLBACK TO SAVEPOINT a', 'savepoint'],
+    ['ROLLBACK WORK TO a', 'savepoint'],
+    ['rollback work to savepoint a', 'savepoint'],
+    ['SAVEPOINT a', 'savepoint'],
+    ['BEGIN', 'none'],
+    ['BEGIN NULL; END;', 'none'],
+    ['DECLARE x NUMBER; BEGIN COMMIT; END;', 'none'],
+    ['END', 'none'],
+    ['START TRANSACTION', 'none'],
+    ['/* COMMIT */ SELECT 1 FROM dual', 'none'],
+    ['', 'none'],
+  ] as const)('reads %s as %s', (sql, expected) => {
+    expect(transactionControl(sql, 'oracle')).toBe(expected);
+  });
+});
+
+describe('commitsImplicitly: Oracle (V6.4)', () => {
+  it('is true for DDL and account statements, in any case', () => {
+    for (const sql of [
+      'CREATE TABLE t (a NUMBER)',
+      'create global temporary table t (a number)',
+      'ALTER TABLE t ADD b NUMBER',
+      'DROP TABLE t',
+      'TRUNCATE TABLE t',
+      'RENAME a TO b',
+      'GRANT SELECT ON t TO u',
+      'REVOKE SELECT ON t FROM u',
+      "COMMENT ON TABLE t IS 'x'",
+      'ANALYZE TABLE t COMPUTE STATISTICS',
+      'AUDIT SELECT ON t',
+      'NOAUDIT SELECT ON t',
+      'PURGE RECYCLEBIN',
+      'FLASHBACK TABLE t TO BEFORE DROP',
+    ]) {
+      expect(commitsImplicitly(sql, 'oracle'), sql).toBe(true);
+    }
+  });
+
+  it('is false for ALTER SESSION, data changes, queries and blocks', () => {
+    for (const sql of [
+      "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'",
+      'alter session set time_zone = 0',
+      'SELECT 1 FROM dual',
+      'INSERT INTO t VALUES (1)',
+      'UPDATE t SET a = 1',
+      'BEGIN NULL; END;',
+      'SET TRANSACTION READ ONLY',
+      'COMMIT',
+      'LOCK TABLE t IN EXCLUSIVE MODE',
+      '-- CREATE\nSELECT 1 FROM dual',
+      '',
+    ]) {
+      expect(commitsImplicitly(sql, 'oracle'), sql).toBe(false);
+    }
+  });
+});
+
+describe('commitsImplicitly: Oracle settings (V6.4)', () => {
+  it('is false for ALTER SESSION and ALTER SYSTEM, which change settings only', () => {
+    expect(commitsImplicitly("ALTER SESSION SET TIME_ZONE = 'UTC'", 'oracle')).toBe(false);
+    expect(commitsImplicitly('ALTER SYSTEM SET open_cursors = 500', 'oracle')).toBe(false);
+    expect(commitsImplicitly('ALTER TABLE t ADD b NUMBER', 'oracle')).toBe(true);
+  });
+});

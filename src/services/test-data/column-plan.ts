@@ -4,6 +4,7 @@
 
 import { clickhouseBareType } from '../../shared/clickhouse-types';
 import { enumOptions, inputKindOf } from '../../shared/cell-input';
+import type { DriverId } from '../../shared/connection';
 import type { GeneratorKind, GeneratorSettings } from './generators';
 
 export interface PlanColumn {
@@ -16,6 +17,8 @@ export interface PlanColumn {
   readonly unique: boolean;
   /** A one-column foreign key: values come from this table's column. */
   readonly reference?: { readonly table: string; readonly column: string };
+  /** For the types whose meaning depends on the database (Oracle's DATE has a time). */
+  readonly driver?: DriverId;
 }
 
 /** Name rules for text columns, the first match wins. */
@@ -65,7 +68,7 @@ export function suggestGenerator(column: PlanColumn): GeneratorKind {
   if (column.reference !== undefined) {
     return 'reference';
   }
-  const kind = inputKindOf(column.dataType);
+  const kind = inputKindOf(column.dataType, column.driver);
   const name = normalizedName(column.name);
   if (column.unique && kind === 'integer') {
     return 'sequence';
@@ -104,9 +107,13 @@ export function suggestGenerator(column: PlanColumn): GeneratorKind {
 /** What the type itself allows: lengths, ranges, scale, the values of an enum. */
 export function typeSettings(column: PlanColumn, kind: GeneratorKind): GeneratorSettings {
   const type = clickhouseBareType(column.dataType).toLowerCase();
-  const length = /^(?:national\s+)?(var)?char(?:acter)?(?:\s+varying)?\s*\((\d+)\)/u.exec(type);
+  // Oracle says what a length counts: VARCHAR2(60 CHAR), CHAR(4 BYTE).
+  const length =
+    /^(?:national\s+)?n?(var)?char(?:acter)?2?(?:\s+varying)?\s*\((\d+)(?:\s+(?:char|byte))?\)/u.exec(
+      type,
+    );
   const varying = length?.[1] !== undefined || /varying|varchar/u.test(type);
-  const decimal = /^(?:decimal|numeric|dec|fixed)\s*\((\d+)\s*(?:,\s*(\d+))?\)/u.exec(type);
+  const decimal = /^(?:decimal|numeric|dec|fixed|number)\s*\((\d+)\s*(?:,\s*(\d+))?\)/u.exec(type);
   const settings: {
     -readonly [K in keyof GeneratorSettings]: GeneratorSettings[K];
   } = { kind, ...(column.unique ? { unique: true } : {}) };
@@ -121,7 +128,7 @@ export function typeSettings(column: PlanColumn, kind: GeneratorKind): Generator
     const scale = Number(decimal[2] ?? 0);
     settings.scale = scale;
     settings.max = Math.min(10 ** Math.max(0, precision - scale) - 1, 10_000);
-  } else if (inputKindOf(type) === 'number') {
+  } else if (inputKindOf(type, column.driver) === 'number') {
     settings.scale = 2;
   }
   Object.assign(settings, integerRange(type));

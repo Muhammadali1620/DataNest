@@ -6,6 +6,7 @@ import {
   mentionedNames,
   orderViews,
   RowBatcher,
+  insertStatement,
   scriptStatement,
 } from '../../../src/services/dump-script';
 import { splitStatements } from '../../../src/core/sql/split';
@@ -24,6 +25,31 @@ describe('scriptStatement: SQL Server (V6.2)', () => {
     expect(mentionedNames('SELECT * FROM [dbo].[Order]]s]', 'mssql')).toEqual(
       new Set(['select', 'from', 'dbo', 'order]s']),
     );
+  });
+});
+
+describe('scriptStatement: Oracle (V6.4)', () => {
+  it('ends every statement with a `/` line, as SQL*Plus runs it', () => {
+    expect(scriptStatement('  INSERT INTO "T" VALUES (1)  ', 'oracle')).toBe(
+      'INSERT INTO "T" VALUES (1)\n/\n',
+    );
+  });
+
+  it('keeps the semicolon that PL/SQL needs and splits back into the same statements', () => {
+    const body = 'CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  NULL;\nEND;';
+    const script = [
+      scriptStatement('CREATE TABLE "T" ("A" NUMBER)', 'oracle'),
+      scriptStatement(body, 'oracle'),
+      scriptStatement('INSERT INTO "T" VALUES (q\'[a;b]\')', 'oracle'),
+    ].join('');
+    expect(script).toBe(
+      `CREATE TABLE "T" ("A" NUMBER)\n/\n${body}\n/\nINSERT INTO "T" VALUES (q'[a;b]')\n/\n`,
+    );
+    expect(splitStatements(script, 'oracle').map((statement) => statement.text)).toEqual([
+      'CREATE TABLE "T" ("A" NUMBER)',
+      body,
+      'INSERT INTO "T" VALUES (q\'[a;b]\')',
+    ]);
   });
 });
 
@@ -115,5 +141,29 @@ describe('RowBatcher', () => {
     const big = `('${'x'.repeat(INSERT_CHARS / 2)}')`;
     expect(batcher.add(big)).toBeUndefined();
     expect(batcher.add(big)).toHaveLength(2);
+  });
+});
+
+describe('insertStatement (V6.4)', () => {
+  it('ends an INSERT with a semicolon, and an Oracle one, which may be a block, with /', () => {
+    expect(insertStatement('INSERT INTO t VALUES (1) ', 'mysql')).toBe(
+      'INSERT INTO t VALUES (1);\n',
+    );
+    expect(insertStatement('INSERT INTO t VALUES (1)', 'mssql')).toBe(
+      'INSERT INTO t VALUES (1);\n',
+    );
+    expect(insertStatement('BEGIN\n  INSERT INTO t VALUES (1);\nEND;', 'oracle')).toBe(
+      'BEGIN\n  INSERT INTO t VALUES (1);\nEND;\n/\n',
+    );
+  });
+
+  it('writes Oracle blocks that the splitter reads back one by one', () => {
+    const block = 'BEGIN\n  INSERT INTO t VALUES (1);\n  INSERT INTO t VALUES (2);\nEND;';
+    const script =
+      insertStatement(block, 'oracle') + insertStatement('INSERT INTO t VALUES (3)', 'oracle');
+    expect(splitStatements(script, 'oracle').map((statement) => statement.text)).toEqual([
+      block,
+      'INSERT INTO t VALUES (3)',
+    ]);
   });
 });

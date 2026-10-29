@@ -483,6 +483,39 @@ describe('SSL fields', () => {
   });
 });
 
+describe('TLS for Oracle (V6.4)', () => {
+  const oracle = { driver: 'oracle', port: '1521', database: 'FREEPDB1' } as const;
+
+  it('sends no TLS settings for Oracle, even when a mode is still set', () => {
+    expect(toSsl(fields({ ...oracle, sslMode: 'require', sslCa: '/ca' }))).toBeUndefined();
+    expect(toInput(fields({ ...oracle, sslMode: 'verify-full' }))).not.toHaveProperty('ssl');
+  });
+
+  it('still sends them for the drivers that use TLS', () => {
+    expect(toSsl(fields({ driver: 'mssql', sslMode: 'require' }))).toEqual({ mode: 'require' });
+    expect(toSsl(fields({ driver: 'clickhouse', sslMode: 'require' }))).toEqual({
+      mode: 'require',
+    });
+  });
+
+  it('sends schema patterns only, as the service is the one database', () => {
+    expect(
+      toInput(fields({ ...oracle, filterDatabases: 'a*', filterSchemas: 'APP, HR_*' })).filter,
+    ).toEqual({ schemas: ['APP', 'HR_*'] });
+  });
+
+  it('builds the rest of an Oracle connection as usual', () => {
+    expect(toInput(fields({ ...oracle, name: 'Ora', host: 'db', user: 'app' }))).toMatchObject({
+      name: 'Ora',
+      driver: 'oracle',
+      host: 'db',
+      port: 1521,
+      user: 'app',
+      database: 'FREEPDB1',
+    });
+  });
+});
+
 describe('applyUrl', () => {
   it('fills the target, TLS and password, and names a nameless connection', () => {
     const form = fields({

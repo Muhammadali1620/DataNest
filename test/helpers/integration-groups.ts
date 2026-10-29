@@ -43,6 +43,14 @@ const DEFINITIONS = {
       return [{ name: 'mssql', host: db.host, port: db.port }];
     },
   },
+  oracle: {
+    always: false,
+    folders: ['oracle'],
+    endpoints: (env) => {
+      const db = testDatabase('oracle', env);
+      return [{ name: 'oracle', host: db.host, port: db.port }];
+    },
+  },
   clickhouse: {
     always: false,
     folders: ['clickhouse'],

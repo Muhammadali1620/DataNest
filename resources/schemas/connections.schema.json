@@ -79,7 +79,7 @@
           "maxLength": 200
         },
         "driver": {
-          "enum": ["mysql", "postgres", "sqlite", "mssql", "clickhouse"],
+          "enum": ["mysql", "postgres", "sqlite", "mssql", "clickhouse", "oracle"],
           "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server."
         },
         "host": {

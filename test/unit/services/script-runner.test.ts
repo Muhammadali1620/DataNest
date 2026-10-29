@@ -307,6 +307,34 @@ describe('ScriptRunner', () => {
     expect(harness.released).toEqual([]);
   });
 
+  describe('Oracle scripts (V6.4)', () => {
+    it('skips SQL*Plus commands, which belong to the client, and runs the rest', async () => {
+      const script = [
+        'SET DEFINE OFF',
+        'PROMPT Loading',
+        'WHENEVER SQLERROR EXIT SQL.SQLCODE',
+        'REM a remark',
+        'SET TRANSACTION READ WRITE;',
+        'BEGIN',
+        '  NULL;',
+        'END;',
+        '/',
+        'EXIT',
+        '',
+      ].join('\n');
+      const harness = new Harness('oracle');
+      const report = await harness
+        .runner()
+        .run({ target: TARGET, chunks: chunksOf(script, 5), continueOnError: false });
+      expect(report.failures).toEqual([]);
+      expect(harness.session.executed).toEqual([
+        'SET TRANSACTION READ WRITE',
+        'BEGIN\n  NULL;\nEND;',
+      ]);
+      expect(report.skipped.map((skip) => skip.line)).toEqual([1, 2, 3, 4, 10]);
+    });
+  });
+
   describe('PostgreSQL dumps', () => {
     const dump = [
       '\\restrict abc',

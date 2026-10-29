@@ -968,3 +968,93 @@ describe('connection form App: more databases (V6.3)', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Port').value).toBe('8123');
   });
 });
+
+describe('connection form App: Oracle (V6.4)', () => {
+  const drivers: ConnectionFormState['drivers'] = [
+    ...DRIVERS,
+    { id: 'oracle', defaultPort: 1521, file: false },
+  ];
+  const oracle = (overrides: Partial<ConnectionFormState> = {}): ConnectionFormState =>
+    newState({
+      drivers,
+      input: { name: 'Ora', driver: 'oracle', host: 'db', port: 1521, database: 'FREEPDB1' },
+      ...overrides,
+    });
+
+  it('lists Oracle by its name and offers port 1521', async () => {
+    await withState(newState({ drivers }));
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    expect([...select.options].map((option) => option.textContent).at(-1)).toBe('Oracle');
+    select.value = 'oracle';
+    await fireEvent.change(select);
+    await waitFor(() => {
+      expect(field('Port').value).toBe('1521');
+    });
+  });
+
+  it('filters only schemas for Oracle: its database is the service it names', async () => {
+    const { host } = await withState(oracle());
+    const drafts: ConnectionDraft[] = [];
+    host.handle('save', (draft) => {
+      drafts.push(draft);
+      return { connectionId: 'c1' };
+    });
+    expect(screen.queryByLabelText('Databases')).toBeNull();
+    await fireEvent.input(field('Schemas'), { target: { value: 'APP_*, !APP_TEST' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(drafts).toHaveLength(1);
+    });
+    expect(drafts[0]?.input.filter).toEqual({ schemas: ['APP_*', '!APP_TEST'] });
+  });
+
+  it('has no TLS section for Oracle and brings it back for other drivers', async () => {
+    await withState(newState({ drivers }));
+    expect(screen.queryByLabelText('SSL / TLS')).not.toBeNull();
+    const select = screen.getByLabelText<HTMLSelectElement>('Database');
+    select.value = 'oracle';
+    await fireEvent.change(select);
+    await waitFor(() => {
+      expect(screen.queryByLabelText('SSL / TLS')).toBeNull();
+    });
+    select.value = 'postgres';
+    await fireEvent.change(select);
+    await waitFor(() => {
+      expect(screen.queryByLabelText('SSL / TLS')).not.toBeNull();
+    });
+  });
+
+  it('drops saved TLS settings when an Oracle connection is saved', async () => {
+    const { host } = await withState(
+      oracle({
+        connectionId: 'c1',
+        input: {
+          name: 'Ora',
+          driver: 'oracle',
+          host: 'db',
+          port: 1521,
+          ssl: { mode: 'require', ca: '/ca' },
+        },
+      }),
+    );
+    expect(screen.queryByLabelText('CA certificate')).toBeNull();
+    const drafts: ConnectionDraft[] = [];
+    host.handle('save', (draft) => {
+      drafts.push(draft);
+      return { connectionId: 'c1' };
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(drafts).toHaveLength(1);
+    });
+    expect(drafts[0]?.input).toMatchObject({ driver: 'oracle', host: 'db', port: 1521 });
+    expect(drafts[0]?.input).not.toHaveProperty('ssl');
+  });
+
+  it('suggests an ALTER SESSION statement as init SQL', async () => {
+    await withState(oracle());
+    expect(screen.getByLabelText('Init SQL').getAttribute('placeholder')).toBe(
+      "ALTER SESSION SET NLS_LANGUAGE = 'AMERICAN';",
+    );
+  });
+});

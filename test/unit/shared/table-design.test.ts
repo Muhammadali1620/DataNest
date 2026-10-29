@@ -51,6 +51,22 @@ describe('composeType', () => {
 });
 
 describe('splitType', () => {
+  it("keeps Oracle's intervals whole: their lengths sit in two places (V6.4)", () => {
+    expect(splitType('INTERVAL YEAR(2) TO MONTH')).toEqual({
+      type: 'INTERVAL YEAR(2) TO MONTH',
+      length: '',
+    });
+    expect(splitType('INTERVAL DAY(2) TO SECOND(6)')).toEqual({
+      type: 'INTERVAL DAY(2) TO SECOND(6)',
+      length: '',
+    });
+    // PostgreSQL's interval puts its precision last, which splits as before.
+    expect(splitType('interval day to second(3)')).toEqual({
+      type: 'interval day to second',
+      length: '3',
+    });
+  });
+
   it('takes the length out of the parentheses', () => {
     expect(splitType('varchar(255)')).toEqual({ type: 'varchar', length: '255' });
     expect(splitType('numeric(10, 2)')).toEqual({ type: 'numeric', length: '10, 2' });
@@ -347,5 +363,74 @@ describe('newTableDesign for ClickHouse (V6.3)', () => {
       autoIncrement: false,
     });
     expect(designProblems(design, 'clickhouse')).toEqual([]);
+  });
+});
+
+describe('Oracle designs (V6.4)', () => {
+  it('allows identity on NUMBER and INTEGER, even outside the primary key', () => {
+    for (const type of ['NUMBER', 'number', 'INTEGER']) {
+      expect(
+        designProblems(design([column({ id: 'a', type, autoIncrement: true })]), 'oracle'),
+        type,
+      ).toEqual([]);
+    }
+    expect(
+      designProblems(
+        design([column({ id: 'a', type: 'NUMBER', length: '10', autoIncrement: true })]),
+        'oracle',
+      ),
+    ).toEqual([]);
+  });
+
+  it('refuses identity on other types', () => {
+    for (const type of ['VARCHAR2', 'DATE', 'BINARY_DOUBLE', 'int']) {
+      expect(
+        designProblems(design([column({ id: 'a', type, autoIncrement: true })]), 'oracle'),
+        type,
+      ).toEqual([{ kind: 'auto-increment', column: 'a', reason: 'type' }]);
+    }
+  });
+
+  it('refuses identity next to a default, and on a second column', () => {
+    expect(
+      designProblems(
+        design([column({ id: 'a', type: 'NUMBER', autoIncrement: true, defaultValue: '0' })]),
+        'oracle',
+      ),
+    ).toEqual([{ kind: 'auto-increment', column: 'a', reason: 'default' }]);
+    expect(
+      designProblems(
+        design([column({ id: 'a', type: 'NUMBER', autoIncrement: true, defaultValue: '  ' })]),
+        'oracle',
+      ),
+    ).toEqual([]);
+    expect(
+      designProblems(
+        design([
+          column({ id: 'a', name: 'a', type: 'NUMBER', autoIncrement: true }),
+          column({ id: 'b', name: 'b', type: 'NUMBER', autoIncrement: true }),
+        ]),
+        'oracle',
+      ),
+    ).toEqual([{ kind: 'auto-increment', column: 'b', reason: 'several' }]);
+  });
+});
+
+describe('newTableDesign for Oracle (V6.4)', () => {
+  it('starts with a NUMBER identity key that can be saved at once', () => {
+    const design = newTableDesign('oracle', 'ORDERS');
+    expect(design.name).toBe('ORDERS');
+    expect(design.columns).toEqual([
+      expect.objectContaining({
+        name: 'id',
+        type: 'NUMBER',
+        length: '',
+        nullable: false,
+        primaryKey: true,
+        autoIncrement: true,
+        defaultValue: '',
+      }),
+    ]);
+    expect(designProblems(design, 'oracle')).toEqual([]);
   });
 });

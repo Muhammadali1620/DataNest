@@ -154,7 +154,11 @@ export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf())
     case 'BEGIN':
       // In T-SQL a bare BEGIN opens a block of statements, which may write anything;
       // only BEGIN TRAN starts a transaction.
-      return !syntax.batchSeparator || TSQL_TRANSACTION.has(words[1]?.text ?? '');
+      // In PL/SQL it opens an anonymous block, which may do anything too.
+      return (
+        (!syntax.batchSeparator && !syntax.slashTerminator) ||
+        (syntax.batchSeparator && TSQL_TRANSACTION.has(words[1]?.text ?? ''))
+      );
     case 'SAVE':
       return words[1]?.text === 'TRAN' || words[1]?.text === 'TRANSACTION';
     case 'COMMIT':

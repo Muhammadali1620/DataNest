@@ -200,6 +200,7 @@ export class TableViewer {
           metadata: this.deps.cache.wrap(request.target.connectionId, session.metadata),
           syntax: syntaxOf(driver.id),
           schemas: driver.capabilities.schemas,
+          driver: driver.id,
           logger: this.logger,
           readOnly: this.deps.manager.isReadOnly(request.target.connectionId),
         },

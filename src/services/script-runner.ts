@@ -84,6 +84,13 @@ export const STATEMENT_EXCERPT = 300;
 /** psql commands that only change how psql itself behaves; leaving them out is harmless. */
 const HARMLESS_PSQL = /^\\(restrict|unrestrict|set|unset|echo|encoding|pset|timing|qecho)\b/u;
 
+/**
+ * SQL*Plus commands of an Oracle script (V6.4), all about the client: its settings,
+ * messages and spool file. WHENEVER SQLERROR is what the runner does anyway unless asked
+ * to go on, and EXIT is how such a script usually ends.
+ */
+const HARMLESS_SQLPLUS = /^(SET|PROMPT|REM|REMARK|SPOOL|WHENEVER|EXIT|QUIT)\b/iu;
+
 let nextRun = 1;
 
 export class ScriptRunner {
@@ -168,7 +175,10 @@ export class ScriptRunner {
         state.outcome = 'cancelled';
         return false;
       }
-      if (item.kind === 'psql-command' && HARMLESS_PSQL.test(item.text)) {
+      if (
+        item.kind === 'psql-command' &&
+        (HARMLESS_PSQL.test(item.text) || HARMLESS_SQLPLUS.test(item.text))
+      ) {
         state.skipped.push({ line: item.line, text: item.text });
         continue;
       }

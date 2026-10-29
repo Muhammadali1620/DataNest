@@ -14,6 +14,8 @@ const SYSTEM_DATABASES: Readonly<Record<DriverId, readonly string[]>> = {
   // The server's own tools keep these four apart as "system databases" too.
   mssql: ['master', 'model', 'msdb', 'tempdb'],
   clickhouse: ['system', 'INFORMATION_SCHEMA', 'information_schema'],
+  // The database is the service the connection opens; it has no siblings to hide.
+  oracle: [],
 };
 
 /** Schemas the server keeps for itself. */
@@ -23,6 +25,8 @@ const SYSTEM_SCHEMAS: Readonly<Record<DriverId, readonly string[]>> = {
   sqlite: [],
   mssql: ['sys', 'INFORMATION_SCHEMA', 'guest'],
   clickhouse: [],
+  // The reader lists only schemas Oracle does not maintain itself; these two are for sure.
+  oracle: ['SYS', 'SYSTEM', 'PDBADMIN'],
 };
 
 /** Prefixes of generated schemas: PostgreSQL numbers them per session. */
@@ -32,6 +36,7 @@ const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<DriverId, readonly string[]>> = {
   sqlite: [],
   mssql: [],
   clickhouse: [],
+  oracle: [],
 };
 
 function equalsAny(name: string, names: readonly string[]): boolean {

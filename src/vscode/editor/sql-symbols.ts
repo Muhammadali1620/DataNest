@@ -41,12 +41,12 @@ function refOf(mention: TableMention, scope: ObjectScope): TableRef {
   };
 }
 
-/** Where `x.name` makes x a schema (PostgreSQL, SQL Server) rather than a database. */
+/** Where `x.name` makes x a schema (PostgreSQL, SQL Server, Oracle) rather than a database. */
 function schemaQualified(driver: DriverId | undefined): boolean {
-  return driver === 'postgres' || driver === 'mssql';
+  return driver === 'postgres' || driver === 'mssql' || driver === 'oracle';
 }
 
-/** `x.name`: x is a schema in PostgreSQL and SQL Server, a database elsewhere. */
+/** `x.name`: x is a schema in PostgreSQL, SQL Server and Oracle, a database elsewhere. */
 function qualifiedRef(
   qualifier: string,
   name: string,

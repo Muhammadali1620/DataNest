@@ -6,6 +6,7 @@
     filterSupport,
     isFileDriver,
     MAX_SSH_JUMPS,
+    optionSupport,
   } from '../../../../src/shared/connection';
   import type { DriverId } from '../../../../src/shared/connection';
   import type {
@@ -61,6 +62,7 @@
     sqlite: 'form.driver.sqlite',
     mssql: 'form.driver.mssql',
     clickhouse: 'form.driver.clickhouse',
+    oracle: 'form.driver.oracle',
   };
 
   const problems = $derived(fields === undefined ? [] : problemsOf(fields));
@@ -441,6 +443,7 @@
           />
         </Field>
 
+        {#if optionSupport(fields.driver).tls}
         <fieldset class="section">
           <TlsEditor
             {fields}
@@ -450,6 +453,7 @@
             onBrowse={(field: TlsFile) => void browseTls(field)}
           />
         </fieldset>
+        {/if}
 
         <fieldset class="section">
           <legend>
@@ -539,25 +543,32 @@
         <OptionsEditor {fields} {t} {errorFor} />
       </details>
 
-      {#if filters.databases}
+      <!-- Oracle filters only schemas: its database is the one service the connection names. -->
+      {#if filters.databases || filters.schemas}
         <details class="section options" open={formState?.input.filter !== undefined}>
           <summary>{t('form.filter')}</summary>
-          <Field
-            label={t('form.filter.databases')}
-            error={errorFor('filter-too-long')}
-            hint={t('form.filter.hint')}
-          >
-            <input
-              class="control"
-              bind:value={fields.filterDatabases}
-              placeholder="app_*, !app_test"
-              aria-label={t('form.filter.databases')}
-              autocomplete="off"
-              spellcheck="false"
-            />
-          </Field>
+          {#if filters.databases}
+            <Field
+              label={t('form.filter.databases')}
+              error={errorFor('filter-too-long')}
+              hint={t('form.filter.hint')}
+            >
+              <input
+                class="control"
+                bind:value={fields.filterDatabases}
+                placeholder="app_*, !app_test"
+                aria-label={t('form.filter.databases')}
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </Field>
+          {/if}
           {#if filters.schemas}
-            <Field label={t('form.filter.schemas')} hint={t('form.filter.schemasHint')}>
+            <Field
+              label={t('form.filter.schemas')}
+              error={filters.databases ? undefined : errorFor('filter-too-long')}
+              hint={filters.databases ? t('form.filter.schemasHint') : t('form.filter.hint')}
+            >
               <input
                 class="control"
                 bind:value={fields.filterSchemas}

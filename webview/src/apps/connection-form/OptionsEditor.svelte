@@ -132,6 +132,8 @@
           ? 'SET DATEFORMAT ymd;'
           : fields.driver === 'clickhouse'
             ? 'SET max_threads = 4;'
+            : fields.driver === 'oracle'
+              ? "ALTER SESSION SET NLS_LANGUAGE = 'AMERICAN';"
           : "SET SESSION sql_mode = 'STRICT_ALL_TABLES';"}
     aria-invalid={errorFor('init-sql-too-long') !== undefined}
     aria-label={t('form.options.initSql')}

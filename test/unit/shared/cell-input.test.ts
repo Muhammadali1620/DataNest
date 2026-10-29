@@ -315,3 +315,52 @@ describe('ClickHouse types (V6.3)', () => {
     expect(enumOptions('Int8')).toBeUndefined();
   });
 });
+
+describe('Oracle types (V6.4)', () => {
+  const ok = (value: unknown) => ({ ok: true, value });
+  const bad = (problem: string) => ({ ok: false, problem });
+
+  it.each([
+    ['NUMBER(10)', 'number'],
+    ['NUMBER(10,2)', 'number'],
+    ['INTEGER', 'integer'],
+    ['VARCHAR2(255 CHAR)', 'text'],
+    ['NVARCHAR2(50)', 'text'],
+    ['CLOB', 'text'],
+    ['TIMESTAMP(6)', 'datetime'],
+    ['TIMESTAMP(6) WITH TIME ZONE', 'datetime'],
+    ['BOOLEAN', 'boolean'],
+    ['RAW(16)', 'binary'],
+    ['BLOB', 'binary'],
+    ['JSON', 'json'],
+  ] as const)('reads %s as %s', (type, kind) => {
+    expect(inputKindOf(type, 'oracle')).toBe(kind);
+  });
+
+  it("edits Oracle's DATE as a moment, since it holds a time of day too", () => {
+    expect(inputKindOf('DATE', 'oracle')).toBe('datetime');
+    expect(inputKindOf('DATE', 'mysql')).toBe('date');
+    expect(inputKindOf('DATE')).toBe('date');
+  });
+
+  it('reads up to nine fraction digits, as TIMESTAMP(9) and datetime2(7) show them', () => {
+    expect(parseCellInput('datetime', '9999-12-31 23:59:59.999999999')).toEqual(
+      ok({ kind: 'datetime', text: '9999-12-31 23:59:59.999999999' }),
+    );
+    expect(parseCellInput('datetime', '2024-01-01 00:00:00.1234567890')).toEqual(
+      bad('invalid-datetime'),
+    );
+  });
+
+  it('takes the zone after a space, as the grid shows it, and writes it next to the time', () => {
+    expect(parseCellInput('datetime', '2024-06-15 12:00:00.123456 +03:00')).toEqual(
+      ok({ kind: 'datetime', text: '2024-06-15 12:00:00.123456+03:00' }),
+    );
+    expect(parseCellInput('datetime', '2024-06-15 12:00:00 Z')).toEqual(
+      ok({ kind: 'datetime', text: '2024-06-15 12:00:00Z' }),
+    );
+    expect(parseCellInput('datetime', '2024-06-15 12:00:00  +03:00')).toEqual(
+      bad('invalid-datetime'),
+    );
+  });
+});

@@ -43,12 +43,13 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'clickhouse',
       'mariadb',
       'mssql',
       'mysql',
+      'oracle',
       'postgres',
       'ssh',
       'ssh-inner',
@@ -102,7 +103,8 @@ describe('docker/compose.yml (D17)', () => {
     expect(service.healthcheck?.test.join(' ')).toMatch(/big_table|inventory\.stock_levels/);
   });
 
-  it.each(services.filter(([id]) => id !== 'mssql'))(
+  // SQL Server and Oracle keep their data in the container, which db:down removes.
+  it.each(services.filter(([id]) => id !== 'mssql' && id !== 'oracle'))(
     'keeps %s data in tmpfs so every start is clean',
     (_id, service) => {
       expect(service.tmpfs?.length).toBeGreaterThan(0);
@@ -126,7 +128,9 @@ describe('docker/compose.yml (D17)', () => {
   });
 
   it.each(services)('mounts an existing seed folder into %s read-only', (_id, service) => {
-    const seeds = (service.volumes ?? []).filter((v) => v.includes('docker-entrypoint-initdb.d'));
+    const seeds = (service.volumes ?? []).filter((v) =>
+      /(docker|container)-entrypoint-initdb\.d/u.test(v),
+    );
     expect(seeds).toHaveLength(1);
     const [source = '', , mode] = (seeds[0] ?? '').split(':');
     expect(mode).toBe('ro');

@@ -138,6 +138,27 @@ const BY_DRIVER: Readonly<Record<DriverId, readonly SqlFunction[]>> = {
     fn('JSONExtractString', 'json', 'key'),
     fn('generateUUIDv4'),
   ],
+  oracle: [
+    ...LENGTH_SUBSTR,
+    fn('SYSDATE'),
+    fn('SYSTIMESTAMP'),
+    fn('TO_CHAR', 'value', 'format'),
+    fn('TO_DATE', 'text', "'YYYY-MM-DD'"),
+    fn('TO_TIMESTAMP', 'text', 'format'),
+    fn('TO_NUMBER', 'text'),
+    fn('TRUNC', 'date'),
+    fn('ADD_MONTHS', 'date', 'months'),
+    fn('MONTHS_BETWEEN', 'end', 'start'),
+    fn('NVL', 'value', 'fallback'),
+    fn('NVL2', 'value', 'if_not_null', 'if_null'),
+    fn('DECODE', 'value', 'match', 'result', 'default'),
+    fn('INSTR', 'text', 'part'),
+    fn('LISTAGG', "expression, ','"),
+    fn('REGEXP_LIKE', 'text', 'pattern'),
+    fn('REGEXP_REPLACE', 'text', 'pattern', 'replacement'),
+    fn('JSON_VALUE', 'document', 'path'),
+    fn('SYS_GUID'),
+  ],
 };
 
 /** The functions of a dialect, common ones first; standard SQL when none is known. */

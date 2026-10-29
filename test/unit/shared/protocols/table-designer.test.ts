@@ -64,7 +64,7 @@ describe('tableDesignerProtocol', () => {
     };
     expect(tableDesignerProtocol.webview.events.state.parse(state)).toEqual(state);
     expect(() =>
-      tableDesignerProtocol.webview.events.state.parse({ ...state, driver: 'oracle' }),
+      tableDesignerProtocol.webview.events.state.parse({ ...state, driver: 'db2' }),
     ).toThrow();
   });
 

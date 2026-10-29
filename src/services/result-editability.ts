@@ -14,6 +14,7 @@ import { parseSelectSource } from '../core/sql/select-source';
 import type { SqlSyntax } from '../core/sql/tokenizer';
 import type { Logger } from '../core/logging/logger';
 import type { MetadataReader } from '../drivers/driver';
+import type { DriverId } from '../shared/connection';
 
 export interface EditabilityContext {
   readonly metadata: MetadataReader;
@@ -23,6 +24,8 @@ export interface EditabilityContext {
   readonly logger: Logger;
   /** The connection refuses every change, so nothing is editable whatever the query. */
   readonly readOnly?: boolean;
+  /** For the types whose meaning depends on the database (Oracle's DATE). */
+  readonly driver?: DriverId;
 }
 
 /** The scope and name a table reference points at; parts are outermost first. */
@@ -59,15 +62,17 @@ export async function analyzeEditability(
     return readOnlyResult('complex');
   }
   try {
+    const schema =
+      ref.schema === undefined ? undefined : await schemaNamed(context.metadata, ref.schema);
     const scope: ObjectScope = {
       ...(ref.database === undefined ? {} : { database: ref.database }),
-      ...(ref.schema === undefined ? {} : { schema: ref.schema }),
+      ...(schema === undefined ? {} : { schema }),
     };
     const info = findByName(await context.metadata.listTables(scope), ref.name);
     if (info === undefined) {
       return readOnlyResult('table-not-found');
     }
-    const table: TableRef = { ...ref, name: info.name };
+    const table: TableRef = { ...ref, ...scope, name: info.name };
     const columns = await context.metadata.listColumns(table);
     if (columns.length === 0) {
       return readOnlyResult('table-not-found');
@@ -83,6 +88,7 @@ export async function analyzeEditability(
       uniqueKeys,
       items: parsed.source.items,
       resultColumns,
+      ...(context.driver === undefined ? {} : { driver: context.driver }),
     });
     if (!resolved.editable) {
       return resolved;
@@ -93,6 +99,15 @@ export async function analyzeEditability(
     context.logger.debug(`Could not tell if the result is editable: ${errorMessage(error)}`);
     return readOnlyResult('failed');
   }
+}
+
+/**
+ * The schema a written name means, found the way table names are: exactly, else regardless
+ * of case. Oracle keeps unquoted names in upper case, so `shop.orders` is SHOP.ORDERS there.
+ */
+async function schemaNamed(metadata: MetadataReader, written: string): Promise<string> {
+  const schemas = (await metadata.listSchemas()).map((name) => ({ name }));
+  return findByName(schemas, written)?.name ?? written;
 }
 
 /** Foreign keys are a convenience: not being able to read them must not cost editing. */

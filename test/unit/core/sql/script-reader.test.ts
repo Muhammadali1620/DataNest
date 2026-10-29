@@ -221,6 +221,64 @@ describe('ScriptReader: SQL Server (V6.2)', () => {
   });
 });
 
+describe('ScriptReader: Oracle (V6.4)', () => {
+  const script = [
+    'SET DEFINE OFF',
+    'PROMPT Creating table',
+    'CREATE TABLE t (id NUMBER, note VARCHAR2(20));',
+    "INSERT INTO t VALUES (1, q'[a;b",
+    '/',
+    "c]');",
+    'CREATE OR REPLACE PROCEDURE p IS',
+    'BEGIN',
+    "  INSERT INTO t VALUES (2, 'x;y');",
+    '  COMMIT;',
+    'END;',
+    '/',
+    'BEGIN',
+    '  p;',
+    'END;',
+    '/',
+    'REM done',
+    'SELECT COUNT(*) FROM t;',
+    'EXIT',
+    '',
+  ].join('\n');
+
+  it('reads PL/SQL, `/` lines and SQL*Plus lines the same however the text is cut', () => {
+    expect(expectStable(script, 'oracle')).toEqual([
+      { kind: 'psql-command', text: 'SET DEFINE OFF', line: 1 },
+      { kind: 'psql-command', text: 'PROMPT Creating table', line: 2 },
+      { kind: 'statement', text: 'CREATE TABLE t (id NUMBER, note VARCHAR2(20))', line: 3 },
+      { kind: 'statement', text: "INSERT INTO t VALUES (1, q'[a;b\n/\nc]')", line: 4 },
+      {
+        kind: 'statement',
+        text: "CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  INSERT INTO t VALUES (2, 'x;y');\n  COMMIT;\nEND;",
+        line: 7,
+      },
+      { kind: 'statement', text: 'BEGIN\n  p;\nEND;', line: 13 },
+      { kind: 'psql-command', text: 'REM done', line: 17 },
+      { kind: 'statement', text: 'SELECT COUNT(*) FROM t', line: 18 },
+      { kind: 'psql-command', text: 'EXIT', line: 19 },
+    ]);
+  });
+
+  it('never lets a block out before its `/` line', () => {
+    const reader = new ScriptReader('oracle');
+    expect(reader.push('BEGIN\n  NULL;\n')).toEqual([]);
+    expect(reader.push('END;\n')).toEqual([]);
+    expect(reader.push('/\nSELECT 1 FROM dual;\n')).toEqual([
+      { kind: 'statement', text: 'BEGIN\n  NULL;\nEND;', line: 1 },
+    ]);
+    expect(reader.end()).toEqual([{ kind: 'statement', text: 'SELECT 1 FROM dual', line: 5 }]);
+  });
+
+  it('leaves SQL*Plus lines to the server in other dialects', () => {
+    const items = readWhole('SET DEFINE OFF\nSELECT 1;\n', 'postgres');
+    expect(items).toEqual([{ kind: 'statement', text: 'SET DEFINE OFF\nSELECT 1', line: 1 }]);
+  });
+});
+
 describe('isCopyFromStdin', () => {
   it('recognizes COPY … FROM STDIN in any case and form', () => {
     expect(isCopyFromStdin('COPY public.t (a, b) FROM stdin')).toBe(true);

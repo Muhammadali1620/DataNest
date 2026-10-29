@@ -233,3 +233,18 @@ describe('addColumn on ClickHouse (V6.3)', () => {
     expect(next.columns[0]).toMatchObject({ type: 'String', length: '', nullable: true });
   });
 });
+
+describe('addColumn on Oracle (V6.4)', () => {
+  it('adds a nullable VARCHAR2 of 255 characters, not bytes', () => {
+    const next = addColumn(newTableDesign('oracle', 't'), 'oracle');
+    expect(next.columns.at(-1)).toMatchObject({
+      id: 'new-2',
+      name: '',
+      type: 'VARCHAR2',
+      length: '255 CHAR',
+      nullable: true,
+      autoIncrement: false,
+      primaryKey: false,
+    });
+  });
+});

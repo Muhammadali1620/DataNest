@@ -229,3 +229,26 @@ services:
           'CMD-SHELL',
           'clickhouse-client --user datanest --password datanest -q "SELECT count() FROM datanest_test.big_table" | grep -qx 10000',
         ]
+
+  # Oracle Database 23ai Free (V6.4). Its data stays in the container (the image ships a
+  # ready database), which `npm run db:down` removes; every start is still clean.
+  oracle:
+    image: gvenzl/oracle-free:23.26.3-slim-faststart
+    container_name: datanest-oracle
+    profiles: [oracle]
+    environment:
+      ORACLE_PASSWORD: datanest_root
+      APP_USER: datanest
+      APP_USER_PASSWORD: datanest
+      TZ: UTC
+    ports:
+      - 127.0.0.1:7521:1521
+    volumes:
+      - ./seed/oracle:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD-SHELL',
+          'echo "SELECT COUNT(*) FROM datanest.big_table, datanest.seed_done;" | sqlplus -s datanest/datanest@//localhost/FREEPDB1 | grep -q 10000',
+        ]

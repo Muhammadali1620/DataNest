@@ -152,7 +152,54 @@ describe('analyzeEditability', () => {
 
   it('scopes the lookup by the qualifier in the statement', async () => {
     const { analyze, metadata } = setup(true);
+    metadata.schemas = ['public', 'app'];
     await analyze('SELECT * FROM app.Users', ['id', 'name']);
-    expect(metadata.calls[0]).toBe('listTables:/app');
+    expect(metadata.calls.slice(0, 2)).toEqual(['listSchemas:', 'listTables:/app']);
+  });
+
+  it('finds the schema regardless of case, as Oracle reads an unquoted name (V6.4)', async () => {
+    const { analyze, metadata } = setup(true);
+    metadata.schemas = ['DATANEST', 'SYSTEM'];
+    expect(await analyze('SELECT * FROM datanest.users', ['id', 'name'])).toMatchObject({
+      editable: true,
+      table: { schema: 'DATANEST', name: 'Users' },
+    });
+    expect(metadata.calls[1]).toBe('listTables:/DATANEST');
+  });
+
+  it('prefers the exact schema and keeps an unknown one as written', async () => {
+    const { analyze, metadata } = setup(true);
+    metadata.schemas = ['App', 'app'];
+    await analyze('SELECT * FROM app.Users', ['id', 'name']);
+    expect(metadata.calls[1]).toBe('listTables:/app');
+    metadata.schemas = ['other'];
+    await analyze('SELECT * FROM nowhere.Users', ['id', 'name']);
+    expect(metadata.calls).toContain('listTables:/nowhere');
+  });
+
+  it('edits an Oracle DATE as a moment, and the same type elsewhere as a day (V6.4)', async () => {
+    const metadata = new FakeMetadata();
+    metadata.tables = [{ name: 'T', kind: 'table' }];
+    metadata.columns = [
+      column('ID', { primaryKey: true }),
+      column('BORN', { dataType: 'DATE', nullable: true }),
+    ];
+    const kindOf = async (driver: 'oracle' | 'mysql' | undefined) => {
+      const result = await analyzeEditability(
+        {
+          metadata,
+          syntax: syntaxOf(driver),
+          schemas: false,
+          logger: new RecordingLogger(),
+          ...(driver === undefined ? {} : { driver }),
+        },
+        'SELECT * FROM T',
+        ['ID', 'BORN'],
+      );
+      return result.editable ? result.columns[1]?.kind : undefined;
+    };
+    expect(await kindOf('oracle')).toBe('datetime');
+    expect(await kindOf('mysql')).toBe('date');
+    expect(await kindOf(undefined)).toBe('date');
   });
 });

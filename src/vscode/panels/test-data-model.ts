@@ -45,7 +45,7 @@ export class TestDataModel {
   readonly columns: PlanColumn[];
 
   constructor(private readonly deps: TestDataModelDeps) {
-    this.columns = planColumns(deps.structure);
+    this.columns = planColumns(deps.structure, deps.driver);
   }
 
   /** What the page starts with. */
@@ -106,6 +106,7 @@ export class TestDataModel {
     const settings = columnSettings(this.columns, choices, context);
     return insertScript(
       this.deps.dialect,
+      this.deps.driver,
       this.deps.table,
       filledColumns(this.columns, choices),
       generateRows(settings, choices, this.columns, count, seed),

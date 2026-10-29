@@ -72,3 +72,24 @@ describe('unquoteIdentifier', () => {
     expect(unquoteIdentifier('"')).toBe('');
   });
 });
+
+describe('Oracle names (V6.4)', () => {
+  it('allows 128 bytes', () => {
+    expect(identifierLimit('oracle')).toBe(128);
+    expect(identifierProblem('a'.repeat(128), 'oracle')).toBeUndefined();
+    expect(identifierProblem('a'.repeat(129), 'oracle')).toBe('too-long');
+  });
+
+  it('counts bytes, so multibyte names reach the limit sooner', () => {
+    // A Cyrillic letter takes two bytes in UTF-8, a CJK character three.
+    expect(identifierProblem('я'.repeat(64), 'oracle')).toBeUndefined();
+    expect(identifierProblem('я'.repeat(65), 'oracle')).toBe('too-long');
+    expect(identifierProblem('日'.repeat(42), 'oracle')).toBeUndefined();
+    expect(identifierProblem('日'.repeat(43), 'oracle')).toBe('too-long');
+  });
+
+  it('rejects blank names and NUL characters', () => {
+    expect(identifierProblem('  ', 'oracle')).toBe('empty');
+    expect(identifierProblem('a\u0000b', 'oracle')).toBe('nul');
+  });
+});

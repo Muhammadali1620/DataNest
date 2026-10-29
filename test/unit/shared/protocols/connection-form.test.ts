@@ -36,7 +36,7 @@ describe('connectionInputSchema', () => {
   });
 
   it('rejects an unknown driver', () => {
-    expect(() => connectionInputSchema.parse({ name: 'x', driver: 'oracle' })).toThrow('driver');
+    expect(() => connectionInputSchema.parse({ name: 'x', driver: 'db2' })).toThrow('driver');
   });
 
   it('rejects a port outside 1..65535 and a non-integer port', () => {

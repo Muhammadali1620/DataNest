@@ -166,3 +166,47 @@ describe('isReadOnlyStatement: ClickHouse (V6.3)', () => {
     }
   });
 });
+
+describe('isReadOnlyStatement: Oracle (V6.4)', () => {
+  const oracle = syntaxOf('oracle');
+
+  it('takes BEGIN and DECLARE for PL/SQL blocks, which may write anything', () => {
+    expect(isReadOnlyStatement('BEGIN NULL; END;', oracle)).toBe(false);
+    expect(isReadOnlyStatement('BEGIN', oracle)).toBe(false);
+    expect(isReadOnlyStatement('BEGIN TRAN', oracle)).toBe(false);
+    expect(isReadOnlyStatement('DECLARE n NUMBER; BEGIN NULL; END;', oracle)).toBe(false);
+  });
+
+  it('keeps BEGIN a transaction elsewhere, and BEGIN TRAN one in T-SQL', () => {
+    for (const driver of [undefined, 'mysql', 'postgres', 'sqlite'] as const) {
+      expect(isReadOnlyStatement('BEGIN', syntaxOf(driver)), String(driver)).toBe(true);
+    }
+    expect(isReadOnlyStatement('BEGIN TRAN', syntaxOf('mssql'))).toBe(true);
+    expect(isReadOnlyStatement('BEGIN', syntaxOf('mssql'))).toBe(false);
+  });
+
+  it('reads queries, plans and transaction ends', () => {
+    for (const sql of [
+      'SELECT * FROM dual',
+      "SELECT q'[DELETE]' FROM dual",
+      'WITH a AS (SELECT 1 x FROM dual) SELECT * FROM a',
+      'EXPLAIN PLAN FOR SELECT 1 FROM dual',
+      'COMMIT',
+      'ROLLBACK',
+      'SAVEPOINT a',
+    ]) {
+      expect(isReadOnlyStatement(sql, oracle), sql).toBe(true);
+    }
+  });
+
+  it('counts changes, calls and locks as writes', () => {
+    for (const sql of [
+      'SELECT * FROM t FOR UPDATE',
+      'MERGE INTO t USING s ON (1 = 1) WHEN MATCHED THEN UPDATE SET a = 1',
+      'CALL p()',
+      'INSERT ALL INTO t VALUES (1) SELECT * FROM dual',
+    ]) {
+      expect(isReadOnlyStatement(sql, oracle), sql).toBe(false);
+    }
+  });
+});

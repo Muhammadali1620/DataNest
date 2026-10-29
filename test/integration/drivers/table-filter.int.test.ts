@@ -11,6 +11,7 @@ import { driver as mysqlDriver } from '../../../src/drivers/mysql';
 import { driver as postgresDriver } from '../../../src/drivers/postgres';
 import { driver as mssqlDriver } from '../../../src/drivers/mssql';
 import { driver as clickhouseDriver } from '../../../src/drivers/clickhouse';
+import { driver as oracleDriver } from '../../../src/drivers/oracle';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
@@ -123,6 +124,7 @@ describe('table view filter and sort', () => {
         sqlite,
         mssql: mssqlDriver,
         clickhouse: clickhouseDriver,
+        oracle: oracleDriver,
       };
       manager = new ConnectionManager({
         store,

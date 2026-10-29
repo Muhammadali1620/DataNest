@@ -139,3 +139,26 @@ describe('ClickHouse system objects (V6.3)', () => {
     expect(withoutSystemSchemas('clickhouse', ['a'])).toEqual(['a']);
   });
 });
+
+describe('Oracle system objects (V6.4)', () => {
+  it('hides SYS, SYSTEM and PDBADMIN, whatever their case', () => {
+    for (const name of ['SYS', 'SYSTEM', 'PDBADMIN', 'sys']) {
+      expect(isSystemSchema('oracle', name), name).toBe(true);
+    }
+    expect(withoutSystemSchemas('oracle', ['APP', 'SYS', 'HR', 'SYSTEM', 'PDBADMIN'])).toEqual([
+      'APP',
+      'HR',
+    ]);
+  });
+
+  it('keeps schemas that only start like a system one', () => {
+    expect(isSystemSchema('oracle', 'SYSADM')).toBe(false);
+    expect(isSystemSchema('oracle', 'SYSTEM_APP')).toBe(false);
+  });
+
+  it('has no system databases: the service is the only one', () => {
+    expect(isSystemDatabase('oracle', 'ORCLPDB1')).toBe(false);
+    expect(isSystemDatabase('oracle', 'SYS')).toBe(false);
+    expect(withoutSystemDatabases('oracle', ['FREEPDB1'])).toEqual(['FREEPDB1']);
+  });
+});

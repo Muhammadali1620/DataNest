@@ -6,10 +6,11 @@ import type { TableRef, TableStructure } from '../../core/model/objects';
 import type { Dialect, Session } from '../../drivers/driver';
 import { cellText } from '../../shared/cell-text';
 import type { CellValue } from '../../shared/cell-value';
-import { RowBatcher } from '../dump-script';
+import { insertStatement, RowBatcher } from '../dump-script';
 import type { SourceRecord } from '../import/import-source';
 import { convertValue } from '../import/import-values';
 import type { ImportColumn } from '../import/table-import';
+import type { DriverId } from '../../shared/connection';
 import { exactLiteralOf } from '../sql-literal';
 import { type PlanColumn, suggestGenerator, typeSettings } from './column-plan';
 import { generateValue, type GeneratorKind, type GeneratorSettings, Random } from './generators';
@@ -24,8 +25,8 @@ export interface ColumnChoice {
   readonly nullPercent: number;
 }
 
-/** The columns of a table as the generator sees them. */
-export function planColumns(structure: TableStructure): PlanColumn[] {
+/** The columns of a table as the generator sees them, in `driver`'s database. */
+export function planColumns(structure: TableStructure, driver?: DriverId): PlanColumn[] {
   const singleKeys = new Set(
     [
       structure.primaryKey,
@@ -45,6 +46,7 @@ export function planColumns(structure: TableStructure): PlanColumn[] {
       autoIncrement: column.autoIncrement,
       generated: column.generated,
       unique: singleKeys.has(column.name),
+      ...(driver === undefined ? {} : { driver }),
       ...(key === undefined
         ? {}
         : {
@@ -192,6 +194,7 @@ export async function* asRecords(rows: Iterable<(string | null)[]>): AsyncGenera
  */
 export function insertScript(
   dialect: Dialect,
+  driver: DriverId,
   table: TableRef,
   columns: readonly ImportColumn[],
   rows: Iterable<(string | null)[]>,
@@ -203,15 +206,19 @@ export function insertScript(
   const batcher = new RowBatcher();
   const flush = (tuples: string[]): void => {
     if (tuples.length > 0) {
-      statements.push(`${dialect.dump.insert(quotedTable, quoted, tuples, identity)};`);
+      statements.push(
+        insertStatement(dialect.dump.insert(quotedTable, quoted, tuples, identity), driver),
+      );
     }
   };
   for (const values of rows) {
     const literals = columns.map((column) => {
-      const converted = convertValue(values[column.source] ?? null, column.dataType, {
-        emptyIsNull: false,
-        nullText: '',
-      });
+      const converted = convertValue(
+        values[column.source] ?? null,
+        column.dataType,
+        { emptyIsNull: false, nullText: '' },
+        driver,
+      );
       const cell: CellValue = converted.ok ? converted.value : null;
       return exactLiteralOf(dialect, cell);
     });
@@ -221,7 +228,7 @@ export function insertScript(
     }
   }
   flush(batcher.take());
-  return `${statements.join('\n\n')}\n`;
+  return statements.join('\n');
 }
 
 async function firstColumn(session: Session, sql: string): Promise<CellValue[]> {

@@ -140,6 +140,10 @@ export function composeType(type: string, length: string): string {
 /** The reverse of `composeType`: `decimal(10,2) unsigned` → `decimal unsigned` + `10,2`. */
 export function splitType(full: string): { type: string; length: string } {
   const text = full.trim();
+  // Oracle's INTERVAL DAY(2) TO SECOND(6) has two lengths in two places: it stays whole.
+  if (/^interval\s+(year|day)\s*\(/iu.test(text)) {
+    return { type: text, length: '' };
+  }
   const open = text.indexOf('(');
   if (open === -1) {
     return { type: text, length: '' };
@@ -220,6 +224,8 @@ const INTEGER_TYPES: Readonly<Record<DriverId, ReadonlySet<string>>> = {
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
   // Nothing numbers itself: rows have no identity, only a sorting key.
   clickhouse: new Set(),
+  // Identity columns: NUMBER, or INTEGER (NUMBER(38)).
+  oracle: new Set(['number', 'integer']),
 };
 
 /**
@@ -334,7 +340,10 @@ function autoIncrementProblems(design: TableDesign, driver: DriverId): DesignPro
       (driver === 'sqlite' && (!column.primaryKey || keys.length !== 1))
     ) {
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'key' });
-    } else if ((driver === 'postgres' || driver === 'mssql') && column.defaultValue.trim() !== '') {
+    } else if (
+      (driver === 'postgres' || driver === 'mssql' || driver === 'oracle') &&
+      column.defaultValue.trim() !== ''
+    ) {
       // An identity column numbers itself; PostgreSQL and SQL Server refuse a default
       // next to it.
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'default' });
@@ -355,9 +364,11 @@ export function newTableDesign(driver: DriverId, name = ''): TableDesign {
         type:
           driver === 'clickhouse'
             ? 'UInt64'
-            : driver === 'mysql' || driver === 'mssql'
-              ? 'int'
-              : 'integer',
+            : driver === 'oracle'
+              ? 'NUMBER'
+              : driver === 'mysql' || driver === 'mssql'
+                ? 'int'
+                : 'integer',
         length: '',
         nullable: false,
         defaultValue: '',

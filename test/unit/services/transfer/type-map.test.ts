@@ -594,3 +594,346 @@ describe('defaults to and from ClickHouse (V6.3)', () => {
     ).toBeUndefined();
   });
 });
+
+describe('Oracle as the source (V6.4)', () => {
+  const read = (type: string) => neutralType(type, 'oracle');
+
+  it('reads NUMBER without a precision as a decimal of any size', () => {
+    expect(read('NUMBER')).toEqual({ kind: 'decimal' });
+    expect(read('number')).toEqual({ kind: 'decimal' });
+  });
+
+  it('reads NUMBER(p) as the narrowest integer that holds p digits', () => {
+    expect(read('NUMBER(1)')).toEqual({ kind: 'integer', bytes: 2, unsigned: false });
+    expect(read('number(4)')).toEqual({ kind: 'integer', bytes: 2, unsigned: false });
+    expect(read('NUMBER(5)')).toEqual({ kind: 'integer', bytes: 4, unsigned: false });
+    expect(read('NUMBER(9)')).toEqual({ kind: 'integer', bytes: 4, unsigned: false });
+    expect(read('NUMBER(10)')).toEqual({ kind: 'integer', bytes: 8, unsigned: false });
+    expect(read('NUMBER( 18 )')).toEqual({ kind: 'integer', bytes: 8, unsigned: false });
+    expect(read('NUMBER(10,0)')).toEqual({ kind: 'integer', bytes: 8, unsigned: false });
+  });
+
+  it('keeps NUMBER(p) beyond 18 digits exact as a decimal', () => {
+    expect(read('NUMBER(19)')).toEqual({ kind: 'decimal', precision: 19, scale: 0 });
+    expect(read('NUMBER(38)')).toEqual({ kind: 'decimal', precision: 38, scale: 0 });
+  });
+
+  it('reads NUMBER(p,s) as a decimal, a negative scale as none', () => {
+    expect(read('NUMBER(10,2)')).toEqual({ kind: 'decimal', precision: 10, scale: 2 });
+    expect(read('NUMBER(10, -2)')).toEqual({ kind: 'decimal', precision: 10, scale: 0 });
+  });
+
+  it('reads INTEGER, INT and SMALLINT as the 38-digit numbers Oracle makes of them', () => {
+    for (const type of ['INTEGER', 'INT', 'SMALLINT']) {
+      expect(read(type), type).toEqual({ kind: 'decimal', precision: 38, scale: 0 });
+    }
+  });
+
+  it('reads binary floats by width and FLOAT as a double', () => {
+    expect(read('BINARY_FLOAT')).toEqual({ kind: 'float', double: false });
+    expect(read('BINARY_DOUBLE')).toEqual({ kind: 'float', double: true });
+    expect(read('FLOAT')).toEqual({ kind: 'float', double: true });
+    expect(read('FLOAT(126)')).toEqual({ kind: 'float', double: true });
+  });
+
+  it('reads DATE as a moment to the second: it carries a time of day', () => {
+    expect(read('DATE')).toEqual({ kind: 'datetime', zone: false, precision: 0 });
+  });
+
+  it('reads TIMESTAMP with its precision, at most 6, and its zone', () => {
+    expect(read('TIMESTAMP')).toEqual({ kind: 'datetime', zone: false, precision: 6 });
+    expect(read('TIMESTAMP(3)')).toEqual({ kind: 'datetime', zone: false, precision: 3 });
+    expect(read('TIMESTAMP(0)')).toEqual({ kind: 'datetime', zone: false, precision: 0 });
+    expect(read('TIMESTAMP(9)')).toEqual({ kind: 'datetime', zone: false, precision: 6 });
+    expect(read('TIMESTAMP(6) WITH TIME ZONE')).toEqual({
+      kind: 'datetime',
+      zone: true,
+      precision: 6,
+    });
+    expect(read('TIMESTAMP(3) WITH LOCAL TIME ZONE')).toEqual({
+      kind: 'datetime',
+      zone: true,
+      precision: 3,
+    });
+    expect(read('TIMESTAMP WITH TIME ZONE')).toMatchObject({ zone: true });
+  });
+
+  it('reads intervals, row ids and LONG as text', () => {
+    for (const type of [
+      'INTERVAL DAY(2) TO SECOND(6)',
+      'INTERVAL YEAR(2) TO MONTH',
+      'ROWID',
+      'UROWID',
+      'LONG',
+    ]) {
+      expect(read(type), type).toEqual({ kind: 'text' });
+    }
+  });
+
+  it('reads national strings, LOBs and RAW like the other databases do', () => {
+    expect(read('NVARCHAR2(50)')).toEqual({ kind: 'string', length: 50, fixed: false });
+    expect(read('NCHAR(5)')).toEqual({ kind: 'string', length: 5, fixed: true });
+    expect(read('CLOB')).toEqual({ kind: 'text' });
+    expect(read('NCLOB')).toEqual({ kind: 'text' });
+    expect(read('BLOB')).toEqual({ kind: 'binary' });
+    expect(read('RAW(16)')).toEqual({ kind: 'binary' });
+    expect(read('JSON')).toEqual({ kind: 'json' });
+  });
+
+  it('reads NUMBER the usual way for the other databases', () => {
+    expect(neutralType('number(10)', 'postgres')).toEqual({
+      kind: 'decimal',
+      precision: 10,
+      scale: 0,
+    });
+    expect(neutralType('date', 'postgres')).toEqual({ kind: 'date' });
+  });
+});
+
+describe('Oracle as the target (V6.4)', () => {
+  const write = (neutral: Parameters<typeof targetType>[0], indexed = false) =>
+    targetType(neutral, 'oracle', indexed);
+
+  it('writes booleans as NUMBER(1), which every version has', () => {
+    expect(write({ kind: 'boolean' })).toEqual({ type: 'NUMBER', length: '1' });
+  });
+
+  it('writes integers as NUMBER with room for every value of their width', () => {
+    expect(write({ kind: 'integer', bytes: 1, unsigned: false })).toEqual({
+      type: 'NUMBER',
+      length: '5',
+    });
+    expect(write({ kind: 'integer', bytes: 2, unsigned: true })).toEqual({
+      type: 'NUMBER',
+      length: '5',
+    });
+    expect(write({ kind: 'integer', bytes: 3, unsigned: false })).toEqual({
+      type: 'NUMBER',
+      length: '10',
+    });
+    expect(write({ kind: 'integer', bytes: 4, unsigned: true })).toEqual({
+      type: 'NUMBER',
+      length: '10',
+    });
+    expect(write({ kind: 'integer', bytes: 8, unsigned: false })).toEqual({
+      type: 'NUMBER',
+      length: '19',
+    });
+    expect(write({ kind: 'integer', bytes: 8, unsigned: true })).toEqual({
+      type: 'NUMBER',
+      length: '20',
+    });
+  });
+
+  it('writes decimals as NUMBER(p,s), and as plain NUMBER beyond 38 digits', () => {
+    expect(write({ kind: 'decimal', precision: 10, scale: 2 })).toEqual({
+      type: 'NUMBER',
+      length: '10,2',
+    });
+    expect(write({ kind: 'decimal', precision: 12 })).toEqual({ type: 'NUMBER', length: '12,0' });
+    expect(write({ kind: 'decimal', precision: 5, scale: 9 })).toEqual({
+      type: 'NUMBER',
+      length: '5,5',
+    });
+    expect(write({ kind: 'decimal' })).toEqual({ type: 'NUMBER', length: '' });
+    expect(write({ kind: 'decimal', precision: 39, scale: 2 })).toEqual({
+      type: 'NUMBER',
+      length: '',
+    });
+  });
+
+  it('writes floats as BINARY_FLOAT and BINARY_DOUBLE', () => {
+    expect(write({ kind: 'float', double: false })).toEqual({ type: 'BINARY_FLOAT', length: '' });
+    expect(write({ kind: 'float', double: true })).toEqual({ type: 'BINARY_DOUBLE', length: '' });
+  });
+
+  it('writes strings in characters: CHAR up to 2000, VARCHAR2 up to 4000, CLOB beyond', () => {
+    expect(write({ kind: 'string', length: 10, fixed: true })).toEqual({
+      type: 'CHAR',
+      length: '10 CHAR',
+    });
+    expect(write({ kind: 'string', length: 2000, fixed: true })).toEqual({
+      type: 'CHAR',
+      length: '2000 CHAR',
+    });
+    expect(write({ kind: 'string', length: 2001, fixed: true })).toEqual({
+      type: 'VARCHAR2',
+      length: '2001 CHAR',
+    });
+    expect(write({ kind: 'string', length: 4000, fixed: false })).toEqual({
+      type: 'VARCHAR2',
+      length: '4000 CHAR',
+    });
+    expect(write({ kind: 'string', length: 4001, fixed: false })).toEqual({
+      type: 'CLOB',
+      length: '',
+    });
+  });
+
+  it('writes long text, JSON and binary as LOBs, or short enough to index when indexed', () => {
+    expect(write({ kind: 'text' })).toEqual({ type: 'CLOB', length: '' });
+    expect(write({ kind: 'json' })).toEqual({ type: 'CLOB', length: '' });
+    expect(write({ kind: 'binary' })).toEqual({ type: 'BLOB', length: '' });
+    expect(write({ kind: 'text' }, true)).toEqual({ type: 'VARCHAR2', length: '1000 CHAR' });
+    expect(write({ kind: 'json' }, true)).toEqual({ type: 'VARCHAR2', length: '1000 CHAR' });
+    expect(write({ kind: 'string', length: 4001, fixed: false }, true)).toEqual({
+      type: 'VARCHAR2',
+      length: '1000 CHAR',
+    });
+    expect(write({ kind: 'binary' }, true)).toEqual({ type: 'RAW', length: '2000' });
+    // Short strings fit an index as they are.
+    expect(write({ kind: 'string', length: 50, fixed: false }, true)).toEqual({
+      type: 'VARCHAR2',
+      length: '50 CHAR',
+    });
+  });
+
+  it('writes enums as VARCHAR2 as long as the longest value, 255 without values', () => {
+    expect(write({ kind: 'enum', values: ['a', 'bbb'] })).toEqual({
+      type: 'VARCHAR2',
+      length: '3 CHAR',
+    });
+    expect(write({ kind: 'enum', values: [''] })).toEqual({ type: 'VARCHAR2', length: '1 CHAR' });
+    expect(write({ kind: 'enum', values: [] })).toEqual({ type: 'VARCHAR2', length: '255 CHAR' });
+  });
+
+  it('writes dates, times, moments and UUIDs', () => {
+    expect(write({ kind: 'date' })).toEqual({ type: 'DATE', length: '' });
+    expect(write({ kind: 'time' })).toEqual({ type: 'VARCHAR2', length: '16 CHAR' });
+    expect(write({ kind: 'datetime', zone: false })).toEqual({ type: 'TIMESTAMP', length: '6' });
+    expect(write({ kind: 'datetime', zone: false, precision: 0 })).toEqual({
+      type: 'TIMESTAMP',
+      length: '0',
+    });
+    expect(write({ kind: 'datetime', zone: true, precision: 3 })).toEqual({
+      type: 'TIMESTAMP WITH TIME ZONE',
+      length: '3',
+    });
+    expect(write({ kind: 'uuid' })).toEqual({ type: 'VARCHAR2', length: '36 CHAR' });
+  });
+
+  it('maps column types between Oracle and the others', () => {
+    expect(mapColumnType('VARCHAR2(100 CHAR)', 'oracle', 'oracle', false)).toEqual({
+      type: 'VARCHAR2',
+      length: '100 CHAR',
+    });
+    expect(mapColumnType('NUMBER(10)', 'oracle', 'postgres', false)).toEqual({
+      type: 'bigint',
+      length: '',
+    });
+    expect(mapColumnType('varchar(50)', 'postgres', 'oracle', false)).toEqual({
+      type: 'VARCHAR2',
+      length: '50 CHAR',
+    });
+    expect(mapColumnType('bool', 'postgres', 'oracle', false)).toEqual({
+      type: 'NUMBER',
+      length: '1',
+    });
+  });
+});
+
+describe('defaults to and from Oracle (V6.4)', () => {
+  it('writes booleans as 1 and 0', () => {
+    expect(mapDefault('TRUE', { kind: 'boolean' }, 'postgres', 'oracle')).toBe('1');
+    expect(mapDefault("'f'", { kind: 'boolean' }, 'postgres', 'oracle')).toBe('0');
+    expect(mapDefault("b'1'", { kind: 'boolean' }, 'mysql', 'oracle')).toBe('1');
+    expect(mapDefault('maybe', { kind: 'boolean' }, 'postgres', 'oracle')).toBeUndefined();
+  });
+
+  it('turns the current date into TRUNC(SYSDATE)', () => {
+    expect(mapDefault('CURRENT_DATE', { kind: 'date' }, 'postgres', 'oracle')).toBe(
+      'TRUNC(SYSDATE)',
+    );
+    expect(mapDefault('today()', { kind: 'date' }, 'clickhouse', 'oracle')).toBe('TRUNC(SYSDATE)');
+  });
+
+  it('turns the current time into SYSDATE to the second, SYSTIMESTAMP otherwise', () => {
+    expect(
+      mapDefault('now()', { kind: 'datetime', zone: false, precision: 0 }, 'postgres', 'oracle'),
+    ).toBe('SYSDATE');
+    expect(mapDefault('now()', { kind: 'datetime', zone: false }, 'postgres', 'oracle')).toBe(
+      'SYSTIMESTAMP',
+    );
+    expect(
+      mapDefault(
+        'CURRENT_TIMESTAMP(3)',
+        { kind: 'datetime', zone: true, precision: 3 },
+        'mysql',
+        'oracle',
+      ),
+    ).toBe('SYSTIMESTAMP');
+    expect(
+      mapDefault('GETDATE()', { kind: 'datetime', zone: false, precision: 3 }, 'mssql', 'oracle'),
+    ).toBe('SYSTIMESTAMP');
+  });
+
+  it('carries literals over and drops what it cannot translate', () => {
+    expect(
+      mapDefault('42', { kind: 'integer', bytes: 4, unsigned: false }, 'mysql', 'oracle'),
+    ).toBe('42');
+    expect(mapDefault("'new'::character varying", { kind: 'text' }, 'postgres', 'oracle')).toBe(
+      "'new'",
+    );
+    expect(mapDefault('NULL', { kind: 'text' }, 'postgres', 'oracle')).toBeUndefined();
+    expect(mapDefault('gen_random_uuid()', { kind: 'uuid' }, 'postgres', 'oracle')).toBeUndefined();
+  });
+
+  it("reads Oracle's SYSDATE and SYSTIMESTAMP as the current time for the others", () => {
+    const seconds = { kind: 'datetime', zone: false, precision: 0 } as const;
+    expect(mapDefault('SYSDATE', seconds, 'oracle', 'postgres')).toBe('CURRENT_TIMESTAMP');
+    expect(mapDefault('sysdate ', seconds, 'oracle', 'clickhouse')).toBe('now()');
+    expect(
+      mapDefault('SYSTIMESTAMP', { kind: 'datetime', zone: true, precision: 6 }, 'oracle', 'mssql'),
+    ).toBe('SYSDATETIMEOFFSET()');
+    expect(
+      mapDefault(
+        'SYSTIMESTAMP(3)',
+        { kind: 'datetime', zone: false, precision: 3 },
+        'oracle',
+        'mysql',
+      ),
+    ).toBe('CURRENT_TIMESTAMP(3)');
+    expect(mapDefault('SYS_GUID()', { kind: 'text' }, 'oracle', 'postgres')).toBeUndefined();
+  });
+
+  it('keeps every default as it is between Oracle servers', () => {
+    expect(mapDefault('SYS_GUID()', { kind: 'text' }, 'oracle', 'oracle')).toBe('SYS_GUID()');
+  });
+});
+
+describe('Oracle lengths and odd types (V6.4)', () => {
+  it('reads the length of CHAR and BYTE lengths', () => {
+    expect(neutralType('VARCHAR2(100 CHAR)', 'oracle')).toEqual({
+      kind: 'string',
+      length: 100,
+      fixed: false,
+    });
+    expect(neutralType('VARCHAR2(40 BYTE)', 'oracle')).toEqual({
+      kind: 'string',
+      length: 40,
+      fixed: false,
+    });
+    expect(neutralType('CHAR(10 CHAR)', 'oracle')).toEqual({
+      kind: 'string',
+      length: 10,
+      fixed: true,
+    });
+    expect(neutralType('NCHAR(3)', 'oracle')).toEqual({ kind: 'string', length: 3, fixed: true });
+  });
+
+  it('reads LONG RAW as binary', () => {
+    expect(neutralType('LONG RAW', 'oracle')).toEqual({ kind: 'binary' });
+  });
+
+  it('carries TRUNC(SYSDATE) over as the current date', () => {
+    const date = neutralType('date', 'postgres');
+    expect(mapDefault('TRUNC(SYSDATE)', date, 'oracle', 'postgres')).toBe('CURRENT_DATE');
+    expect(mapDefault('trunc( sysdate )', date, 'oracle', 'mssql')).toBe('CAST(GETDATE() AS date)');
+  });
+
+  it('drops a clock default for a time of day, which Oracle keeps as text', () => {
+    const time = neutralType('time', 'postgres');
+    expect(mapDefault('CURRENT_TIME', time, 'postgres', 'oracle')).toBeUndefined();
+    expect(mapDefault('CURRENT_TIMESTAMP', time, 'postgres', 'oracle')).toBeUndefined();
+  });
+});

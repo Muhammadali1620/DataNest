@@ -240,7 +240,7 @@ function arrangement(
 
 /** The TLS settings to send; none when TLS is off. Files are kept as typed, trimmed. */
 export function toSsl(fields: FormFields): ConnectionInput['ssl'] {
-  if (fields.sslMode === 'off') {
+  if (fields.sslMode === 'off' || !optionSupport(fields.driver).tls) {
     return undefined;
   }
   const ca = trim(fields.sslCa);

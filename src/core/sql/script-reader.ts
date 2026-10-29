@@ -55,6 +55,7 @@ export class ScriptReader {
       const split = splitScript(region, this.driver, {
         delimiter: this.delimiter,
         psqlCommands: this.driver === 'postgres',
+        sqlplusCommands: this.driver === 'oracle',
       });
       const pieces = split.pieces;
       // The last piece may still go on in the next part, unless the text has ended.

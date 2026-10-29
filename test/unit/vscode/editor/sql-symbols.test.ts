@@ -112,6 +112,25 @@ describe('symbolAt', () => {
   });
 });
 
+describe('symbolAt on Oracle (V6.4)', () => {
+  it('reads x.name as schema.table, and x.routine( as a routine of schema x', () => {
+    expect(at('SELECT * FROM datanest.ord|ers', 'oracle', {})?.symbol).toEqual({
+      kind: 'table',
+      table: { schema: 'datanest', name: 'orders' },
+    });
+    expect(at('SELECT datanest.order_to|tal(1) FROM dual', 'oracle', {})?.symbol).toEqual({
+      kind: 'routine',
+      name: 'order_total',
+      scope: { schema: 'datanest' },
+    });
+  });
+
+  it('takes Oracle built-ins and keywords for no object', () => {
+    expect(at('SELECT NV|L(a, 1) FROM dual', 'oracle', {})).toBeUndefined();
+    expect(at('SELECT SYS|DATE FROM dual', 'oracle', {})).toBeUndefined();
+  });
+});
+
 describe('definitionTargets', () => {
   it('tries a table, then a view, with the cursor on the name or the column', () => {
     expect(definitionTargets({ kind: 'table', table: { name: 't' } })).toEqual({

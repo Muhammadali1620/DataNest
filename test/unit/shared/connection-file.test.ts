@@ -101,7 +101,7 @@ describe('readConnectionFile', () => {
       { "name": "Good", "driver": "mysql", "host": "h" },
       { "name": "No host", "driver": "mysql" },
       { "name": "Typo", "driver": "mysql", "host": "h", "pasword": "x" },
-      { "name": "Bad driver", "driver": "oracle", "host": "h" },
+      { "name": "Bad driver", "driver": "db2", "host": "h" },
       "not an object",
       { "id": "has space", "name": "Bad id", "driver": "mysql", "host": "h" }
     ] }`);

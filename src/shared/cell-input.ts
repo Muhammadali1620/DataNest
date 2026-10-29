@@ -4,6 +4,7 @@
 
 import { clickhouseBareType } from './clickhouse-types';
 import { type CellValue } from './cell-value';
+import type { DriverId } from './connection';
 
 export const INPUT_KINDS = [
   'text',
@@ -25,8 +26,11 @@ export function isTextEditable(kind: InputKind): boolean {
   return kind !== 'binary';
 }
 
-/** Which editor a column of this database type gets. */
-export function inputKindOf(dataType: string | undefined): InputKind {
+/**
+ * Which editor a column of this database type gets. The driver matters only where a
+ * type name means something else there: Oracle's DATE holds a time of day too.
+ */
+export function inputKindOf(dataType: string | undefined, driver?: DriverId): InputKind {
   // ClickHouse wraps the type it stores: Nullable(…), LowCardinality(…).
   const type = clickhouseBareType(dataType ?? '').toLowerCase();
   if (type === '') {
@@ -49,7 +53,7 @@ export function inputKindOf(dataType: string | undefined): InputKind {
     return 'datetime';
   }
   if (/^date(32)?$/u.test(type)) {
-    return 'date';
+    return driver === 'oracle' ? 'datetime' : 'date';
   }
   if (/^time(\s|\(|$)/u.test(type)) {
     return 'time';
@@ -109,12 +113,14 @@ export type ParsedInput =
   | { readonly ok: false; readonly problem: InputProblem };
 
 const ZONE = '(?:Z|[+-]\\d{2}(?::?\\d{2})?)?';
+/** Oracle and SQL Server print the zone after a space: `… 12:00:00.1234567 +03:00`. */
+const SPACED_ZONE = / (?=Z$|[+-]\d{2}(?::?\d{2})?$)/u;
 const INTEGER = /^[+-]?\d+$/u;
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/u;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const TIME = new RegExp(`^-?\\d{1,3}:[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,6})?)?${ZONE}$`, 'u');
 const DATETIME = new RegExp(
-  `^(\\d{4})-(\\d{2})-(\\d{2})[ T](\\d{2}):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,6})?)?${ZONE}$`,
+  `^(\\d{4})-(\\d{2})-(\\d{2})[ T](\\d{2}):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,9})?)? ?${ZONE}$`,
   'u',
 );
 
@@ -206,8 +212,12 @@ export function parseCellInput(
       ) {
         return { ok: false, problem: 'invalid-datetime' };
       }
-      // `T` is the browser's spelling; databases take the space.
-      return { ok: true, value: { kind: 'datetime', text: text.replace('T', ' ') } };
+      // `T` is the browser's spelling; databases take the space. The zone goes right
+      // after the time, which every server reads.
+      return {
+        ok: true,
+        value: { kind: 'datetime', text: text.replace('T', ' ').replace(SPACED_ZONE, '') },
+      };
     }
     case 'json':
       try {

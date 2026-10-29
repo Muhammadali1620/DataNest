@@ -144,7 +144,12 @@ export class DataImportModel {
           if (source === null || source === undefined || column.generated) {
             return { fill: 'default' as const };
           }
-          const converted = convertValue(record.values[source], column.dataType, values);
+          const converted = convertValue(
+            record.values[source],
+            column.dataType,
+            values,
+            this.driver,
+          );
           return converted.ok
             ? { text: cellText(converted.value, { nullText: 'NULL' }) }
             : { problem: converted.problem };

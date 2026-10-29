@@ -31,7 +31,7 @@ describe('dataImportProtocol state (V6.3)', () => {
 
   it('knows ClickHouse among the drivers', () => {
     expect(() =>
-      dataImportProtocol.webview.events.state.parse({ ...STATE, driver: 'oracle' }),
+      dataImportProtocol.webview.events.state.parse({ ...STATE, driver: 'db2' }),
     ).toThrow();
   });
 });

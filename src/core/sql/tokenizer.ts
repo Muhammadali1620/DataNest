@@ -49,6 +49,13 @@ export interface SqlSyntax {
    * bodies and batches that declare variables then run as one statement up to it.
    */
   readonly batchSeparator: boolean;
+  /**
+   * A line holding only `/` ends a statement (SQL*Plus, Oracle). PL/SQL — routine,
+   * trigger and package bodies, anonymous blocks — runs as one statement up to it.
+   */
+  readonly slashTerminator: boolean;
+  /** `q'[…]'` strings with a delimiter of one's choice (Oracle). */
+  readonly quoteOperator: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -64,6 +71,8 @@ const MYSQL: SqlSyntax = {
   executableComments: true,
   bracketIdentifiers: false,
   batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
 };
 
 const POSTGRES: SqlSyntax = {
@@ -79,6 +88,8 @@ const POSTGRES: SqlSyntax = {
   executableComments: false,
   bracketIdentifiers: false,
   batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
 };
 
 const SQLITE: SqlSyntax = {
@@ -94,6 +105,8 @@ const SQLITE: SqlSyntax = {
   executableComments: false,
   bracketIdentifiers: false,
   batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
 };
 
 const MSSQL: SqlSyntax = {
@@ -110,6 +123,8 @@ const MSSQL: SqlSyntax = {
   executableComments: false,
   bracketIdentifiers: true,
   batchSeparator: true,
+  slashTerminator: false,
+  quoteOperator: false,
 };
 
 const CLICKHOUSE: SqlSyntax = {
@@ -127,6 +142,25 @@ const CLICKHOUSE: SqlSyntax = {
   executableComments: false,
   bracketIdentifiers: false,
   batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
+};
+
+const ORACLE: SqlSyntax = {
+  backslashEscapes: false,
+  hashComments: false,
+  backtickIdentifiers: false,
+  doubleQuoteIdentifiers: true,
+  escapeStrings: false,
+  dollarQuotes: false,
+  nestedBlockComments: false,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+  slashTerminator: true,
+  quoteOperator: true,
 };
 
 const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
@@ -135,6 +169,7 @@ const BY_DRIVER: Readonly<Record<DriverId, SqlSyntax>> = {
   sqlite: SQLITE,
   mssql: MSSQL,
   clickhouse: CLICKHOUSE,
+  oracle: ORACLE,
 };
 
 /** The syntax of a driver; the safest common set when none is known. */
@@ -155,6 +190,8 @@ export function syntaxOf(driver?: DriverId): SqlSyntax {
       // `[` is an array subscript in PostgreSQL; `GO` is a word anywhere else.
       bracketIdentifiers: false,
       batchSeparator: false,
+      slashTerminator: false,
+      quoteOperator: false,
     };
   }
   return BY_DRIVER[driver];
@@ -212,6 +249,12 @@ function readToken(sql: string, start: number, syntax: SqlSyntax): Token {
     const dollar = dollarQuoted(sql, start);
     if (dollar) {
       return dollar;
+    }
+  }
+  if (syntax.quoteOperator) {
+    const q = quoteOperator(sql, start);
+    if (q) {
+      return q;
     }
   }
   if (syntax.escapeStrings && (char === 'E' || char === 'e') && sql[start + 1] === "'") {
@@ -296,6 +339,25 @@ function quoted(
   return { kind, start, end: sql.length, unterminated: true };
 }
 
+const Q_CLOSERS: Readonly<Record<string, string>> = { '[': ']', '{': '}', '(': ')', '<': '>' };
+
+/** `q'[…]'`, `nq'{…}'`, `q'!…!'`: the string ends at the closing delimiter and a quote. */
+function quoteOperator(sql: string, start: number): Token | undefined {
+  const match = /^[nN]?[qQ]'/u.exec(sql.slice(start, start + 3));
+  if (match === null) {
+    return undefined;
+  }
+  const open = sql[start + match[0].length];
+  if (open === undefined || /\s/u.test(open)) {
+    return undefined;
+  }
+  const closer = `${Q_CLOSERS[open] ?? open}'`;
+  const end = sql.indexOf(closer, start + match[0].length + 1);
+  return end === -1
+    ? { kind: 'string', start, end: sql.length, unterminated: true }
+    : { kind: 'string', start, end: end + closer.length };
+}
+
 /** `[name]`, where `]]` stands for one `]`. */
 function bracketed(sql: string, start: number): Token {
   let index = start + 1;
@@ -359,4 +421,9 @@ export function isTrivia(token: Token): boolean {
 /** The source text of a token. */
 export function textOf(sql: string, token: Token): string {
   return sql.slice(token.start, token.end);
+}
+
+/** The line a script puts after each statement so its client runs it: GO, `/`, or none. */
+export function scriptTerminator(syntax: SqlSyntax): string | undefined {
+  return syntax.batchSeparator ? 'GO' : syntax.slashTerminator ? '/' : undefined;
 }

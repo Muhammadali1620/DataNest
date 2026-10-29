@@ -3,6 +3,7 @@
 // aggregation, and a key (primary or unique, never NULL) present in the result.
 
 import { enumOptions, type InputKind, inputKindOf } from '../../shared/cell-input';
+import type { DriverId } from '../../shared/connection';
 import type { ReadOnlyReason } from '../../shared/read-only-reason';
 import type { SelectItem } from '../sql/select-source';
 import type { ColumnInfo, ForeignKey, TableKind, TableRef } from './objects';
@@ -52,6 +53,8 @@ export interface EditabilityInput {
   readonly items: readonly SelectItem[];
   /** Names of the result columns, in order. */
   readonly resultColumns: readonly string[];
+  /** For the types whose meaning depends on the database (Oracle's DATE). */
+  readonly driver?: DriverId;
 }
 
 function readOnly(reason: ReadOnlyReason): ReadOnlyResult {
@@ -147,7 +150,11 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
     keyIndexes.push(index);
   }
   // A binary key cannot be written back exactly (only a preview of it is held).
-  if (key.some((name) => inputKindOf(findByName(input.columns, name)?.dataType) === 'binary')) {
+  if (
+    key.some(
+      (name) => inputKindOf(findByName(input.columns, name)?.dataType, input.driver) === 'binary',
+    )
+  ) {
     return readOnly('no-key');
   }
   const columns = columnMap.map((name): EditableColumn | null => {
@@ -160,7 +167,7 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
       name: info.name,
       dataType: info.dataType,
       nullable: info.nullable,
-      kind: inputKindOf(info.dataType),
+      kind: inputKindOf(info.dataType, input.driver),
       ...(options === undefined ? {} : { options }),
       ...(info.defaultValue === undefined ? {} : { defaultValue: info.defaultValue }),
     };

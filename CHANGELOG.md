@@ -20,6 +20,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   connections enforced by the server; the table designer (MergeTree, `Nullable`, column
   order), dumps, imports, exports, test data and copies to and from the other databases.
   Results are read-only, since rows have no key.
+- Oracle Database (12.2 and newer, through node-oracledb's thin mode: no Instant Client):
+  the service is the database and users are its schemas; exact `NUMBER(38)`, `TIMESTAMP(9)`
+  and `TIMESTAMP WITH TIME ZONE` with its offset; intervals, LOBs and JSON; PL/SQL in the
+  editor and in SQL files, with `/` lines, `q'[…]'` strings and SQL*Plus commands that are
+  skipped; what `DBMS_OUTPUT` prints shown as the statement's message; compile errors with
+  their line and column; cancel; transactions begun with `SET TRANSACTION` or a savepoint;
+  names written without quotes found the way Oracle reads them (`orders` is `ORDERS`); the
+  table designer (identity columns, comments), editing, dumps that load under another user,
+  imports, exports, test data and copies to and from the other databases.
 
 ### Changed
 
@@ -34,6 +43,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   from SQLite are all called `fk_1`, which MySQL and SQL Server refuse twice.
 - The table designer edits SQL Server's nonclustered indexes instead of keeping them
   as they are.
+- A date and time typed into a cell may have up to nine fraction digits and a space before
+  the zone, the way SQL Server's `datetime2(7)` and `datetimeoffset` show them.
+- Copying tables reads `CHAR(10 CHAR)`-style lengths and keeps a time default only where
+  the target can hold it.
 
 ## [0.5.0] - 2026-10-29
 

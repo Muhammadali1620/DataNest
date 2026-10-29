@@ -6,6 +6,7 @@ import { DbError, errorMessage, toDbError } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
 import type { TableRef } from '../../core/model/objects';
 import type { Session } from '../../drivers/driver';
+import type { DriverId } from '../../shared/connection';
 import { ConnectionManager, type SessionTarget } from '../connection-manager';
 import { RowBatcher } from '../dump-script';
 import { exactLiteralOf } from '../sql-literal';
@@ -96,7 +97,11 @@ export class TableImporter {
     if (request.columns.length === 0) {
       throw new DbError('unsupported', 'No column of the table gets a value from the file');
     }
-    const { dialect, capabilities } = await this.manager.driverOf(request.target.connectionId);
+    const {
+      id: driver,
+      dialect,
+      capabilities,
+    } = await this.manager.driverOf(request.target.connectionId);
     const owner = ConnectionManager.taskOwner(`import-${nextImport++}`);
     const session = await this.manager.acquire(owner, request.target);
     const state = new ImportState();
@@ -134,7 +139,7 @@ export class TableImporter {
           break;
         }
         state.read += 1;
-        const row = this.rowOf(record, request, dialect, state);
+        const row = this.rowOf(record, request, dialect, driver, state);
         if (row === undefined) {
           if (all) {
             state.outcome = 'stopped';
@@ -202,6 +207,7 @@ export class TableImporter {
     record: SourceRecord,
     request: ImportRequest,
     dialect: Parameters<typeof exactLiteralOf>[0],
+    driver: DriverId,
     state: ImportState,
   ): PendingRow | undefined {
     if ('error' in record) {
@@ -210,7 +216,12 @@ export class TableImporter {
     }
     const literals: string[] = [];
     for (const column of request.columns) {
-      const converted = convertValue(record.values[column.source], column.dataType, request.values);
+      const converted = convertValue(
+        record.values[column.source],
+        column.dataType,
+        request.values,
+        driver,
+      );
       if (!converted.ok) {
         state.fail({ line: record.line, column: column.name, problem: converted.problem });
         return undefined;

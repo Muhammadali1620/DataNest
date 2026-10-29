@@ -283,3 +283,111 @@ describe('ClickHouse URLs (V6.3)', () => {
     expect(parseConnectionUrl('clickhouse:///db')).toEqual({ ok: false, problem: 'no-host' });
   });
 });
+
+describe('Oracle URLs (V6.4)', () => {
+  it('knows the oracle scheme, with jdbc: and thin: too', () => {
+    expect(urlDriver('oracle://h')).toBe('oracle');
+    expect(urlDriver('ORACLE://h')).toBe('oracle');
+    expect(urlDriver('oracle:thin:@h:1521:ORCL')).toBe('oracle');
+    expect(urlDriver('jdbc:oracle:thin:@//h:1521/SVC')).toBe('oracle');
+  });
+
+  it('reads user, password, port and the service as the database', () => {
+    expect(ok(parseConnectionUrl('oracle://scott:tiger@db.example:1521/ORCLPDB1'))).toEqual({
+      input: {
+        name: 'ORCLPDB1',
+        driver: 'oracle',
+        host: 'db.example',
+        port: 1521,
+        user: 'scott',
+        database: 'ORCLPDB1',
+      },
+      password: 'tiger',
+    });
+  });
+
+  it('reads the JDBC thin forms with a service or a SID', () => {
+    for (const url of [
+      'oracle:thin:@//db.example:1521/SVC',
+      'jdbc:oracle:thin:@//db.example:1521/SVC',
+      'jdbc:oracle:thin:@db.example:1521:SVC',
+    ]) {
+      expect(ok(parseConnectionUrl(url)).input, url).toEqual({
+        name: 'SVC',
+        driver: 'oracle',
+        host: 'db.example',
+        port: 1521,
+        database: 'SVC',
+      });
+    }
+  });
+
+  it('reads the user and password of a JDBC thin URL written user/password@', () => {
+    for (const url of [
+      'jdbc:oracle:thin:scott/tiger@db.example:1521:ORCL',
+      'jdbc:oracle:thin:scott/tiger@//db.example:1521/ORCL',
+    ]) {
+      const value = ok(parseConnectionUrl(url));
+      expect(value.input, url).toMatchObject({
+        host: 'db.example',
+        user: 'scott',
+        database: 'ORCL',
+      });
+      expect(value.password, url).toBe('tiger');
+    }
+  });
+
+  it('reads a host and service without a port, and a bare host', () => {
+    expect(ok(parseConnectionUrl('oracle://db.example/SVC')).input).toEqual({
+      name: 'SVC',
+      driver: 'oracle',
+      host: 'db.example',
+      database: 'SVC',
+    });
+    expect(ok(parseConnectionUrl('oracle://db.example')).input).toEqual({
+      name: 'db.example',
+      driver: 'oracle',
+      host: 'db.example',
+    });
+    expect(ok(parseConnectionUrl('oracle://u@h/S/')).input).toMatchObject({
+      user: 'u',
+      database: 'S',
+    });
+  });
+
+  it('reads IPv6 hosts in brackets', () => {
+    expect(ok(parseConnectionUrl('oracle://[::1]:1521/SVC')).input).toMatchObject({
+      host: '::1',
+      port: 1521,
+      database: 'SVC',
+    });
+    expect(ok(parseConnectionUrl('oracle:thin:@//[2001:db8::1]:1522/S')).input).toMatchObject({
+      host: '2001:db8::1',
+      port: 1522,
+    });
+  });
+
+  it('decodes a percent-encoded password and keeps an empty one out', () => {
+    expect(ok(parseConnectionUrl('oracle://u:p%40ss%2Fx@h:1521/S')).password).toBe('p@ss/x');
+    expect(ok(parseConnectionUrl('oracle://u:@h/S'))).not.toHaveProperty('password');
+  });
+
+  it('ignores a port out of range and query parameters', () => {
+    expect(ok(parseConnectionUrl('oracle://h:99999/S')).input).not.toHaveProperty('port');
+    expect(ok(parseConnectionUrl('oracle://h:0/S')).input).not.toHaveProperty('port');
+    expect(ok(parseConnectionUrl('oracle://h:1521/S?x=1')).input).toEqual({
+      name: 'S',
+      driver: 'oracle',
+      host: 'h',
+      port: 1521,
+      database: 'S',
+    });
+  });
+
+  it('needs a host', () => {
+    expect(parseConnectionUrl('oracle:thin:@')).toEqual({ ok: false, problem: 'no-host' });
+    expect(parseConnectionUrl('oracle://')).toMatchObject({ ok: false });
+    expect(parseConnectionUrl('oracle://u:p@:1521/S')).toMatchObject({ ok: false });
+    expect(parseConnectionUrl('oracle://h:abc/S')).toMatchObject({ ok: false });
+  });
+});

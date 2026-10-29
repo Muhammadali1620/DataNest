@@ -123,6 +123,10 @@ function driverFromWord(word: string): DriverId | undefined {
   if (text.includes('clickhouse')) {
     return 'clickhouse';
   }
+  // Laravel's Oracle package says `oracle`, PHP's extension `oci8`.
+  if (/oracle|oci8/.test(text)) {
+    return 'oracle';
+  }
   return undefined;
 }
 
@@ -152,7 +156,9 @@ function fromGroup(prefix: string, vars: ReadonlyMap<string, string>): EnvCandid
           ? 'mssql'
           : port === 8123
             ? 'clickhouse'
-            : undefined);
+            : port === 1521
+              ? 'oracle'
+              : undefined);
   if (driver === undefined) {
     return undefined;
   }

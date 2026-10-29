@@ -37,9 +37,10 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
     return clickhouseNeutral(dataType);
   }
   const type = dataType.trim().toLowerCase();
+  // Oracle says what a length counts: `varchar2(100 char)`, `char(10 byte)`.
   const numbers = (/\(([^)]*)\)/u.exec(type)?.[1] ?? '')
     .split(',')
-    .map((part) => Number(part.trim()))
+    .map((part) => Number(/^\s*(\d+(?:\.\d+)?)/u.exec(part)?.[1] ?? Number.NaN))
     .filter((value) => Number.isFinite(value) && value > 0);
   if (
     /^(bool|boolean)$/u.test(type) ||
@@ -53,6 +54,12 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
   }
   if (driver === 'mssql') {
     const own = mssqlNeutral(type);
+    if (own !== undefined) {
+      return own;
+    }
+  }
+  if (driver === 'oracle') {
+    const own = oracleNeutral(type);
     if (own !== undefined) {
       return own;
     }
@@ -134,6 +141,60 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
     return { kind: 'enum', values: enumOptions(dataType) ?? [] };
   }
   return { kind: 'text' };
+}
+
+/** Oracle types: NUMBER(p) is an integer by its digits, DATE carries a time. */
+function oracleNeutral(type: string): NeutralType | undefined {
+  const number = /^number(?:\s*\(\s*(\d+)\s*(?:,\s*(-?\d+)\s*)?\))?$/u.exec(type);
+  if (number !== null) {
+    const precision = number[1] === undefined ? undefined : Number(number[1]);
+    const scale = Number(number[2] ?? 0);
+    if (precision === undefined) {
+      return { kind: 'decimal' };
+    }
+    if (scale !== 0) {
+      return { kind: 'decimal', precision, scale: Math.max(scale, 0) };
+    }
+    if (precision <= 4) {
+      return { kind: 'integer', bytes: 2, unsigned: false };
+    }
+    if (precision <= 9) {
+      return { kind: 'integer', bytes: 4, unsigned: false };
+    }
+    return precision <= 18
+      ? { kind: 'integer', bytes: 8, unsigned: false }
+      : { kind: 'decimal', precision, scale: 0 };
+  }
+  if (type === 'integer' || type === 'int' || type === 'smallint') {
+    return { kind: 'decimal', precision: 38, scale: 0 };
+  }
+  if (type === 'binary_float') {
+    return { kind: 'float', double: false };
+  }
+  if (type === 'binary_double' || type.startsWith('float')) {
+    return { kind: 'float', double: true };
+  }
+  if (type === 'date') {
+    return { kind: 'datetime', zone: false, precision: 0 };
+  }
+  if (type.startsWith('timestamp')) {
+    const digits = /\((\d+)\)/u.exec(type)?.[1];
+    return {
+      kind: 'datetime',
+      zone: /with (local )?time zone/u.test(type),
+      ...precisionOf(digits === undefined ? [6] : [Number(digits)]),
+    };
+  }
+  if (type.startsWith('interval') || type === 'rowid' || type === 'urowid') {
+    return { kind: 'text' };
+  }
+  if (type === 'long') {
+    return { kind: 'text' };
+  }
+  if (type === 'long raw') {
+    return { kind: 'binary' };
+  }
+  return undefined;
 }
 
 /** SQL Server types that mean something else elsewhere, or exist only there. */
@@ -274,6 +335,62 @@ export function targetType(
       return mssqlType(neutral, indexed);
     case 'clickhouse':
       return clickhouseType(neutral);
+    case 'oracle':
+      return oracleType(neutral, indexed);
+  }
+}
+
+/** The longest VARCHAR2 in characters; an indexed one stays well under the key limit. */
+const ORACLE_VARCHAR = 4000;
+const ORACLE_INDEXED_VARCHAR = 1000;
+
+function oracleType(neutral: NeutralType, indexed: boolean): { type: string; length: string } {
+  switch (neutral.kind) {
+    // BOOLEAN exists only from 23ai; NUMBER(1) works everywhere and holds 0 and 1.
+    case 'boolean':
+      return t('NUMBER', '1');
+    case 'integer':
+      if (neutral.bytes <= 2) {
+        return t('NUMBER', '5');
+      }
+      if (neutral.bytes <= 4) {
+        return t('NUMBER', '10');
+      }
+      return t('NUMBER', neutral.unsigned ? '20' : '19');
+    case 'decimal':
+      return neutral.precision === undefined || neutral.precision > 38
+        ? t('NUMBER')
+        : t('NUMBER', `${neutral.precision},${Math.min(neutral.scale ?? 0, neutral.precision)}`);
+    case 'float':
+      return t(neutral.double ? 'BINARY_DOUBLE' : 'BINARY_FLOAT');
+    case 'string':
+      if (neutral.fixed && neutral.length <= 2000) {
+        return t('CHAR', `${neutral.length} CHAR`);
+      }
+      if (neutral.length <= ORACLE_VARCHAR) {
+        return t('VARCHAR2', `${neutral.length} CHAR`);
+      }
+      return indexed ? t('VARCHAR2', `${ORACLE_INDEXED_VARCHAR} CHAR`) : t('CLOB');
+    case 'text':
+    case 'json':
+      return indexed ? t('VARCHAR2', `${ORACLE_INDEXED_VARCHAR} CHAR`) : t('CLOB');
+    case 'enum': {
+      const longest = Math.max(1, ...neutral.values.map((value) => value.length));
+      return t('VARCHAR2', `${neutral.values.length === 0 ? 255 : longest} CHAR`);
+    }
+    case 'date':
+      return t('DATE');
+    // Oracle has no time of day on its own.
+    case 'time':
+      return t('VARCHAR2', '16 CHAR');
+    case 'datetime': {
+      const precision = String(neutral.precision ?? 6);
+      return neutral.zone ? t('TIMESTAMP WITH TIME ZONE', precision) : t('TIMESTAMP', precision);
+    }
+    case 'binary':
+      return indexed ? t('RAW', '2000') : t('BLOB');
+    case 'uuid':
+      return t('VARCHAR2', '36 CHAR');
   }
 }
 
@@ -499,7 +616,7 @@ export function mapColumnType(
 }
 
 const NOW =
-  /^(current_timestamp|now|localtimestamp|transaction_timestamp|statement_timestamp|getdate|sysdatetime|getutcdate|sysutcdatetime|sysdatetimeoffset|now64)\s*(\(\s*\d*\s*\))?$/iu;
+  /^(current_timestamp|now|localtimestamp|transaction_timestamp|statement_timestamp|getdate|sysdatetime|getutcdate|sysutcdatetime|sysdatetimeoffset|now64|sysdate|systimestamp)\s*(\(\s*\d*\s*\))?$/iu;
 
 /**
  * A default for the target, or undefined when it cannot be carried over (a function
@@ -529,10 +646,18 @@ export function mapDefault(
   }
   if (neutral.kind === 'boolean') {
     if (/^(true|'t'|'true'|b?'1'|1)$/iu.test(bare)) {
-      return to === 'mysql' || to === 'mssql' ? '1' : to === 'clickhouse' ? 'true' : 'TRUE';
+      return to === 'mysql' || to === 'mssql' || to === 'oracle'
+        ? '1'
+        : to === 'clickhouse'
+          ? 'true'
+          : 'TRUE';
     }
     if (/^(false|'f'|'false'|b?'0'|0)$/iu.test(bare)) {
-      return to === 'mysql' || to === 'mssql' ? '0' : to === 'clickhouse' ? 'false' : 'FALSE';
+      return to === 'mysql' || to === 'mssql' || to === 'oracle'
+        ? '0'
+        : to === 'clickhouse'
+          ? 'false'
+          : 'FALSE';
     }
     return undefined;
   }
@@ -542,14 +667,26 @@ export function mapDefault(
   if (/^'(?:[^'\\]|'')*'$/u.test(bare)) {
     return bare;
   }
-  if (NOW.test(bare) || /^current_(date|time)$|^today\s*\(\s*\)$/iu.test(bare)) {
-    if (/^(current_date|today\s*\(\s*\))$/iu.test(bare)) {
+  const today = /^(current_date|today\s*\(\s*\)|trunc\s*\(\s*sysdate\s*\))$/iu;
+  if (NOW.test(bare) || today.test(bare) || /^current_time$/iu.test(bare)) {
+    // Oracle keeps a time of day as text (see oracleType), which takes no clock.
+    if (to === 'oracle' && neutral.kind === 'time') {
+      return undefined;
+    }
+    if (today.test(bare)) {
       // SQL Server 2022 has no CURRENT_DATE.
       return to === 'mssql'
         ? 'CAST(GETDATE() AS date)'
         : to === 'clickhouse'
           ? 'today()'
-          : 'CURRENT_DATE';
+          : to === 'oracle'
+            ? 'TRUNC(SYSDATE)'
+            : 'CURRENT_DATE';
+    }
+    if (to === 'oracle') {
+      return neutral.kind === 'datetime' && (neutral.precision ?? 6) === 0
+        ? 'SYSDATE'
+        : 'SYSTIMESTAMP';
     }
     if (to === 'clickhouse') {
       const digits = neutral.kind === 'datetime' ? (neutral.precision ?? 6) : 0;

@@ -39,6 +39,7 @@ describe('languageOf', () => {
     expect(languageOf('sqlite')).toBe('sqlite');
     expect(languageOf('mssql')).toBe('transactsql');
     expect(languageOf('clickhouse')).toBe('clickhouse');
+    expect(languageOf('oracle')).toBe('plsql');
     expect(languageOf(undefined)).toBe('sql');
   });
 
@@ -182,5 +183,39 @@ describe('ClickHouse formatting (V6.3)', () => {
     expect(text).toContain('SELECT');
     expect(text).toContain('FINAL');
     expect(text).toContain('PREWHERE');
+  });
+});
+
+describe('Oracle formatting (V6.4)', () => {
+  it('formats through the real formatter in the PL/SQL dialect', () => {
+    const text = formatter.format(
+      'select a, b from t where x = 1 and rownum <= 10',
+      languageOf('oracle'),
+      DEFAULT_FORMAT_STYLE,
+    );
+    expect(text).toContain('SELECT');
+    expect(text).toContain('WHERE');
+    expect(text).toContain('FROM');
+  });
+
+  it('keeps q-quoted strings as they are', () => {
+    const text = formatter.format(
+      "select q'[it's; here]' from dual",
+      languageOf('oracle'),
+      DEFAULT_FORMAT_STYLE,
+    );
+    expect(text).toContain("q'[it's; here]'");
+  });
+
+  it('formats each statement of an Oracle script on its own', () => {
+    const text = 'select 1 from dual\n/\nselect 2 from dual;';
+    const result = formatEdits(text, 'oracle', DEFAULT_FORMAT_STYLE, shouting);
+    expect(result).toEqual({
+      edits: [
+        { start: 0, end: 18, text: 'SELECT 1 FROM DUAL' },
+        { start: 21, end: 39, text: 'SELECT 2 FROM DUAL' },
+      ],
+      failed: 0,
+    });
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
 import { mssqlDialect } from '../../../../src/drivers/mssql/dialect';
 import { clickhouseDialect } from '../../../../src/drivers/clickhouse/dialect';
+import { oracleDialect } from '../../../../src/drivers/oracle/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import type { ObjectScope, TableRef, TableStructure } from '../../../../src/core/model/objects';
@@ -18,6 +19,7 @@ const DIALECTS = {
   sqlite: sqliteDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
+  oracle: oracleDialect,
 };
 
 /** `orders (id int auto pk, note text)` with a FULLTEXT index the designer keeps. */

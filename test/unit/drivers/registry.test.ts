@@ -82,7 +82,7 @@ describe('DriverRegistry', () => {
   it('rejects unknown driver ids without calling the loader', async () => {
     const loader = vi.fn();
     const registry = registryWith(loader as never);
-    await expect(registry.get('oracle' as DriverId)).rejects.toMatchObject({
+    await expect(registry.get('db2' as DriverId)).rejects.toMatchObject({
       name: 'DbError',
       code: 'unsupported',
     });

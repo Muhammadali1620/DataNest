@@ -169,3 +169,27 @@ describe('ClickHouse types (V6.3)', () => {
     expect(suggestGenerator(column('size', "Enum8('s' = 1)"))).toBe('enum');
   });
 });
+
+describe('Oracle columns (V6.4)', () => {
+  it("fills Oracle's DATE with moments, since it holds a time of day", () => {
+    expect(suggestGenerator(column('born', 'DATE', { driver: 'oracle' }))).not.toBe(
+      suggestGenerator(column('born', 'DATE')),
+    );
+    expect(suggestGenerator(column('born', 'DATE'))).toBe('date');
+  });
+
+  it('reads lengths that say CHAR or BYTE, and NUMBER(p,s) ranges', () => {
+    expect(typeSettings(column('a', 'VARCHAR2(60 CHAR)'), 'words')).toMatchObject({
+      maxLength: 60,
+    });
+    expect(typeSettings(column('a', 'CHAR(4 BYTE)'), 'words')).toMatchObject({
+      maxLength: 4,
+      fixedLength: true,
+    });
+    expect(typeSettings(column('a', 'NVARCHAR2(20)'), 'words')).toMatchObject({ maxLength: 20 });
+    expect(typeSettings(column('a', 'NUMBER(5,2)'), 'decimal')).toMatchObject({
+      scale: 2,
+      max: 999,
+    });
+  });
+});

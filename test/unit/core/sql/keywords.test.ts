@@ -77,3 +77,38 @@ describe('ClickHouse keywords (V6.3)', () => {
     expect(keywordsOf()).toEqual(expect.arrayContaining(['PREWHERE', 'ENGINE']));
   });
 });
+
+describe('Oracle keywords (V6.4)', () => {
+  it('has the words of its own SQL and PL/SQL', () => {
+    for (const word of [
+      'VARCHAR2',
+      'NUMBER',
+      'DUAL',
+      'ROWNUM',
+      'CONNECT BY',
+      'MINUS',
+      'FETCH FIRST',
+      'PACKAGE BODY',
+      'ELSIF',
+      'EXECUTE IMMEDIATE',
+      'SYSDATE',
+    ]) {
+      expect(KEYWORDS.oracle, word).toContain(word);
+    }
+    expect(keywordsOf('oracle')).toEqual(expect.arrayContaining(['VARCHAR2', 'DUAL']));
+  });
+
+  it('offers no LIMIT, TOP or backtick-era words', () => {
+    for (const word of ['LIMIT', 'TOP', 'AUTO_INCREMENT']) {
+      expect(KEYWORDS.oracle, word).not.toContain(word);
+    }
+  });
+});
+
+describe('keywords of an unknown connection (V6.4)', () => {
+  it('include the Oracle words with everyone else', () => {
+    for (const word of ['VARCHAR2', 'DUAL', 'ELSIF', 'MINUS']) {
+      expect(keywordsOf(), word).toContain(word);
+    }
+  });
+});

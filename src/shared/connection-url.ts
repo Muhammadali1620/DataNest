@@ -31,6 +31,7 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   sqlserver: 'mssql',
   clickhouse: 'clickhouse',
   ch: 'clickhouse',
+  oracle: 'oracle',
 };
 
 /** The driver a URL is for, or undefined when DataNest does not know the scheme. */
@@ -203,6 +204,45 @@ function sqlServerUrl(plain: string): UrlResult {
   };
 }
 
+const ORACLE_REST =
+  /^(?:\/\/)?(?:([^:/@]+)(?:[:/]([^@]*))?@)?(?:\/\/)?(\[[^\]]+\]|[^:/@?]+)(?::(\d+))?(?:[/:]([^?/]+))?\/?(?:\?.*)?$/u;
+
+/**
+ * Oracle URLs: `oracle://user:pass@host:1521/SERVICE`, the JDBC thin form
+ * `oracle:thin:@//host:1521/SERVICE` (or `@host:1521:SID`) and EZConnect
+ * `user/pass@host:1521/SERVICE`. The service plays the database.
+ */
+function oracleUrl(plain: string): UrlResult {
+  const rest = plain.replace(/^oracle:(?:thin:)?/iu, '').replace(/^@/u, '');
+  const match = ORACLE_REST.exec(rest.trim());
+  if (match === null) {
+    return { ok: false, problem: rest.trim() === '' ? 'no-host' : 'not-a-url' };
+  }
+  const host = nonEmpty(decode(match[3] ?? '').replace(/^\[(.*)\]$/u, '$1'));
+  if (host === undefined) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const port = match[4] === undefined ? undefined : Number(match[4]);
+  const user = nonEmpty(decode(match[1] ?? ''));
+  const password = nonEmpty(decode(match[2] ?? ''));
+  const database = nonEmpty(decode(match[5] ?? ''));
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'oracle',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
+    ...(database === undefined ? {} : { database }),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(password === undefined ? {} : { password }),
+    },
+  };
+}
+
 /** Reads a connection URL. Unknown query parameters are ignored. */
 export function parseConnectionUrl(text: string): UrlResult {
   const trimmed = text.trim();
@@ -227,6 +267,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'mssql') {
     return sqlServerUrl(plain);
+  }
+  if (driver === 'oracle') {
+    return oracleUrl(plain);
   }
   let url: URL;
   try {

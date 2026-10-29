@@ -221,3 +221,69 @@ describe('dangersOf: T-SQL batches (V6.2)', () => {
     expect(dangersOf('', mssql)).toEqual([]);
   });
 });
+
+describe('dangersOf: PL/SQL blocks (V6.4)', () => {
+  const oracle = syntaxOf('oracle');
+
+  it('finds a DROP or a DELETE without WHERE inside an anonymous block', () => {
+    expect(dangersOf('BEGIN\n  DELETE FROM t;\nEND;', oracle)).toEqual(['delete-without-where']);
+    expect(dangersOf('DECLARE n NUMBER;\nBEGIN\n  DROP TABLE x;\nEND;', oracle)).toEqual(['drop']);
+    expect(dangersOf('BEGIN UPDATE t SET a = 1; TRUNCATE TABLE u; END;', oracle)).toEqual([
+      'update-without-where',
+      'truncate',
+    ]);
+    expect(dangersOf('BEGIN IF a = 1 THEN DELETE FROM t; END IF; END;', oracle)).toEqual([
+      'delete-without-where',
+    ]);
+  });
+
+  it('lets a block through when each change has its own WHERE', () => {
+    expect(dangersOf('BEGIN UPDATE t SET a = 1 WHERE id = 1; END;', oracle)).toEqual([]);
+    expect(dangersOf("BEGIN DELETE FROM t WHERE a = ';'; END;", oracle)).toEqual([]);
+    expect(dangersOf('BEGIN NULL; END;', oracle)).toEqual([]);
+  });
+
+  it('leaves the body of a routine or trigger alone: creating it runs nothing', () => {
+    expect(
+      dangersOf('CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  DELETE FROM t;\nEND;', oracle),
+    ).toEqual([]);
+    expect(
+      dangersOf(
+        'CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW BEGIN DROP TABLE x; END;',
+        oracle,
+      ),
+    ).toEqual([]);
+  });
+
+  it('still flags plain statements', () => {
+    expect(dangersOf('DELETE FROM t', oracle)).toEqual(['delete-without-where']);
+    expect(dangersOf('TRUNCATE TABLE t', oracle)).toEqual(['truncate']);
+    expect(dangersOf('DROP TABLE t PURGE', oracle)).toEqual(['drop']);
+    expect(dangersOf('SELECT 1 FROM dual', oracle)).toEqual([]);
+    expect(dangersOf("SELECT q'[DROP TABLE t]' FROM dual", oracle)).toEqual([]);
+  });
+});
+
+describe('dangersOf: PL/SQL control flow (V6.4)', () => {
+  const oracle = syntaxOf('oracle');
+
+  it('sees a change inside a loop, an ELSIF branch and an exception handler', () => {
+    for (const sql of [
+      'BEGIN FOR i IN 1..3 LOOP DELETE FROM t; END LOOP; END;',
+      'BEGIN FOR r IN (SELECT id FROM s WHERE x = 1) LOOP DELETE FROM t; END LOOP; END;',
+      'BEGIN LOOP DELETE FROM t; EXIT; END LOOP; END;',
+      'BEGIN NULL; EXCEPTION WHEN OTHERS THEN DELETE FROM t; END;',
+      'BEGIN IF a = 1 THEN NULL; ELSIF a = 2 THEN DELETE FROM t; END IF; END;',
+      'BEGIN CASE WHEN a = 1 THEN DELETE FROM t; END CASE; END;',
+    ]) {
+      expect(dangersOf(sql, oracle), sql).toEqual(['delete-without-where']);
+    }
+  });
+
+  it('lets the same control flow through when the change has its WHERE', () => {
+    expect(
+      dangersOf('BEGIN FOR i IN 1..3 LOOP DELETE FROM t WHERE id = i; END LOOP; END;', oracle),
+    ).toEqual([]);
+    expect(dangersOf('BEGIN NULL; EXCEPTION WHEN OTHERS THEN RAISE; END;', oracle)).toEqual([]);
+  });
+});

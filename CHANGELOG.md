@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-29
+
+NoSQL: Redis, MongoDB and Elasticsearch, each with the tree, pages and an editor of its
+own, and the same connections, SSH, TLS, production and read-only marks as SQL.
+
 ### Added
 
 - Redis: connect to one server, through Sentinels or to a cluster, with a password or an

@@ -3,8 +3,8 @@
 [![CI](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml)
 
 A free, open-source database client for VS Code and its forks — MySQL, MariaDB,
-PostgreSQL, SQLite, Microsoft SQL Server, ClickHouse and Oracle, without accounts, limits or
-telemetry.
+PostgreSQL, SQLite, Microsoft SQL Server, ClickHouse, Oracle, Redis, MongoDB and
+Elasticsearch, without accounts, limits or telemetry.
 
 **Install:** [Open VSX](https://open-vsx.org/extension/datanest/datanest) —
 or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/DataNest/releases).
@@ -23,9 +23,13 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
   ClickHouse and Oracle (12.2 and newer, no Instant Client needed), each driver loaded only
   when you first use it. TiDB, CockroachDB, YugabyteDB and Amazon Aurora work through the
   MySQL and PostgreSQL drivers, with presets in the connection form.
+- Redis (one server, Sentinel, cluster; Valkey too), MongoDB (one server, replica set,
+  `mongodb+srv://`, X.509) and Elasticsearch or OpenSearch (user and password or an API
+  key), with the same connections, folders, SSH, TLS, production and read-only marks.
 - A form with “Test connection”, editing, duplicating and deleting; fill it from a
-  `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://` or `oracle://` URL (or a JDBC
-  `oracle:thin:@…` one), or import connections from the workspace's `.env` files.
+  `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://`, `oracle://`, `redis://`,
+  `mongodb://` or `elasticsearch://` URL (or a JDBC `oracle:thin:@…` one), or import
+  connections from the workspace's `.env` files.
 - SSH tunnels with a password, a key or an SSH agent, through up to five jump hosts,
   with the server key checked like OpenSSH does.
 - SSL/TLS with a choice of checks, your own CA and client certificates (not yet for
@@ -108,9 +112,26 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Copy tables to another connection, even another database system: types, defaults and
   keys are translated, and the report says what could not be.
 
+**Redis, MongoDB and Elasticsearch**
+
+- Redis: keys in folders by `:`, loaded with `SCAN` so the server never blocks; a page per
+  key for strings (text, JSON, hex), hashes, lists, sets, sorted sets and streams, with
+  editing and TTL; a console with suggestions from the server's own command docs; server
+  information.
+- MongoDB: databases, collections, views and indexes in the tree; a page per collection
+  with a filter, a sort and a projection, as a table or as text, and editing that never
+  overwrites someone else's change; queries in an editor (`find`, `aggregate`, counts,
+  writes) run with Ctrl+Enter. Exact BSON types and field order are kept.
+- Elasticsearch: indices and their mapping fields in the tree; requests written as in a
+  console (`GET /products/_search` and a JSON body) sent with Ctrl+Enter, the hits as a
+  table and the whole answer as text, 64-bit numbers exact.
+
 **Safety and history**
 
-- Safe mode asks before `DELETE` or `UPDATE` without `WHERE`, `DROP` and `TRUNCATE`.
+- Safe mode asks before `DELETE` or `UPDATE` without `WHERE`, `DROP` and `TRUNCATE` — and
+  before `FLUSHALL`, a MongoDB `drop` or `deleteMany({})`, an Elasticsearch index delete.
+  Production connections ask before every change, read-only ones refuse it, in every
+  database family.
 - Every statement goes to a searchable history, with passwords masked, ready to rerun.
 
 ## Getting started

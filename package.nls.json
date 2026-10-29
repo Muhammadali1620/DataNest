@@ -1,6 +1,6 @@
 {
   "extension.displayName": "DataNest",
-  "extension.description": "Free and open-source database client: MySQL, MariaDB, PostgreSQL, SQLite and more.",
+  "extension.description": "Free and open-source database client: MySQL, MariaDB, PostgreSQL, SQLite, SQL Server, Redis, MongoDB, Elasticsearch and more.",
   "viewsContainers.datanest.title": "DataNest",
   "views.connections.name": "Connections",
   "viewsWelcome.connections.empty": "No connections yet.\n[New Connection](command:datanest.connections.add)\n[Add from URL](command:datanest.connections.addFromUrl) · [Import from .env](command:datanest.connections.importEnv) · [Import a list](command:datanest.connections.import)",

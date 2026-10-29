@@ -1,6 +1,6 @@
 {
   "extension.displayName": "DataNest",
-  "extension.description": "Бесплатный клиент баз данных с открытым кодом: MySQL, MariaDB, PostgreSQL, SQLite и другие.",
+  "extension.description": "Бесплатный клиент баз данных с открытым кодом: MySQL, MariaDB, PostgreSQL, SQLite, SQL Server, Redis, MongoDB, Elasticsearch и другие.",
   "viewsContainers.datanest.title": "DataNest",
   "views.connections.name": "Подключения",
   "viewsWelcome.connections.empty": "Пока нет подключений.\n[Новое подключение](command:datanest.connections.add)\n[Добавить по URL](command:datanest.connections.addFromUrl) · [Импорт из .env](command:datanest.connections.importEnv) · [Импорт списка](command:datanest.connections.import)",

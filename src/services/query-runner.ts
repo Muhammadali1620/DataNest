@@ -15,6 +15,7 @@ import type { MetadataCache } from './metadata-cache';
 import type { HistoryRecorder } from './history';
 import { needsBegin } from './manual-commit';
 import type { ResultStore, ResultSummary, ResultRow } from './result-store';
+import { msg } from '../core/user-message';
 
 /** Limits the user controls through settings (V1.25). */
 export interface QueryLimits {
@@ -101,7 +102,7 @@ export class QueryRunner {
       return { results: [], cancelled: false, skipped: 0 };
     }
     if (this.active.has(request.documentUri)) {
-      throw new DbError('busy', 'A query is already running in this editor');
+      throw new DbError('busy', msg('A query is already running in this editor'));
     }
     const owner = ConnectionManager.editorOwner(request.documentUri);
     const run: ActiveRun = { cancelled: false, timedOut: false, owner, startedAt: Date.now() };
@@ -144,7 +145,7 @@ export class QueryRunner {
     work: (session: Session) => Promise<T>,
   ): Promise<T> {
     if (this.active.has(documentUri)) {
-      throw new DbError('busy', 'A query is already running in this editor');
+      throw new DbError('busy', msg('A query is already running in this editor'));
     }
     const owner = ConnectionManager.editorOwner(documentUri);
     const run: ActiveRun = { cancelled: false, timedOut: false, owner, startedAt: Date.now() };
@@ -334,7 +335,7 @@ export class QueryRunner {
         dbError.position ?? guessErrorPosition(dbError.message, statement.text, driverId);
       this.remember(request, statement.text, {
         durationMs: Date.now() - started,
-        error: timedOut ? 'Timed out' : dbError.message,
+        error: timedOut ? msg('Timed out') : dbError.message,
       });
       return this.deps.results.add({
         documentUri: request.documentUri,
@@ -347,7 +348,10 @@ export class QueryRunner {
         error: {
           code: timedOut ? 'timeout' : dbError.code,
           message: timedOut
-            ? `Cancelled after ${Math.round(timeoutMs / 1000)} s (the query timeout of the connection or datanest.queryTimeout)`
+            ? msg(
+                'Cancelled after {0} s (the query timeout of the connection or datanest.queryTimeout)',
+                Math.round(timeoutMs / 1000),
+              )
             : dbError.message,
           ...(position === undefined ? {} : { position }),
         },

@@ -18,6 +18,7 @@ import { ConnectionManager, type SessionTarget } from './connection-manager';
 import { commentLine, orderViews, RowBatcher, scriptStatement } from './dump-script';
 import type { TextSink } from './file-sink';
 import { exactLiteralOf } from './sql-literal';
+import { msg } from '../core/user-message';
 
 export type DumpContent = 'all' | 'structure' | 'data';
 
@@ -119,7 +120,7 @@ export class SqlDumper {
       }
     } catch (error) {
       if (request.signal?.aborted === true) {
-        throw new DbError('cancelled', 'The dump was cancelled');
+        throw new DbError('cancelled', msg('The dump was cancelled'));
       }
       throw error;
     } finally {
@@ -408,7 +409,7 @@ class DumpWriter {
 
   private checkCancelled(): void {
     if (this.request.signal?.aborted === true) {
-      throw new DbError('cancelled', 'The dump was cancelled');
+      throw new DbError('cancelled', msg('The dump was cancelled'));
     }
   }
 

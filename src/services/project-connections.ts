@@ -15,6 +15,7 @@ import {
   readConnectionFile,
   writeConnectionFile,
 } from '../shared/connection-file';
+import { msg } from '../core/user-message';
 
 /** Where a project keeps its connections, relative to the workspace folder. */
 export const PROJECT_FILE_PATH = '.vscode/datanest.json';
@@ -164,7 +165,7 @@ export class ProjectConnections {
   async add(folderKey: string, input: ConnectionInput): Promise<ConnectionConfig> {
     const folder = this.folderList.find((one) => one.key === folderKey);
     if (folder === undefined) {
-      throw new DbError('not-found', 'This workspace folder is not open');
+      throw new DbError('not-found', msg('This workspace folder is not open'));
     }
     const id = await this.serial(async () => {
       this.requireTrust();
@@ -206,14 +207,14 @@ export class ProjectConnections {
       const localId =
         folder === undefined ? undefined : this.loaded.get(folder.key)?.localIds.get(id);
       if (folder === undefined || localId === undefined) {
-        throw new DbError('not-found', `Project connection "${id}" does not exist`);
+        throw new DbError('not-found', msg('Project connection "{0}" does not exist', id));
       }
       // The file may have changed since it was read (a pull, a teammate's edit):
       // the entry is found again by its id, not by its old position.
       const file = await this.readForWrite(folder);
       const index = [...assignIds(file).entries()].find(([, local]) => local === localId)?.[0];
       if (file === undefined || index === undefined) {
-        throw new DbError('not-found', 'The connection is no longer in the project file');
+        throw new DbError('not-found', msg('The connection is no longer in the project file'));
       }
       const connections = rawConnections(file);
       change(connections, index, localId, folder);
@@ -225,7 +226,10 @@ export class ProjectConnections {
 
   private requireTrust(): void {
     if (!this.trusted) {
-      throw new DbError('unsupported', 'Trust this workspace to change its project connections');
+      throw new DbError(
+        'unsupported',
+        msg('Trust this workspace to change its project connections'),
+      );
     }
   }
 
@@ -237,7 +241,10 @@ export class ProjectConnections {
     }
     const result = readConnectionFile(text);
     if (!result.ok) {
-      throw new DbError('unsupported', `${PROJECT_FILE_PATH} cannot be read: ${result.error}`);
+      throw new DbError(
+        'unsupported',
+        msg('{0} cannot be read: {1}', PROJECT_FILE_PATH, result.error),
+      );
     }
     return result.file;
   }
@@ -245,7 +252,10 @@ export class ProjectConnections {
   private require(id: string): ConnectionConfig {
     const config = this.get(id);
     if (config === undefined) {
-      throw new DbError('internal', `Project connection "${id}" was written but not read back`);
+      throw new DbError(
+        'internal',
+        msg('Project connection "{0}" was written but not read back', id),
+      );
     }
     return config;
   }

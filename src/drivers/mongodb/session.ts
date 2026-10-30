@@ -27,6 +27,7 @@ import { readBson } from './bson-read';
 import { fromDriverDocument, toDriverCommand, toDriverDocument, toDriverValue } from './bson-write';
 import { toMongoDbError } from './errors';
 import { mongoOptions, mongoUrl } from './options';
+import { msg } from '../../core/user-message';
 
 /** Replies of commands keep int32, double and int64 apart, and regexes as written. */
 const COMMAND_OPTIONS = {
@@ -45,7 +46,7 @@ function asBytes(value: unknown): Uint8Array {
   }
   throw new DbError(
     'internal',
-    'The driver returned a decoded document where raw bytes were asked',
+    msg('The driver returned a decoded document where raw bytes were asked'),
   );
 }
 
@@ -171,7 +172,7 @@ class DriverSession implements MongoSession {
 
   async command(database: string, command: MongoDocument): Promise<MongoDocument> {
     if (command.fields.length === 0) {
-      throw new DbError('syntax', 'The command is empty');
+      throw new DbError('syntax', msg('The command is empty'));
     }
     try {
       const reply = await this.client

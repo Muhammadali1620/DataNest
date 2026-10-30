@@ -7,6 +7,7 @@ import { checkServerIdentity, type PeerCertificate } from 'node:tls';
 import { DbError, errorMessage } from '../../core/errors';
 import type { ResolvedConnectionConfig, SslMode } from '../../shared/connection';
 import { readUserFile } from './files';
+import { msg } from '../../core/user-message';
 
 export interface TlsMaterial {
   readonly mode: SslMode;
@@ -27,9 +28,9 @@ export async function tlsMaterial(
   }
   const read = async (path: string | undefined, what: string): Promise<Buffer | undefined> =>
     path === undefined || path.trim() === '' ? undefined : await readUserFile(path, what);
-  const ca = await read(ssl.ca, 'the CA certificate');
-  const cert = await read(ssl.cert, 'the client certificate');
-  const key = await read(ssl.key, 'the client key');
+  const ca = await read(ssl.ca, msg('the CA certificate'));
+  const cert = await read(ssl.cert, msg('the client certificate'));
+  const key = await read(ssl.key, msg('the client key'));
   return {
     mode: ssl.mode,
     ...(ca === undefined ? {} : { ca }),
@@ -113,19 +114,22 @@ export function tlsFailure(error: unknown, serverName: string): DbError | undefi
     case 'name':
       return new DbError(
         'connection-failed',
-        `The server certificate is not issued for "${serverName}": ${reason}`,
+        msg('The server certificate is not issued for "{0}": {1}', serverName, reason),
         options,
       );
     case 'untrusted':
       return new DbError(
         'connection-failed',
-        `The server certificate is not trusted (${reason}). Choose the CA certificate that issued it, or only encrypt without checking.`,
+        msg(
+          'The server certificate is not trusted ({0}). Choose the CA certificate that issued it, or only encrypt without checking.',
+          reason,
+        ),
         options,
       );
     case 'dates':
       return new DbError(
         'connection-failed',
-        `The server certificate is not valid now: ${reason}`,
+        msg('The server certificate is not valid now: {0}', reason),
         options,
       );
     case undefined:

@@ -56,6 +56,48 @@ describe('translations', () => {
   });
 });
 
+describe('the Russian dictionary', () => {
+  // Names of products, file formats and terms that stay as they are in Russian too.
+  const UNTRANSLATED = new Set([
+    'form.driver.mysql',
+    'form.driver.postgres',
+    'form.driver.sqlite',
+    'form.driver.mssql',
+    'form.driver.clickhouse',
+    'form.driver.oracle',
+    'form.driver.redis',
+    'form.driver.mongodb',
+    'form.driver.elasticsearch',
+    'form.preset.auroraMysql',
+    'form.preset.auroraPostgres',
+    'form.preset.cockroachdb',
+    'form.preset.yugabytedb',
+    'form.redis.mode.sentinel',
+    'form.mongo.mode.replicaSet',
+    'form.options.initSql',
+    'console.production',
+    'grid.exportFormat.sql',
+    'grid.exportFormat.markdown',
+    'grid.exportFormat.xlsx',
+    'users.flag.file',
+  ]);
+
+  it('translates every text except names and terms', () => {
+    // A word in lowercase letters is language; JSON, NULL or DEFAULT alone are terms.
+    const same = (Object.keys(en) as (keyof typeof en)[]).filter(
+      (key) => ru[key] === en[key] && /[a-z]{3,}/.test(en[key]) && !UNTRANSLATED.has(key),
+    );
+    expect(same).toEqual([]);
+  });
+
+  it('keeps the list of untranslated texts current', () => {
+    const stale = [...UNTRANSLATED].filter(
+      (key) => ru[key as keyof typeof en] !== en[key as keyof typeof en],
+    );
+    expect(stale).toEqual([]);
+  });
+});
+
 describe('translators', () => {
   it('translate keys with arguments', () => {
     expect(createTranslator('ru')('ping.reply', 2, 'ok')).toBe('Ответ №2: ok');

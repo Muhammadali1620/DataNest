@@ -20,6 +20,7 @@ import type { ExecuteEvent, ExecuteOptions, ResultColumn, Session } from '../dri
 import { toClickhouseDbError } from './errors';
 import { ClickhouseMetadata } from './metadata';
 import { toCellValue } from './values';
+import { msg } from '../../core/user-message';
 
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
@@ -199,7 +200,7 @@ class ClickhouseSession implements Session {
 
   private async *run(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     const release = await this.lock();
     const running: Running = { queryId: randomUUID(), abort: new AbortController() };
@@ -283,7 +284,7 @@ class ClickhouseSession implements Session {
   /** Runs a catalog query with `{name:Type}` parameters, outside the session. */
   async query(sql: string, params: Record<string, string> = {}): Promise<unknown[][]> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     try {
       const result = await this.client.query({

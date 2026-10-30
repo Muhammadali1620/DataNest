@@ -5,6 +5,7 @@ import { DbError } from '../../core/errors';
 import type { Dialect, Session } from '../../drivers/driver';
 import type { MonitorServer } from './monitor-server';
 import { firstValue, type NamedRow, namedRows, numberOf, textOf } from './rows';
+import { msg } from '../../core/user-message';
 
 export interface ServerProcess {
   /** How the server names the session: a thread id, a pid, `sid,serial#`, a query id. */
@@ -112,7 +113,7 @@ export async function listProcesses(
     case 'oracle':
       return unique((await namedRows(session, ORACLE_PROCESSES)).map(oracleProcess));
     case 'sqlite':
-      throw new DbError('unsupported', 'A SQLite file has no server sessions to list');
+      throw new DbError('unsupported', msg('A SQLite file has no server sessions to list'));
   }
 }
 
@@ -138,23 +139,23 @@ export function stopStatement(
         return `CANCEL SESSION ${dialect.literal(process.id)}`;
       }
       if (process.queryId === undefined) {
-        throw new DbError('not-found', 'The session runs no statement now');
+        throw new DbError('not-found', msg('The session runs no statement now'));
       }
       return `CANCEL QUERY ${dialect.literal(process.queryId)}`;
     case 'mssql':
       if (kind === 'cancel') {
-        throw new DbError('unsupported', 'SQL Server can only end the whole session');
+        throw new DbError('unsupported', msg('SQL Server can only end the whole session'));
       }
       return `KILL ${digits(process.id)}`;
     case 'clickhouse':
       if (kind === 'terminate') {
-        throw new DbError('unsupported', 'ClickHouse lists queries, not sessions');
+        throw new DbError('unsupported', msg('ClickHouse lists queries, not sessions'));
       }
       return `KILL QUERY WHERE query_id = ${dialect.literal(process.id)} ASYNC`;
     case 'oracle': {
       const match = /^(\d+),(\d+)$/u.exec(process.id);
       if (match === null) {
-        throw new DbError('internal', `"${process.id}" is not an Oracle session id`);
+        throw new DbError('internal', msg('"{0}" is not an Oracle session id', process.id));
       }
       if (kind === 'cancel') {
         return `ALTER SYSTEM CANCEL SQL '${match[1]}, ${match[2]}'`;
@@ -171,7 +172,7 @@ EXCEPTION
 END;`;
     }
     case 'sqlite':
-      throw new DbError('unsupported', 'A SQLite file has no server sessions to stop');
+      throw new DbError('unsupported', msg('A SQLite file has no server sessions to stop'));
   }
 }
 
@@ -377,7 +378,7 @@ function flag(row: NamedRow | undefined, name: string): boolean {
 
 function digits(id: string): string {
   if (!/^\d+$/u.test(id)) {
-    throw new DbError('internal', `"${id}" is not a process number`);
+    throw new DbError('internal', msg('"{0}" is not a process number', id));
   }
   return id;
 }

@@ -5,6 +5,7 @@ import type { Dialect } from '../driver';
 import { oracleDdl } from './ddl';
 import { oracleDump } from './dump';
 import { quoteIdentifier, quoteString, quoteTable, quoteText } from './quote';
+import { msg } from '../../core/user-message';
 
 export { quoteIdentifier, quoteTable };
 
@@ -52,7 +53,11 @@ export function binaryLiteral(hex: string): string {
   if (hex.length > MAX_BINARY_LITERAL * 2) {
     throw new DbError(
       'unsupported',
-      `Oracle takes a binary value of at most ${MAX_BINARY_LITERAL} bytes in SQL text; this one has ${hex.length / 2}`,
+      msg(
+        'Oracle takes a binary value of at most {0} bytes in SQL text; this one has {1}',
+        MAX_BINARY_LITERAL,
+        hex.length / 2,
+      ),
     );
   }
   return `HEXTORAW('${hex}')`;
@@ -131,7 +136,10 @@ export const oracleDialect: Dialect = {
     `UPPER(${quotedColumn}) LIKE UPPER(${quotedPattern}) ESCAPE '!'`,
   defaultKeyword: true,
   insertDefaultRow: () => {
-    throw new DbError('unsupported', 'Oracle needs a value for at least one column of a new row');
+    throw new DbError(
+      'unsupported',
+      msg('Oracle needs a value for at least one column of a new row'),
+    );
   },
   // A transaction starts by itself with the first change; SET TRANSACTION starts it on
   // purpose. Savepoints go away only with the transaction.

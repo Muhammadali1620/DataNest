@@ -1,3 +1,4 @@
+import { msg } from '../core/user-message';
 // JSON with comments and trailing commas, the way VS Code reads its own files in
 // `.vscode/`. People hand-edit those, so a comment must not make a file unreadable.
 
@@ -44,7 +45,7 @@ export function stripJsonc(text: string): string {
     } else if (char === '/' && next === '*') {
       const end = text.indexOf('*/', index + 2);
       if (end === -1) {
-        throw new JsoncError('A block comment is not closed');
+        throw new JsoncError(msg('A block comment is not closed'));
       }
       // Kept as a space, so the comment still separates the tokens around it.
       out += ' ';

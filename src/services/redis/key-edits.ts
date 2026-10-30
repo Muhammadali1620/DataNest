@@ -10,16 +10,23 @@ import type { RedisCommand, RedisReply, RedisSession } from '../../drivers/redis
 import { isErrorReply } from '../../drivers/redis-driver';
 import { type RedisValue, redisValueBytes } from '../../shared/redis-value';
 import { replyNumber } from './reply';
+import { msg } from '../../core/user-message';
 
 /** Bytes to write; a cut value or broken hex is refused rather than written short. */
-export function valueBytes(value: RedisValue, what = 'The value'): Uint8Array {
+export function valueBytes(value: RedisValue, what: 'value' | 'field' = 'value'): Uint8Array {
   const bytes = redisValueBytes(value);
   if (bytes === undefined) {
+    // Whole sentences for each, so a translation never has to agree with a pasted noun.
+    const cut = value.truncated === true;
     throw new DbError(
       'unsupported',
-      value.truncated === true
-        ? `${what} is too big to edit here: only its start was shown`
-        : `${what} is not valid hex`,
+      what === 'field'
+        ? cut
+          ? msg('The field is too big to edit here: only its start was shown')
+          : msg('The field is not valid hex')
+        : cut
+          ? msg('The value is too big to edit here: only its start was shown')
+          : msg('The value is not valid hex'),
     );
   }
   return bytes;
@@ -37,7 +44,10 @@ export function isStreamId(text: string): boolean {
   return /^(\*|\d+(-(\d+|\*))?)$/.test(text.trim());
 }
 
-const CHANGED = 'The value changed since it was shown: refresh and try again';
+/** Translated where it is thrown: a constant would be English before a translator is set. */
+function changed(): string {
+  return msg('The value changed since it was shown: refresh and try again');
+}
 
 /** The first error reply of an atomic block, as an error. */
 function firstError(replies: readonly RedisReply[]): void {
@@ -87,9 +97,9 @@ export async function setField(
   value: RedisValue,
   previous?: RedisValue,
 ): Promise<void> {
-  const name = valueBytes(field, 'The field');
+  const name = valueBytes(field, 'field');
   const bytes = valueBytes(value);
-  const old = previous === undefined ? undefined : valueBytes(previous, 'The field');
+  const old = previous === undefined ? undefined : valueBytes(previous, 'field');
   if (old === undefined || Buffer.compare(Buffer.from(old), Buffer.from(name)) === 0) {
     await session.call(['HSET', key, name, bytes]);
     return;
@@ -101,7 +111,7 @@ export async function setField(
     [name, bytes, old],
   );
   if (done !== 1) {
-    throw new DbError('constraint', 'The hash already has a field with that name');
+    throw new DbError('constraint', msg('The hash already has a field with that name'));
   }
 }
 
@@ -110,7 +120,7 @@ export async function deleteField(
   key: Uint8Array,
   field: RedisValue,
 ): Promise<void> {
-  await session.call(['HDEL', key, valueBytes(field, 'The field')]);
+  await session.call(['HDEL', key, valueBytes(field, 'field')]);
 }
 
 /** LSET while the element at `index` is still `expected`. */
@@ -128,7 +138,7 @@ export async function setListItem(
     [String(index), valueBytes(expected), valueBytes(value)],
   );
   if (done !== 1) {
-    throw new DbError('busy', CHANGED);
+    throw new DbError('busy', changed());
   }
 }
 
@@ -150,7 +160,7 @@ export async function removeListItem(
     [String(index), valueBytes(expected), marker],
   );
   if (done !== 1) {
-    throw new DbError('busy', CHANGED);
+    throw new DbError('busy', changed());
   }
 }
 
@@ -187,7 +197,10 @@ export async function setScoredMember(
   previous?: RedisValue,
 ): Promise<void> {
   if (!isScore(score)) {
-    throw new DbError('constraint', `"${score}" is not a score: write a number, inf or -inf`);
+    throw new DbError(
+      'constraint',
+      msg('"{0}" is not a score: write a number, inf or -inf', score),
+    );
   }
   const add: RedisCommand = ['ZADD', key, score.trim(), valueBytes(value)];
   if (previous === undefined) {
@@ -214,16 +227,16 @@ export async function addEntry(
   fields: readonly { field: RedisValue; value: RedisValue }[],
 ): Promise<void> {
   if (!isStreamId(id)) {
-    throw new DbError('constraint', `"${id}" is not a stream id: write *, or ms-seq`);
+    throw new DbError('constraint', msg('"{0}" is not a stream id: write *, or ms-seq', id));
   }
   if (fields.length === 0) {
-    throw new DbError('constraint', 'A stream entry needs at least one field');
+    throw new DbError('constraint', msg('A stream entry needs at least one field'));
   }
   await session.call([
     'XADD',
     key,
     id.trim(),
-    ...fields.flatMap((pair) => [valueBytes(pair.field, 'The field'), valueBytes(pair.value)]),
+    ...fields.flatMap((pair) => [valueBytes(pair.field, 'field'), valueBytes(pair.value)]),
   ]);
 }
 
@@ -290,7 +303,7 @@ function firstCommand(content: NewKeyContent): (string | Uint8Array)[] {
     case 'string':
       return ['SET', valueBytes(content.value)];
     case 'hash':
-      return ['HSET', valueBytes(content.field, 'The field'), valueBytes(content.value)];
+      return ['HSET', valueBytes(content.field, 'field'), valueBytes(content.value)];
     case 'list':
       return ['RPUSH', valueBytes(content.value)];
     case 'set':
@@ -299,12 +312,12 @@ function firstCommand(content: NewKeyContent): (string | Uint8Array)[] {
       if (!isScore(content.score)) {
         throw new DbError(
           'constraint',
-          `"${content.score}" is not a score: write a number, inf or -inf`,
+          msg('"{0}" is not a score: write a number, inf or -inf', content.score),
         );
       }
       return ['ZADD', content.score.trim(), valueBytes(content.value)];
     case 'stream':
-      return ['XADD', '*', valueBytes(content.field, 'The field'), valueBytes(content.value)];
+      return ['XADD', '*', valueBytes(content.field, 'field'), valueBytes(content.value)];
   }
 }
 
@@ -322,6 +335,6 @@ export async function createKey(
     [command, ...args],
   );
   if (done !== 1) {
-    throw new DbError('constraint', 'A key with that name already exists');
+    throw new DbError('constraint', msg('A key with that name already exists'));
   }
 }

@@ -12,6 +12,7 @@ import {
 } from '../../core/json/json-tree';
 import type { ElasticRequest, ElasticSession } from '../../drivers/elastic-driver';
 import { elasticFailure } from '../../drivers/elasticsearch/errors';
+import { msg } from '../../core/user-message';
 
 /** Sends a request that must succeed and answers JSON; a failed status is a DbError. */
 export async function callJson(
@@ -27,7 +28,7 @@ export async function callJson(
   } catch {
     throw new DbError(
       'internal',
-      `The server's answer to ${request.method} ${request.path} is not JSON`,
+      msg("The server's answer to {0} {1} is not JSON", request.method, request.path),
     );
   }
 }
@@ -123,19 +124,19 @@ export async function listFields(
 /** Why an index name is refused, or undefined (Elasticsearch's own rules). */
 export function indexNameProblem(name: string): string | undefined {
   if (name.trim() === '') {
-    return 'The name is empty';
+    return msg('The name is empty');
   }
   if (name !== name.toLowerCase()) {
-    return 'An index name is in lowercase';
+    return msg('An index name is in lowercase');
   }
   if (/[\\/*?"<>| ,#:]/.test(name)) {
-    return 'An index name cannot hold \\ / * ? " < > | , # : or spaces';
+    return msg('An index name cannot hold \\ / * ? " < > | , # : or spaces');
   }
   if (/^[-_+]/.test(name) || name === '.' || name === '..') {
-    return 'An index name cannot start with -, _ or +';
+    return msg('An index name cannot start with -, _ or +');
   }
   if (new TextEncoder().encode(name).length > 255) {
-    return 'An index name is at most 255 bytes';
+    return msg('An index name is at most 255 bytes');
   }
   return undefined;
 }
@@ -158,7 +159,10 @@ export async function createIndex(
     } catch (error) {
       throw new DbError(
         'syntax',
-        `The settings are not JSON: ${error instanceof Error ? error.message : String(error)}`,
+        msg(
+          'The settings are not JSON: {0}',
+          error instanceof Error ? error.message : String(error),
+        ),
       );
     }
   }
@@ -174,7 +178,7 @@ export async function deleteIndex(
   name: string,
 ): Promise<void> {
   if (name.includes('*') || name === '_all' || name.includes(',')) {
-    throw new DbError('unsupported', 'DataNest deletes one index at a time, by its name');
+    throw new DbError('unsupported', msg('DataNest deletes one index at a time, by its name'));
   }
   await callJson(session, { method: 'DELETE', path: `/${encodeURIComponent(name)}` });
 }

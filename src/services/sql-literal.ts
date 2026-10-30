@@ -6,6 +6,7 @@ import { DbError } from '../core/errors';
 import type { Dialect } from '../drivers/driver';
 import { retainedBytes } from '../shared/binary-bytes';
 import type { CellValue } from '../shared/cell-value';
+import { msg } from '../core/user-message';
 
 /** A literal for the value; a binary one falls back to its preview when the bytes are gone. */
 export function literalOf(dialect: Dialect, cell: CellValue): string {
@@ -36,7 +37,7 @@ export function exactLiteralOf(dialect: Dialect, cell: CellValue): string {
   ) {
     throw new DbError(
       'unsupported',
-      `A binary value of ${cell.size} bytes is larger than DataNest can copy`,
+      msg('A binary value of {0} bytes is larger than DataNest can copy', cell.size),
     );
   }
   return literalOf(dialect, cell);

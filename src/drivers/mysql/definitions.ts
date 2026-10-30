@@ -4,6 +4,7 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import { quoteIdentifier } from './dialect';
+import { msg } from '../../core/user-message';
 
 /** Runs one metadata statement and returns its rows as arrays. */
 export type MysqlRowReader = (sql: string, params?: unknown[]) => Promise<unknown[][]>;
@@ -30,7 +31,7 @@ export async function readMysqlDefinition(
       : `${quoteIdentifier(object.database)}.${quoteIdentifier(object.name)}`;
   const rows = await read(`SHOW CREATE ${keyword} ${name}`);
   if (rows.length === 0) {
-    throw new DbError('not-found', `${object.name} does not exist`);
+    throw new DbError('not-found', msg('{0} does not exist', object.name));
   }
   const value = rows[0]?.[column];
   // The server returns NULL instead of the text when the user may run the routine
@@ -38,7 +39,7 @@ export async function readMysqlDefinition(
   if (typeof value !== 'string' || value === '') {
     throw new DbError(
       'permission-denied',
-      `The server does not show the definition of ${object.name} to this user`,
+      msg('The server does not show the definition of {0} to this user', object.name),
     );
   }
   return [value];

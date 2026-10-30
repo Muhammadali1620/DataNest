@@ -6,6 +6,7 @@ import type { Dialect } from '../driver';
 import { mssqlDdl } from './ddl';
 import { mssqlDump } from './dump';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export { quoteIdentifier, quoteTable };
 
@@ -22,7 +23,10 @@ export function literal(value: CellValue): string {
   }
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new DbError('unsupported', `SQL Server cannot store ${String(value)} in a number`);
+      throw new DbError(
+        'unsupported',
+        msg('SQL Server cannot store {0} in a number', String(value)),
+      );
     }
     return String(value);
   }

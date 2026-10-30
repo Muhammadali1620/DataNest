@@ -8,6 +8,7 @@ import { sqliteAlterTable } from './alter';
 import { sqliteCreateTable } from './create-table';
 import { sqliteReplaceObject } from './replace';
 import { quoteIdentifier, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const TYPES = ['integer', 'real', 'text', 'blob', 'numeric'];
 
@@ -30,7 +31,7 @@ export const sqliteDdl: SchemaDdl = {
     if (kind !== 'table') {
       throw new DbError(
         'unsupported',
-        'SQLite cannot rename a view: drop it and create it again under the new name',
+        msg('SQLite cannot rename a view: drop it and create it again under the new name'),
       );
     }
     return `ALTER TABLE ${quoteTable(table)} RENAME TO ${quoteIdentifier(newName)}`;
@@ -46,7 +47,7 @@ export const sqliteDdl: SchemaDdl = {
       case 'procedure':
       case 'sequence':
       case 'event':
-        throw new DbError('unsupported', `SQLite has no ${object.kind}s`);
+        throw new DbError('unsupported', msg('SQLite has no {0}s', object.kind));
     }
   },
   replaceObject: (object, statements) => sqliteReplaceObject(object, statements),

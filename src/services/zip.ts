@@ -3,6 +3,7 @@
 // more than this needs (ARCHITECTURE.md §2, no native modules).
 
 import { deflateRawSync } from 'node:zlib';
+import { msg } from '../core/user-message';
 
 export interface ZipEntry {
   /** Path inside the archive, with `/` separators. */
@@ -50,7 +51,7 @@ export const MAX_ZIP_ENTRIES = 0xfffe;
 
 export function zip(entries: readonly ZipEntry[], now: Date = new Date()): Uint8Array {
   if (entries.length > MAX_ZIP_ENTRIES) {
-    throw new Error('Too many files for a ZIP archive');
+    throw new Error(msg('Too many files for a ZIP archive'));
   }
   const stamp = dosDateTime(now);
   const chunks: Buffer[] = [];
@@ -105,7 +106,7 @@ export function zip(entries: readonly ZipEntry[], now: Date = new Date()): Uint8
   end.writeUInt32LE(offset, 16);
   const archive = Buffer.concat([...chunks, directory, end]);
   if (archive.length > MAX_ZIP_BYTES) {
-    throw new Error('The archive is too large for a ZIP file');
+    throw new Error(msg('The archive is too large for a ZIP file'));
   }
   return archive;
 }

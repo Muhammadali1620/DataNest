@@ -4,6 +4,7 @@
 import { DbError } from '../../core/errors';
 import type { PlanNode, PlanWarning, QueryPlan } from '../../shared/query-plan';
 import { numberOf, planNode, propertyText } from './plan-node';
+import { msg } from '../../core/user-message';
 
 /** Fields that become the node itself rather than lines in its details. */
 const SHOWN = new Set([
@@ -41,11 +42,11 @@ export function readPostgresPlan(raw: string, analyzed: boolean): QueryPlan {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw new DbError('internal', 'The server sent a plan that is not JSON', { cause: error });
+    throw new DbError('internal', msg('The server sent a plan that is not JSON'), { cause: error });
   }
   const top: unknown = Array.isArray(parsed) ? parsed[0] : parsed;
   if (!isRecord(top) || !isRecord(top.Plan)) {
-    throw new DbError('internal', 'The server sent a plan without a Plan');
+    throw new DbError('internal', msg('The server sent a plan without a Plan'));
   }
   const properties: [string, string][] = [];
   for (const [key, value] of Object.entries(top)) {

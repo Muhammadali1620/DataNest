@@ -7,6 +7,7 @@ import type { ObjectRef } from '../../core/model/objects';
 import { isTrivia, syntaxOf, textOf, tokenize } from '../../core/sql/tokenizer';
 import type { ReplacePlan } from '../driver';
 import { quoteIdentifier, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const KEYWORDS = {
   procedure: 'PROCEDURE',
@@ -74,7 +75,7 @@ export function mysqlReplaceObject(
     object.kind !== 'trigger' &&
     object.kind !== 'event'
   ) {
-    throw new DbError('unsupported', `A ${object.kind} is not edited as a definition`);
+    throw new DbError('unsupported', msg('A {0} is not edited as a definition', object.kind));
   }
   const keyword = KEYWORDS[object.kind];
   const drop = `DROP ${keyword} IF EXISTS ${qualified(object)}`;

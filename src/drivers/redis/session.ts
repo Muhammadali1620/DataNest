@@ -16,6 +16,7 @@ import type {
 } from '../redis-driver';
 import { isReplyError, toRedisDbError } from './errors';
 import { redisTarget } from './options';
+import { msg } from '../../core/user-message';
 
 type Client = Redis | Cluster;
 
@@ -47,7 +48,7 @@ export function normalizeReply(value: unknown): RedisReply {
 function nameOf(command: RedisCommand): string {
   const [name] = command;
   if (name === undefined) {
-    throw new DbError('syntax', 'No command to run');
+    throw new DbError('syntax', msg('No command to run'));
   }
   return typeof name === 'string' ? name : new TextDecoder().decode(name);
 }
@@ -119,7 +120,7 @@ class IoredisSession implements RedisSession {
       throw this.failure(error);
     }
     if (results === null) {
-      throw new DbError('busy', 'The transaction was aborted: the key changed meanwhile');
+      throw new DbError('busy', msg('The transaction was aborted: the key changed meanwhile'));
     }
     return results.map(([error, value]) =>
       error === null ? normalizeReply(value) : { error: error.message },
@@ -195,7 +196,7 @@ class IoredisSession implements RedisSession {
     const mapped = toRedisDbError(error);
     if (mapped.code === 'connection-failed' && this.lastError !== undefined) {
       const cause = toRedisDbError(this.lastError);
-      return new DbError('connection-failed', `${mapped.message} ${errorMessage(cause)}`, {
+      return new DbError('connection-failed', msg('{0} {1}', mapped.message, errorMessage(cause)), {
         cause: error,
       });
     }
@@ -247,9 +248,13 @@ export async function openRedisSession(config: ResolvedRedisConfig): Promise<Red
     } catch (error) {
       await session.close();
       const cause = toRedisDbError(error);
-      throw new DbError('not-found', `Database ${database} does not exist: ${cause.message}`, {
-        cause,
-      });
+      throw new DbError(
+        'not-found',
+        msg('Database {0} does not exist: {1}', database, cause.message),
+        {
+          cause,
+        },
+      );
     }
   }
   return session;

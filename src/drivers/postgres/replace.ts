@@ -5,6 +5,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { ReplacePlan } from '../driver';
 import { quoteIdentifier, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export function postgresReplaceObject(
   object: ObjectRef,
@@ -27,7 +28,7 @@ export function postgresReplaceObject(
       break;
     case 'trigger':
       if (object.table === undefined) {
-        throw new DbError('unsupported', `The table of trigger ${object.name} is unknown`);
+        throw new DbError('unsupported', msg('The table of trigger {0} is unknown', object.name));
       }
       drops.push(
         `DROP TRIGGER IF EXISTS ${quoteIdentifier(object.name)} ON ${quoteTable({ ...schema, name: object.table })}`,
@@ -36,7 +37,7 @@ export function postgresReplaceObject(
     case 'table':
     case 'sequence':
     case 'event':
-      throw new DbError('unsupported', `A ${object.kind} is not edited as a definition`);
+      throw new DbError('unsupported', msg('A {0} is not edited as a definition', object.kind));
   }
   return {
     check: [],

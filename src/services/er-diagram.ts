@@ -4,6 +4,7 @@
 import { DbError } from '../core/errors';
 import type { ObjectScope, TableRef } from '../core/model/objects';
 import type { MetadataReader } from '../drivers/driver';
+import { msg } from '../core/user-message';
 
 export interface ErColumn {
   readonly name: string;
@@ -156,6 +157,6 @@ function externalLabel(target: TableRef, scope: ObjectScope): string {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted === true) {
-    throw new DbError('cancelled', 'Reading the diagram was cancelled');
+    throw new DbError('cancelled', msg('Reading the diagram was cancelled'));
   }
 }

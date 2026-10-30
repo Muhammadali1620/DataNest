@@ -19,6 +19,7 @@ import { toPgDbError } from './errors';
 import { PostgresMetadata } from './metadata';
 import { forServer, type PgServer, pgServer, SERVER_SQL } from './server';
 import { pgTypeName, pgTypeParser, toCellValue } from './values';
+import { msg } from '../../core/user-message';
 
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
@@ -172,7 +173,7 @@ class PostgresSession implements Session {
 
   private async *run(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     const rowLimit = options.rowLimit ?? Number.POSITIVE_INFINITY;
     // pg has no pause of its own; the socket under its parser does. With TLS that is
@@ -339,7 +340,7 @@ class PostgresSession implements Session {
   private cancelQuery(pid: number | null | undefined): pg.QueryConfig {
     if (this.server.flavor === 'cockroach') {
       if (this.cancelKey === undefined) {
-        throw new DbError('unsupported', 'The server did not report its session id');
+        throw new DbError('unsupported', msg('The server did not report its session id'));
       }
       return {
         text: 'CANCEL QUERIES IF EXISTS (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE session_id = $1)',
@@ -347,7 +348,7 @@ class PostgresSession implements Session {
       };
     }
     if (typeof pid !== 'number') {
-      throw new DbError('unsupported', 'The server did not report a backend pid');
+      throw new DbError('unsupported', msg('The server did not report a backend pid'));
     }
     return { text: 'SELECT pg_cancel_backend($1)', values: [pid] };
   }

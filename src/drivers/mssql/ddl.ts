@@ -11,6 +11,7 @@ import { describeSql } from './definitions';
 import { mssqlColumnSql, renameTarget, withoutRestrict } from './design';
 import { mssqlReplaceObject } from './replace';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const TYPES = [
   'int',
@@ -56,7 +57,7 @@ export const mssqlDdl: SchemaDdl = {
   // SQL Server has no CASCADE: a schema must be empty to be dropped.
   dropSchema: (name, cascade) => {
     if (cascade) {
-      throw new DbError('unsupported', 'SQL Server drops only empty schemas');
+      throw new DbError('unsupported', msg('SQL Server drops only empty schemas'));
     }
     return `DROP SCHEMA ${quoteIdentifier(name)}`;
   },
@@ -115,7 +116,10 @@ export const mssqlDdl: SchemaDdl = {
         // A trigger is named by its schema, like any other object of it.
         return `DROP ${object.kind.toUpperCase()} ${quoteTable(object)}`;
       case 'event':
-        throw new DbError('unsupported', 'SQL Server keeps scheduled jobs outside the database');
+        throw new DbError(
+          'unsupported',
+          msg('SQL Server keeps scheduled jobs outside the database'),
+        );
     }
   },
   replaceObject: (object, statements) => mssqlReplaceObject(object, statements),

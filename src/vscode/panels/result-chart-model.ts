@@ -15,6 +15,7 @@ import {
 import type { CellValue } from '../../shared/cell-value';
 import { tabTitle } from '../../shared/protocols/result-grid';
 import type { ResultChartState } from '../../shared/protocols/result-chart';
+import { msg } from '../../core/user-message';
 
 export interface ResultChartModelDeps {
   readonly statement: string;
@@ -35,7 +36,7 @@ export class ResultChartModel {
 
   constructor(private readonly deps: ResultChartModelDeps) {
     if (deps.columns.length === 0) {
-      throw new DbError('unsupported', 'The result has no columns to draw');
+      throw new DbError('unsupported', msg('The result has no columns to draw'));
     }
     this.rows = deps.rows.slice(0, MAX_CHART_ROWS);
     this.truncated = deps.truncated || deps.rows.length > MAX_CHART_ROWS;
@@ -63,10 +64,10 @@ export class ResultChartModel {
     const width = this.deps.columns.length;
     const inside = (index: number): boolean => index >= 0 && index < width;
     if (!inside(config.x) || !config.ys.every(inside)) {
-      throw new DbError('syntax', 'The chart names a column the result does not have');
+      throw new DbError('syntax', msg('The chart names a column the result does not have'));
     }
     if (config.ys.length === 0 && config.aggregate !== 'count') {
-      throw new DbError('syntax', 'Pick a column of values, or count the rows');
+      throw new DbError('syntax', msg('Pick a column of values, or count the rows'));
     }
     this.config = {
       type: config.type,

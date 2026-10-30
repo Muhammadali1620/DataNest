@@ -4,6 +4,7 @@
 import * as vscode from 'vscode';
 import { formatBytes } from '../../services/mongodb/catalog';
 import { type ElasticFieldNode, type ElasticIndexNode, nodeId, TREE_CONTEXT } from './nodes';
+import { formatCount } from '../../core/number-format';
 
 const HEALTH_COLORS: Readonly<Record<'green' | 'yellow' | 'red', string>> = {
   green: 'charts.green',
@@ -24,7 +25,7 @@ export function elasticIndexItem(node: ElasticIndexNode): vscode.TreeItem {
     parts.push(vscode.l10n.t('closed'));
   }
   if (index.docs !== undefined) {
-    parts.push(vscode.l10n.t('{0} docs', Number(index.docs).toLocaleString()));
+    parts.push(vscode.l10n.t('{0} docs', formatCount(Number(index.docs), vscode.env.language)));
   }
   if (index.size !== undefined) {
     parts.push(formatBytes(Number(index.size)));

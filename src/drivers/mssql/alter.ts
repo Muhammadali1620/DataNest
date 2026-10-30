@@ -13,6 +13,7 @@ import { schemaOf } from './catalog';
 import { describeSql } from './definitions';
 import { mssqlColumnSql, renameTarget, withoutRestrict } from './design';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 /** Drops the default constraint of a column, whatever the server named it. */
 export function dropDefaultSql(table: { schema: string; name: string }, column: string): string {
@@ -57,7 +58,10 @@ export function mssqlAlterTable(
     if (change.autoIncrement) {
       throw new DbError(
         'unsupported',
-        `SQL Server cannot add or remove IDENTITY on the existing column ${change.after.name.trim()}`,
+        msg(
+          'SQL Server cannot add or remove IDENTITY on the existing column {0}',
+          change.after.name.trim(),
+        ),
       );
     }
   }

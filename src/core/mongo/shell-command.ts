@@ -5,6 +5,7 @@
 
 import { ShellReader, ShellSyntaxError } from './shell-reader';
 import type { MongoValue } from './value';
+import { msg } from '../user-message';
 
 export interface ShellCall {
   readonly method: string;
@@ -41,7 +42,7 @@ function args(reader: ShellReader): MongoValue[] {
   while (!reader.accept(')')) {
     values.push(reader.value());
     if (!reader.accept(',')) {
-      reader.expect(')', '"," or ")"');
+      reader.expect(')', msg('"," or ")"'));
       break;
     }
   }
@@ -53,7 +54,7 @@ function stringArg(reader: ShellReader, what: string): string {
   const at = reader.offset;
   const value = reader.value();
   if (value.type !== 'string') {
-    reader.fail(`${what} expects a name in quotes`, at);
+    reader.fail(msg('{0} expects a name in quotes', what), at);
   }
   reader.expect(')');
   return value.value;
@@ -68,13 +69,13 @@ function callFollows(reader: ShellReader): boolean {
 export function parseShellStatement(text: string): ShellStatement {
   const reader: ShellReader = new ShellReader(text.trim().replace(/;$/, ''));
   if (reader.atEnd()) {
-    reader.fail('There is no statement here');
+    reader.fail(msg('There is no statement here'));
   }
   const head = reader.identifier();
   if (head === 'use') {
     const name = reader.text.slice(reader.offset).trim();
     if (!DATABASE_NAME.test(name)) {
-      reader.fail('use expects the name of a database');
+      reader.fail(msg('use expects the name of a database'));
     }
     return { kind: 'use', database: name };
   }
@@ -82,15 +83,18 @@ export function parseShellStatement(text: string): ShellStatement {
     const what = reader.identifier();
     const shown = what === undefined ? undefined : SHOW[what];
     if (shown === undefined || !reader.atEnd()) {
-      reader.fail('DataNest shows "dbs" and "collections"');
+      reader.fail(msg('DataNest shows "dbs" and "collections"'));
     }
     return { kind: 'show', what: shown };
   }
   if (head !== 'db') {
     reader.fail(
       head === undefined
-        ? 'A statement starts with db, use or show'
-        : `"${head}" is not something DataNest runs: a statement starts with db, use or show`,
+        ? msg('A statement starts with db, use or show')
+        : msg(
+            '"{0}" is not something DataNest runs: a statement starts with db, use or show',
+            head,
+          ),
       0,
     );
   }
@@ -105,17 +109,17 @@ export function parseShellStatement(text: string): ShellStatement {
       const at = reader.offset;
       const value = reader.value();
       if (value.type !== 'string') {
-        reader.fail('A collection name in brackets goes in quotes', at);
+        reader.fail(msg('A collection name in brackets goes in quotes'), at);
       }
       reader.expect(']');
       collection = [...names, value.value].join('.');
       names.length = 0;
       continue;
     }
-    reader.expect('.', '"." and a method');
+    reader.expect('.', msg('"." and a method'));
     const name = reader.identifier();
     if (name === undefined) {
-      reader.fail(`Expected a name after "."${reader.near()}`);
+      reader.fail(msg('Expected a name after "."{0}', reader.near()));
     }
     if (!callFollows(reader)) {
       names.push(name);
@@ -137,13 +141,13 @@ export function parseShellStatement(text: string): ShellStatement {
   }
   const chain: ShellCall[] = [];
   while (!reader.atEnd()) {
-    reader.expect('.', 'the end of the statement or "." and a method');
+    reader.expect('.', msg('the end of the statement or "." and a method'));
     const name = reader.identifier();
     if (name === undefined) {
-      reader.fail(`Expected a method after "."${reader.near()}`);
+      reader.fail(msg('Expected a method after "."{0}', reader.near()));
     }
     if (!callFollows(reader)) {
-      reader.fail(`Expected "(" after ${name}`);
+      reader.fail(msg('Expected "(" after {0}', name));
     }
     chain.push({ method: name, args: args(reader) });
   }

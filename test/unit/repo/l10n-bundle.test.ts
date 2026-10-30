@@ -1,5 +1,6 @@
-// Every host string passes through vscode.l10n.t() (ARCHITECTURE.md §10); this keeps
-// the Russian bundle in step with the code, so no message shows up untranslated.
+// Every host string passes through vscode.l10n.t() (ARCHITECTURE.md §10), and every
+// message of the layers below it through msg() (V9.2, D100); this keeps the Russian
+// bundle in step with the code, so no message shows up untranslated.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,13 +14,14 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-/** The first argument of every `l10n.t('…')` call written as a single-quoted literal. */
+/** The first argument of every `l10n.t('…')` and `msg('…')` call, a quoted literal. */
 function messages(): Set<string> {
   const found = new Set<string>();
-  const call = /l10n\.t\(\s*'((?:[^'\\]|\\.)*)'/g;
+  // Prettier writes a text with an apostrophe in double quotes.
+  const call = /(?:l10n\.t|\bmsg)\(\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g;
   for (const file of sourceFiles(join(ROOT, 'src'))) {
     for (const match of readFileSync(file, 'utf8').matchAll(call)) {
-      const raw = match[1] ?? '';
+      const raw = match[1] ?? match[2] ?? '';
       found.add(raw.replace(/\\(.)/g, (_all, char: string) => (char === 'n' ? '\n' : char)));
     }
   }
@@ -29,6 +31,31 @@ function messages(): Set<string> {
 const bundle = JSON.parse(
   readFileSync(join(ROOT, 'l10n', 'bundle.l10n.ru.json'), 'utf8'),
 ) as Record<string, string>;
+
+/** Source files of the extension, as path and text. */
+function sources(): { file: string; text: string }[] {
+  return sourceFiles(join(ROOT, 'src')).map((file) => ({ file, text: readFileSync(file, 'utf8') }));
+}
+
+describe('translatable messages', () => {
+  it('gives msg() a quoted template, never a computed one', () => {
+    // A template built at run time could not be found in the bundle.
+    const computed = sources().flatMap(({ file, text }) =>
+      [...text.matchAll(/\bmsg\(\s*([^'"\s)])/g)].map(() => file),
+    );
+    expect(computed.filter((file) => !file.endsWith('user-message.ts'))).toEqual([]);
+  });
+
+  it('never gives a DbError a bare English literal', () => {
+    // Our own messages go through msg(); a server's text is passed on as it came.
+    const bare = sources().flatMap(({ file, text }) =>
+      [...text.matchAll(/new DbError\(\s*'[a-z-]+',\s*['"`]/g)].map(
+        (match) => `${file}:${text.slice(0, match.index).split('\n').length}`,
+      ),
+    );
+    expect(bare).toEqual([]);
+  });
+});
 
 describe('l10n bundle', () => {
   const used = messages();

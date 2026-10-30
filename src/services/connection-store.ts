@@ -29,6 +29,7 @@ import {
 import { connectionInputShape } from '../shared/connection-schema';
 import { array, literal, object, type Schema, string, union } from '../shared/schema';
 import type { ProjectConnections, ProjectFolder } from './project-connections';
+import { msg } from '../core/user-message';
 
 /** The slice of `vscode.Memento` the store needs. */
 export interface KeyValueState {
@@ -170,7 +171,7 @@ export class ConnectionStore {
   async createFolder(name: string): Promise<string> {
     const folder = folderName(name);
     if (this.folderList.includes(folder)) {
-      throw new DbError('unsupported', `A folder named "${folder}" already exists`);
+      throw new DbError('unsupported', msg('A folder named "{0}" already exists', folder));
     }
     await this.save(this.items, [...this.folderList, folder]);
     this.notify();
@@ -185,7 +186,7 @@ export class ConnectionStore {
       return target;
     }
     if (this.folderList.includes(target)) {
-      throw new DbError('unsupported', `A folder named "${target}" already exists`);
+      throw new DbError('unsupported', msg('A folder named "{0}" already exists', target));
     }
     await this.save(
       this.items.map((item) => (item.folder === from ? { ...item, folder: target } : item)),
@@ -253,7 +254,7 @@ export class ConnectionStore {
   async setFilter(id: string, filter: VisibilityFilter | undefined): Promise<void> {
     const current = this.get(id);
     if (current === undefined) {
-      throw new DbError('not-found', `Connection "${id}" does not exist`);
+      throw new DbError('not-found', msg('Connection "{0}" does not exist', id));
     }
     const { id: _id, filter: _old, ...input } = current;
     await this.update(id, filter === undefined ? input : { ...input, filter });
@@ -269,7 +270,7 @@ export class ConnectionStore {
     const index = this.items.findIndex((item) => item.id === id);
     const current = this.items[index];
     if (current === undefined) {
-      throw new DbError('not-found', `Connection "${id}" does not exist`);
+      throw new DbError('not-found', msg('Connection "{0}" does not exist', id));
     }
     const { color: _old, ...rest } = current;
     const items = [...this.items];
@@ -280,7 +281,7 @@ export class ConnectionStore {
 
   private requireFolder(name: string): void {
     if (!this.folderList.includes(name)) {
-      throw new DbError('not-found', `Folder "${name}" does not exist`);
+      throw new DbError('not-found', msg('Folder "{0}" does not exist', name));
     }
   }
 
@@ -340,7 +341,7 @@ export class ConnectionStore {
     const index = this.items.findIndex((item) => item.id === id);
     const before = this.items[index] ?? this.projects?.get(id);
     if (before === undefined) {
-      throw new DbError('not-found', `Connection "${id}" does not exist`);
+      throw new DbError('not-found', msg('Connection "{0}" does not exist', id));
     }
     let config: ConnectionConfig;
     if (index === -1) {
@@ -395,7 +396,7 @@ export class ConnectionStore {
   async moveToProject(id: string, folderKey: string): Promise<ConnectionConfig> {
     const source = this.items.find((item) => item.id === id);
     if (source === undefined) {
-      throw new DbError('not-found', `Connection "${id}" is not one of your own`);
+      throw new DbError('not-found', msg('Connection "{0}" is not one of your own', id));
     }
     const { id: _id, folder: _folder, ...input } = source;
     const moved = await this.projectsOrThrow().add(folderKey, input);
@@ -410,7 +411,7 @@ export class ConnectionStore {
   async moveToUser(id: string): Promise<ConnectionConfig> {
     const source = this.projects?.get(id);
     if (source === undefined) {
-      throw new DbError('not-found', `Connection "${id}" is not a project connection`);
+      throw new DbError('not-found', msg('Connection "{0}" is not a project connection', id));
     }
     const moved: ConnectionConfig = { ...source, id: crypto.randomUUID() };
     await this.save([...this.items, moved]);
@@ -423,7 +424,7 @@ export class ConnectionStore {
 
   private projectsOrThrow(): ProjectConnections {
     if (this.projects === undefined) {
-      throw new DbError('unsupported', 'Project connections are not available');
+      throw new DbError('unsupported', msg('Project connections are not available'));
     }
     return this.projects;
   }
@@ -462,7 +463,7 @@ export class ConnectionStore {
   async duplicate(id: string, newName?: string): Promise<ConnectionConfig> {
     const source = this.get(id);
     if (!source) {
-      throw new DbError('not-found', `Connection "${id}" does not exist`);
+      throw new DbError('not-found', msg('Connection "{0}" does not exist', id));
     }
     const copy: ConnectionConfig = {
       ...source,
@@ -566,7 +567,7 @@ export class ConnectionStore {
 function folderName(name: string): string {
   const trimmed = name.trim();
   if (trimmed === '' || trimmed.length > CONNECTION_LIMITS.folder) {
-    throw new DbError('unsupported', 'A folder needs a name of up to 200 characters');
+    throw new DbError('unsupported', msg('A folder needs a name of up to 200 characters'));
   }
   return trimmed;
 }
@@ -618,7 +619,7 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
-    throw new DbError('unsupported', `Invalid connection: ${problems.join(', ')}`);
+    throw new DbError('unsupported', msg('Invalid connection: {0}', problems.join(', ')));
   }
   return normalized;
 }

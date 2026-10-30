@@ -18,6 +18,7 @@ import {
   type UserRef,
   withPassword,
 } from './user-admin';
+import { msg } from '../../core/user-message';
 
 const TABLE = ['ALL', 'SELECT', 'INSERT', 'ALTER', 'DROP', 'TRUNCATE', 'OPTIMIZE', 'SHOW'];
 const DATABASE = [...TABLE, 'CREATE'];
@@ -59,7 +60,7 @@ export function clickhouseUserAdmin(dialect: AdminDialect): UserAdmin {
       case 'sequence':
         throw new DbError(
           'unsupported',
-          `ClickHouse grants nothing at the level "${change.level}"`,
+          msg('ClickHouse grants nothing at the level "{0}"', change.level),
         );
     }
   };
@@ -152,7 +153,7 @@ export function clickhouseUserAdmin(dialect: AdminDialect): UserAdmin {
     },
 
     createUser: (user) => {
-      checkText(user.password, 'password');
+      checkText(user.password, msg('password'));
       return withPassword(user.password, (password) => [
         `CREATE USER ${account(user)} IDENTIFIED BY ${dialect.literal(password)}`,
       ]);
@@ -161,7 +162,7 @@ export function clickhouseUserAdmin(dialect: AdminDialect): UserAdmin {
     dropUser: (user) => [`${user.role === true ? 'DROP ROLE' : 'DROP USER'} ${account(user)}`],
 
     setPassword: (user, password) => {
-      checkText(password, 'password');
+      checkText(password, msg('password'));
       return withPassword(password, (shown) => [
         `ALTER USER ${account(user)} IDENTIFIED BY ${dialect.literal(shown)}`,
       ]);

@@ -19,6 +19,7 @@ import type {
   ElasticSession,
 } from '../elastic-driver';
 import { elasticFailure, networkFailure } from './errors';
+import { msg } from '../../core/user-message';
 
 /** Bytes of a response DataNest reads at most; a bigger one is refused, not cut. */
 export const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
@@ -90,7 +91,7 @@ class HttpSession implements ElasticSession {
 
   request(request: ElasticRequest): Promise<ElasticResponse> {
     if (this.closed) {
-      return Promise.reject(new DbError('connection-failed', 'The session is closed'));
+      return Promise.reject(new DbError('connection-failed', msg('The session is closed')));
     }
     const path = `${this.target.prefix}${request.path.startsWith('/') ? '' : '/'}${request.path}`;
     const body = request.body === undefined ? undefined : Buffer.from(request.body, 'utf8');
@@ -124,7 +125,10 @@ class HttpSession implements ElasticSession {
               reject(
                 new DbError(
                   'constraint',
-                  `The answer is larger than ${MAX_RESPONSE_BYTES / 1024 / 1024} MB: ask for less (size, _source)`,
+                  msg(
+                    'The answer is larger than {0} MB: ask for less (size, _source)',
+                    MAX_RESPONSE_BYTES / 1024 / 1024,
+                  ),
                 ),
               );
               return;
@@ -160,7 +164,7 @@ class HttpSession implements ElasticSession {
         limit > 0
           ? setTimeout(() => {
               outgoing.destroy(
-                new DbError('timeout', `The request took longer than ${limit / 1000} s`),
+                new DbError('timeout', msg('The request took longer than {0} s', limit / 1000)),
               );
             }, limit)
           : undefined;
@@ -198,14 +202,14 @@ async function readServer(session: HttpSession): Promise<ElasticServerInfo> {
   } catch (error) {
     throw new DbError(
       'connection-failed',
-      `The server did not answer as Elasticsearch does: ${errorMessage(error)}`,
+      msg('The server did not answer as Elasticsearch does: {0}', errorMessage(error)),
     );
   }
   const version = typeof info.version?.number === 'string' ? info.version.number : '';
   if (version === '') {
     throw new DbError(
       'connection-failed',
-      'The server did not answer as Elasticsearch does: no version',
+      msg('The server did not answer as Elasticsearch does: no version'),
     );
   }
   return {

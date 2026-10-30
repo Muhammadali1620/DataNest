@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { DumpDialect } from '../driver';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const EMPTY_PATH = "SELECT pg_catalog.set_config('search_path', '', false)";
 
@@ -61,14 +62,14 @@ export const postgresDump: DumpDialect = {
         return `DROP SEQUENCE IF EXISTS ${quoteTable(object)}`;
       case 'trigger':
         if (object.table === undefined) {
-          throw new DbError('unsupported', `The table of trigger ${object.name} is unknown`);
+          throw new DbError('unsupported', msg('The table of trigger {0} is unknown', object.name));
         }
         return `DROP TRIGGER IF EXISTS ${quoteIdentifier(object.name)} ON ${quoteTable({
           ...object,
           name: object.table,
         })}`;
       case 'event':
-        throw new DbError('unsupported', 'PostgreSQL has no scheduled events');
+        throw new DbError('unsupported', msg('PostgreSQL has no scheduled events'));
     }
   },
 };

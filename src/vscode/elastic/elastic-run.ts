@@ -14,6 +14,7 @@ import { lineAndColumn } from '../../core/mongo/shell-parse';
 import type { ElasticResponse, ElasticSession } from '../../drivers/elastic-driver';
 import type { SafeMode } from '../../services/safe-mode';
 import type { WritePolicy } from '../../services/write-policy';
+import { msg } from '../../core/user-message';
 
 export interface ElasticRunQuestion {
   readonly kind: 'production' | 'dangerous';
@@ -44,7 +45,9 @@ export function parseInDocument(request: ElasticRequestText, document: string): 
   } catch (error) {
     if (error instanceof RequestSyntaxError) {
       const { line, column } = lineAndColumn(document, error.offset);
-      throw new DbError('syntax', `${line}:${column} ${error.message}`, { position: error.offset });
+      throw new DbError('syntax', msg('{0}:{1} {2}', line, column, error.message), {
+        position: error.offset,
+      });
     }
     throw error;
   }

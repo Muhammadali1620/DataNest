@@ -14,6 +14,7 @@ import {
   str,
 } from '../../core/mongo/value';
 import type { MongoSession } from '../../drivers/mongo-driver';
+import { msg } from '../../core/user-message';
 
 type Commands = Pick<MongoSession, 'command'>;
 
@@ -23,13 +24,13 @@ const MAX_DATABASE_BYTES = 63;
 /** Why a database name is refused, or undefined when it is fine (MongoDB's rules). */
 export function databaseNameProblem(name: string): string | undefined {
   if (name.trim() === '') {
-    return 'The name is empty';
+    return msg('The name is empty');
   }
   if (/[/\\. "$*<>:|?]/u.test(name) || name.includes('\u0000')) {
-    return 'A database name cannot hold / \\ . " $ * < > : | ? or spaces';
+    return msg('A database name cannot hold / \\ . " $ * < > : | ? or spaces');
   }
   if (new TextEncoder().encode(name).length > MAX_DATABASE_BYTES) {
-    return `A database name is at most ${MAX_DATABASE_BYTES} bytes`;
+    return msg('A database name is at most {0} bytes', MAX_DATABASE_BYTES);
   }
   return undefined;
 }
@@ -37,16 +38,16 @@ export function databaseNameProblem(name: string): string | undefined {
 /** Why a collection name is refused, or undefined when it is fine. */
 export function collectionNameProblem(name: string): string | undefined {
   if (name.trim() === '') {
-    return 'The name is empty';
+    return msg('The name is empty');
   }
   if (name.includes('\u0000') || name.includes('$')) {
-    return 'A collection name cannot hold $ or the NUL character';
+    return msg('A collection name cannot hold $ or the NUL character');
   }
   if (name.startsWith('system.')) {
-    return 'Names starting with "system." belong to the server';
+    return msg('Names starting with "system." belong to the server');
   }
   if (name.startsWith('.') || name.endsWith('.')) {
-    return 'A collection name cannot start or end with a dot';
+    return msg('A collection name cannot start or end with a dot');
   }
   return undefined;
 }
@@ -152,11 +153,14 @@ export function defaultIndexName(keys: MongoDocument): string {
 /** Why an index key is refused before it reaches the server. */
 export function indexKeyProblem(keys: MongoDocument): string | undefined {
   if (keys.fields.length === 0) {
-    return 'The index has no keys: name at least one field, e.g. { email: 1 }';
+    return msg('The index has no keys: name at least one field, e.g. { email: 1 }');
   }
   for (const [name, value] of keys.fields) {
     if (keyPart(value) === undefined) {
-      return `The key "${name}" must be 1, -1 or a kind such as "text", "2dsphere", "hashed"`;
+      return msg(
+        'The key "{0}" must be 1, -1 or a kind such as "text", "2dsphere", "hashed"',
+        name,
+      );
     }
   }
   return undefined;
@@ -211,7 +215,7 @@ export async function dropIndex(
   if (name === '_id_') {
     throw new DbError(
       'unsupported',
-      'The _id index belongs to every collection and cannot be dropped',
+      msg('The _id index belongs to every collection and cannot be dropped'),
     );
   }
   await session.command(

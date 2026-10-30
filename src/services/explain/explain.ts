@@ -19,6 +19,7 @@ import { cellText, joinedLines } from './plan-node';
 import { readPostgresPlan } from './postgres-plan';
 import { readSqlitePlan } from './sqlite-plan';
 import { readTabularPlan } from './tabular-plan';
+import { msg } from '../../core/user-message';
 
 /** Which server of a driver answers: they differ in how they explain. */
 export type PlanServer =
@@ -91,16 +92,18 @@ export async function explainStatement(
 ): Promise<QueryPlan> {
   const statement = sql.trim().replace(/;+\s*$/u, '');
   if (statement === '') {
-    throw new DbError('syntax', 'There is no statement to explain');
+    throw new DbError('syntax', msg('There is no statement to explain'));
   }
   if (analyze) {
     if (!canAnalyze(server)) {
-      throw new DbError('unsupported', 'This database cannot run a statement for its plan');
+      throw new DbError('unsupported', msg('This database cannot run a statement for its plan'));
     }
     if (!isReadOnlyStatement(statement, syntaxOf(driverOf(server)))) {
       throw new DbError(
         'unsupported',
-        'EXPLAIN ANALYZE runs the statement, so DataNest does it only for statements that read',
+        msg(
+          'EXPLAIN ANALYZE runs the statement, so DataNest does it only for statements that read',
+        ),
       );
     }
   }
@@ -171,7 +174,7 @@ async function mssqlPlanXml(
       .find((set) => cellText(set.rows[0]?.[0])?.startsWith('<ShowPlanXML') === true);
     const xml = cellText(plan?.rows[0]?.[0]);
     if (xml === undefined) {
-      throw new DbError('internal', 'SQL Server sent no plan for the statement');
+      throw new DbError('internal', msg('SQL Server sent no plan for the statement'));
     }
     return xml;
   } finally {

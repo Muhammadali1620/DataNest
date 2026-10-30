@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { DumpDialect } from '../driver';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const OBJECT_WORDS: Readonly<Record<ObjectRef['kind'], string | undefined>> = {
   table: 'TABLE',
@@ -65,7 +66,7 @@ export const mssqlDump: DumpDialect = {
   dropObject: (object: ObjectRef) => {
     const word = OBJECT_WORDS[object.kind];
     if (word === undefined) {
-      throw new DbError('unsupported', 'SQL Server keeps scheduled jobs outside the database');
+      throw new DbError('unsupported', msg('SQL Server keeps scheduled jobs outside the database'));
     }
     return `DROP ${word} IF EXISTS ${quoteTable(object)}`;
   },

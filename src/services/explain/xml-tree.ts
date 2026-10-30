@@ -3,6 +3,7 @@
 // no DTDs, no namespaces beyond dropping the prefix.
 
 import { DbError } from '../../core/errors';
+import { msg } from '../../core/user-message';
 
 export interface XmlElement {
   /** The name without a namespace prefix. */
@@ -51,7 +52,7 @@ export function parseXml(text: string): XmlElement {
       const name = localName(body.slice(1).trim());
       const element = stack.pop();
       if (element?.name !== name) {
-        throw new DbError('internal', `The plan XML closes <${name}> that is not open`);
+        throw new DbError('internal', msg('The plan XML closes <{0}> that is not open', name));
       }
       const finished: XmlElement = element;
       if (stack.length === 0) {
@@ -80,7 +81,7 @@ export function parseXml(text: string): XmlElement {
     }
   }
   if (stack.length > 0 || root === undefined) {
-    throw new DbError('internal', 'The plan XML is incomplete');
+    throw new DbError('internal', msg('The plan XML is incomplete'));
   }
   return root;
 }
@@ -123,7 +124,7 @@ export function findFirst(
 function after(text: string, end: string, from: number): number {
   const index = text.indexOf(end, from);
   if (index < 0) {
-    throw new DbError('internal', 'The plan XML is incomplete');
+    throw new DbError('internal', msg('The plan XML is incomplete'));
   }
   return index + end.length;
 }
@@ -143,7 +144,7 @@ function tagEnd(text: string, open: number): number {
       return index;
     }
   }
-  throw new DbError('internal', 'The plan XML is incomplete');
+  throw new DbError('internal', msg('The plan XML is incomplete'));
 }
 
 function localName(name: string): string {

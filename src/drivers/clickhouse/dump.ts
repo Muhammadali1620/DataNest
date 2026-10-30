@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { DumpDialect } from '../driver';
 import { quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export const clickhouseDump: DumpDialect = {
   prepare: [],
@@ -32,7 +33,10 @@ export const clickhouseDump: DumpDialect = {
       case 'trigger':
       case 'sequence':
       case 'event':
-        throw new DbError('unsupported', `ClickHouse has no ${object.kind} inside a database`);
+        throw new DbError(
+          'unsupported',
+          msg('ClickHouse has no {0} inside a database', object.kind),
+        );
     }
   },
 };

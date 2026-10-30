@@ -7,6 +7,7 @@ import type { ColumnDetail, TableRef, TableStructure } from '../../core/model/ob
 import type { MetadataReader } from '../driver';
 import type { PgRowReader } from './definitions';
 import { generatedColumnSql } from './server';
+import { msg } from '../../core/user-message';
 
 export async function readPgStructure(
   read: PgRowReader,
@@ -22,7 +23,7 @@ export async function readPgStructure(
     [table.schema ?? 'public', table.name],
   );
   if (relation === undefined) {
-    throw new DbError('not-found', `${table.name} does not exist`);
+    throw new DbError('not-found', msg('{0} does not exist', table.name));
   }
   const rows = await read(
     `SELECT a.attname, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull,

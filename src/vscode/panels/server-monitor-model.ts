@@ -27,6 +27,7 @@ import type {
   MonitorSummary,
   ServerMonitorState,
 } from '../../shared/protocols/server-monitor';
+import { msg } from '../../core/user-message';
 
 export interface ServerMonitorModelDeps {
   readonly connectionName: string;
@@ -107,7 +108,7 @@ export class ServerMonitorModel {
   async settings(scope: MonitorScope): Promise<MonitorSetting[]> {
     const server = this.known();
     if (!monitorFeatures(server).scopes.includes(scope)) {
-      throw new DbError('unsupported', 'The server has no settings of this kind');
+      throw new DbError('unsupported', msg('The server has no settings of this kind'));
     }
     return await this.exclusive(async () => listSettings(await this.deps.session(), server, scope));
   }
@@ -169,19 +170,19 @@ export class ServerMonitorModel {
     if (this.deps.readOnly) {
       throw new DbError(
         'permission-denied',
-        'The connection is read-only, so DataNest stops nothing on it',
+        msg('The connection is read-only, so DataNest stops nothing on it'),
       );
     }
     const features = monitorFeatures(server);
     if (!(kind === 'cancel' ? features.cancel : features.terminate)) {
-      throw new DbError('unsupported', 'The server cannot stop a process this way');
+      throw new DbError('unsupported', msg('The server cannot stop a process this way'));
     }
     const target = this.process(id);
     if (target === undefined) {
-      throw new DbError('not-found', 'The process is no longer in the list; refresh it');
+      throw new DbError('not-found', msg('The process is no longer in the list; refresh it'));
     }
     if (target.mine) {
-      throw new DbError('unsupported', 'This is the session of the monitor itself');
+      throw new DbError('unsupported', msg('This is the session of the monitor itself'));
     }
     return await this.exclusive(async () =>
       stopProcess(await this.deps.session(), server, target, kind, this.deps.dialect),
@@ -190,7 +191,7 @@ export class ServerMonitorModel {
 
   private known(): MonitorServer {
     if (this.server === undefined) {
-      throw new DbError('busy', this.error ?? 'The monitor is still connecting');
+      throw new DbError('busy', this.error ?? msg('The monitor is still connecting'));
     }
     return this.server;
   }

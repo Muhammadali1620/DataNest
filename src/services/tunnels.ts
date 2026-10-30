@@ -14,6 +14,7 @@ import {
   type SshHopSecrets,
   sshHopsOf,
 } from '../shared/connection';
+import { msg } from '../core/user-message';
 
 /** How long each SSH server may take to answer and log us in. */
 export const SSH_TIMEOUT_MS = 10_000;
@@ -170,7 +171,7 @@ export class TunnelPool {
    */
   async acquire(key: string, spec: TunnelSpec): Promise<TunnelLease> {
     if (this.disposed) {
-      throw new DbError('internal', 'The tunnel pool is disposed');
+      throw new DbError('internal', msg('The tunnel pool is disposed'));
     }
     let entry = this.shared.get(key);
     if (entry === undefined) {

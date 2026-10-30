@@ -19,6 +19,7 @@ import { toOracleDbError } from './errors';
 import { installExactDates } from './exact-dates';
 import { OracleMetadata } from './metadata';
 import { type OracleColumnLike, oracleTypeName, toCellValue } from './values';
+import { msg } from '../../core/user-message';
 
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
@@ -86,7 +87,9 @@ export async function openOracleSession(config: ResolvedConnectionConfig): Promi
   if (config.ssl !== undefined) {
     throw new DbError(
       'unsupported',
-      'TLS (TCPS) connections to Oracle are not supported yet; connect without TLS or through SSH',
+      msg(
+        'TLS (TCPS) connections to Oracle are not supported yet; connect without TLS or through SSH',
+      ),
     );
   }
   installExactDates();
@@ -143,7 +146,7 @@ class OracleSession implements Session {
 
   private async *run(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     const rowLimit = options.rowLimit ?? Number.POSITIVE_INFINITY;
     const control = transactionControl(sql, 'oracle');
@@ -173,7 +176,7 @@ class OracleSession implements Session {
         // ORA-24344: the routine or trigger was created, but does not compile.
         throw new DbError(
           'syntax',
-          await this.compileErrors(warning.message ?? 'Compiled with errors'),
+          await this.compileErrors(warning.message ?? msg('Compiled with errors')),
         );
       }
       resultSet = result.resultSet;
@@ -227,7 +230,7 @@ class OracleSession implements Session {
       const lines = rows.map(
         (row) => `line ${String(row[0])}, column ${String(row[1])}: ${String(row[2]).trim()}`,
       );
-      return lines.length === 0 ? fallback : `Compiled with errors: ${lines.join('; ')}`;
+      return lines.length === 0 ? fallback : msg('Compiled with errors: {0}', lines.join('; '));
     } catch (_error) {
       return fallback;
     }
@@ -256,7 +259,7 @@ class OracleSession implements Session {
   /** A catalog query with `:name` binds; rows as fetched values. */
   async query(sql: string, binds: Record<string, string> = {}): Promise<unknown[][]> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     try {
       const result = await this.connection.execute<unknown[]>(sql, binds, {

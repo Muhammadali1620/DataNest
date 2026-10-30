@@ -20,6 +20,7 @@ import {
   type UserRef,
   withPassword,
 } from './user-admin';
+import { msg } from '../../core/user-message';
 
 const OBJECT_PRIVILEGES = [
   'SELECT',
@@ -104,7 +105,7 @@ export function mssqlUserAdmin(dialect: AdminDialect): UserAdmin {
       case 'role':
         throw new DbError(
           'unsupported',
-          `SQL Server grants nothing at the level "${change.level}" here`,
+          msg('SQL Server grants nothing at the level "{0}" here', change.level),
         );
     }
   };
@@ -174,7 +175,7 @@ export function mssqlUserAdmin(dialect: AdminDialect): UserAdmin {
     },
 
     createUser: (user) => {
-      checkText(user.password, 'password');
+      checkText(user.password, msg('password'));
       const name = principal(user);
       return withPassword(user.password, (password) => [
         `CREATE LOGIN ${name} WITH PASSWORD = ${dialect.literal(password)}`,
@@ -185,7 +186,7 @@ export function mssqlUserAdmin(dialect: AdminDialect): UserAdmin {
     dropUser: (user) => [`${user.role === true ? 'DROP ROLE' : 'DROP USER'} ${principal(user)}`],
 
     setPassword: (user, password) => {
-      checkText(password, 'password');
+      checkText(password, msg('password'));
       return withPassword(password, (shown) => [
         `ALTER LOGIN ${principal(user)} WITH PASSWORD = ${dialect.literal(shown)}`,
       ]);

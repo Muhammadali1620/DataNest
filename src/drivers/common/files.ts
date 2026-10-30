@@ -4,6 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { DbError } from '../../core/errors';
+import { msg } from '../../core/user-message';
 
 /** `~/…` paths are what people copy from their SSH and client configs. */
 export function expandHome(path: string, home: string = homedir()): string {
@@ -19,6 +20,6 @@ export async function readUserFile(path: string, what: string): Promise<Buffer> 
   try {
     return await readFile(file);
   } catch (error) {
-    throw new DbError('not-found', `Cannot read ${what} "${file}"`, { cause: error });
+    throw new DbError('not-found', msg('Cannot read {0} "{1}"', what, file), { cause: error });
   }
 }

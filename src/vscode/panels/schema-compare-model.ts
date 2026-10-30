@@ -26,6 +26,7 @@ import type {
 } from '../../shared/table-design';
 import { composeType, columnNames } from '../../shared/table-design';
 import { lineDiff } from '../../shared/text-diff';
+import { msg } from '../../core/user-message';
 
 export interface CompareSide {
   readonly connectionId: string;
@@ -172,7 +173,7 @@ export class SchemaCompareModel {
   private find(id: string): CompareItem {
     const item = this.items?.find((candidate) => candidate.id === id);
     if (item === undefined) {
-      throw new DbError('not-found', 'This difference is no longer in the comparison');
+      throw new DbError('not-found', msg('This difference is no longer in the comparison'));
     }
     return item;
   }

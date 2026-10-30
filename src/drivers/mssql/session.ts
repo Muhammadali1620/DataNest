@@ -19,6 +19,7 @@ import { toMssqlDbError } from './errors';
 import { installExactValues } from './exact-values';
 import { MssqlMetadata } from './metadata';
 import { type ColumnMetadataLike, mssqlTypeName, toCellValue } from './values';
+import { msg } from '../../core/user-message';
 
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
@@ -110,7 +111,7 @@ export function verifyChain(connection: unknown, tls: TlsMaterial | undefined): 
   const socket = (connection as { messageIo?: { securePair?: { cleartext?: SecureSocketLike } } })
     .messageIo?.securePair?.cleartext;
   if (socket === undefined) {
-    throw new DbError('connection-failed', 'The server did not encrypt the connection');
+    throw new DbError('connection-failed', msg('The server did not encrypt the connection'));
   }
   const problem = socket.authorizationError;
   if (socket.authorized === true || problem === 'ERR_TLS_CERT_ALTNAME_INVALID') {
@@ -120,7 +121,10 @@ export function verifyChain(connection: unknown, tls: TlsMaterial | undefined): 
   const error = Object.assign(new Error(String(problem)), { code });
   throw (
     tlsFailure(error, tls.serverName) ??
-    new DbError('connection-failed', `The server certificate is not trusted: ${String(problem)}`)
+    new DbError(
+      'connection-failed',
+      msg('The server certificate is not trusted: {0}', String(problem)),
+    )
   );
 }
 
@@ -177,7 +181,7 @@ export function loginFailure(messages: readonly ServerMessage[]): Error | undefi
   if (first?.number === undefined) {
     return undefined;
   }
-  return Object.assign(new Error(first.message ?? 'Login failed'), {
+  return Object.assign(new Error(first.message ?? msg('Login failed')), {
     number: first.number,
     code: 'ELOGIN',
   });
@@ -238,10 +242,10 @@ class MssqlSession implements Session {
 
   private usable(): void {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     if (this.ended) {
-      throw new DbError('connection-failed', 'The connection to the server was lost');
+      throw new DbError('connection-failed', msg('The connection to the server was lost'));
     }
   }
 

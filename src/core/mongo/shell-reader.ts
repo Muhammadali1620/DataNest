@@ -7,6 +7,7 @@
 import { newObjectId } from './object-id';
 import { hexToBase64 } from './shell-format';
 import type { MongoDocument, MongoField, MongoValue } from './value';
+import { msg } from '../user-message';
 
 /** Something that is not valid shell data, and where. */
 export class ShellSyntaxError extends Error {
@@ -70,7 +71,7 @@ export class ShellReader {
       if (char === '/' && this.text[this.offset + 1] === '*') {
         const end = this.text.indexOf('*/', this.offset + 2);
         if (end < 0) {
-          this.fail('The comment is not closed');
+          this.fail(msg('The comment is not closed'));
         }
         this.offset = end + 2;
         continue;
@@ -91,18 +92,18 @@ export class ShellReader {
 
   expect(char: string, what = `"${char}"`): void {
     if (!this.accept(char)) {
-      this.fail(`Expected ${what}${this.near()}`);
+      this.fail(msg('Expected {0}{1}', what, this.near()));
     }
   }
 
-  /** " here" / " near `…`", for messages. */
+  /** " at the end" / " near `…`", for messages. */
   near(): string {
     this.skipSpace();
     if (this.offset >= this.text.length) {
-      return ' at the end';
+      return msg(' at the end');
     }
     const rest = this.text.slice(this.offset, this.offset + 12).split('\n')[0] ?? '';
-    return ` near \`${rest}\``;
+    return msg(' near `{0}`', rest);
   }
 
   /** A name made of identifier characters, or undefined when none comes next. */
@@ -121,7 +122,7 @@ export class ShellReader {
   /** One value: a document, an array, a string, a number, a constructor, … */
   value(depth = 0): MongoValue {
     if (depth > MAX_DEPTH) {
-      this.fail('The value nests too deeply');
+      this.fail(msg('The value nests too deeply'));
     }
     this.skipSpace();
     const start = this.offset;
@@ -143,7 +144,10 @@ export class ShellReader {
     }
     const word = this.identifier();
     if (word === undefined) {
-      this.fail(char === '' ? 'Expected a value at the end' : `Unexpected "${char}"`, start);
+      this.fail(
+        char === '' ? msg('Expected a value at the end') : msg('Unexpected "{0}"', char),
+        start,
+      );
     }
     return this.word(word, start, depth);
   }
@@ -154,10 +158,10 @@ export class ShellReader {
     while (!this.accept('}')) {
       this.skipSpace();
       const name = this.name();
-      this.expect(':', '":" after the field name');
+      this.expect(':', msg('":" after the field name'));
       fields.push([name, this.value(depth + 1)]);
       if (!this.accept(',')) {
-        this.expect('}', '"," or "}"');
+        this.expect('}', msg('"," or "}"'));
         break;
       }
     }
@@ -170,7 +174,7 @@ export class ShellReader {
     while (!this.accept(']')) {
       items.push(this.value(depth + 1));
       if (!this.accept(',')) {
-        this.expect(']', '"," or "]"');
+        this.expect(']', msg('"," or "]"'));
         break;
       }
     }
@@ -192,7 +196,7 @@ export class ShellReader {
     }
     const word = this.identifier();
     if (word === undefined) {
-      this.fail(`Expected a field name${this.near()}`);
+      this.fail(msg('Expected a field name{0}', this.near()));
     }
     return word;
   }
@@ -202,7 +206,7 @@ export class ShellReader {
     this.skipSpace();
     const quote = this.peek();
     if (quote !== '"' && quote !== "'" && quote !== '`') {
-      this.fail(`Expected a string${this.near()}`);
+      this.fail(msg('Expected a string{0}', this.near()));
     }
     const start = this.offset;
     this.offset += 1;
@@ -210,17 +214,17 @@ export class ShellReader {
     for (;;) {
       const char = this.peek();
       if (char === '') {
-        this.fail('The string is not closed', start);
+        this.fail(msg('The string is not closed'), start);
       }
       if (char === quote) {
         this.offset += 1;
         return out;
       }
       if ((char === '\n' || char === '\r') && quote !== '`') {
-        this.fail('A line break inside a string; write it as \\n', this.offset);
+        this.fail(msg('A line break inside a string; write it as \\n'), this.offset);
       }
       if (quote === '`' && char === '$' && this.text[this.offset + 1] === '{') {
-        this.fail('Templates with ${…} are not data: write the value itself');
+        this.fail(msg('Templates with ${…} are not data: write the value itself'));
       }
       if (char === '\\') {
         out += this.escape();
@@ -250,7 +254,7 @@ export class ShellReader {
         return '\v';
       case '0':
         if (/\d/.test(this.peek())) {
-          this.fail('Octal escapes are not allowed', at);
+          this.fail(msg('Octal escapes are not allowed'), at);
         }
         return '\0';
       case 'x':
@@ -260,7 +264,7 @@ export class ShellReader {
           const end = this.text.indexOf('}', this.offset);
           const hex = end < 0 ? '' : this.text.slice(this.offset + 1, end);
           if (!/^[0-9a-fA-F]{1,6}$/.test(hex) || Number.parseInt(hex, 16) > 0x10ffff) {
-            this.fail('A wrong \\u{…} escape', at);
+            this.fail(msg('A wrong \\u{…} escape'), at);
           }
           this.offset = end + 1;
           return String.fromCodePoint(Number.parseInt(hex, 16));
@@ -278,7 +282,7 @@ export class ShellReader {
       case '\u2029':
         return '';
       case '':
-        return this.fail('The string is not closed', at);
+        return this.fail(msg('The string is not closed'), at);
       default:
         return char;
     }
@@ -287,7 +291,7 @@ export class ShellReader {
   private hexDigits(count: number, at: number): number {
     const hex = this.text.slice(this.offset, this.offset + count);
     if (hex.length !== count || !/^[0-9a-fA-F]+$/.test(hex)) {
-      this.fail('A wrong escape', at);
+      this.fail(msg('A wrong escape'), at);
     }
     this.offset += count;
     return Number.parseInt(hex, 16);
@@ -320,11 +324,11 @@ export class ShellReader {
     const match = /^(\d+)?(\.\d*)?([eE][+-]?\d+)?/.exec(rest);
     const [whole = '', digits, fraction, exponent] = match ?? [];
     if (whole === '' || whole === '.' || (digits === undefined && fraction === undefined)) {
-      this.fail('Expected a number', start);
+      this.fail(msg('Expected a number'), start);
     }
     this.offset += whole.length;
     if (IDENTIFIER_PART.test(this.peek())) {
-      this.fail(`Unexpected "${this.peek()}" in a number`);
+      this.fail(msg('Unexpected "{0}" in a number', this.peek()));
     }
     if (fraction === undefined && exponent === undefined) {
       return this.integer(BigInt(digits ?? '0') * (sign === '-' ? -1n : 1n), start);
@@ -341,7 +345,9 @@ export class ShellReader {
       return { type: 'int64', value: value.toString() };
     }
     return this.fail(
-      'The number is too large for a 64-bit integer: write it with a point for a double, or as NumberDecimal("…")',
+      msg(
+        'The number is too large for a 64-bit integer: write it with a point for a double, or as NumberDecimal("…")',
+      ),
       start,
     );
   }
@@ -354,7 +360,7 @@ export class ShellReader {
     for (;;) {
       const char = this.peek();
       if (char === '' || char === '\n' || char === '\r') {
-        this.fail('The regular expression is not closed', start);
+        this.fail(msg('The regular expression is not closed'), start);
       }
       this.offset += 1;
       if (char === '\\') {
@@ -398,7 +404,7 @@ export class ShellReader {
       case 'new': {
         const name = this.identifier();
         if (name === undefined) {
-          this.fail(`Expected a constructor after "new"${this.near()}`);
+          this.fail(msg('Expected a constructor after "new"{0}', this.near()));
         }
         return this.call(name, start, depth);
       }
@@ -414,7 +420,7 @@ export class ShellReader {
     while (!this.accept(')')) {
       values.push(this.value(depth + 1));
       if (!this.accept(',')) {
-        this.expect(')', '"," or ")"');
+        this.expect(')', msg('"," or ")"'));
         break;
       }
     }
@@ -426,12 +432,12 @@ export class ShellReader {
       return { type: name === 'MinKey' ? 'minKey' : 'maxKey' };
     }
     if (!this.text.startsWith('(', this.skipped())) {
-      this.fail(`Unknown value "${name}"`, start);
+      this.fail(msg('Unknown value "{0}"', name), start);
     }
     const args = this.args(depth);
     const constructor = CONSTRUCTORS.get(name);
     if (constructor === undefined) {
-      this.fail(`Unknown constructor ${name}(); DataNest reads data, not code`, start);
+      this.fail(msg('Unknown constructor {0}(); DataNest reads data, not code', name), start);
     }
     const result = constructor(args, (message) => this.fail(`${name}(): ${message}`, start));
     return result;
@@ -458,7 +464,7 @@ type Constructor = (args: readonly MongoValue[], fail: Fail) => MongoValue;
 function textArg(args: readonly MongoValue[], index: number, fail: Fail, what: string): string {
   const arg = args[index];
   if (arg?.type !== 'string') {
-    fail(`expects ${what} as a string`);
+    fail(msg('expects {0} as a string', what));
   }
   return arg.value;
 }
@@ -471,12 +477,14 @@ function numberArg(args: readonly MongoValue[], index: number, fail: Fail, what:
   if (arg?.type === 'int64' || arg?.type === 'double') {
     return Number(arg.value);
   }
-  return fail(`expects ${what} as a number`);
+  return fail(msg('expects {0} as a number', what));
 }
 
 function arity(args: readonly MongoValue[], min: number, max: number, fail: Fail): void {
   if (args.length < min || args.length > max) {
-    fail(min === max ? `takes ${min} argument(s)` : `takes ${min} to ${max} arguments`);
+    fail(
+      min === max ? msg('takes {0} argument(s)', min) : msg('takes {0} to {1} arguments', min, max),
+    );
   }
 }
 
@@ -484,7 +492,7 @@ function int64Text(value: MongoValue, fail: Fail): string {
   let big: bigint;
   if (value.type === 'string') {
     if (!/^[+-]?\d+$/.test(value.value.trim())) {
-      fail('expects a whole number');
+      fail(msg('expects a whole number'));
     }
     big = BigInt(value.value.trim());
   } else if (value.type === 'int32' || value.type === 'int64') {
@@ -492,10 +500,10 @@ function int64Text(value: MongoValue, fail: Fail): string {
   } else if (value.type === 'double' && Number.isSafeInteger(Number(value.value))) {
     big = BigInt(Number(value.value));
   } else {
-    return fail('expects a whole number');
+    return fail(msg('expects a whole number'));
   }
   if (big < INT64_MIN || big > INT64_MAX) {
-    fail('is out of the 64-bit range');
+    fail(msg('is out of the 64-bit range'));
   }
   return big.toString();
 }
@@ -516,7 +524,7 @@ function dateFrom(args: readonly MongoValue[], fail: Fail): MongoValue {
       ? Date.parse(`${text}T00:00:00Z`)
       : Date.parse(text);
     if (Number.isNaN(ms) || !/^[+-]?\d{4,6}-\d{2}-\d{2}/.test(text)) {
-      fail('expects an ISO date, e.g. "2026-10-29T12:00:00Z"');
+      fail(msg('expects an ISO date, e.g. "2026-10-29T12:00:00Z"'));
     }
     return { type: 'date', value: String(ms) };
   }
@@ -524,7 +532,7 @@ function dateFrom(args: readonly MongoValue[], fail: Fail): MongoValue {
     const text = int64Text(arg, fail);
     return { type: 'date', value: text };
   }
-  return fail('expects an ISO date or milliseconds since 1970');
+  return fail(msg('expects an ISO date or milliseconds since 1970'));
 }
 
 const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Constructor>([
@@ -535,9 +543,9 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
       if (args.length === 0) {
         return { type: 'objectId', value: newObjectId() };
       }
-      const hex = textArg(args, 0, fail, 'the 24 hex digits').trim();
+      const hex = textArg(args, 0, fail, msg('the 24 hex digits')).trim();
       if (!/^[0-9a-fA-F]{24}$/.test(hex)) {
-        fail('expects 24 hex digits');
+        fail(msg('expects 24 hex digits'));
       }
       return { type: 'objectId', value: hex.toLowerCase() };
     },
@@ -557,9 +565,9 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
       arity(args, 1, 1, fail);
       const arg = args[0];
       const number =
-        arg?.type === 'string' ? Number(arg.value) : numberArg(args, 0, fail, 'the value');
+        arg?.type === 'string' ? Number(arg.value) : numberArg(args, 0, fail, msg('the value'));
       if (!Number.isInteger(number) || number < INT32_MIN || number > INT32_MAX) {
-        fail('expects a whole number within 32 bits');
+        fail(msg('expects a whole number within 32 bits'));
       }
       return { type: 'int32', value: number };
     },
@@ -570,7 +578,7 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
       arity(args, 1, 1, fail);
       const arg = args[0];
       const number =
-        arg?.type === 'string' ? Number(arg.value) : numberArg(args, 0, fail, 'the value');
+        arg?.type === 'string' ? Number(arg.value) : numberArg(args, 0, fail, msg('the value'));
       return { type: 'double', value: Object.is(number, -0) ? '-0' : String(number) };
     },
   ],
@@ -586,7 +594,7 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
             ? String(arg.value)
             : '';
       if (!DECIMAL.test(text)) {
-        fail('expects a decimal number as a string, e.g. "12.50"');
+        fail(msg('expects a decimal number as a string, e.g. "12.50"'));
       }
       return { type: 'decimal', value: text };
     },
@@ -595,13 +603,13 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
     'BinData',
     (args, fail) => {
       arity(args, 2, 2, fail);
-      const subtype = numberArg(args, 0, fail, 'the subtype');
-      const base64 = textArg(args, 1, fail, 'the base64 data').replace(/\s+/g, '');
+      const subtype = numberArg(args, 0, fail, msg('the subtype'));
+      const base64 = textArg(args, 1, fail, msg('the base64 data')).replace(/\s+/g, '');
       if (!Number.isInteger(subtype) || subtype < 0 || subtype > 255) {
-        fail('expects a subtype from 0 to 255');
+        fail(msg('expects a subtype from 0 to 255'));
       }
       if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64) || base64.length % 4 !== 0) {
-        fail('expects base64 data');
+        fail(msg('expects base64 data'));
       }
       return { type: 'binary', subtype, value: base64 };
     },
@@ -610,15 +618,15 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
     'HexData',
     (args, fail) => {
       arity(args, 2, 2, fail);
-      const subtype = numberArg(args, 0, fail, 'the subtype');
-      const hex = textArg(args, 1, fail, 'the hex data').replace(/\s+/g, '');
+      const subtype = numberArg(args, 0, fail, msg('the subtype'));
+      const hex = textArg(args, 1, fail, msg('the hex data')).replace(/\s+/g, '');
       if (
         !/^([0-9a-fA-F]{2})*$/.test(hex) ||
         !Number.isInteger(subtype) ||
         subtype < 0 ||
         subtype > 255
       ) {
-        fail('expects a subtype and hex digits');
+        fail(msg('expects a subtype and hex digits'));
       }
       return { type: 'binary', subtype, value: hexToBase64(hex.toLowerCase()) };
     },
@@ -627,9 +635,9 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
     'UUID',
     (args, fail) => {
       arity(args, 1, 1, fail);
-      const hex = textArg(args, 0, fail, 'the UUID').replaceAll('-', '');
+      const hex = textArg(args, 0, fail, msg('the UUID')).replaceAll('-', '');
       if (!/^[0-9a-fA-F]{32}$/.test(hex)) {
-        fail('expects 32 hex digits, dashes allowed');
+        fail(msg('expects 32 hex digits, dashes allowed'));
       }
       return { type: 'binary', subtype: 4, value: hexToBase64(hex.toLowerCase()) };
     },
@@ -649,12 +657,12 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
         i = get('i');
       } else {
         arity(args, 2, 2, fail);
-        t = numberArg(args, 0, fail, 'the seconds');
-        i = numberArg(args, 1, fail, 'the increment');
+        t = numberArg(args, 0, fail, msg('the seconds'));
+        i = numberArg(args, 1, fail, msg('the increment'));
       }
       const valid = (n: number): boolean => Number.isInteger(n) && n >= 0 && n <= 0xffff_ffff;
       if (!valid(t) || !valid(i)) {
-        fail('expects whole numbers t and i within 32 bits');
+        fail(msg('expects whole numbers t and i within 32 bits'));
       }
       return { type: 'timestamp', t, i };
     },
@@ -677,10 +685,10 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
     'RegExp',
     (args, fail) => {
       arity(args, 1, 2, fail);
-      const pattern = textArg(args, 0, fail, 'the pattern');
-      const flags = args.length > 1 ? textArg(args, 1, fail, 'the flags') : '';
+      const pattern = textArg(args, 0, fail, msg('the pattern'));
+      const flags = args.length > 1 ? textArg(args, 1, fail, msg('the flags')) : '';
       if (!/^[a-z]*$/i.test(flags)) {
-        fail('expects letters as flags');
+        fail(msg('expects letters as flags'));
       }
       return { type: 'regex', pattern, flags: sortedFlags(flags) };
     },
@@ -689,13 +697,13 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
     'Code',
     (args, fail) => {
       arity(args, 1, 2, fail);
-      const code = textArg(args, 0, fail, 'the code');
+      const code = textArg(args, 0, fail, msg('the code'));
       const scope = args[1];
       if (scope === undefined) {
         return { type: 'code', value: code };
       }
       if (scope.type !== 'document') {
-        return fail('expects a document as the scope');
+        return fail(msg('expects a document as the scope'));
       }
       return { type: 'code', value: code, scope };
     },
@@ -704,13 +712,16 @@ const CONSTRUCTORS: ReadonlyMap<string, Constructor> = new Map<string, Construct
     'DBRef',
     (args, fail) => {
       arity(args, 2, 3, fail);
-      const collection = textArg(args, 0, fail, 'the collection');
+      const collection = textArg(args, 0, fail, msg('the collection'));
       const fields: MongoField[] = [
         ['$ref', { type: 'string', value: collection }],
         ['$id', args[1] ?? { type: 'null' }],
       ];
       if (args.length > 2) {
-        fields.push(['$db', { type: 'string', value: textArg(args, 2, fail, 'the database') }]);
+        fields.push([
+          '$db',
+          { type: 'string', value: textArg(args, 2, fail, msg('the database')) },
+        ]);
       }
       return { type: 'document', fields };
     },

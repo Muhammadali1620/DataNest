@@ -15,6 +15,7 @@ import {
   TYPE_TEXT,
   unwrapDefault,
 } from './catalog';
+import { msg } from '../../core/user-message';
 
 export async function readMssqlStructure(
   read: MssqlRowReader,
@@ -31,7 +32,7 @@ export async function readMssqlStructure(
     [objectName(table), DESCRIPTION],
   );
   if (relation === undefined) {
-    throw new DbError('not-found', `${table.name} does not exist`);
+    throw new DbError('not-found', msg('{0} does not exist', table.name));
   }
   const rows = await read(
     `SELECT c.name, ${TYPE_TEXT}, c.is_nullable, dc.definition, c.is_identity, c.is_computed,

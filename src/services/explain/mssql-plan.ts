@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { PlanNode, PlanWarning, QueryPlan } from '../../shared/query-plan';
 import { numberOf, planNode } from './plan-node';
 import { findAll, findFirst, parseXml, type XmlElement } from './xml-tree';
+import { msg } from '../../core/user-message';
 
 /** Parts of a RelOp that are not the operator itself. */
 const NOT_OPERATOR = new Set([
@@ -22,7 +23,7 @@ const PREDICATES = ['SeekPredicates', 'SeekPredicateNew', 'Predicate', 'ProbeRes
 export function readMssqlPlan(raw: string, analyzed: boolean): QueryPlan {
   const document = parseXml(raw);
   if (document.name !== 'ShowPlanXML') {
-    throw new DbError('internal', 'The server sent something other than a showplan');
+    throw new DbError('internal', msg('The server sent something other than a showplan'));
   }
   const statements = findAll(document, 'StmtSimple');
   const notes: string[] = [];
@@ -60,7 +61,7 @@ export function readMssqlPlan(raw: string, analyzed: boolean): QueryPlan {
     ];
   });
   if (roots.length === 0) {
-    throw new DbError('internal', 'The showplan has no operators: the statement has no plan');
+    throw new DbError('internal', msg('The showplan has no operators: the statement has no plan'));
   }
   const root =
     roots.length === 1 && roots[0] !== undefined

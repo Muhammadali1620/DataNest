@@ -17,6 +17,7 @@ import type {
   TableStructure,
 } from '../../core/model/objects';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
+import { msg } from '../../core/user-message';
 
 /** Runs one catalog query with `{name:Type}` parameters and returns its rows. */
 export type ClickhouseRowReader = (
@@ -185,7 +186,7 @@ export class ClickhouseMetadata implements MetadataReader {
       { db: databaseOf(table), table: table.name },
     );
     if (relation === undefined || VIEW_ENGINES.has(text(relation[1]))) {
-      throw new DbError('not-found', `${table.name} does not exist`);
+      throw new DbError('not-found', msg('{0} does not exist', table.name));
     }
     const columns = (await this.columns(table)).map((row): ColumnDetail => {
       const type = text(row[1]);
@@ -233,7 +234,10 @@ export class ClickhouseMetadata implements MetadataReader {
       case 'trigger':
       case 'sequence':
       case 'event':
-        throw new DbError('unsupported', `ClickHouse has no ${object.kind} inside a database`);
+        throw new DbError(
+          'unsupported',
+          msg('ClickHouse has no {0} inside a database', object.kind),
+        );
     }
   }
 
@@ -260,7 +264,7 @@ export class ClickhouseMetadata implements MetadataReader {
       table: table.name,
     });
     if (shown === undefined) {
-      throw new DbError('not-found', `${table.name} does not exist`);
+      throw new DbError('not-found', msg('{0} does not exist', table.name));
     }
     return text(shown[0]).trim().replace(/;\s*$/u, '');
   }

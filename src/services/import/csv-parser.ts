@@ -1,3 +1,4 @@
+import { msg } from '../../core/user-message';
 // Reading CSV in parts (V5.3), the way RFC 4180 writes it and the way spreadsheets
 // actually do: quoted fields may hold delimiters, quotes ("") and line breaks, and
 // a part may end anywhere, even between the two characters of "" or CR LF.
@@ -30,7 +31,7 @@ export class CsvParser {
 
   constructor(private readonly delimiter = ',') {
     if (delimiter.length !== 1 || delimiter === '"' || delimiter === '\n' || delimiter === '\r') {
-      throw new Error(`A CSV delimiter is one character other than a quote or line break`);
+      throw new Error(msg('A CSV delimiter is one character other than a quote or line break'));
     }
   }
 

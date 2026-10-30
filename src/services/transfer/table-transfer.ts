@@ -20,6 +20,7 @@ import { exactLiteralOf } from '../sql-literal';
 import { designFromStructure } from '../table-structure';
 import { transferValue } from './transfer-values';
 import { mapColumnType, mapDefault, type NeutralType, neutralType } from './type-map';
+import { msg } from '../../core/user-message';
 
 export type TransferContent = 'all' | 'structure' | 'data';
 /** What happens to a table the target already has. */
@@ -236,7 +237,7 @@ class Job {
         await each(this.writer, this.to.ddl.createTable(target, inline));
         created = true;
       } else if (!exists) {
-        return failed(new DbError('not-found', `${name} does not exist on the target`));
+        return failed(new DbError('not-found', msg('{0} does not exist on the target', name)));
       }
       // Rows go into the columns both sides have; an existing table may differ.
       const targetColumns = created
@@ -331,7 +332,11 @@ class Job {
     if (problems.length > 0) {
       throw new DbError(
         'unsupported',
-        `${name} cannot be created on the target: ${problems.map((problem) => problem.kind).join(', ')}`,
+        msg(
+          '{0} cannot be created on the target: {1}',
+          name,
+          problems.map((problem) => problem.kind).join(', '),
+        ),
       );
     }
     return design;
@@ -396,7 +401,7 @@ class Job {
           continue;
         }
         if (aborted(this.request.signal)) {
-          throw new DbError('cancelled', 'The transfer was cancelled');
+          throw new DbError('cancelled', msg('The transfer was cancelled'));
         }
         for (const row of event.rows) {
           const literals = table.columns.map((column, index) =>
@@ -463,7 +468,7 @@ class Job {
         const index = results.indexOf(result);
         results[index] = {
           ...result,
-          error: `Foreign keys were not added: ${errorMessage(error)}`,
+          error: msg('Foreign keys were not added: {0}', errorMessage(error)),
         };
       }
     }

@@ -19,6 +19,7 @@ import {
 import type { MongoCursor, MongoCursorRequest, MongoSession } from '../../drivers/mongo-driver';
 import { checkWrite, countDocuments } from './documents';
 import { createIndexCommand } from './schema-edits';
+import { msg } from '../../core/user-message';
 
 /** What a statement does to data: reads, writes, or writes something hard to undo. */
 export type StatementEffect = 'read' | 'write' | 'dangerous';
@@ -151,7 +152,10 @@ export type RunOutcome =
 function unsupported(method: string): DbError {
   return new DbError(
     'unsupported',
-    `DataNest does not run ${method}() from the editor; use find, aggregate, the counts, inserts, updates, deletes, indexes or db.runCommand`,
+    msg(
+      'DataNest does not run {0}() from the editor; use find, aggregate, the counts, inserts, updates, deletes, indexes or db.runCommand',
+      method,
+    ),
   );
 }
 
@@ -161,7 +165,7 @@ function documentArg(call: ShellCall, index: number, what: string, optional = tr
     return doc([]);
   }
   if (value?.type !== 'document') {
-    throw new DbError('syntax', `${call.method}() expects ${what} as a document`);
+    throw new DbError('syntax', msg('{0}() expects {1} as a document', call.method, what));
   }
   return value;
 }
@@ -175,7 +179,7 @@ function numberArg(call: ShellCall): number {
         ? Number(value.value)
         : NaN;
   if (!Number.isSafeInteger(number) || number < 0) {
-    throw new DbError('syntax', `${call.method}() expects a whole number of 0 or more`);
+    throw new DbError('syntax', msg('{0}() expects a whole number of 0 or more', call.method));
   }
   return number;
 }
@@ -183,7 +187,7 @@ function numberArg(call: ShellCall): number {
 function arrayArg(call: ShellCall, what: string): MongoValue[] {
   const value = call.args[0];
   if (value?.type !== 'array') {
-    throw new DbError('syntax', `${call.method}() expects ${what} in brackets`);
+    throw new DbError('syntax', msg('{0}() expects {1} in brackets', call.method, what));
   }
   return [...value.items];
 }
@@ -207,8 +211,8 @@ function findRequest(
   let request: Extract<MongoCursorRequest, { kind: 'find' }> = {
     kind: 'find',
     collection,
-    filter: documentArg(call, 0, 'the filter'),
-    projection: documentArg(call, 1, 'the projection'),
+    filter: documentArg(call, 0, msg('the filter')),
+    projection: documentArg(call, 1, msg('the projection')),
     ...(maxTimeMS === 0 ? {} : { maxTimeMS }),
   };
   for (const link of chain) {
@@ -229,7 +233,7 @@ function findRequest(
       case 'hint': {
         const hint = link.args[0];
         if (hint === undefined) {
-          throw new DbError('syntax', 'hint() expects an index name or keys');
+          throw new DbError('syntax', msg('hint() expects an index name or keys'));
         }
         request = { ...request, hint };
         break;
@@ -248,7 +252,10 @@ function findRequest(
       case 'count':
         break;
       default:
-        throw new DbError('unsupported', `DataNest does not run .${link.method}() after find()`);
+        throw new DbError(
+          'unsupported',
+          msg('DataNest does not run .{0}() after find()', link.method),
+        );
     }
   }
   return request;
@@ -303,12 +310,16 @@ async function runDatabaseCall(
     case 'runCommand':
       return {
         kind: 'documents',
-        documents: [await session.command(database, documentArg(call, 0, 'the command', false))],
+        documents: [
+          await session.command(database, documentArg(call, 0, msg('the command'), false)),
+        ],
       };
     case 'adminCommand':
       return {
         kind: 'documents',
-        documents: [await session.command('admin', documentArg(call, 0, 'the command', false))],
+        documents: [
+          await session.command('admin', documentArg(call, 0, msg('the command'), false)),
+        ],
       };
     case 'getCollectionNames': {
       const names = (await session.listCollections(database)).map((one) => one.name).sort();
@@ -320,7 +331,7 @@ async function runDatabaseCall(
         documents: [await session.command(database, doc([['dbStats', int32(1)]]))],
       };
     case 'aggregate': {
-      const pipeline = arrayArg(call, 'the stages');
+      const pipeline = arrayArg(call, msg('the stages'));
       if (chainHas(chain, 'explain')) {
         return {
           kind: 'documents',
@@ -350,11 +361,11 @@ async function runDatabaseCall(
     case 'createCollection': {
       const name = call.args[0];
       if (name?.type !== 'string') {
-        throw new DbError('syntax', 'createCollection() expects a name in quotes');
+        throw new DbError('syntax', msg('createCollection() expects a name in quotes'));
       }
       const reply = await session.command(
         database,
-        doc([['create', name], ...documentArg(call, 1, 'the options').fields]),
+        doc([['create', name], ...documentArg(call, 1, msg('the options')).fields]),
       );
       return { kind: 'documents', documents: [reply] };
     }
@@ -375,10 +386,13 @@ async function runUpdate(
   collection: string,
   call: ShellCall,
 ): Promise<RunOutcome> {
-  const filter = documentArg(call, 0, 'the filter', false);
+  const filter = documentArg(call, 0, msg('the filter'), false);
   const update = call.args[1];
   if (update?.type !== 'document' && update?.type !== 'array') {
-    throw new DbError('syntax', `${call.method}() expects the update as a document or a pipeline`);
+    throw new DbError(
+      'syntax',
+      msg('{0}() expects the update as a document or a pipeline', call.method),
+    );
   }
   const replacing = call.method === 'replaceOne';
   const operators =
@@ -386,16 +400,19 @@ async function runUpdate(
   if (replacing && operators) {
     throw new DbError(
       'syntax',
-      'replaceOne() takes a whole document, not $set and other operators',
+      msg('replaceOne() takes a whole document, not $set and other operators'),
     );
   }
   if (!replacing && update.type === 'document' && !operators) {
     throw new DbError(
       'syntax',
-      `${call.method}() needs update operators such as $set; replaceOne() replaces a whole document`,
+      msg(
+        '{0}() needs update operators such as $set; replaceOne() replaces a whole document',
+        call.method,
+      ),
     );
   }
-  const options = documentArg(call, 2, 'the options');
+  const options = documentArg(call, 2, msg('the options'));
   const upsert = field(options, 'upsert');
   const reply = await session.command(
     database,
@@ -470,8 +487,8 @@ async function runCollectionCall(
       }
     }
     case 'aggregate': {
-      const pipeline = arrayArg(call, 'the stages');
-      const settings = documentArg(call, 1, 'the options');
+      const pipeline = arrayArg(call, msg('the stages'));
+      const settings = documentArg(call, 1, msg('the options'));
       if (chainHas(chain, 'explain')) {
         return {
           kind: 'documents',
@@ -511,7 +528,7 @@ async function runCollectionCall(
             session,
             database,
             collection,
-            documentArg(call, 0, 'the filter'),
+            documentArg(call, 0, msg('the filter')),
             options.maxTimeMS,
           )
         ).count,
@@ -524,14 +541,14 @@ async function runCollectionCall(
     case 'distinct': {
       const key = call.args[0];
       if (key?.type !== 'string') {
-        throw new DbError('syntax', 'distinct() expects the field name in quotes');
+        throw new DbError('syntax', msg('distinct() expects the field name in quotes'));
       }
       const reply = await session.command(
         database,
         doc([
           ['distinct', str(collection)],
           ['key', key],
-          ['query', documentArg(call, 1, 'the filter')],
+          ['query', documentArg(call, 1, msg('the filter'))],
         ]),
       );
       const values = field(reply, 'values');
@@ -546,10 +563,10 @@ async function runCollectionCall(
     case 'insertMany': {
       const documents =
         call.method === 'insertOne'
-          ? [documentArg(call, 0, 'the document', false)]
-          : arrayArg(call, 'the documents');
+          ? [documentArg(call, 0, msg('the document'), false)]
+          : arrayArg(call, msg('the documents'));
       if (documents.length === 0 || documents.some((one) => one.type !== 'document')) {
-        throw new DbError('syntax', `${call.method}() expects documents`);
+        throw new DbError('syntax', msg('{0}() expects documents', call.method));
       }
       const reply = await session.command(
         database,
@@ -577,7 +594,7 @@ async function runCollectionCall(
               type: 'array',
               items: [
                 doc([
-                  ['q', documentArg(call, 0, 'the filter', false)],
+                  ['q', documentArg(call, 0, msg('the filter'), false)],
                   ['limit', int32(call.method === 'deleteOne' ? 1 : 0)],
                 ]),
               ],
@@ -598,8 +615,8 @@ async function runCollectionCall(
             database,
             createIndexCommand(
               collection,
-              documentArg(call, 0, 'the keys', false),
-              documentArg(call, 1, 'the options'),
+              documentArg(call, 0, msg('the keys'), false),
+              documentArg(call, 1, msg('the options')),
             ),
           ),
         ],
@@ -607,7 +624,7 @@ async function runCollectionCall(
     case 'dropIndex': {
       const index = call.args[0];
       if (index === undefined) {
-        throw new DbError('syntax', 'dropIndex() expects the name or the keys of the index');
+        throw new DbError('syntax', msg('dropIndex() expects the name or the keys of the index'));
       }
       return {
         kind: 'documents',

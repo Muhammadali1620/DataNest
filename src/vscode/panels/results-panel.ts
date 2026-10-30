@@ -23,6 +23,7 @@ import {
 import { RpcPeer } from '../../shared/rpc';
 import { buildState, errorOffsetOf } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
+import { formatCount } from '../../core/number-format';
 
 export interface ResultsPanelDeps {
   readonly extensionUri: vscode.Uri;
@@ -260,11 +261,11 @@ export class ResultsPanel implements vscode.Disposable {
           page.totalRows === undefined || page.approximate === true
             ? vscode.l10n.t(
                 'Load the whole table? It may hold a very large number of rows (up to {0}), which can be slow and use a lot of memory.',
-                MAX_PAGE_SIZE.toLocaleString(),
+                formatCount(MAX_PAGE_SIZE, vscode.env.language),
               )
             : vscode.l10n.t(
                 'Load all {0} rows? This can be slow and use a lot of memory.',
-                rows.toLocaleString(),
+                formatCount(rows, vscode.env.language),
               ),
           { modal: true },
           load,

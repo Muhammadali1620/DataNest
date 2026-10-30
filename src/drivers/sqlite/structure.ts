@@ -12,6 +12,7 @@ import type {
 import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
 import type { SqliteQueryRunner } from './metadata';
+import { msg } from '../../core/user-message';
 
 export async function readSqliteStructure(
   session: SqliteQueryRunner,
@@ -23,7 +24,7 @@ export async function readSqliteStructure(
     [table.name],
   );
   if (own === undefined) {
-    throw new DbError('not-found', `${table.name} does not exist`);
+    throw new DbError('not-found', msg('{0} does not exist', table.name));
   }
   const autoIncrement = /\bAUTOINCREMENT\b/i.test(text(own[0]));
   // hidden: 0 ordinary, 1 hidden (virtual tables), 2 and 3 generated columns.

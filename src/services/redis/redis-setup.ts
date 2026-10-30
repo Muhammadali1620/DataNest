@@ -7,6 +7,7 @@ import { type CommandWord, parseCommandLine } from '../../core/redis/command-lin
 import type { RedisSession } from '../../drivers/redis-driver';
 import type { ConnectionInput } from '../../shared/connection';
 import { commandEffect, commandFor, parseCommandInfo, SESSION_COMMANDS } from './command-info';
+import { msg } from '../../core/user-message';
 
 export interface InitCommand {
   /** The line as written, for messages. */
@@ -36,14 +37,17 @@ export function initCommands(config: Pick<ConnectionInput, 'options'>): InitComm
     if (!parsed.ok) {
       throw new DbError(
         'syntax',
-        `Init command "${line}" is not written correctly: ${parsed.problem}`,
+        msg('Init command "{0}" is not written correctly: {1}', line, parsed.problem),
       );
     }
     const name = wordText(parsed.words[0] ?? '').toLowerCase();
     if (SESSION_COMMANDS.has(name)) {
       throw new DbError(
         'unsupported',
-        `Init command "${line}" would change the connection itself; set it in the connection settings`,
+        msg(
+          'Init command "{0}" would change the connection itself; set it in the connection settings',
+          line,
+        ),
       );
     }
     commands.push({ line, words: parsed.words });
@@ -70,7 +74,7 @@ export async function setUpRedisSession(
       const cause = toDbError(error);
       throw new DbError(
         cause.code,
-        `Init command "${command.line}" failed: ${errorMessage(cause)}`,
+        msg('Init command "{0}" failed: {1}', command.line, errorMessage(cause)),
       );
     }
   }
@@ -88,7 +92,7 @@ async function refuseWrites(session: RedisSession, command: InitCommand): Promis
   if (commandEffect(commandFor(info, words)) !== 'read') {
     throw new DbError(
       'permission-denied',
-      `The init commands of a read-only connection may not change anything: ${command.line}`,
+      msg('The init commands of a read-only connection may not change anything: {0}', command.line),
     );
   }
 }

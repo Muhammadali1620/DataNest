@@ -19,6 +19,7 @@ import {
   text,
 } from './definitions';
 import { literal, quoteIdentifier } from './dialect';
+import { msg } from '../../core/user-message';
 
 const DEFAULT_SCHEMA = 'public';
 
@@ -34,7 +35,7 @@ export async function readPgTableDump(read: PgRowReader, table: TableRef): Promi
   );
   const row = rows[0];
   if (row === undefined) {
-    throw new DbError('not-found', `${schema}.${table.name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schema, table.name));
   }
   const oid = text(row[0]);
   const qualified = `${quoteIdentifier(schema)}.${quoteIdentifier(table.name)}`;

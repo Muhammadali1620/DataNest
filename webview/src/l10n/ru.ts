@@ -335,7 +335,7 @@ export const ru: Record<MessageKey, string> = {
   'form.ssh.jumps': 'Промежуточные хосты (jump)',
   'form.ssh.jumpsHint':
     'DataNest входит на них первыми, по порядку, и через них добирается до SSH-сервера выше.',
-  'form.ssh.jump': 'Jump {0}',
+  'form.ssh.jump': 'Промежуточный хост {0}',
   'form.ssh.addJump': 'Добавить промежуточный хост',
   'form.ssh.removeJump': 'Убрать',
   'form.ssh.moveUp': 'Выше',
@@ -650,7 +650,7 @@ export const ru: Record<MessageKey, string> = {
   'generator.lastName': 'Фамилия',
   'generator.fullName': 'Имя и фамилия',
   'generator.username': 'Логин',
-  'generator.email': 'Email',
+  'generator.email': 'Электронная почта',
   'generator.phone': 'Телефон',
   'generator.company': 'Компания',
   'generator.city': 'Город',

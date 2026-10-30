@@ -21,6 +21,7 @@ import {
 } from '../../core/mongo/value';
 import type { MongoRawDocument, MongoSession } from '../../drivers/mongo-driver';
 import { mongoErrorKind } from '../../drivers/mongodb/errors';
+import { msg } from '../../core/user-message';
 
 type Session = Pick<MongoSession, 'command' | 'openCursor'>;
 
@@ -155,7 +156,7 @@ export function checkWrite(reply: MongoDocument): void {
     return;
   }
   const code = numberField(failure, 'code');
-  const message = stringField(failure, 'errmsg') ?? 'The server refused the write';
+  const message = stringField(failure, 'errmsg') ?? msg('The server refused the write');
   throw new DbError(
     (code === undefined ? undefined : mongoErrorKind(code)) ?? 'constraint',
     message,
@@ -207,11 +208,14 @@ export async function replaceDocument(
 ): Promise<void> {
   const id = idOf(original);
   if (id === undefined) {
-    throw new DbError('unsupported', 'A document without _id cannot be found again to replace it');
+    throw new DbError(
+      'unsupported',
+      msg('A document without _id cannot be found again to replace it'),
+    );
   }
   const nextId = idOf(next);
   if (nextId === undefined || formatValue(nextId) !== formatValue(id)) {
-    throw new DbError('constraint', `The _id cannot change: keep _id: ${formatValue(id)}`);
+    throw new DbError('constraint', msg('The _id cannot change: keep _id: {0}', formatValue(id)));
   }
   const reply = await session.command(
     database,
@@ -239,8 +243,8 @@ export async function replaceDocument(
   }
   const now = await findById(session, database, collection, id);
   throw now === undefined
-    ? new DbError('not-found', 'The document was deleted meanwhile')
-    : new DbError('busy', 'The document changed after it was read: refresh it and edit again');
+    ? new DbError('not-found', msg('The document was deleted meanwhile'))
+    : new DbError('busy', msg('The document changed after it was read: refresh it and edit again'));
 }
 
 /** Inserts a document; one without `_id` gets a new ObjectId first, as drivers do. */

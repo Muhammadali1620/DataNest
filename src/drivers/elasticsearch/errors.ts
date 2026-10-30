@@ -4,6 +4,7 @@
 
 import { DbError, type DbErrorCode, errorMessage } from '../../core/errors';
 import type { ElasticResponse } from '../elastic-driver';
+import { msg } from '../../core/user-message';
 
 /** The kind of a failed answer, by its status. */
 export function statusKind(status: number): DbErrorCode {
@@ -87,7 +88,7 @@ export function networkFailure(error: unknown): DbError {
   if (code === 'ERR_SSL_WRONG_VERSION_NUMBER' || code === 'EPROTO') {
     return new DbError(
       'connection-failed',
-      `TLS failed: the server may not speak TLS on this port (${message})`,
+      msg('TLS failed: the server may not speak TLS on this port ({0})', message),
       {
         cause: error,
         driverCode: code,

@@ -25,6 +25,7 @@ import {
   type MongoDocumentsState,
   type TypedProblem,
 } from '../../shared/protocols/mongo-documents';
+import { msg } from '../../core/user-message';
 
 export interface MongoDocumentsModelDeps {
   readonly connectionName: string;
@@ -191,15 +192,15 @@ export class MongoDocumentsModel implements DocumentsPage {
       throw new DbError(
         shown === undefined ? 'not-found' : 'unsupported',
         shown === undefined
-          ? 'The row is not on the page any more: refresh it'
-          : 'A document without _id cannot be found again to edit it',
+          ? msg('The row is not on the page any more: refresh it')
+          : msg('A document without _id cannot be found again to edit it'),
       );
     }
     const session = await this.deps.session();
     // The page may show it cut by a projection; the editor needs all of it, as stored now.
     const current = await findById(session, this.deps.database, this.deps.collection, id);
     if (current === undefined) {
-      throw new DbError('not-found', 'The document was deleted meanwhile');
+      throw new DbError('not-found', msg('The document was deleted meanwhile'));
     }
     const token = String(this.nextToken);
     this.nextToken += 1;
@@ -212,7 +213,7 @@ export class MongoDocumentsModel implements DocumentsPage {
     this.mayEdit();
     const original = this.edits.get(token);
     if (original === undefined) {
-      throw new DbError('not-found', 'This edit is no longer open: edit the document again');
+      throw new DbError('not-found', msg('This edit is no longer open: edit the document again'));
     }
     let next: MongoDocument;
     try {
@@ -256,7 +257,7 @@ export class MongoDocumentsModel implements DocumentsPage {
       if (id === undefined) {
         throw new DbError(
           'unsupported',
-          'A document without _id cannot be found again to delete it',
+          msg('A document without _id cannot be found again to delete it'),
         );
       }
       return id;
@@ -295,13 +296,16 @@ export class MongoDocumentsModel implements DocumentsPage {
 
   private refusal(): DbError {
     if (this.deps.readOnly) {
-      return new DbError('permission-denied', 'The connection is read-only: nothing may change');
+      return new DbError(
+        'permission-denied',
+        msg('The connection is read-only: nothing may change'),
+      );
     }
     return new DbError(
       'unsupported',
       this.deps.collectionType === 'view'
-        ? 'A view shows another collection: change the documents there'
-        : 'Documents of a time series collection are added, not edited here',
+        ? msg('A view shows another collection: change the documents there')
+        : msg('Documents of a time series collection are added, not edited here'),
     );
   }
 

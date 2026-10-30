@@ -9,6 +9,7 @@ import { attachBlobs } from './blobs';
 import { fromWireError, toSqliteDbError } from './errors';
 import { SqliteMetadata } from './metadata';
 import { FLOW_STOP, FLOW_TAKEN, type SqliteParam, type WorkerToHost } from './protocol';
+import { msg } from '../../core/user-message';
 
 /** The worker bundle next to dist/drivers/sqlite.js (scripts/build-config.mjs). */
 export const WORKER_FILENAME = 'sqlite-worker.js';
@@ -24,7 +25,7 @@ export async function openSqliteSession(
 ): Promise<Session> {
   const file = config.file;
   if (file === undefined || file === '') {
-    throw new DbError('unsupported', 'A SQLite connection needs a database file path');
+    throw new DbError('unsupported', msg('A SQLite connection needs a database file path'));
   }
   const session = new SqliteSession(
     options.workerPath ?? defaultWorkerPath(),
@@ -38,7 +39,7 @@ export async function openSqliteSession(
 function defaultWorkerPath(): string {
   // __dirname exists only in the bundled CJS output; tests pass workerPath instead.
   if (typeof __dirname === 'undefined') {
-    throw new DbError('internal', 'The SQLite worker bundle location is unknown');
+    throw new DbError('internal', msg('The SQLite worker bundle location is unknown'));
   }
   return join(__dirname, WORKER_FILENAME);
 }
@@ -63,7 +64,7 @@ class SqliteSession implements Session {
     this.file = file;
     this.readOnly = readOnly;
     this.metadata = new SqliteMetadata(this);
-    this.ready = Promise.reject(new DbError('internal', 'The session is not open yet'));
+    this.ready = Promise.reject(new DbError('internal', msg('The session is not open yet')));
     this.ready.catch(() => undefined);
   }
 
@@ -107,7 +108,7 @@ class SqliteSession implements Session {
     params?: readonly SqliteParam[],
   ): AsyncGenerator<ExecuteEvent> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     const worker = await this.ready;
     const id = this.nextId++;
@@ -165,7 +166,7 @@ class SqliteSession implements Session {
     }
     this.closed = true;
     this.generation += 1;
-    this.failAll(new DbError('cancelled', 'The session was closed'));
+    this.failAll(new DbError('cancelled', msg('The session was closed')));
     const worker = await this.ready.catch(() => undefined);
     // Not awaited for the same reason as in cancel(): a worker busy inside SQLite
     // stops only when the statement returns, and closing must not block on that.
@@ -179,7 +180,7 @@ class SqliteSession implements Session {
     // The abandoned worker takes its connection, and any open transaction, with it.
     this.inTransaction = false;
     void previous?.terminate();
-    this.failAll(new DbError('cancelled', 'The statement was cancelled'));
+    this.failAll(new DbError('cancelled', msg('The statement was cancelled')));
     this.ready = this.track(this.spawn());
     await this.ready;
   }
@@ -225,13 +226,13 @@ class SqliteSession implements Session {
       worker.on('exit', () => {
         if (!settled) {
           settled = true;
-          reject(new DbError('internal', 'The SQLite worker exited during start'));
+          reject(new DbError('internal', msg('The SQLite worker exited during start')));
           return;
         }
         // An abandoned worker (cancel, close) is expected to exit; only the
         // worker still in charge means a crash the running statements must see.
         if (isCurrent() && !this.closed) {
-          this.failAll(new DbError('internal', 'The SQLite worker stopped unexpectedly'));
+          this.failAll(new DbError('internal', msg('The SQLite worker stopped unexpectedly')));
         }
       });
       worker.postMessage({

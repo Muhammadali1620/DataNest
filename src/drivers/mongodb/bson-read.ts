@@ -5,6 +5,7 @@
 import { Decimal128 } from 'mongodb';
 import { DbError } from '../../core/errors';
 import type { MongoDocument, MongoField, MongoValue } from '../../core/mongo/value';
+import { msg } from '../../core/user-message';
 
 const UTF8 = new TextDecoder('utf-8');
 
@@ -209,7 +210,7 @@ class Reader {
 }
 
 function broken(why: string): DbError {
-  return new DbError('internal', `The server sent a document DataNest cannot read: ${why}`);
+  return new DbError('internal', msg('The server sent a document DataNest cannot read: {0}', why));
 }
 
 /** A double as text; `-0` keeps its sign, which `String` drops. */

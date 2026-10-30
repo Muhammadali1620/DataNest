@@ -16,6 +16,7 @@ import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { quoteIdentifier } from './dialect';
 import type { SqliteParam } from './protocol';
 import { readSqliteStructure } from './structure';
+import { msg } from '../../core/user-message';
 
 /** What metadata needs from the session, kept narrow for tests. */
 export interface SqliteQueryRunner {
@@ -32,7 +33,7 @@ export class SqliteMetadata implements MetadataReader {
   }
 
   listSchemas(): Promise<string[]> {
-    return Promise.reject(new DbError('unsupported', 'SQLite has no schemas'));
+    return Promise.reject(new DbError('unsupported', msg('SQLite has no schemas')));
   }
 
   async listTables(): Promise<TableInfo[]> {
@@ -156,7 +157,7 @@ export class SqliteMetadata implements MetadataReader {
    */
   async getDefinition(object: ObjectRef): Promise<string[]> {
     if (object.kind !== 'table' && object.kind !== 'view' && object.kind !== 'trigger') {
-      throw new DbError('unsupported', `SQLite has no ${object.kind}s`);
+      throw new DbError('unsupported', msg('SQLite has no {0}s', object.kind));
     }
     const master =
       object.database === undefined
@@ -168,7 +169,7 @@ export class SqliteMetadata implements MetadataReader {
     );
     const first = asText(own[0]?.[0]);
     if (first === undefined) {
-      throw new DbError('not-found', `${object.name} does not exist`);
+      throw new DbError('not-found', msg('{0} does not exist', object.name));
     }
     if (object.kind === 'trigger') {
       return [first];
@@ -195,7 +196,7 @@ export class SqliteMetadata implements MetadataReader {
       [table.name],
     );
     if (!rows.some((row) => row[0] === 'table')) {
-      throw new DbError('not-found', `${table.name} does not exist`);
+      throw new DbError('not-found', msg('{0} does not exist', table.name));
     }
     const create: string[] = [];
     const after: string[] = [];

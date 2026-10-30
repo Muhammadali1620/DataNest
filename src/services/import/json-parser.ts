@@ -1,3 +1,4 @@
+import { msg } from '../../core/user-message';
 // Reading JSON records in parts (V5.3): a top-level array of objects, or objects one
 // after another (JSON Lines). Only one record's text is held at a time, and numbers
 // keep the digits of the file, so a 20-digit id or 0.10 is not turned into a double.
@@ -39,10 +40,10 @@ export class JsonRecordParser {
     if (this.scalar) {
       this.finish();
     } else if (this.text !== '') {
-      this.fail('The file ends inside a record');
+      this.fail(msg('The file ends inside a record'));
     } else if (this.mode === 'array' && !this.arrayClosed) {
       this.recordLine = this.line;
-      this.fail('The array is never closed');
+      this.fail(msg('The array is never closed'));
     }
     return this.records.splice(0);
   }
@@ -73,7 +74,7 @@ export class JsonRecordParser {
       if (this.text === '') {
         if (this.arrayClosed) {
           this.recordLine = this.line;
-          this.fail('Text after the end of the array');
+          this.fail(msg('Text after the end of the array'));
           this.arrayClosed = false;
           this.mode = 'lines';
         }
@@ -136,11 +137,11 @@ export function parseRecord(text: string): ReadonlyMap<string, JsonField> | stri
   try {
     value = JSON.parse(text, keepNumberText);
   } catch (error) {
-    return error instanceof Error ? error.message : 'Not valid JSON';
+    return error instanceof Error ? error.message : msg('Not valid JSON');
   }
   // A bare number arrives wrapped by the reviver, which makes it look like an object.
   if (typeof value !== 'object' || value === null || Array.isArray(value) || NUMBER_TEXT in value) {
-    return 'A record must be an object';
+    return msg('A record must be an object');
   }
   const fields = new Map<string, JsonField>();
   for (const [key, field] of Object.entries(value as Record<string, unknown>)) {

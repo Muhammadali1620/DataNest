@@ -15,6 +15,7 @@ import {
 import { diffTables, isEmptyDiff } from '../../shared/table-diff';
 import { type AlterPlan, EMPTY_PLAN, type SchemaDdl } from '../driver';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const TYPES = [
   'UInt8',
@@ -130,12 +131,12 @@ export const clickhouseDdl: SchemaDdl = {
       case 'trigger':
       case 'sequence':
       case 'event':
-        throw new DbError('unsupported', `ClickHouse has no ${object.kind}`);
+        throw new DbError('unsupported', msg('ClickHouse has no {0}', object.kind));
     }
   },
   replaceObject: (object, statements, original) => {
     if (object.kind !== 'view') {
-      throw new DbError('unsupported', `A ${object.kind} is not edited as a definition`);
+      throw new DbError('unsupported', msg('A {0} is not edited as a definition', object.kind));
     }
     if (object.materialized === true) {
       // No OR REPLACE for materialized views: dropped and made again, and made as before
@@ -176,7 +177,9 @@ export function clickhouseAlterTable(
   if (diff.primaryKey) {
     throw new DbError(
       'unsupported',
-      'The sorting key of a ClickHouse table cannot change; copy the rows into a new table instead',
+      msg(
+        'The sorting key of a ClickHouse table cannot change; copy the rows into a new table instead',
+      ),
     );
   }
   const target = quoteTable(table);

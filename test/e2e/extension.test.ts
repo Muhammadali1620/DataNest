@@ -60,6 +60,18 @@ describe('DataNest extension', () => {
     );
   });
 
+  it('installs the translator for the messages of its services (V9.2)', () => {
+    // The test host shares the extension host's global object, as the driver bundles do.
+    const translate = (globalThis as Record<symbol, unknown>)[Symbol.for('datanest.translator')];
+    assert.equal(typeof translate, 'function');
+    // The test host is English: the template comes back with its values in place.
+    const english = (translate as (template: string, args: unknown[]) => string)(
+      'Connection "{0}" does not exist',
+      ['prod'],
+    );
+    assert.equal(english, 'Connection "prod" does not exist');
+  });
+
   it('registers every command from package.json', async () => {
     const registered = new Set(await vscode.commands.getCommands(true));
     const { contributes } = extension().packageJSON as Manifest;

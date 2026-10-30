@@ -9,6 +9,7 @@ import { RpcPeer } from '../../shared/rpc';
 import { userAdminProtocol, type UserAdminProtocol } from '../../shared/protocols/user-admin';
 import { UserAdminModel } from './user-admin-model';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
+import { msg } from '../../core/user-message';
 
 export interface UserAdminPanelDeps {
   readonly extensionUri: vscode.Uri;
@@ -100,7 +101,7 @@ export class UserAdminPanel implements vscode.Disposable {
       if (UserAdminModel.hasPassword(change)) {
         throw new DbError(
           'unsupported',
-          'A statement with a password is not written to an editor; run it from the page',
+          msg('A statement with a password is not written to an editor; run it from the page'),
         );
       }
       await deps.openEditor(`${model.statements(change).statements.join(';\n')};\n`);

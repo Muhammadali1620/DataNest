@@ -17,6 +17,7 @@ import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readMysqlDefinition } from './definitions';
 import { readMysqlStructure } from './structure';
 import { toMysqlDbError } from './errors';
+import { msg } from '../../core/user-message';
 
 /** Reads structure from information_schema; shares the session's connection. */
 export class MysqlMetadata implements MetadataReader {
@@ -35,7 +36,9 @@ export class MysqlMetadata implements MetadataReader {
   }
 
   listSchemas(): Promise<string[]> {
-    return Promise.reject(new DbError('unsupported', 'MySQL has no schemas inside a database'));
+    return Promise.reject(
+      new DbError('unsupported', msg('MySQL has no schemas inside a database')),
+    );
   }
 
   async listTables(scope: ObjectScope): Promise<TableInfo[]> {

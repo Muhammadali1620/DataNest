@@ -8,6 +8,7 @@ import { splitStatements } from '../core/sql/split';
 import { syntaxOf } from '../core/sql/tokenizer';
 import type { Dialect, Session } from '../drivers/driver';
 import { type ConnectionInput, optionSupport } from '../shared/connection';
+import { msg } from '../core/user-message';
 
 export interface SetupStatement {
   readonly sql: string;
@@ -29,7 +30,7 @@ export function setupStatements(config: ConnectionInput, dialect: Dialect): Setu
     if (config.readOnly === true && !isReadOnlyStatement(statement.text, syntaxOf(config.driver))) {
       throw new DbError(
         'permission-denied',
-        `The init SQL of a read-only connection may not change anything: ${statement.text}`,
+        msg('The init SQL of a read-only connection may not change anything: {0}', statement.text),
       );
     }
     statements.push({ sql: statement.text, origin: 'init' });
@@ -53,8 +54,12 @@ export async function setUpSession(
       throw new DbError(
         cause.code,
         statement.origin === 'time-zone'
-          ? `The server refused the time zone "${config.options?.timeZone ?? ''}": ${errorMessage(cause)}`
-          : `Init SQL failed at "${statement.sql}": ${errorMessage(cause)}`,
+          ? msg(
+              'The server refused the time zone "{0}": {1}',
+              config.options?.timeZone ?? '',
+              errorMessage(cause),
+            )
+          : msg('Init SQL failed at "{0}": {1}', statement.sql, errorMessage(cause)),
       );
     }
   }

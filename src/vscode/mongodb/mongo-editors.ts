@@ -24,6 +24,7 @@ import {
   queryTemplate,
   runMongoStatement,
 } from './mongo-run';
+import { formatCount } from '../../core/number-format';
 
 export const MONGO_LANGUAGE_ID = 'datanest-mongo';
 
@@ -282,7 +283,10 @@ export class MongoEditors implements vscode.Disposable, vscode.CodeLensProvider 
         count: (count) => vscode.l10n.t('{0} documents', count),
         write: (outcome) => writeSummary(outcome),
         capped: (count) =>
-          vscode.l10n.t('The first {0} documents are shown', count.toLocaleString()),
+          vscode.l10n.t(
+            'The first {0} documents are shown',
+            formatCount(count, vscode.env.language),
+          ),
       },
     });
     MongoDocumentsPanel.show({

@@ -2,6 +2,7 @@
 // C-style backslash escapes, which ClickHouse reads inside every quoted token.
 
 import type { TableRef } from '../../core/model/objects';
+import { msg } from '../../core/user-message';
 
 function escaped(text: string, quote: string): string {
   return text.replaceAll('\\', '\\\\').replaceAll(quote, `\\${quote}`);
@@ -9,10 +10,10 @@ function escaped(text: string, quote: string): string {
 
 export function quoteIdentifier(name: string): string {
   if (name === '') {
-    throw new Error('Identifier must not be empty');
+    throw new Error(msg('Identifier must not be empty'));
   }
   if (name.includes('\u0000')) {
-    throw new Error('Identifier must not contain NUL');
+    throw new Error(msg('Identifier must not contain NUL'));
   }
   return `\`${escaped(name, '`')}\``;
 }

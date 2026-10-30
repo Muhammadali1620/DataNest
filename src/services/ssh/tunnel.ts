@@ -10,6 +10,7 @@ import { DbError, errorMessage } from '../../core/errors';
 import { expandHome, readUserFile } from '../../drivers/common/files';
 import type { Logger } from '../../core/logging/logger';
 import type { HostKeyInfo, Tunnel, TunnelHop, TunnelSpec } from '../tunnels';
+import { msg } from '../../core/user-message';
 
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const KEEPALIVE_COUNT_MAX = 3;
@@ -64,7 +65,7 @@ export async function connectConfig(
       // Many servers ask for the password through keyboard-interactive instead.
       return { ...base, password: hop.password ?? '', tryKeyboard: true };
     case 'key': {
-      const privateKey = await readUserFile(hop.keyFile ?? '', 'the SSH key file');
+      const privateKey = await readUserFile(hop.keyFile ?? '', msg('the SSH key file'));
       return {
         ...base,
         privateKey,
@@ -81,7 +82,7 @@ export async function connectConfig(
       if (agent === undefined) {
         throw new DbError(
           'auth-failed',
-          'No SSH agent found: SSH_AUTH_SOCK is not set. Start an agent or give its socket.',
+          msg('No SSH agent found: SSH_AUTH_SOCK is not set. Start an agent or give its socket.'),
         );
       }
       return { ...base, agent };
@@ -96,35 +97,45 @@ export function sshError(hop: TunnelHop, error: unknown, hostKeyRejected: boolea
   if (hostKeyRejected) {
     return new DbError(
       'permission-denied',
-      `The host key of ${hop.host}:${hop.port} was not trusted`,
+      msg('The host key of {0}:{1} was not trusted', hop.host, hop.port),
       { cause: error },
     );
   }
   if (level === 'client-authentication') {
-    return new DbError('auth-failed', `SSH login failed for ${where(hop)}`, { cause: error });
-  }
-  if (level === 'client-timeout') {
-    return new DbError('timeout', `The SSH server ${hop.host}:${hop.port} did not answer in time`, {
+    return new DbError('auth-failed', msg('SSH login failed for {0}', where(hop)), {
       cause: error,
     });
+  }
+  if (level === 'client-timeout') {
+    return new DbError(
+      'timeout',
+      msg('The SSH server {0}:{1} did not answer in time', hop.host, hop.port),
+      {
+        cause: error,
+      },
+    );
   }
   if (/no passphrase given|bad passphrase|integrity check failed/i.test(message)) {
     return new DbError(
       'auth-failed',
       hop.passphrase === undefined || hop.passphrase === ''
-        ? `The SSH key of ${where(hop)} is protected by a passphrase`
-        : `Wrong passphrase for the SSH key of ${where(hop)}`,
+        ? msg('The SSH key of {0} is protected by a passphrase', where(hop))
+        : msg('Wrong passphrase for the SSH key of {0}', where(hop)),
       { cause: error },
     );
   }
   if (/Cannot parse privateKey|Unsupported key format/i.test(message)) {
-    return new DbError('auth-failed', `The SSH key of ${where(hop)} cannot be read: ${message}`, {
-      cause: error,
-    });
+    return new DbError(
+      'auth-failed',
+      msg('The SSH key of {0} cannot be read: {1}', where(hop), message),
+      {
+        cause: error,
+      },
+    );
   }
   return new DbError(
     'connection-failed',
-    `Cannot connect to the SSH server ${hop.host}:${hop.port}: ${message}`,
+    msg('Cannot connect to the SSH server {0}:{1}: {2}', hop.host, hop.port, message),
     { cause: error },
   );
 }
@@ -210,7 +221,7 @@ async function forward(
 /** Opens the chain of hops and a local port in front of the target. */
 export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<Tunnel> {
   if (spec.hops.length === 0) {
-    throw new DbError('internal', 'An SSH tunnel needs at least one server');
+    throw new DbError('internal', msg('An SSH tunnel needs at least one server'));
   }
   const clients: Client[] = [];
   const closeClients = (): void => {
@@ -229,7 +240,13 @@ export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<T
           const from = spec.hops[index - 1];
           throw new DbError(
             'connection-failed',
-            `The SSH server ${from?.host ?? '?'} cannot reach ${hop.host}:${hop.port}: ${errorMessage(error)}`,
+            msg(
+              'The SSH server {0} cannot reach {1}:{2}: {3}',
+              from?.host ?? '?',
+              hop.host,
+              hop.port,
+              errorMessage(error),
+            ),
             { cause: error },
           );
         }
@@ -244,7 +261,7 @@ export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<T
   const last = clients.at(-1);
   const lastHop = spec.hops.at(-1);
   if (last === undefined || lastHop === undefined) {
-    throw new DbError('internal', 'The SSH chain is empty');
+    throw new DbError('internal', msg('The SSH chain is empty'));
   }
   const server = createServer();
   const sockets = new Set<Socket>();
@@ -294,7 +311,13 @@ export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<T
       } catch (error) {
         failure = new DbError(
           'connection-failed',
-          `The SSH server ${lastHop.host} cannot reach ${spec.target.host}:${spec.target.port}: ${errorMessage(error)}`,
+          msg(
+            'The SSH server {0} cannot reach {1}:{2}: {3}',
+            lastHop.host,
+            spec.target.host,
+            spec.target.port,
+            errorMessage(error),
+          ),
           { cause: error },
         );
         logger.warn(failure.message);
@@ -314,9 +337,13 @@ export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<T
     });
   } catch (error) {
     shutdown();
-    throw new DbError('connection-failed', `Cannot open a local port: ${errorMessage(error)}`, {
-      cause: error,
-    });
+    throw new DbError(
+      'connection-failed',
+      msg('Cannot open a local port: {0}', errorMessage(error)),
+      {
+        cause: error,
+      },
+    );
   }
   const address = server.address();
   const port = typeof address === 'object' && address !== null ? address.port : 0;

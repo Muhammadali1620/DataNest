@@ -5,6 +5,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { DumpDialect } from '../driver';
 import { quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export const sqliteDump: DumpDialect = {
   prepare: [],
@@ -31,7 +32,7 @@ export const sqliteDump: DumpDialect = {
       case 'procedure':
       case 'sequence':
       case 'event':
-        throw new DbError('unsupported', `SQLite has no ${object.kind}s`);
+        throw new DbError('unsupported', msg('SQLite has no {0}s', object.kind));
     }
   },
 };

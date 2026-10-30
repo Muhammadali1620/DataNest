@@ -20,6 +20,7 @@ import {
   type UserRef,
   withPassword,
 } from './user-admin';
+import { msg } from '../../core/user-message';
 
 const TABLE_PRIVILEGES = [
   'ALL PRIVILEGES',
@@ -77,7 +78,7 @@ export function mysqlUserAdmin(server: MonitorServer, dialect: AdminDialect): Us
     },
   };
   const account = (user: UserRef): string => {
-    checkText(user.name, 'user name');
+    checkText(user.name, msg('user name'));
     return `${dialect.literal(user.name)}@${dialect.literal(user.host ?? '%')}`;
   };
   const target = (change: GrantChange): string => {
@@ -85,19 +86,22 @@ export function mysqlUserAdmin(server: MonitorServer, dialect: AdminDialect): Us
       case 'server':
         return '*.*';
       case 'database':
-        return `${dialect.quoteIdentifier(required(change.database, 'database'))}.*`;
+        return `${dialect.quoteIdentifier(required(change.database, msg('database')))}.*`;
       case 'table':
-        return `${dialect.quoteIdentifier(required(change.database, 'database'))}.${dialect.quoteIdentifier(required(change.name, 'table'))}`;
+        return `${dialect.quoteIdentifier(required(change.database, msg('database')))}.${dialect.quoteIdentifier(required(change.name, msg('table')))}`;
       case 'allTables':
       case 'role':
       case 'routine':
       case 'schema':
       case 'sequence':
-        throw new DbError('unsupported', `MySQL grants nothing at the level "${change.level}"`);
+        throw new DbError(
+          'unsupported',
+          msg('MySQL grants nothing at the level "{0}"', change.level),
+        );
     }
   };
   const role = (change: GrantChange): string => {
-    const name = required(change.name, 'role');
+    const name = required(change.name, msg('role'));
     // MariaDB roles have no host; MySQL and TiDB roles are accounts.
     return server === 'mariadb' && change.host === undefined
       ? dialect.literal(name)
@@ -159,7 +163,7 @@ export function mysqlUserAdmin(server: MonitorServer, dialect: AdminDialect): Us
     },
 
     createUser: (user) => {
-      checkText(user.password, 'password');
+      checkText(user.password, msg('password'));
       return withPassword(user.password, (password) => [
         `CREATE USER ${account(user)} IDENTIFIED BY ${dialect.literal(password)}`,
       ]);
@@ -168,12 +172,12 @@ export function mysqlUserAdmin(server: MonitorServer, dialect: AdminDialect): Us
     dropUser: (user) => [
       // A MariaDB role has no host and goes with DROP ROLE.
       server === 'mariadb' && user.role === true && user.host === ''
-        ? `DROP ROLE ${dialect.literal(required(user.name, 'role'))}`
+        ? `DROP ROLE ${dialect.literal(required(user.name, msg('role')))}`
         : `DROP USER ${account(user)}`,
     ],
 
     setPassword: (user, password) => {
-      checkText(password, 'password');
+      checkText(password, msg('password'));
       return withPassword(password, (shown) => [
         `ALTER USER ${account(user)} IDENTIFIED BY ${dialect.literal(shown)}`,
       ]);

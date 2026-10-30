@@ -10,6 +10,7 @@ import type {
 } from '../../core/model/objects';
 import type { MetadataReader } from '../../drivers/driver';
 import { designFromStructure, type LoadedTable } from '../table-structure';
+import { msg } from '../../core/user-message';
 
 export interface TableSnapshot {
   readonly name: string;
@@ -97,6 +98,6 @@ export async function readSchemaSnapshot(
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted === true) {
-    throw new DbError('cancelled', 'Reading the schema was cancelled');
+    throw new DbError('cancelled', msg('Reading the schema was cancelled'));
   }
 }

@@ -5,10 +5,11 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { ReplacePlan } from '../driver';
 import { quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export function sqliteReplaceObject(object: ObjectRef, statements: readonly string[]): ReplacePlan {
   if (object.kind !== 'view' && object.kind !== 'trigger') {
-    throw new DbError('unsupported', `A ${object.kind} is not edited as a definition`);
+    throw new DbError('unsupported', msg('A {0} is not edited as a definition', object.kind));
   }
   return {
     check: [],

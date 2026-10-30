@@ -15,6 +15,7 @@ import { diffTables, isEmptyDiff } from '../../shared/table-diff';
 import { type AlterPlan, EMPTY_PLAN, type SchemaDdl } from '../driver';
 import { columnList, createTableSql, foreignKeySql, primaryKeySql } from '../common/design-sql';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const TYPES = [
   'NUMBER',
@@ -148,7 +149,10 @@ export const oracleDdl: SchemaDdl = {
       case 'sequence':
         return `DROP ${object.kind.toUpperCase()} ${quoteTable(object)}`;
       case 'event':
-        throw new DbError('unsupported', 'Oracle keeps scheduled jobs apart, in DBMS_SCHEDULER');
+        throw new DbError(
+          'unsupported',
+          msg('Oracle keeps scheduled jobs apart, in DBMS_SCHEDULER'),
+        );
     }
   },
   replaceObject: (object, statements, original) => {
@@ -161,7 +165,7 @@ export const oracleDdl: SchemaDdl = {
       case 'table':
       case 'sequence':
       case 'event':
-        throw new DbError('unsupported', `A ${object.kind} is not edited as a definition`);
+        throw new DbError('unsupported', msg('A {0} is not edited as a definition', object.kind));
     }
     if (object.materialized === true) {
       // A materialized view cannot be replaced: it is dropped and made again, and made
@@ -193,7 +197,10 @@ export function oracleAlterTable(
     if (change.autoIncrement) {
       throw new DbError(
         'unsupported',
-        `Oracle cannot turn the existing column ${change.after.name.trim()} into an identity column or back`,
+        msg(
+          'Oracle cannot turn the existing column {0} into an identity column or back',
+          change.after.name.trim(),
+        ),
       );
     }
   }

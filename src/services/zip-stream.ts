@@ -5,6 +5,7 @@
 
 import { constants, deflateRawSync } from 'node:zlib';
 import { crc32Update, dosDateTime, MAX_ZIP_BYTES, MAX_ZIP_ENTRIES } from './zip';
+import { msg } from '../core/user-message';
 
 export type ByteWriter = (data: Uint8Array) => Promise<void>;
 
@@ -74,7 +75,7 @@ export class ZipStream {
       size += data.length;
       compressed += body.length;
       if (size > MAX_ZIP_BYTES || this.offset + body.length > MAX_ZIP_BYTES) {
-        throw new Error('The file is too large for a ZIP archive without ZIP64');
+        throw new Error(msg('The file is too large for a ZIP archive without ZIP64'));
       }
       await this.emit(body);
     };
@@ -151,21 +152,21 @@ export class ZipStream {
 
   private remember(entry: Written): void {
     if (this.written.length >= MAX_ZIP_ENTRIES) {
-      throw new Error('Too many files for a ZIP archive');
+      throw new Error(msg('Too many files for a ZIP archive'));
     }
     this.written.push(entry);
   }
 
   private checkClosed(): void {
     if (this.open) {
-      throw new Error('The previous file of the archive is still being written');
+      throw new Error(msg('The previous file of the archive is still being written'));
     }
   }
 
   private async emit(data: Uint8Array): Promise<void> {
     this.offset += data.length;
     if (this.offset > MAX_ZIP_BYTES) {
-      throw new Error('The file is too large for a ZIP archive without ZIP64');
+      throw new Error(msg('The file is too large for a ZIP archive without ZIP64'));
     }
     await this.write(data);
   }

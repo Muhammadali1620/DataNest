@@ -14,6 +14,7 @@ import type { SafeMode } from '../../services/safe-mode';
 import { type RunOutcome, runStatement, statementEffect } from '../../services/mongodb/shell-run';
 import type { WritePolicy } from '../../services/write-policy';
 import type { TreeNode } from '../tree/nodes';
+import { msg } from '../../core/user-message';
 
 /** The question before a run: a write on production, or a dangerous one in safe mode. */
 export interface MongoRunQuestion {
@@ -62,7 +63,7 @@ export function parseInDocument(
   } catch (error) {
     if (error instanceof ShellSyntaxError) {
       const { line, column } = lineAndColumn(document, offset + error.offset);
-      throw new DbError('syntax', `${line}:${column} ${error.message}`, {
+      throw new DbError('syntax', msg('{0}:{1} {2}', line, column, error.message), {
         position: offset + error.offset,
       });
     }

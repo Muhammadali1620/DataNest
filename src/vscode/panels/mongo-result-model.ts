@@ -16,6 +16,7 @@ import {
   type TypedProblem,
 } from '../../shared/protocols/mongo-documents';
 import type { DocumentsPage } from './mongo-documents-model';
+import { msg } from '../../core/user-message';
 
 /** Documents a result keeps in memory; the cursor is closed after them. */
 export const MAX_RESULT_DOCUMENTS = 10_000;
@@ -182,7 +183,9 @@ export class MongoResultModel implements DocumentsPage {
   private readOnlyResult(): DbError {
     return new DbError(
       'unsupported',
-      'A result is only read here: change documents with a statement, or on the collection’s page',
+      msg(
+        'A result is only read here: change documents with a statement, or on the collection’s page',
+      ),
     );
   }
 

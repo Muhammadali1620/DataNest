@@ -28,6 +28,7 @@ import {
   type TreeNode,
 } from './nodes';
 import { type ProjectSource, TreeModel, type TreeSettings } from './tree-model';
+import { formatCount } from '../../core/number-format';
 
 export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
@@ -94,7 +95,9 @@ export class ConnectionsTreeProvider
             ? vscode.l10n.t('No keys')
             : vscode.l10n.t('No keys match {0}', pattern),
         redisKeys: (count) =>
-          count === 1 ? vscode.l10n.t('1 key') : vscode.l10n.t('{0} keys', count.toLocaleString()),
+          count === 1
+            ? vscode.l10n.t('1 key')
+            : vscode.l10n.t('{0} keys', formatCount(count, vscode.env.language)),
         hiddenByFilter: (count) => vscode.l10n.t('{0} more hidden by the filter', count),
         emptyFolder: vscode.l10n.t('Empty: drag connections here'),
         empty: {
@@ -244,7 +247,7 @@ export class ConnectionsTreeProvider
         );
         item.id = nodeId(node);
         item.iconPath = vscode.ThemeIcon.Folder;
-        item.description = node.count.toLocaleString();
+        item.description = formatCount(node.count, vscode.env.language);
         item.tooltip = vscode.l10n.t('{0} keys loaded under {1}', node.count, node.prefix);
         item.contextValue = TREE_CONTEXT.redisFolder;
         return item;
@@ -273,7 +276,10 @@ export class ConnectionsTreeProvider
         );
         item.id = nodeId(node);
         item.iconPath = new vscode.ThemeIcon('ellipsis');
-        item.description = vscode.l10n.t('{0} loaded', node.loaded.toLocaleString());
+        item.description = vscode.l10n.t(
+          '{0} loaded',
+          formatCount(node.loaded, vscode.env.language),
+        );
         item.contextValue = TREE_CONTEXT.redisMore;
         item.command = {
           command: 'datanest.redis.loadMoreKeys',

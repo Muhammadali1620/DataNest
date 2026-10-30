@@ -36,6 +36,7 @@ import {
   type TunnelSpec,
   tunnelSpecOf,
 } from './tunnels';
+import { msg } from '../core/user-message';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -231,7 +232,7 @@ export class ConnectionManager implements Disposable {
   async acquire(owner: string, target: SessionTarget): Promise<Session> {
     const held = await this.acquireHolder(owner, target, 'sql');
     if (held.family !== 'sql') {
-      throw new DbError('internal', 'Expected a SQL session');
+      throw new DbError('internal', msg('Expected a SQL session'));
     }
     return held.session;
   }
@@ -240,7 +241,7 @@ export class ConnectionManager implements Disposable {
   async acquireRedis(owner: string, target: SessionTarget): Promise<RedisSession> {
     const held = await this.acquireHolder(owner, target, 'redis');
     if (held.family !== 'redis') {
-      throw new DbError('internal', 'Expected a Redis session');
+      throw new DbError('internal', msg('Expected a Redis session'));
     }
     return held.session;
   }
@@ -249,7 +250,7 @@ export class ConnectionManager implements Disposable {
   async acquireMongo(owner: string, target: SessionTarget): Promise<MongoSession> {
     const held = await this.acquireHolder(owner, target, 'mongodb');
     if (held.family !== 'mongodb') {
-      throw new DbError('internal', 'Expected a MongoDB session');
+      throw new DbError('internal', msg('Expected a MongoDB session'));
     }
     return held.session;
   }
@@ -258,7 +259,7 @@ export class ConnectionManager implements Disposable {
   async acquireElastic(owner: string, target: SessionTarget): Promise<ElasticSession> {
     const held = await this.acquireHolder(owner, target, 'elasticsearch');
     if (held.family !== 'elasticsearch') {
-      throw new DbError('internal', 'Expected an Elasticsearch session');
+      throw new DbError('internal', msg('Expected an Elasticsearch session'));
     }
     return held.session;
   }
@@ -274,7 +275,7 @@ export class ConnectionManager implements Disposable {
     family: DriverFamily,
   ): Promise<Holder> {
     if (this.disposed) {
-      throw new DbError('internal', 'The connection manager is disposed');
+      throw new DbError('internal', msg('The connection manager is disposed'));
     }
     const config = this.configOf(target.connectionId);
     if (driverFamily(config.driver) !== family) {
@@ -689,27 +690,27 @@ export class ConnectionManager implements Disposable {
     if (this.disposed) {
       await opened.close().catch(() => undefined);
       await lease?.release();
-      throw new DbError('internal', 'The connection manager is disposed');
+      throw new DbError('internal', msg('The connection manager is disposed'));
     }
   }
 
   private async redisDriver(): Promise<RedisDriver> {
     if (this.drivers.getRedis === undefined) {
-      throw new DbError('unsupported', 'Redis is not available');
+      throw new DbError('unsupported', msg('Redis is not available'));
     }
     return await this.drivers.getRedis();
   }
 
   private async elasticDriver(): Promise<ElasticDriver> {
     if (this.drivers.getElastic === undefined) {
-      throw new DbError('unsupported', 'Elasticsearch is not available');
+      throw new DbError('unsupported', msg('Elasticsearch is not available'));
     }
     return await this.drivers.getElastic();
   }
 
   private async mongoDriver(): Promise<MongoDriver> {
     if (this.drivers.getMongo === undefined) {
-      throw new DbError('unsupported', 'MongoDB is not available');
+      throw new DbError('unsupported', msg('MongoDB is not available'));
     }
     return await this.drivers.getMongo();
   }
@@ -749,7 +750,7 @@ export class ConnectionManager implements Disposable {
 
   private tunnelProvider(): TunnelProvider {
     if (this.tunnels === undefined) {
-      throw new DbError('unsupported', 'SSH tunnels are not available');
+      throw new DbError('unsupported', msg('SSH tunnels are not available'));
     }
     return this.tunnels;
   }
@@ -757,7 +758,7 @@ export class ConnectionManager implements Disposable {
   private configOf(connectionId: string): ConnectionConfig {
     const config = this.store.get(connectionId);
     if (!config) {
-      throw new DbError('not-found', `Connection "${connectionId}" does not exist`);
+      throw new DbError('not-found', msg('Connection "{0}" does not exist', connectionId));
     }
     return config;
   }
@@ -810,22 +811,28 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
   if (wanted === 'sql') {
     switch (actual) {
       case 'redis':
-        return `"${config.name}" is a Redis connection: it runs Redis commands, not SQL`;
+        return msg('"{0}" is a Redis connection: it runs Redis commands, not SQL', config.name);
       case 'mongodb':
-        return `"${config.name}" is a MongoDB connection: it has collections, not SQL tables`;
+        return msg(
+          '"{0}" is a MongoDB connection: it has collections, not SQL tables',
+          config.name,
+        );
       case 'elasticsearch':
-        return `"${config.name}" is an Elasticsearch connection: it has indices, not SQL tables`;
+        return msg(
+          '"{0}" is an Elasticsearch connection: it has indices, not SQL tables',
+          config.name,
+        );
       case 'sql':
-        return `"${config.name}" is a SQL connection`;
+        return msg('"{0}" is a SQL connection', config.name);
     }
   }
   switch (wanted) {
     case 'redis':
-      return `"${config.name}" is not a Redis connection`;
+      return msg('"{0}" is not a Redis connection', config.name);
     case 'mongodb':
-      return `"${config.name}" is not a MongoDB connection`;
+      return msg('"{0}" is not a MongoDB connection', config.name);
     case 'elasticsearch':
-      return `"${config.name}" is not an Elasticsearch connection`;
+      return msg('"{0}" is not an Elasticsearch connection', config.name);
   }
 }
 

@@ -19,6 +19,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   million rows could exhaust the memory of the extension host. The oldest results go
   first; the newest one and results with unsaved changes are always kept.
 
+- In a Russian editor, about 380 messages of DataNest's own services and drivers still came
+  in English: connection errors, timeouts in the history, refusals of the Redis console,
+  mistakes in MongoDB statements and JSON, name checks, import, transfer, saving edits,
+  SSH and TLS problems. They are translated now; only what the servers themselves say
+  stays as they say it.
+- Numbers in the tree and in questions are grouped the way the editor's language writes
+  them, not the operating system's.
+
 ### Changed
 
 - The DataNest log says how long the extension took to start.

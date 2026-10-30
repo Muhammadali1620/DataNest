@@ -8,6 +8,7 @@ import { mysqlUserAdmin } from './mysql-users';
 import { oracleUserAdmin } from './oracle-users';
 import { postgresUserAdmin } from './postgres-users';
 import type { AdminDialect, UserAdmin } from './user-admin';
+import { msg } from '../../core/user-message';
 
 export function userAdminFor(server: MonitorServer, dialect: AdminDialect): UserAdmin {
   switch (server) {
@@ -26,6 +27,6 @@ export function userAdminFor(server: MonitorServer, dialect: AdminDialect): User
     case 'oracle':
       return oracleUserAdmin(dialect);
     case 'sqlite':
-      throw new DbError('unsupported', 'A SQLite file has no users');
+      throw new DbError('unsupported', msg('A SQLite file has no users'));
   }
 }

@@ -13,6 +13,7 @@ import {
 import { connectionInputShape, sshHopShape } from './connection-schema';
 import { parseJsonc } from './jsonc';
 import { array, isPlainObject, object, optional, SchemaError, string } from './schema';
+import { msg } from '../core/user-message';
 
 export const CONNECTION_FILE_VERSION = 1;
 
@@ -74,14 +75,17 @@ export function readConnectionFile(text: string): FileReadResult {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
   if (!isPlainObject(value)) {
-    return { ok: false, error: 'The file must hold a JSON object with a "connections" list' };
+    return { ok: false, error: msg('The file must hold a JSON object with a "connections" list') };
   }
   const list: unknown = value.connections ?? [];
   if (!Array.isArray(list)) {
     return { ok: false, error: '"connections" must be a list' };
   }
   if (list.length > MAX_FILE_CONNECTIONS) {
-    return { ok: false, error: `The file lists more than ${MAX_FILE_CONNECTIONS} connections` };
+    return {
+      ok: false,
+      error: msg('The file lists more than {0} connections', MAX_FILE_CONNECTIONS),
+    };
   }
   const folders: unknown = value.folders;
   return {

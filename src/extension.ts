@@ -9,6 +9,7 @@ import { createBundleSshLoader, TunnelPool } from './services/tunnels';
 import { createHostKeyCheck } from './vscode/ssh-host-keys';
 import { MetadataCache } from './services/metadata-cache';
 import type { TableRef } from './core/model/objects';
+import { setTranslator } from './core/user-message';
 import { CONFIG_KEYS, CONFIG_SECTION, CONTEXT_KEYS } from './vscode/command-ids';
 import { registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
@@ -57,6 +58,9 @@ import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Reported in the log, so a slow start can be told from a slow editor (V9.1).
   const started = performance.now();
+  // Messages of the layers below this one are translated with the editor's l10n bundle,
+  // in every bundle (drivers too) and before any service exists (V9.2, D100).
+  setTranslator((template, args) => vscode.l10n.t(template, ...args));
   const { logger, channel, disposables } = createOutputLogger();
   context.subscriptions.push(...disposables);
 
@@ -331,5 +335,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-  // Everything is disposed through context.subscriptions.
+  // Everything else is disposed through context.subscriptions.
+  setTranslator(undefined);
 }

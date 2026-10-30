@@ -7,6 +7,7 @@ import type { ColumnDetail, TableRef, TableStructure } from '../../core/model/ob
 import type { MetadataReader } from '../driver';
 import type { MysqlRowReader } from './definitions';
 import { quoteString } from './quote';
+import { msg } from '../../core/user-message';
 
 /** Types whose default MySQL prints without quotes and that need none. */
 const NUMERIC = new Set([
@@ -71,7 +72,7 @@ export async function readMysqlStructure(
     scope,
   );
   if (rows.length === 0) {
-    throw new DbError('not-found', `${table.name} does not exist`);
+    throw new DbError('not-found', msg('{0} does not exist', table.name));
   }
   const [version] = await read('SELECT VERSION()');
   const mariaDb = /mariadb/i.test(text(version?.[0]));

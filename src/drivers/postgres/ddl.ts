@@ -14,6 +14,7 @@ import {
 import { postgresAlterTable } from './alter';
 import { postgresReplaceObject } from './replace';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 const TYPES = [
   'integer',
@@ -123,13 +124,13 @@ export const postgresDdl: SchemaDdl = {
         return `DROP ${object.kind.toUpperCase()} ${qualified(object)}(${object.signature ?? ''})`;
       case 'trigger':
         if (object.table === undefined) {
-          throw new DbError('unsupported', `The table of trigger ${object.name} is unknown`);
+          throw new DbError('unsupported', msg('The table of trigger {0} is unknown', object.name));
         }
         return `DROP TRIGGER ${quoteIdentifier(object.name)} ON ${qualified({ ...object, name: object.table })}`;
       case 'sequence':
         return `DROP SEQUENCE ${qualified(object)}`;
       case 'event':
-        throw new DbError('unsupported', 'PostgreSQL has no scheduled events');
+        throw new DbError('unsupported', msg('PostgreSQL has no scheduled events'));
     }
   },
   replaceObject: (object, statements) => postgresReplaceObject(object, statements),

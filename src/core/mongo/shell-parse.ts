@@ -3,6 +3,7 @@
 
 import { ShellReader, ShellSyntaxError } from './shell-reader';
 import type { MongoDocument, MongoValue } from './value';
+import { msg } from '../user-message';
 
 export { ShellSyntaxError };
 
@@ -10,11 +11,11 @@ export { ShellSyntaxError };
 export function parseValue(text: string): MongoValue {
   const reader = new ShellReader(text);
   if (reader.atEnd()) {
-    reader.fail('Nothing to read');
+    reader.fail(msg('Nothing to read'));
   }
   const value = reader.value();
   if (!reader.atEnd()) {
-    reader.fail(`Unexpected text after the value${reader.near()}`);
+    reader.fail(msg('Unexpected text after the value{0}', reader.near()));
   }
   return value;
 }
@@ -26,7 +27,7 @@ export function parseDocument(text: string, blank: 'empty' | 'error' = 'empty'):
   }
   const value = parseValue(text);
   if (value.type !== 'document') {
-    throw new ShellSyntaxError('Expected a document in braces: { … }', 0);
+    throw new ShellSyntaxError(msg('Expected a document in braces: { … }'), 0);
   }
   return value;
 }
@@ -38,11 +39,11 @@ export function parsePipeline(text: string): MongoDocument[] {
   }
   const value = parseValue(text);
   if (value.type !== 'array') {
-    throw new ShellSyntaxError('Expected the stages in brackets: [ { $match: … }, … ]', 0);
+    throw new ShellSyntaxError(msg('Expected the stages in brackets: [ { $match: … }, … ]'), 0);
   }
   return value.items.map((stage, index) => {
     if (stage.type !== 'document') {
-      throw new ShellSyntaxError(`Stage ${index + 1} is not a document`, 0);
+      throw new ShellSyntaxError(msg('Stage {0} is not a document', index + 1), 0);
     }
     return stage;
   });

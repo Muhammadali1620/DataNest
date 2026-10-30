@@ -15,6 +15,7 @@ import {
   needsValue,
   type TableFilter,
 } from '../shared/table-filter';
+import { msg } from '../core/user-message';
 
 const COMPARISONS: Partial<Record<FilterOperator, string>> = {
   eq: '=',
@@ -57,10 +58,10 @@ function checkWhere(where: string, driver: DriverId): void {
   const tokens = tokenize(where, syntaxOf(driver));
   for (const token of tokens) {
     if (token.unterminated === true) {
-      throw new DbError('syntax', 'The WHERE text has an unclosed quote or comment.');
+      throw new DbError('syntax', msg('The WHERE text has an unclosed quote or comment.'));
     }
     if (token.kind === 'punctuation' && where.slice(token.start, token.end) === ';') {
-      throw new DbError('syntax', 'The WHERE text must be a single condition, without ";".');
+      throw new DbError('syntax', msg('The WHERE text must be a single condition, without ";".'));
     }
   }
 }

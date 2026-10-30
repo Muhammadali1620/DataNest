@@ -5,6 +5,7 @@
 import { DbError } from '../../core/errors';
 import type { PlanNode, PlanWarning, QueryPlan } from '../../shared/query-plan';
 import { numberOf, planNode, propertyText } from './plan-node';
+import { msg } from '../../core/user-message';
 
 const BLOCKS: Readonly<Record<string, string>> = {
   query_block: 'Query block',
@@ -46,10 +47,10 @@ export function readMariadbPlan(raw: string, analyzed: boolean): QueryPlan {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw new DbError('internal', 'The server sent a plan that is not JSON', { cause: error });
+    throw new DbError('internal', msg('The server sent a plan that is not JSON'), { cause: error });
   }
   if (!isRecord(parsed) || !isRecord(parsed.query_block)) {
-    throw new DbError('internal', 'The server sent a plan without a query block');
+    throw new DbError('internal', msg('The server sent a plan without a query block'));
   }
   const properties: [string, string][] = [];
   const planning = isRecord(parsed.query_optimization)
@@ -60,7 +61,7 @@ export function readMariadbPlan(raw: string, analyzed: boolean): QueryPlan {
   }
   const [root] = walk('query_block', parsed.query_block);
   if (root === undefined) {
-    throw new DbError('internal', 'The server sent an empty plan');
+    throw new DbError('internal', msg('The server sent an empty plan'));
   }
   return { root, analyzed, properties, notes: [], raw };
 }

@@ -9,6 +9,7 @@ import type { Driver, DriverModule } from './driver';
 import type { ElasticDriver, ElasticDriverModule } from './elastic-driver';
 import type { MongoDriver, MongoDriverModule } from './mongo-driver';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
+import { msg } from '../core/user-message';
 
 export type DriverLoader = (
   id: DriverId,
@@ -39,11 +40,11 @@ export class DriverRegistry {
   /** Loads a SQL driver on first use; concurrent calls share one load. */
   async get(id: SqlDriverId): Promise<Driver> {
     if (!isDriverId(id) || !isSqlDriver(id)) {
-      throw new DbError('unsupported', `Unknown SQL driver "${String(id)}"`);
+      throw new DbError('unsupported', msg('Unknown SQL driver "{0}"', String(id)));
     }
     const driver = await this.loadOnce(id);
     if (!isSqlDriverShaped(driver)) {
-      throw new DbError('internal', `Driver "${id}" is broken: unexpected module shape`);
+      throw new DbError('internal', msg('Driver "{0}" is broken: unexpected module shape', id));
     }
     return driver;
   }
@@ -52,7 +53,7 @@ export class DriverRegistry {
   async getRedis(): Promise<RedisDriver> {
     const driver = await this.loadOnce('redis');
     if (isSqlDriverShaped(driver) || driver.id !== 'redis') {
-      throw new DbError('internal', 'Driver "redis" is broken: unexpected module shape');
+      throw new DbError('internal', msg('Driver "redis" is broken: unexpected module shape'));
     }
     return driver;
   }
@@ -61,7 +62,7 @@ export class DriverRegistry {
   async getMongo(): Promise<MongoDriver> {
     const driver = await this.loadOnce('mongodb');
     if (isSqlDriverShaped(driver) || driver.id !== 'mongodb') {
-      throw new DbError('internal', 'Driver "mongodb" is broken: unexpected module shape');
+      throw new DbError('internal', msg('Driver "mongodb" is broken: unexpected module shape'));
     }
     return driver;
   }
@@ -70,7 +71,10 @@ export class DriverRegistry {
   async getElastic(): Promise<ElasticDriver> {
     const driver = await this.loadOnce('elasticsearch');
     if (isSqlDriverShaped(driver) || driver.id !== 'elasticsearch') {
-      throw new DbError('internal', 'Driver "elasticsearch" is broken: unexpected module shape');
+      throw new DbError(
+        'internal',
+        msg('Driver "elasticsearch" is broken: unexpected module shape'),
+      );
     }
     return driver;
   }
@@ -106,7 +110,7 @@ export class DriverRegistry {
     const shaped = isSqlDriver(id) ? isSqlDriverShaped(driver) : isFamilyDriverShaped(driver, id);
     if (!shaped || (driver as AnyDriver).id !== id) {
       this.logger.error(`Driver bundle "${id}" has a wrong shape`);
-      throw new DbError('internal', `Driver "${id}" is broken: unexpected module shape`);
+      throw new DbError('internal', msg('Driver "{0}" is broken: unexpected module shape', id));
     }
     this.logger.info(`Driver "${id}" loaded`);
     return driver as AnyDriver;

@@ -36,6 +36,7 @@ import {
   type TableFolder,
   type TreeNode,
 } from './nodes';
+import { msg } from '../../core/user-message';
 
 /** What a project node says when it has nothing to list (V4.7). */
 export interface ProjectTexts {
@@ -617,7 +618,7 @@ export class TreeModel {
   private configOf(connectionId: string): ConnectionConfig {
     const config = this.deps.store.get(connectionId);
     if (!config) {
-      throw new DbError('not-found', `Connection "${connectionId}" does not exist`);
+      throw new DbError('not-found', msg('Connection "{0}" does not exist', connectionId));
     }
     return config;
   }

@@ -9,6 +9,7 @@ import type { SchemaDdl, Session } from '../drivers/driver';
 import type { TableBackground, TableDesign } from '../shared/table-design';
 import { browseSession } from './browse-session';
 import { ConnectionManager } from './connection-manager';
+import { msg } from '../core/user-message';
 
 export type SchemaAction =
   | { readonly kind: 'createDatabase'; readonly name: string }
@@ -97,14 +98,20 @@ function singleStatement(
     case 'createDatabase':
       return required(
         ddl.createDatabase,
-        'This connection has no databases to create',
+        msg('This connection has no databases to create'),
       )(action.name);
     case 'dropDatabase':
-      return required(ddl.dropDatabase, 'This connection has no databases to drop')(action.name);
+      return required(
+        ddl.dropDatabase,
+        msg('This connection has no databases to drop'),
+      )(action.name);
     case 'createSchema':
-      return required(ddl.createSchema, 'This database has no schemas')(action.name);
+      return required(ddl.createSchema, msg('This database has no schemas'))(action.name);
     case 'dropSchema':
-      return required(ddl.dropSchema, 'This database has no schemas')(action.name, action.cascade);
+      return required(ddl.dropSchema, msg('This database has no schemas'))(
+        action.name,
+        action.cascade,
+      );
     case 'dropTable':
       return ddl.dropRelation(action.table, action.relation);
     case 'renameTable':

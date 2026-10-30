@@ -2,16 +2,17 @@
 // text outside the database's code page survives.
 
 import type { TableRef } from '../../core/model/objects';
+import { msg } from '../../core/user-message';
 
 /** The longest identifier SQL Server accepts (sysname). */
 export const MAX_IDENTIFIER_LENGTH = 128;
 
 export function quoteIdentifier(name: string): string {
   if (name === '') {
-    throw new Error('Identifier must not be empty');
+    throw new Error(msg('Identifier must not be empty'));
   }
   if (name.includes('\u0000')) {
-    throw new Error('Identifier must not contain NUL');
+    throw new Error(msg('Identifier must not contain NUL'));
   }
   return `[${name.replaceAll(']', ']]')}]`;
 }

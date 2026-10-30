@@ -19,19 +19,23 @@ import {
 import { escapeGlob, SCAN_START, scanFrom } from './key-scan';
 import { formatReply } from './reply-format';
 import { redisKeyRef } from '../../shared/redis-key';
+import { msg } from '../../core/user-message';
 
-/** Commands that turn the connection into something a console line cannot show. */
-const UNSUPPORTED: ReadonlyMap<string, string> = new Map([
-  ['subscribe', 'Subscriptions stream messages without end; use redis-cli for them'],
-  ['psubscribe', 'Subscriptions stream messages without end; use redis-cli for them'],
-  ['ssubscribe', 'Subscriptions stream messages without end; use redis-cli for them'],
-  ['monitor', 'MONITOR streams every command without end; use redis-cli for it'],
-  ['sync', 'Replication streams are not for a console'],
-  ['psync', 'Replication streams are not for a console'],
-  ['hello', 'The protocol is set by DataNest; change the connection instead'],
-  ['auth', 'The user is set by the connection; edit it instead'],
-  ['quit', 'Close the console tab instead'],
-  ['reset', 'Close and reopen the console instead'],
+/**
+ * Commands that turn the connection into something a console line cannot show, with
+ * why. Functions, so the reason is translated when shown, not when the module loads.
+ */
+const UNSUPPORTED: ReadonlyMap<string, () => string> = new Map([
+  ['subscribe', () => msg('Subscriptions stream messages without end; use redis-cli for them')],
+  ['psubscribe', () => msg('Subscriptions stream messages without end; use redis-cli for them')],
+  ['ssubscribe', () => msg('Subscriptions stream messages without end; use redis-cli for them')],
+  ['monitor', () => msg('MONITOR streams every command without end; use redis-cli for it')],
+  ['sync', () => msg('Replication streams are not for a console')],
+  ['psync', () => msg('Replication streams are not for a console')],
+  ['hello', () => msg('The protocol is set by DataNest; change the connection instead')],
+  ['auth', () => msg('The user is set by the connection; edit it instead')],
+  ['quit', () => msg('Close the console tab instead')],
+  ['reset', () => msg('Close and reopen the console instead')],
 ]);
 
 /** Reads that can still stop a big server for a long time. */
@@ -89,15 +93,15 @@ export class RedisConsole {
       return this.refused(
         command,
         parsed.problem === 'unclosed-quote'
-          ? 'A quote is not closed'
-          : 'A closing quote must be followed by a space',
+          ? msg('A quote is not closed')
+          : msg('A closing quote must be followed by a space'),
       );
     }
     const words = parsed.words;
     const name = wordText(words[0] ?? '').toLowerCase();
     const unsupported = UNSUPPORTED.get(name);
     if (unsupported !== undefined) {
-      return this.refused(command, unsupported);
+      return this.refused(command, unsupported());
     }
     try {
       const verdict = await this.verdict(name, words.map(wordText));
@@ -155,8 +159,8 @@ export class RedisConsole {
     const effect: CommandEffect = commandEffect(info);
     if (policy.readOnly && effect !== 'read') {
       return effect === 'unknown'
-        ? 'The connection is read-only, and the server does not say what this command does'
-        : 'The connection is read-only: this command may change data';
+        ? msg('The connection is read-only, and the server does not say what this command does')
+        : msg('The connection is read-only: this command may change data');
     }
     const dangerous =
       (effect === 'write' && (info?.categories.includes('@dangerous') ?? false)) ||
@@ -164,7 +168,7 @@ export class RedisConsole {
     const command = words.join(' ');
     if (dangerous && safeMode !== 'off') {
       if (safeMode === 'block') {
-        return 'Safe mode blocks this command (datanest.safeMode)';
+        return msg('Safe mode blocks this command (datanest.safeMode)');
       }
       const asked = await this.deps.confirm({
         kind: 'dangerous',

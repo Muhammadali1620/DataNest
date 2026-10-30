@@ -1,3 +1,4 @@
+import { msg } from '../user-message';
 // JSON read into a tree that loses nothing (V7.8): numbers stay the text the server wrote
 // (`9007199254740993` or `1.10` survive, which `JSON.parse` would round or trim), and
 // object members keep their order and repeats. Written back laid out or on one line.
@@ -48,7 +49,7 @@ class Reader {
 
   value(depth: number): JsonValue {
     if (depth > MAX_DEPTH) {
-      this.fail('The JSON nests too deeply');
+      this.fail(msg('The JSON nests too deeply'));
     }
     this.space();
     const char = this.text[this.offset] ?? '';
@@ -66,12 +67,12 @@ class Reader {
       case 'n':
         return this.word('null', { type: 'null' });
       case '':
-        return this.fail('Expected a value at the end');
+        return this.fail(msg('Expected a value at the end'));
       default: {
         NUMBER.lastIndex = this.offset;
         const match = NUMBER.exec(this.text);
         if (match === null || match[0] === '-') {
-          return this.fail(`Unexpected "${char}"`);
+          return this.fail(msg('Unexpected "{0}"', char));
         }
         this.offset += match[0].length;
         return { type: 'number', text: match[0] };
@@ -81,7 +82,7 @@ class Reader {
 
   private word(word: string, value: JsonValue): JsonValue {
     if (!this.text.startsWith(word, this.offset)) {
-      this.fail(`Unexpected "${this.text[this.offset] ?? ''}"`);
+      this.fail(msg('Unexpected "{0}"', this.text[this.offset] ?? ''));
     }
     this.offset += word.length;
     return value;
@@ -98,12 +99,12 @@ class Reader {
     for (;;) {
       this.space();
       if (this.text[this.offset] !== '"') {
-        this.fail('Expected a name in double quotes');
+        this.fail(msg('Expected a name in double quotes'));
       }
       const name = this.string();
       this.space();
       if (this.text[this.offset] !== ':') {
-        this.fail('Expected ":" after the name');
+        this.fail(msg('Expected ":" after the name'));
       }
       this.offset += 1;
       members.push([name, this.value(depth + 1)]);
@@ -114,7 +115,7 @@ class Reader {
         return { type: 'object', members };
       }
       if (next !== ',') {
-        this.fail('Expected "," or "}"', this.offset - 1);
+        this.fail(msg('Expected "," or "}"'), this.offset - 1);
       }
     }
   }
@@ -136,7 +137,7 @@ class Reader {
         return { type: 'array', items };
       }
       if (next !== ',') {
-        this.fail('Expected "," or "]"', this.offset - 1);
+        this.fail(msg('Expected "," or "]"'), this.offset - 1);
       }
     }
   }
@@ -148,14 +149,14 @@ class Reader {
     for (;;) {
       const char = this.text[this.offset];
       if (char === undefined) {
-        this.fail('The string is not closed', start);
+        this.fail(msg('The string is not closed'), start);
       }
       if (char === '"') {
         this.offset += 1;
         return out;
       }
       if (char < ' ') {
-        this.fail('A control character inside a string');
+        this.fail(msg('A control character inside a string'));
       }
       if (char === '\\') {
         const escape = this.text[this.offset + 1] ?? '';
@@ -172,7 +173,7 @@ class Reader {
         if (escape === 'u') {
           const hex = this.text.slice(this.offset + 2, this.offset + 6);
           if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
-            this.fail('A wrong \\u escape');
+            this.fail(msg('A wrong \\u escape'));
           }
           out += String.fromCharCode(Number.parseInt(hex, 16));
           this.offset += 6;
@@ -180,7 +181,7 @@ class Reader {
         }
         const replaced = simple[escape];
         if (replaced === undefined) {
-          this.fail('A wrong escape');
+          this.fail(msg('A wrong escape'));
         }
         out += replaced;
         this.offset += 2;
@@ -194,7 +195,7 @@ class Reader {
   end(): void {
     this.space();
     if (this.offset < this.text.length) {
-      this.fail('Unexpected text after the JSON');
+      this.fail(msg('Unexpected text after the JSON'));
     }
   }
 }

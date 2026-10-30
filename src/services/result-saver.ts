@@ -8,6 +8,7 @@ import type { Dialect, ResultColumn, Session } from '../drivers/driver';
 import { buildChangeStatements, type ChangeStatement } from './change-sql';
 import type { ConnectionManager } from './connection-manager';
 import type { ResultRow, ResultStore, ResultSummary } from './result-store';
+import { msg } from '../core/user-message';
 
 export interface SaveFailure {
   readonly ok: false;
@@ -117,7 +118,7 @@ export class ResultSaver {
 
   async save(resultId: string): Promise<SaveOutcome> {
     if (this.saving.has(resultId)) {
-      return failure('busy', 'These changes are already being saved');
+      return failure('busy', msg('These changes are already being saved'));
     }
     this.saving.add(resultId);
     try {
@@ -135,7 +136,7 @@ export class ResultSaver {
     const { summary, statements, dialect } = prepared;
     const origin = summary.origin;
     if (origin === undefined) {
-      return failure('not-editable', 'This result cannot be saved');
+      return failure('not-editable', msg('This result cannot be saved'));
     }
     let session: Session;
     try {
@@ -149,7 +150,7 @@ export class ResultSaver {
     if (state === 'failed') {
       return failure(
         'transaction-failed',
-        'The open transaction of this editor failed; roll it back before saving',
+        msg('The open transaction of this editor failed; roll it back before saving'),
       );
     }
     const fence = fenceOf(dialect, state === 'open');
@@ -164,8 +165,14 @@ export class ResultSaver {
           return failure(
             'row-missing',
             affected === undefined || affected === 0
-              ? 'A row was not found: it was changed or deleted since it was read. Nothing was saved.'
-              : `A statement affected ${affected} rows instead of ${statement.expectedRows}. Nothing was saved.`,
+              ? msg(
+                  'A row was not found: it was changed or deleted since it was read. Nothing was saved.',
+                )
+              : msg(
+                  'A statement affected {0} rows instead of {1}. Nothing was saved.',
+                  affected,
+                  statement.expectedRows,
+                ),
             statement.sql,
           );
         }
@@ -194,20 +201,20 @@ export class ResultSaver {
   private async prepare(resultId: string): Promise<Prepared | SaveFailure> {
     const summary = this.deps.results.get(resultId);
     if (summary?.edit?.editable !== true || summary.origin === undefined) {
-      return failure('not-editable', 'This result is read-only');
+      return failure('not-editable', msg('This result is read-only'));
     }
     if (this.deps.isBusy(summary.documentUri)) {
-      return failure('busy', 'A query is running in this editor; wait for it to finish');
+      return failure('busy', msg('A query is running in this editor; wait for it to finish'));
     }
     const plan = this.deps.results.pendingPlan(resultId);
     if (plan === undefined) {
-      return failure('not-editable', 'This result is no longer available');
+      return failure('not-editable', msg('This result is no longer available'));
     }
     try {
       const driver = await this.deps.manager.driverOf(summary.origin.target.connectionId);
       const statements = buildChangeStatements({ edit: summary.edit, ...plan }, driver.dialect);
       if (statements.length === 0) {
-        return failure('no-changes', 'There are no changes to save');
+        return failure('no-changes', msg('There are no changes to save'));
       }
       return { summary, statements, dialect: driver.dialect };
     } catch (error) {

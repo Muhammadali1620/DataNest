@@ -1,6 +1,7 @@
 import { DbError, type DbErrorCode, errorMessage } from '../../core/errors';
 import { unquoteIdentifier } from '../../core/sql/identifiers';
 import { syntaxOf, textOf, tokenize } from '../../core/sql/tokenizer';
+import { msg } from '../../core/user-message';
 
 /** What tedious errors carry; everything is optional because input is untrusted. */
 interface TediousErrorLike {
@@ -125,7 +126,7 @@ export function toMssqlDbError(error: unknown, sql?: string): DbError {
   return new DbError(code, errorMessage(like === outer ? error : like), {
     driverCode: number ?? codeText,
     ...(position === undefined ? {} : { position }),
-    ...(procedure === '' ? {} : { detail: `In ${procedure}, line ${line}` }),
+    ...(procedure === '' ? {} : { detail: msg('In {0}, line {1}', procedure, line) }),
     cause: error,
   });
 }

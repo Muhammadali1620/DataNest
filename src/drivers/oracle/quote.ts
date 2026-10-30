@@ -2,17 +2,18 @@
 // in single quotes with ' doubled; N'…' keeps text outside the database character set.
 
 import type { TableRef } from '../../core/model/objects';
+import { msg } from '../../core/user-message';
 
 /** The longest identifier Oracle 12.2 and newer accept, in bytes. */
 export const MAX_IDENTIFIER_BYTES = 128;
 
 export function quoteIdentifier(name: string): string {
   if (name === '') {
-    throw new Error('Identifier must not be empty');
+    throw new Error(msg('Identifier must not be empty'));
   }
   if (name.includes('\u0000') || name.includes('"')) {
     // Oracle has no escape for a double quote inside a quoted identifier.
-    throw new Error('Identifier must not contain NUL or a double quote');
+    throw new Error(msg('Identifier must not contain NUL or a double quote'));
   }
   return `"${name}"`;
 }

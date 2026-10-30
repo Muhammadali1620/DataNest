@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { ReplacePlan } from '../driver';
 import { quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export function mssqlReplaceObject(object: ObjectRef, statements: readonly string[]): ReplacePlan {
   switch (object.kind) {
@@ -17,7 +18,7 @@ export function mssqlReplaceObject(object: ObjectRef, statements: readonly strin
     case 'table':
     case 'sequence':
     case 'event':
-      throw new DbError('unsupported', `A ${object.kind} is not edited as a definition`);
+      throw new DbError('unsupported', msg('A {0} is not edited as a definition', object.kind));
   }
   // The edited text may say CREATE OR ALTER, which needs no drop; a plain CREATE does.
   const alters = statements.some((sql) => /^\s*CREATE\s+OR\s+ALTER\b/iu.test(sql));

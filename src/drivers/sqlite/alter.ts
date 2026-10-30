@@ -13,6 +13,7 @@ import { type AlterPlan, EMPTY_PLAN } from '../driver';
 import { columnSql, createIndexSql } from '../common/design-sql';
 import { sqliteCreateTable } from './create-table';
 import { quoteIdentifier, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 /** A default ADD COLUMN accepts: a constant, never an expression such as CURRENT_TIMESTAMP. */
 const CONSTANT = /^(-?\d+(\.\d+)?|'([^']|'')*'|null|true|false)$/i;
@@ -135,7 +136,9 @@ function rebuild(
   if (background.generatedColumns.length > 0) {
     throw new DbError(
       'unsupported',
-      'This change needs the table to be rebuilt, and DataNest cannot rebuild a SQLite table with computed columns yet',
+      msg(
+        'This change needs the table to be rebuilt, and DataNest cannot rebuild a SQLite table with computed columns yet',
+      ),
     );
   }
   const old = table.name;

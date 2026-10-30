@@ -3,6 +3,7 @@
 
 import { DbError } from '../core/errors';
 import type { ConnectionManager } from './connection-manager';
+import { msg } from '../core/user-message';
 
 export type TransactionEnd = 'commit' | 'rollback';
 
@@ -19,12 +20,12 @@ export async function endTransaction(
   const session = manager.sessionOf(owner);
   const state = manager.transactionState(owner);
   if (session === undefined || (state !== 'open' && state !== 'failed')) {
-    throw new DbError('not-found', 'There is no open transaction in this editor');
+    throw new DbError('not-found', msg('There is no open transaction in this editor'));
   }
   if (end === 'commit' && state === 'failed') {
     throw new DbError(
       'unsupported',
-      'The transaction failed, so nothing in it can be saved: roll it back',
+      msg('The transaction failed, so nothing in it can be saved: roll it back'),
     );
   }
   for await (const _event of session.execute(end === 'commit' ? 'COMMIT' : 'ROLLBACK')) {

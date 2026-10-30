@@ -6,6 +6,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import { literal, quoteIdentifier } from './dialect';
 import { generatedColumnSql, type PgServer, printsTriggers, withoutDatabase } from './server';
+import { msg } from '../../core/user-message';
 
 /**
  * Runs one catalog query and returns its rows as arrays; `server` says which catalogs it
@@ -31,7 +32,7 @@ export async function readPgDefinition(read: PgRowReader, object: ObjectRef): Pr
     case 'sequence':
       return await sequenceDefinition(read, schema, object.name);
     case 'event':
-      throw new DbError('unsupported', 'PostgreSQL has no scheduled events');
+      throw new DbError('unsupported', msg('PostgreSQL has no scheduled events'));
   }
 }
 
@@ -54,7 +55,7 @@ async function relationDefinition(
   );
   const row = rows[0];
   if (row === undefined) {
-    throw new DbError('not-found', `${schema}.${name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schema, name));
   }
   const oid = text(row[0]);
   const kind = text(row[1]);
@@ -218,7 +219,7 @@ async function routineDefinition(
     [schema, object.name, object.kind === 'procedure' ? 'p' : 'f', object.signature ?? null],
   );
   if (rows.length === 0) {
-    throw new DbError('not-found', `${schema}.${object.name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schema, object.name));
   }
   const statements: string[] = [];
   const keyword = object.kind === 'procedure' ? 'PROCEDURE' : 'FUNCTION';
@@ -240,7 +241,7 @@ async function triggerDefinition(
   object: ObjectRef,
 ): Promise<string[]> {
   if (!printsTriggers(read.server)) {
-    throw new DbError('unsupported', 'CockroachDB cannot print a trigger back as SQL');
+    throw new DbError('unsupported', msg('CockroachDB cannot print a trigger back as SQL'));
   }
   const rows = await read(
     `SELECT pg_get_triggerdef(t.oid, true)
@@ -253,7 +254,7 @@ async function triggerDefinition(
     [schema, object.name, object.table ?? null],
   );
   if (rows.length === 0) {
-    throw new DbError('not-found', `${schema}.${object.name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schema, object.name));
   }
   return rows.map((row) => text(row[0]));
 }
@@ -282,7 +283,7 @@ export async function sequenceDefinition(
   );
   const row = rows[0];
   if (row === undefined) {
-    throw new DbError('not-found', `${schema}.${name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schema, name));
   }
   const qualified = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
   const statements = [

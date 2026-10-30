@@ -5,6 +5,7 @@
 import { DbError } from '../../core/errors';
 import type { PlanNode, PlanWarning, QueryPlan } from '../../shared/query-plan';
 import { numberOf, planNode, propertyText } from './plan-node';
+import { msg } from '../../core/user-message';
 
 const SHOWN = new Set(['Node Type', 'Plans', 'Description', 'Expression', 'Node Id']);
 
@@ -13,11 +14,11 @@ export function readClickhousePlan(raw: string): QueryPlan {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw new DbError('internal', 'The server sent a plan that is not JSON', { cause: error });
+    throw new DbError('internal', msg('The server sent a plan that is not JSON'), { cause: error });
   }
   const top: unknown = Array.isArray(parsed) ? parsed[0] : parsed;
   if (!isRecord(top) || !isRecord(top.Plan)) {
-    throw new DbError('internal', 'The server sent a plan without a Plan');
+    throw new DbError('internal', msg('The server sent a plan without a Plan'));
   }
   return { root: node(top.Plan), analyzed: false, properties: [], notes: [], raw };
 }

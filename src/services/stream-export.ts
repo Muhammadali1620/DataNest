@@ -27,6 +27,7 @@ import {
   XlsxLimitError,
 } from './xlsx';
 import { ZipStream } from './zip-stream';
+import { msg } from '../core/user-message';
 
 /** Where the file goes: text for the text formats, bytes for XLSX. */
 export interface ExportSink {
@@ -99,7 +100,7 @@ export class StreamExporter {
       return { rows, durationMs: this.now() - started };
     } catch (error) {
       if (request.signal?.aborted === true) {
-        throw new DbError('cancelled', 'The export was cancelled');
+        throw new DbError('cancelled', msg('The export was cancelled'));
       }
       throw error;
     } finally {
@@ -113,7 +114,7 @@ export class StreamExporter {
     let started = false;
     for await (const event of session.execute(request.sql)) {
       if (request.signal?.aborted === true) {
-        throw new DbError('cancelled', 'The export was cancelled');
+        throw new DbError('cancelled', msg('The export was cancelled'));
       }
       if (event.kind === 'columns') {
         if (started) {
@@ -129,7 +130,7 @@ export class StreamExporter {
       }
     }
     if (!started) {
-      throw new DbError('unsupported', 'The statement returns no rows to export');
+      throw new DbError('unsupported', msg('The statement returns no rows to export'));
     }
     await writer.end();
     return rows;
@@ -315,7 +316,7 @@ function xlsxWriter(request: StreamExportRequest): RowWriter {
     for (const row of rows) {
       written += 1;
       if (written + 1 > XLSX_MAX_ROWS) {
-        throw new XlsxLimitError(`Excel holds at most ${XLSX_MAX_ROWS - 1} data rows`);
+        throw new XlsxLimitError(msg('Excel holds at most {0} data rows', XLSX_MAX_ROWS - 1));
       }
       await add(rowXml(names.length, row, written + 1));
     }

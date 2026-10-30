@@ -11,6 +11,7 @@ import type { TableRef } from '../../core/model/objects';
 import type { Dialect, Session } from '../../drivers/driver';
 import type { CellValue } from '../../shared/cell-value';
 import { type ColumnMode, keyOf, rowHash } from './comparable';
+import { msg } from '../../core/user-message';
 
 export const ROW_LIMIT = 1_000_000;
 export const KEEP_ROWS = 10_000;
@@ -59,7 +60,7 @@ export interface DataCompareResult {
 export async function compareTableData(request: DataCompareRequest): Promise<DataCompareResult> {
   const started = Date.now();
   if (request.key.length === 0) {
-    throw new DbError('unsupported', 'Rows can be compared only by key columns');
+    throw new DbError('unsupported', msg('Rows can be compared only by key columns'));
   }
   const width = request.key.length;
   const sourceColumns = [...request.key, ...request.columns].map((pair) => pair.source);
@@ -96,7 +97,7 @@ async function compare(
     if (hashes.has(key)) {
       throw new DbError(
         'constraint',
-        'Values of the key columns repeat in the target: pick columns that identify a row',
+        msg('Values of the key columns repeat in the target: pick columns that identify a row'),
       );
     }
     hashes.set(key, rowHash(row.slice(width), valueModes));
@@ -119,7 +120,7 @@ async function compare(
     if (hash === MATCHED || onlySourceKeys.has(key)) {
       throw new DbError(
         'constraint',
-        'Values of the key columns repeat in the source: pick columns that identify a row',
+        msg('Values of the key columns repeat in the source: pick columns that identify a row'),
       );
     }
     if (hash === undefined) {
@@ -196,7 +197,7 @@ async function readRows(
 ): Promise<void> {
   const sql = `SELECT ${columns.map((column) => side.dialect.quoteIdentifier(column)).join(', ')} FROM ${side.dialect.quoteTable(side.table)}`;
   if (signal?.aborted === true) {
-    throw new DbError('cancelled', 'The comparison was cancelled');
+    throw new DbError('cancelled', msg('The comparison was cancelled'));
   }
   const session = await side.session();
   // A slow server may not send a row for a long time: stopping must reach it too.
@@ -225,13 +226,17 @@ async function stream(
     }
     for (const row of event.rows) {
       if (signal?.aborted === true) {
-        throw new DbError('cancelled', 'The comparison was cancelled');
+        throw new DbError('cancelled', msg('The comparison was cancelled'));
       }
       count += 1;
       if (count > ROW_LIMIT) {
         throw new DbError(
           'unsupported',
-          `${side.table.name} has more than ${ROW_LIMIT.toLocaleString('en')} rows: too many to compare`,
+          msg(
+            '{0} has more than {1} rows: too many to compare',
+            side.table.name,
+            ROW_LIMIT.toLocaleString('en'),
+          ),
         );
       }
       if (visit(row, count) === true) {

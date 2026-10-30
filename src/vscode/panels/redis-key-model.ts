@@ -19,6 +19,7 @@ import {
 } from '../../shared/protocols/redis-key';
 import { type RedisKeyRef, redisKeyBytes, redisKeyRef } from '../../shared/redis-key';
 import type { RedisValue } from '../../shared/redis-value';
+import { msg } from '../../core/user-message';
 
 export interface RedisKeyModelDeps {
   readonly key: RedisKeyRef;
@@ -233,7 +234,10 @@ export class RedisKeyModel {
 
   private refuseIfReadOnly(): void {
     if (this.deps.readOnly) {
-      throw new DbError('permission-denied', 'The connection is read-only: nothing may change');
+      throw new DbError(
+        'permission-denied',
+        msg('The connection is read-only: nothing may change'),
+      );
     }
   }
 

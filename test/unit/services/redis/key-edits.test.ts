@@ -33,7 +33,7 @@ function server(answer: (words: string[]) => RedisReply | Error | undefined = ()
 describe('valueBytes', () => {
   it('refuses a cut value and broken hex with a reason', () => {
     expect(() => valueBytes({ text: 'a', truncated: true })).toThrow(/too big to edit/);
-    expect(() => valueBytes({ text: '', hex: 'xyz' }, 'The field')).toThrow(
+    expect(() => valueBytes({ text: '', hex: 'xyz' }, 'field')).toThrow(
       /The field is not valid hex/,
     );
     expect(valueBytes({ text: '', hex: '00' })).toEqual(Uint8Array.of(0));

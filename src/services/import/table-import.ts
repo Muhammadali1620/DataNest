@@ -12,6 +12,7 @@ import { RowBatcher } from '../dump-script';
 import { exactLiteralOf } from '../sql-literal';
 import type { SourceRecord } from './import-source';
 import { convertValue, type ImportProblem, type ValueOptions } from './import-values';
+import { msg } from '../../core/user-message';
 
 export type ImportMode = 'all' | 'skip';
 
@@ -95,7 +96,7 @@ export class TableImporter {
   async run(request: ImportRequest): Promise<ImportReport> {
     const started = this.now();
     if (request.columns.length === 0) {
-      throw new DbError('unsupported', 'No column of the table gets a value from the file');
+      throw new DbError('unsupported', msg('No column of the table gets a value from the file'));
     }
     const {
       id: driver,
@@ -179,7 +180,7 @@ export class TableImporter {
         await run(session, dialect.transaction.rollback).catch(() => undefined);
       }
       if (aborted(request.signal)) {
-        throw new DbError('cancelled', 'The import was cancelled');
+        throw new DbError('cancelled', msg('The import was cancelled'));
       }
       throw error;
     } finally {

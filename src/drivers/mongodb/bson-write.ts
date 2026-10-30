@@ -21,6 +21,7 @@ import {
 import { DbError } from '../../core/errors';
 import type { MongoDocument, MongoField, MongoValue } from '../../core/mongo/value';
 import { doubleValue } from './bson-read';
+import { msg } from '../../core/user-message';
 
 /** The furthest a JavaScript `Date` reaches either side of 1970. */
 const MAX_DATE_MS = 8.64e15;
@@ -55,7 +56,7 @@ export function toDriverValue(value: MongoValue): unknown {
       if (!Number.isSafeInteger(ms) || Math.abs(ms) > MAX_DATE_MS) {
         throw new DbError(
           'unsupported',
-          `The date ${value.value} ms is out of the range DataNest can write`,
+          msg('The date {0} ms is out of the range DataNest can write', value.value),
         );
       }
       return new Date(ms);
@@ -110,7 +111,7 @@ const MAX_DEPTH = 200;
 /** A value the driver read (bson classes, Dates, Buffers, objects) as a MongoValue. */
 export function fromDriverValue(value: unknown, depth = 0): MongoValue {
   if (depth > MAX_DEPTH) {
-    throw new DbError('internal', 'The reply nests too deeply');
+    throw new DbError('internal', msg('The reply nests too deeply'));
   }
   if (value === null) {
     return { type: 'null' };

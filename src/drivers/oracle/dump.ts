@@ -7,6 +7,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef, RelationKind, TableRef } from '../../core/model/objects';
 import type { DumpDialect } from '../driver';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 /** Runs a DROP and ignores only the error that says the object is not there. */
 export function dropIfExists(statement: string, missingCode: number): string {
@@ -62,7 +63,7 @@ export const oracleDump: DumpDialect = {
     ),
   dropObject: (object: ObjectRef) => {
     if (object.kind === 'event') {
-      throw new DbError('unsupported', 'Oracle keeps scheduled jobs apart, in DBMS_SCHEDULER');
+      throw new DbError('unsupported', msg('Oracle keeps scheduled jobs apart, in DBMS_SCHEDULER'));
     }
     const word =
       object.kind === 'view' && object.materialized === true

@@ -19,6 +19,7 @@ import {
   type UserRef,
   withPassword,
 } from './user-admin';
+import { msg } from '../../core/user-message';
 
 const PRIVILEGES: UserAdminFeatures['privileges'] = {
   server: [
@@ -67,9 +68,9 @@ export function oracleUserAdmin(dialect: AdminDialect): UserAdmin {
   const account = (user: UserRef): string => quote(user.name, 'user name');
   /** Oracle writes a password as a quoted name, so it cannot hold a double quote. */
   const password = (text: string): string => {
-    checkText(text, 'password');
+    checkText(text, msg('password'));
     if (text.includes('"')) {
-      throw new DbError('syntax', 'An Oracle password cannot contain a double quote');
+      throw new DbError('syntax', msg('An Oracle password cannot contain a double quote'));
     }
     return `"${text}"`;
   };
@@ -145,10 +146,10 @@ export function oracleUserAdmin(dialect: AdminDialect): UserAdmin {
     },
 
     createUser: (user) => {
-      const name = dialect.quoteIdentifier(oracleName(required(user.name, 'user name')));
+      const name = dialect.quoteIdentifier(oracleName(required(user.name, msg('user name'))));
       for (const option of user.options) {
         if (!features.createOptions.includes(option)) {
-          throw new DbError('unsupported', `"${option}" is not an option of a new user`);
+          throw new DbError('unsupported', msg('"{0}" is not an option of a new user', option));
         }
       }
       const login = user.options.includes('login');
@@ -205,7 +206,10 @@ export function oracleUserAdmin(dialect: AdminDialect): UserAdmin {
 
   function objectName(change: GrantChange): string {
     if (change.level !== 'table') {
-      throw new DbError('unsupported', `Oracle grants nothing at the level "${change.level}" here`);
+      throw new DbError(
+        'unsupported',
+        msg('Oracle grants nothing at the level "{0}" here', change.level),
+      );
     }
     return `${quote(change.schema, 'schema')}.${quote(change.name, 'table')}`;
   }

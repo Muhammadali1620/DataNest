@@ -8,6 +8,7 @@ import { retainedBytes } from '../shared/binary-bytes';
 import { cellText } from '../shared/cell-text';
 import { type CellValue, isTaggedValue } from '../shared/cell-value';
 import { zip } from './zip';
+import { msg } from '../core/user-message';
 
 /** Hard limits of the format. */
 export const XLSX_MAX_ROWS = 1_048_576;
@@ -196,10 +197,10 @@ export const SHEET_PATH = 'xl/worksheets/sheet1.xml';
 /** The bytes of an .xlsx file; throws XlsxLimitError when the data does not fit the format. */
 export function toXlsx(input: XlsxInput): Uint8Array {
   if (input.rows.length + 1 > XLSX_MAX_ROWS) {
-    throw new XlsxLimitError(`Excel holds at most ${XLSX_MAX_ROWS - 1} data rows`);
+    throw new XlsxLimitError(msg('Excel holds at most {0} data rows', XLSX_MAX_ROWS - 1));
   }
   if (input.header.length > XLSX_MAX_COLUMNS) {
-    throw new XlsxLimitError(`Excel holds at most ${XLSX_MAX_COLUMNS} columns`);
+    throw new XlsxLimitError(msg('Excel holds at most {0} columns', XLSX_MAX_COLUMNS));
   }
   const text = (value: string): Uint8Array => Buffer.from(value, 'utf8');
   return zip([

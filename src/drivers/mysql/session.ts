@@ -20,6 +20,7 @@ import type {
 import { toMysqlDbError } from './errors';
 import { MysqlMetadata } from './metadata';
 import { mysqlTypeName, toCellValue } from './values';
+import { msg } from '../../core/user-message';
 
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
@@ -92,7 +93,7 @@ export async function openMysqlSession(config: ResolvedConnectionConfig): Promis
     // mysql2 rejects a character set it does not know before it connects.
     throw new DbError(
       'unsupported',
-      `Unknown character set "${config.options?.charset ?? ''}": ${String(error)}`,
+      msg('Unknown character set "{0}": {1}', config.options?.charset ?? '', String(error)),
     );
   }
   // Fatal errors between queries (e.g. a dropped socket) must not crash the host;
@@ -124,7 +125,7 @@ function verifyIpIdentity(raw: mysql.Connection, tls: TlsMaterial | undefined): 
   const cert = socket?.getPeerCertificate?.();
   const problem =
     cert === undefined
-      ? new Error('The server did not present a certificate')
+      ? new Error(msg('The server did not present a certificate'))
       : checkServerIdentity(tls.serverName, cert);
   if (problem !== undefined) {
     throw problem;
@@ -176,7 +177,7 @@ class MysqlSession implements Session {
 
   private async *run(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
     if (this.closed) {
-      throw new DbError('internal', 'The session is closed');
+      throw new DbError('internal', msg('The session is closed'));
     }
     const rowLimit = options.rowLimit ?? Number.POSITIVE_INFINITY;
     const queue = new AsyncQueue<ExecuteEvent>({

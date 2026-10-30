@@ -19,6 +19,7 @@ import type {
 import { splitStatements } from '../../core/sql/split';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
+import { msg } from '../../core/user-message';
 
 /** Runs one dictionary query with `:name` binds and returns its rows. */
 export type OracleRowReader = (sql: string, binds?: Record<string, string>) => Promise<unknown[][]>;
@@ -310,7 +311,7 @@ export class OracleMetadata implements MetadataReader {
       { owner: owner(table), name: table.name },
     );
     if (relation === undefined) {
-      throw new DbError('not-found', `${table.name} does not exist`);
+      throw new DbError('not-found', msg('{0} does not exist', table.name));
     }
     const columns = (await this.columnRows(table)).map((row): ColumnDetail => {
       const generated = row[5] === 'YES';
@@ -341,7 +342,7 @@ export class OracleMetadata implements MetadataReader {
 
   async getDefinition(written: ObjectRef): Promise<string[]> {
     if (written.kind === 'event') {
-      throw new DbError('unsupported', 'Oracle keeps scheduled jobs apart, in DBMS_SCHEDULER');
+      throw new DbError('unsupported', msg('Oracle keeps scheduled jobs apart, in DBMS_SCHEDULER'));
     }
     const object = await this.named(written);
     if (object.kind === 'table') {
@@ -480,7 +481,7 @@ export class OracleMetadata implements MetadataReader {
     );
     const ddl = text(row?.[0]).trim();
     if (ddl === '') {
-      throw new DbError('not-found', `${object.name} does not exist`);
+      throw new DbError('not-found', msg('{0} does not exist', object.name));
     }
     return ddl;
   }

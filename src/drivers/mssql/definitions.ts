@@ -16,6 +16,7 @@ import {
   TYPE_TEXT,
 } from './catalog';
 import { quoteIdentifier, quoteString, quoteTable } from './quote';
+import { msg } from '../../core/user-message';
 
 export async function readMssqlDefinition(
   read: MssqlRowReader,
@@ -35,7 +36,7 @@ export async function readMssqlDefinition(
     case 'sequence':
       return [await sequenceDefinition(read, object)];
     case 'event':
-      throw new DbError('unsupported', 'SQL Server keeps scheduled jobs outside the database');
+      throw new DbError('unsupported', msg('SQL Server keeps scheduled jobs outside the database'));
   }
 }
 
@@ -58,7 +59,7 @@ export async function tableParts(
   const qualified = quoteTable(ref);
   const [exists] = await read("SELECT OBJECT_ID(@p1, N'U')", [objectName(table)]);
   if (exists?.[0] === null || exists?.[0] === undefined) {
-    throw new DbError('not-found', `${ref.schema}.${ref.name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', ref.schema, ref.name));
   }
   const lines = [
     ...(await columnLines(read, table)),
@@ -103,7 +104,10 @@ export async function tableParts(
   for (const row of triggerRows) {
     const definition = optionalText(row[1]);
     if (definition === undefined) {
-      throw new DbError('permission-denied', `The definition of trigger ${text(row[0])} is hidden`);
+      throw new DbError(
+        'permission-denied',
+        msg('The definition of trigger {0} is hidden', text(row[0])),
+      );
     }
     triggers.push(withoutSemicolon(definition));
   }
@@ -290,14 +294,14 @@ async function moduleDefinition(read: MssqlRowReader, object: ObjectRef): Promis
     [quoteTable({ schema: schemaOf(object), name: object.name })],
   );
   if (row === undefined) {
-    throw new DbError('not-found', `${schemaOf(object)}.${object.name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schemaOf(object), object.name));
   }
   const definition = optionalText(row[1]);
   if (definition === undefined) {
     // Encrypted (WITH ENCRYPTION), or VIEW DEFINITION is not granted.
     throw new DbError(
       'permission-denied',
-      `The server does not show the definition of ${object.name}`,
+      msg('The server does not show the definition of {0}', object.name),
     );
   }
   return withoutSemicolon(definition);
@@ -313,7 +317,7 @@ async function sequenceDefinition(read: MssqlRowReader, object: ObjectRef): Prom
     [quoteTable({ schema: schemaOf(object), name: object.name })],
   );
   if (row === undefined) {
-    throw new DbError('not-found', `${schemaOf(object)}.${object.name} does not exist`);
+    throw new DbError('not-found', msg('{0}.{1} does not exist', schemaOf(object), object.name));
   }
   const type = text(row[0]);
   const typed =

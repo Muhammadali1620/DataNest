@@ -20,6 +20,7 @@ import {
   type UserRef,
   withPassword,
 } from './user-admin';
+import { msg } from '../../core/user-message';
 
 const POSTGRES_TABLE = [
   'ALL PRIVILEGES',
@@ -117,7 +118,10 @@ export function postgresUserAdmin(cockroach: boolean, dialect: AdminDialect): Us
       case 'server':
       case 'routine':
       case 'role':
-        throw new DbError('unsupported', `Roles get nothing at the level "${change.level}" here`);
+        throw new DbError(
+          'unsupported',
+          msg('Roles get nothing at the level "{0}" here', change.level),
+        );
     }
   };
 
@@ -171,11 +175,11 @@ export function postgresUserAdmin(cockroach: boolean, dialect: AdminDialect): Us
     createUser: (user) => {
       const login = user.options.includes('login');
       if (user.password !== '') {
-        checkText(user.password, 'password');
+        checkText(user.password, msg('password'));
       }
       for (const option of user.options) {
         if (!features.createOptions.includes(option)) {
-          throw new DbError('unsupported', `"${option}" is not an option of a new role`);
+          throw new DbError('unsupported', msg('"{0}" is not an option of a new role', option));
         }
       }
       const options = [
@@ -192,7 +196,7 @@ export function postgresUserAdmin(cockroach: boolean, dialect: AdminDialect): Us
     dropUser: (user) => [`DROP ROLE ${roleName(user)}`],
 
     setPassword: (user, password) => {
-      checkText(password, 'password');
+      checkText(password, msg('password'));
       return withPassword(password, (shown) => [
         `ALTER ROLE ${roleName(user)} WITH PASSWORD ${dialect.literal(shown)}`,
       ]);

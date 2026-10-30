@@ -1,3 +1,4 @@
+import { msg } from './user-message';
 /** Error categories every driver maps its native errors to. */
 export type DbErrorCode =
   | 'connection-failed'
@@ -86,7 +87,7 @@ export function errorMessage(value: unknown): string {
   if (typeof value === 'string' && value.trim() !== '') {
     return value;
   }
-  return 'Unexpected error';
+  return msg('Unexpected error');
 }
 
 const MAX_CAUSE_DEPTH = 10;

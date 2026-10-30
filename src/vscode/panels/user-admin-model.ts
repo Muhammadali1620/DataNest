@@ -26,6 +26,7 @@ import type {
   AdminUser,
   UserAdminState,
 } from '../../shared/protocols/user-admin';
+import { msg } from '../../core/user-message';
 
 export interface UserAdminModelDeps {
   readonly connectionName: string;
@@ -165,7 +166,7 @@ export class UserAdminModel {
       case 'unlock': {
         const setLocked = admin.setLocked;
         if (!admin.features.lock || setLocked === undefined) {
-          throw new DbError('unsupported', 'Accounts of this server cannot be locked');
+          throw new DbError('unsupported', msg('Accounts of this server cannot be locked'));
         }
         return plain(setLocked(user, change.kind === 'lock'));
       }
@@ -173,7 +174,7 @@ export class UserAdminModel {
       case 'revoke': {
         const target = change.target;
         if (target === undefined) {
-          throw new DbError('syntax', 'The grant has no target');
+          throw new DbError('syntax', msg('The grant has no target'));
         }
         const grant = {
           level: target.level,
@@ -208,12 +209,12 @@ export class UserAdminModel {
     if (this.deps.readOnly) {
       throw new DbError(
         'permission-denied',
-        'The connection is read-only, so DataNest changes no account on it',
+        msg('The connection is read-only, so DataNest changes no account on it'),
       );
     }
     const { statements } = this.statements(change);
     if (statements.length === 0) {
-      throw new DbError('syntax', 'There is nothing to run');
+      throw new DbError('syntax', msg('There is nothing to run'));
     }
     return await this.exclusive(async () => {
       const session = await this.deps.session();
@@ -226,7 +227,12 @@ export class UserAdminModel {
           }
           throw new DbError(
             isDbErrorCode(error),
-            `${errorMessage(error)} (statement ${index + 1} of ${statements.length}; the ones before it ran)`,
+            msg(
+              '{0} (statement {1} of {2}; the ones before it ran)',
+              errorMessage(error),
+              index + 1,
+              statements.length,
+            ),
             { cause: error },
           );
         }
@@ -237,7 +243,7 @@ export class UserAdminModel {
 
   private known(): UserAdmin {
     if (this.admin === undefined) {
-      throw new DbError('busy', this.error ?? 'The page is still connecting');
+      throw new DbError('busy', this.error ?? msg('The page is still connecting'));
     }
     return this.admin;
   }

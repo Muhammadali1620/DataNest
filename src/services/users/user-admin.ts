@@ -4,6 +4,7 @@
 
 import { DbError } from '../../core/errors';
 import type { Dialect, Session } from '../../drivers/driver';
+import { msg } from '../../core/user-message';
 
 /** An account: a name, and for MySQL the host it may connect from. */
 export interface UserRef {
@@ -113,25 +114,25 @@ export function withPassword(
 /** A privilege word as servers print them: letters, digits, `_` and spaces. */
 export function checkPrivilege(privilege: string): void {
   if (!/^[A-Za-z][A-Za-z0-9_ ]{0,63}$/u.test(privilege)) {
-    throw new DbError('syntax', `"${privilege}" is not a privilege`);
+    throw new DbError('syntax', msg('"{0}" is not a privilege', privilege));
   }
 }
 
 /** Rejects names and passwords that no server would take as typed. */
 export function checkText(text: string, what: string): void {
   if (text.trim() === '') {
-    throw new DbError('syntax', `The ${what} is empty`);
+    throw new DbError('syntax', msg('The {0} is empty', what));
   }
   // A NUL or a line break in a name or password is a paste gone wrong, never intended.
   if (text.includes('\u0000') || /[\r\n]/u.test(text)) {
-    throw new DbError('syntax', `The ${what} has a line break or a NUL character`);
+    throw new DbError('syntax', msg('The {0} has a line break or a NUL character', what));
   }
 }
 
 /** A name a statement needs, present and sane. */
 export function required(value: string | undefined, what: string): string {
   if (value === undefined) {
-    throw new DbError('syntax', `The ${what} is missing`);
+    throw new DbError('syntax', msg('The {0} is missing', what));
   }
   checkText(value, what);
   return value;
@@ -141,14 +142,17 @@ export function required(value: string | undefined, what: string): string {
 export function privilegeList(features: UserAdminFeatures, change: GrantChange): string {
   const known = features.privileges[change.level];
   if (known === undefined) {
-    throw new DbError('unsupported', `Privileges cannot be granted at the level "${change.level}"`);
+    throw new DbError(
+      'unsupported',
+      msg('Privileges cannot be granted at the level "{0}"', change.level),
+    );
   }
   if (change.privileges.length === 0) {
-    throw new DbError('syntax', 'Pick at least one privilege');
+    throw new DbError('syntax', msg('Pick at least one privilege'));
   }
   for (const privilege of change.privileges) {
     if (!known.includes(privilege)) {
-      throw new DbError('unsupported', `"${privilege}" is not a privilege of this level`);
+      throw new DbError('unsupported', msg('"{0}" is not a privilege of this level', privilege));
     }
   }
   return change.privileges.join(', ');

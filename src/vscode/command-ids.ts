@@ -50,6 +50,10 @@ export const COMMAND_IDS = {
   runRange: 'datanest.query.runRange',
   /** Stops the statement running in this editor. */
   cancelQuery: 'datanest.query.cancel',
+  /** Shows the plan of the statement under the cursor (V8.2). */
+  explainQuery: 'datanest.query.explain',
+  /** Runs the statement under the cursor for its real plan (V8.2). */
+  explainAnalyze: 'datanest.query.explainAnalyze',
   /** Saves the open transaction of the active editor (V4.8). */
   commitTransaction: 'datanest.transaction.commit',
   /** Undoes the open transaction of the active editor. */

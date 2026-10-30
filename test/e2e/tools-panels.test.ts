@@ -90,4 +90,19 @@ describe('tool pages', () => {
     const tab = await waitForTab('datanest.erDiagram');
     assert.equal(tab.label, 'ER Diagram: E2E tools');
   });
+
+  it('opens the plan of the statement under the cursor beside the editor (V8.2)', async function () {
+    this.timeout(30_000);
+    const document = await vscode.commands.executeCommand<vscode.TextDocument>(
+      'datanest.query.new',
+      id,
+    );
+    const editor = await vscode.window.showTextDocument(document);
+    await editor.edit((edit) => {
+      edit.insert(new vscode.Position(0, 0), 'SELECT * FROM children WHERE parent_id = 1');
+    });
+    await vscode.commands.executeCommand('datanest.query.explain');
+    const tab = await waitForTab('datanest.queryPlan');
+    assert.equal(tab.label, 'Query Plan');
+  });
 });

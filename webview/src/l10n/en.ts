@@ -707,6 +707,52 @@ export const en = {
   'er.empty': 'There are no tables here',
   'er.help':
     'Drag boxes to move them, drag the background to pan, Ctrl+wheel to zoom; a click highlights the keys of a table, a double click opens its rows.',
+  'plan.title': 'Query plan',
+  'plan.estimated': 'Estimated',
+  'plan.actual': 'Actual',
+  'plan.explain': 'Explain',
+  'plan.analyze': 'Explain Analyze',
+  'plan.analyzeHint': 'Runs the statement and shows real rows and times',
+  'plan.analyzeUnavailable':
+    'Only for statements that read, on databases that can run them for a plan',
+  'plan.expandAll': 'Expand all',
+  'plan.collapseAll': 'Collapse all',
+  'plan.expand': 'Expand',
+  'plan.collapse': 'Collapse',
+  'plan.raw': 'Show original',
+  'plan.running': 'Explaining…',
+  'plan.notes': 'Advice from the server',
+  'plan.details': 'Details',
+  'plan.selfShare': 'Own share',
+  'plan.basis.time': 'Shares of the real time.',
+  'plan.basis.cost': 'Shares of the estimated cost.',
+  'plan.basis.none': 'This database gives no costs; look at the warnings.',
+  'plan.column.operation': 'Operation',
+  'plan.column.share': 'Share',
+  'plan.column.time': 'Time',
+  'plan.column.cost': 'Cost',
+  'plan.column.rows': 'Rows',
+  'plan.column.loops': 'Loops',
+  'plan.warning.fullScan': 'full scan',
+  'plan.warning.sort': 'sort',
+  'plan.warning.temporary': 'temp table',
+  'plan.warning.misestimate': 'misestimate',
+  'plan.warning.spill': 'spills to disk',
+  'plan.warning.noJoinPredicate': 'no join condition',
+  'plan.warning.implicitConversion': 'type conversion',
+  'plan.warning.missingStatistics': 'no statistics',
+  'plan.hint.fullScan':
+    'Reads the whole table or index. On a big table an index on the filtered or joined columns may help.',
+  'plan.hint.sort':
+    'Sorts the rows itself. An index in the order asked for can make the sort unnecessary.',
+  'plan.hint.temporary': 'Builds a temporary table for grouping or sorting.',
+  'plan.hint.misestimate':
+    'Real rows differ from the estimate tenfold or more: statistics may be stale (ANALYZE).',
+  'plan.hint.spill': 'Did not fit in memory and used the disk.',
+  'plan.hint.noJoinPredicate': 'Joins every row with every row: a join condition may be missing.',
+  'plan.hint.implicitConversion':
+    'Converts a column to another type, which can keep an index from being used.',
+  'plan.hint.missingStatistics': 'The planner has no statistics for a column and guesses.',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -126,5 +126,7 @@
   "commands.elastic.runQuery.title": "Отправить запрос Elasticsearch",
   "commands.elastic.runRequest.title": "Отправить этот запрос",
   "commands.elastic.pickConnection.title": "Выбрать подключение запроса Elasticsearch…",
-  "commands.diagram.show.title": "Показать ER-диаграмму"
+  "commands.diagram.show.title": "Показать ER-диаграмму",
+  "commands.query.explain.title": "План запроса (EXPLAIN)",
+  "commands.query.explainAnalyze.title": "EXPLAIN ANALYZE (выполняет запрос)"
 }

@@ -134,6 +134,31 @@ export class QueryRunner {
   }
 
   /**
+   * Runs `work` on the document's session as that document's run, the way a statement
+   * runs: one at a time, shown as running, stopped by the document's Cancel. EXPLAIN
+   * (V8.2) goes through here, so it sees the editor's temporary tables and settings.
+   */
+  async exclusive<T>(
+    documentUri: string,
+    target: SessionTarget,
+    work: (session: Session) => Promise<T>,
+  ): Promise<T> {
+    if (this.active.has(documentUri)) {
+      throw new DbError('busy', 'A query is already running in this editor');
+    }
+    const owner = ConnectionManager.editorOwner(documentUri);
+    const run: ActiveRun = { cancelled: false, timedOut: false, owner, startedAt: Date.now() };
+    this.active.set(documentUri, run);
+    this.notify(documentUri);
+    try {
+      return await work(await this.deps.manager.acquire(owner, target));
+    } finally {
+      this.active.delete(documentUri);
+      this.notify(documentUri);
+    }
+  }
+
+  /**
    * Asks the server to stop the statement in flight. The run ends with whatever
    * it had already collected; nothing is thrown at the caller of `run`.
    */

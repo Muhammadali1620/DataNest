@@ -1,0 +1,95 @@
+{
+ "columns": [
+  "id",
+  "estRows",
+  "task",
+  "access object",
+  "operator info"
+ ],
+ "rows": [
+  [
+   "Sort_14",
+   "5325.33",
+   "root",
+   "",
+   "Column#15:desc"
+  ],
+  [
+   "└─Projection_16",
+   "5325.33",
+   "root",
+   "",
+   "datanest_test.customers.full_name, Column#15"
+  ],
+  [
+   "  └─HashAgg_17",
+   "5325.33",
+   "root",
+   "",
+   "group by:datanest_test.customers.full_name, funcs:count(1)->Column#15, funcs:firstrow(datanest_test.customers.full_name)->datanest_test.customers.full_name"
+  ],
+  [
+   "    └─HashJoin_28",
+   "10401.04",
+   "root",
+   "",
+   "inner join, equal:[eq(datanest_test.orders.id, datanest_test.order_items.order_id)]"
+  ],
+  [
+   "      ├─IndexReader_83(Build)",
+   "10000.00",
+   "root",
+   "",
+   "index:IndexFullScan_82"
+  ],
+  [
+   "      │ └─IndexFullScan_82",
+   "10000.00",
+   "cop[tikv]",
+   "table:i, index:fk_items_product(product_id)",
+   "keep order:false, stats:pseudo"
+  ],
+  [
+   "      └─MergeJoin_45(Probe)",
+   "8320.83",
+   "root",
+   "",
+   "inner join, left key:datanest_test.customers.id, right key:datanest_test.orders.customer_id"
+  ],
+  [
+   "        ├─IndexReader_72(Build)",
+   "10000.00",
+   "root",
+   "",
+   "index:IndexFullScan_71"
+  ],
+  [
+   "        │ └─IndexFullScan_71",
+   "10000.00",
+   "cop[tikv]",
+   "table:o, index:ix_orders_customer(customer_id)",
+   "keep order:true, stats:pseudo"
+  ],
+  [
+   "        └─TableReader_70(Probe)",
+   "6656.67",
+   "root",
+   "",
+   "data:Selection_69"
+  ],
+  [
+   "          └─Selection_69",
+   "6656.67",
+   "cop[tikv]",
+   "",
+   "ne(datanest_test.customers.country, \"XX\")"
+  ],
+  [
+   "            └─TableFullScan_68",
+   "10000.00",
+   "cop[tikv]",
+   "table:c",
+   "keep order:true, stats:pseudo"
+  ]
+ ]
+}

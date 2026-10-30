@@ -126,5 +126,7 @@
   "commands.elastic.runQuery.title": "Send Elasticsearch Request",
   "commands.elastic.runRequest.title": "Send This Request",
   "commands.elastic.pickConnection.title": "Pick the Connection of the Elasticsearch Query…",
-  "commands.diagram.show.title": "Show ER Diagram"
+  "commands.diagram.show.title": "Show ER Diagram",
+  "commands.query.explain.title": "Explain Plan",
+  "commands.query.explainAnalyze.title": "Explain Analyze (Runs the Statement)"
 }

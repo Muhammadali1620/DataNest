@@ -1,0 +1,9 @@
+-> Sort: n DESC
+    -> Table scan on <temporary>
+        -> Aggregate using temporary table
+            -> Nested loop inner join  (cost=13.5 rows=9.6)
+                -> Nested loop inner join  (cost=6.14 rows=6.4)
+                    -> Filter: (c.country <> 'XX')  (cost=1.5 rows=4)
+                        -> Table scan on c  (cost=1.5 rows=5)
+                    -> Covering index lookup on o using ix_orders_customer (customer_id=c.id)  (cost=1.04 rows=1.6)
+                -> Covering index lookup on i using PRIMARY (order_id=o.id)  (cost=1.02 rows=1.5)

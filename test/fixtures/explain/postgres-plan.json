@@ -1,0 +1,123 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Sort",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Startup Cost": 86.83,
+      "Total Cost": 87.00,
+      "Plan Rows": 69,
+      "Plan Width": 524,
+      "Sort Key": ["(count(*)) DESC"],
+      "Plans": [
+        {
+          "Node Type": "Aggregate",
+          "Strategy": "Hashed",
+          "Partial Mode": "Simple",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 84.03,
+          "Total Cost": 84.72,
+          "Plan Rows": 69,
+          "Plan Width": 524,
+          "Group Key": ["c.full_name"],
+          "Planned Partitions": 0,
+          "Plans": [
+            {
+              "Node Type": "Hash Join",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Join Type": "Inner",
+              "Startup Cost": 44.69,
+              "Total Cost": 76.89,
+              "Plan Rows": 1429,
+              "Plan Width": 516,
+              "Inner Unique": true,
+              "Hash Cond": "(o.customer_id = c.id)",
+              "Plans": [
+                {
+                  "Node Type": "Hash Join",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Inner",
+                  "Startup Cost": 32.95,
+                  "Total Cost": 61.27,
+                  "Plan Rows": 1450,
+                  "Plan Width": 4,
+                  "Inner Unique": true,
+                  "Hash Cond": "(i.order_id = o.id)",
+                  "Plans": [
+                    {
+                      "Node Type": "Seq Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Relation Name": "order_items",
+                      "Alias": "i",
+                      "Startup Cost": 0.00,
+                      "Total Cost": 24.50,
+                      "Plan Rows": 1450,
+                      "Plan Width": 4
+                    },
+                    {
+                      "Node Type": "Hash",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 20.20,
+                      "Total Cost": 20.20,
+                      "Plan Rows": 1020,
+                      "Plan Width": 8,
+                      "Plans": [
+                        {
+                          "Node Type": "Seq Scan",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Relation Name": "orders",
+                          "Alias": "o",
+                          "Startup Cost": 0.00,
+                          "Total Cost": 20.20,
+                          "Plan Rows": 1020,
+                          "Plan Width": 8
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Node Type": "Hash",
+                  "Parent Relationship": "Inner",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 10.88,
+                  "Total Cost": 10.88,
+                  "Plan Rows": 69,
+                  "Plan Width": 520,
+                  "Plans": [
+                    {
+                      "Node Type": "Seq Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Relation Name": "customers",
+                      "Alias": "c",
+                      "Startup Cost": 0.00,
+                      "Total Cost": 10.88,
+                      "Plan Rows": 69,
+                      "Plan Width": 520,
+                      "Filter": "(country <> 'XX'::bpchar)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

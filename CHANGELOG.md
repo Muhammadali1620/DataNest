@@ -13,6 +13,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   it — and can be dragged; pan, zoom, find a table, highlight its keys, open its rows with
   a double click. Show all columns, key columns only or just names. Save the diagram as
   SVG or PNG in the colours of the current theme.
+- Visual query plans: "Explain Plan" on the statement under the cursor opens its plan
+  beside the editor as a tree — operation, table and index, condition, cost, rows — with
+  the nodes that take the most time or cost marked, and warnings for full scans, sorts,
+  temporary tables, spills, joins without a condition and estimates that are far off.
+  "Explain Analyze" runs a reading statement for the real rows and times. Works on
+  PostgreSQL, MySQL, MariaDB, SQLite, SQL Server (with its missing index advice),
+  ClickHouse, Oracle, TiDB, CockroachDB and YugabyteDB.
 
 ## [0.7.0] - 2026-10-29
 

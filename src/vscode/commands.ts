@@ -5,6 +5,8 @@ import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
 import { runCommandHandlers } from './editor/run-query';
+import { explainCommandHandlers } from './editor/explain-query';
+import { QueryPlanPanel } from './panels/query-plan-panel';
 import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode, type TreeNode } from './tree/nodes';
@@ -184,6 +186,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     isManual: (documentUri) => deps.transactionModes.modeOf(documentUri) === 'manual',
     transactionState: (documentUri) =>
       deps.manager.transactionState(ConnectionManager.editorOwner(documentUri)),
+  });
+  const explains = explainCommandHandlers({
+    extensionUri: deps.extensionUri,
+    runner: deps.runner,
+    editors: deps.editors,
+    store: deps.store,
+    logger: deps.logger,
   });
   /** Opens the DDL of an object in a new SQL editor on its connection and database. */
   const showDefinition = async (connectionId: string, object: ObjectRef): Promise<void> => {
@@ -567,6 +576,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runAll]: runCommands.runAll,
     [COMMAND_IDS.runRange]: runCommands.runRange,
     [COMMAND_IDS.cancelQuery]: runCommands.cancel,
+    [COMMAND_IDS.explainQuery]: explains.explain,
+    [COMMAND_IDS.explainAnalyze]: explains.explainAnalyze,
     [COMMAND_IDS.commitTransaction]: () => deps.transactions.end('commit'),
     [COMMAND_IDS.rollbackTransaction]: () => deps.transactions.end('rollback'),
     [COMMAND_IDS.toggleTransactionMode]: () => {
@@ -642,6 +653,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         DataImportPanel.disposeAll();
         TestDataPanel.disposeAll();
         ErDiagramPanel.disposeAll();
+        QueryPlanPanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
         RedisConsolePanel.disposeAll();

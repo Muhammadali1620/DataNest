@@ -286,6 +286,59 @@ describe('QueryRunner', () => {
     });
   });
 
+  describe('exclusive work on the editor session', () => {
+    it('runs on the session a statement of the editor uses, and is busy meanwhile', async () => {
+      await runner.run(request('SELECT 1'));
+      const editorSession = drivers.driver('mysql').lastSession;
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const work = runner.exclusive(DOC, { connectionId: connection.id }, async (session) => {
+        await held;
+        for await (const _event of session.execute('EXPLAIN SELECT 1')) {
+          // drained
+        }
+        return 'done';
+      });
+      await until(() => runner.isRunning(DOC));
+      await expect(runner.run(request('SELECT 2'))).rejects.toMatchObject({ code: 'busy' });
+      await expect(
+        runner.exclusive(DOC, { connectionId: connection.id }, () => Promise.resolve(1)),
+      ).rejects.toMatchObject({ code: 'busy' });
+      release();
+      expect(await work).toBe('done');
+      // No session of its own: the statement went to the editor's.
+      expect(drivers.driver('mysql').sessions).toHaveLength(1);
+      expect(editorSession?.executed.at(-1)).toBe('EXPLAIN SELECT 1');
+      expect(runner.isRunning(DOC)).toBe(false);
+    });
+
+    it('is free again after the work fails', async () => {
+      await expect(
+        runner.exclusive(DOC, { connectionId: connection.id }, () =>
+          Promise.reject(new Error('no plan')),
+        ),
+      ).rejects.toThrow('no plan');
+      expect(runner.isRunning(DOC)).toBe(false);
+    });
+
+    it('is stopped by the cancel of the editor', async () => {
+      drivers.driver('mysql').holdExecute = true;
+      const work = runner.exclusive(DOC, { connectionId: connection.id }, async (session) => {
+        for await (const _event of session.execute('EXPLAIN SELECT 1')) {
+          // drained
+        }
+      });
+      await until(() => drivers.driver('mysql').lastSession !== undefined);
+      const cancelled = expect(work).rejects.toMatchObject({ code: 'cancelled' });
+      await runner.cancel(DOC);
+      drivers.driver('mysql').releaseExecute();
+      await cancelled;
+      expect(drivers.driver('mysql').lastSession?.cancelCount).toBe(1);
+    });
+  });
+
   describe('cancel', () => {
     it('stops the run and marks it cancelled', async () => {
       drivers.driver('mysql').holdExecute = true;

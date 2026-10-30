@@ -1,0 +1,59 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.021833275,
+    "filesort": {
+      "sort_key": "count(0) desc",
+      "temporary_table": {
+        "nested_loop": [
+          {
+            "table": {
+              "table_name": "i",
+              "access_type": "index",
+              "possible_keys": ["PRIMARY"],
+              "key": "fk_items_product",
+              "key_length": "4",
+              "used_key_parts": ["product_id"],
+              "loops": 1,
+              "rows": 7,
+              "cost": 0.007672715,
+              "filtered": 100,
+              "using_index": true
+            }
+          },
+          {
+            "table": {
+              "table_name": "o",
+              "access_type": "eq_ref",
+              "possible_keys": ["PRIMARY", "ix_orders_customer"],
+              "key": "PRIMARY",
+              "key_length": "4",
+              "used_key_parts": ["id"],
+              "ref": ["datanest_test.i.order_id"],
+              "loops": 7,
+              "rows": 1,
+              "cost": 0.00708028,
+              "filtered": 100
+            }
+          },
+          {
+            "table": {
+              "table_name": "c",
+              "access_type": "eq_ref",
+              "possible_keys": ["PRIMARY"],
+              "key": "PRIMARY",
+              "key_length": "4",
+              "used_key_parts": ["id"],
+              "ref": ["datanest_test.o.customer_id"],
+              "loops": 7,
+              "rows": 1,
+              "cost": 0.00708028,
+              "filtered": 100,
+              "attached_condition": "c.country <> 'XX'"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

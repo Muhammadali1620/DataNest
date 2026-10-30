@@ -519,5 +519,7 @@
   "The diagram was saved to {0}": "Диаграмма сохранена в {0}",
   "Pick the schema to draw": "Выберите схему для диаграммы",
   "Pick a database, schema or tables in the DataNest view to draw": "Выберите базу, схему или таблицы в панели DataNest, чтобы построить диаграмму",
-  "Pick the connection to draw": "Выберите подключение для диаграммы"
+  "Pick the connection to draw": "Выберите подключение для диаграммы",
+  "Query Plan": "План запроса",
+  "Nothing to explain": "Нечего объяснять: курсор не в запросе"
 }

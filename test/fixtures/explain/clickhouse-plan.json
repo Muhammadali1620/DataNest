@@ -1,0 +1,687 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Expression",
+      "Node Id": "Expression_14",
+      "Description": "Project names",
+      "Expression": {
+        "Inputs": [
+          {
+            "Name": "count()",
+            "Type": "UInt64"
+          },
+          {
+            "Name": "__table1.full_name",
+            "Type": "Nullable(String)"
+          }
+        ],
+        "Actions": [
+          {
+            "Node Type": "INPUT",
+            "Result Type": "UInt64",
+            "Result Name": "count()",
+            "Arguments": [0],
+            "Removed Arguments": [],
+            "Result": 0
+          },
+          {
+            "Node Type": "INPUT",
+            "Result Type": "Nullable(String)",
+            "Result Name": "__table1.full_name",
+            "Arguments": [1],
+            "Removed Arguments": [],
+            "Result": 1
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "UInt64",
+            "Result Name": "n",
+            "Arguments": [0],
+            "Removed Arguments": [0],
+            "Result": 2
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "Nullable(String)",
+            "Result Name": "full_name",
+            "Arguments": [1],
+            "Removed Arguments": [1],
+            "Result": 0
+          }
+        ],
+        "Outputs": [
+          {
+            "Name": "full_name",
+            "Type": "Nullable(String)"
+          },
+          {
+            "Name": "n",
+            "Type": "UInt64"
+          }
+        ],
+        "Positions": [0, 2]
+      },
+      "Plans": [
+        {
+          "Node Type": "Sorting",
+          "Node Id": "Sorting_13",
+          "Description": "Sorting for ORDER BY",
+          "Sort Description": [
+            {
+              "Column": "count()",
+              "Ascending": false,
+              "With Fill": false
+            }
+          ],
+          "Plans": [
+            {
+              "Node Type": "Expression",
+              "Node Id": "Expression_21",
+              "Description": "(Before ORDER BY + Projection)",
+              "Expression": {
+                "Inputs": [
+                  {
+                    "Name": "count()",
+                    "Type": "UInt64"
+                  },
+                  {
+                    "Name": "__table1.full_name",
+                    "Type": "Nullable(String)"
+                  }
+                ],
+                "Actions": [
+                  {
+                    "Node Type": "INPUT",
+                    "Result Type": "UInt64",
+                    "Result Name": "count()",
+                    "Arguments": [0],
+                    "Removed Arguments": [0],
+                    "Result": 0
+                  },
+                  {
+                    "Node Type": "INPUT",
+                    "Result Type": "Nullable(String)",
+                    "Result Name": "__table1.full_name",
+                    "Arguments": [1],
+                    "Removed Arguments": [1],
+                    "Result": 1
+                  }
+                ],
+                "Outputs": [
+                  {
+                    "Name": "count()",
+                    "Type": "UInt64"
+                  },
+                  {
+                    "Name": "__table1.full_name",
+                    "Type": "Nullable(String)"
+                  }
+                ],
+                "Positions": [0, 1]
+              },
+              "Plans": [
+                {
+                  "Node Type": "Aggregating",
+                  "Node Id": "Aggregating_10",
+                  "Keys": ["__table1.full_name"],
+                  "Aggregates": [
+                    {
+                      "Name": "count()",
+                      "Function": {
+                        "Name": "count",
+                        "Argument Types": [],
+                        "Result Type": "UInt64"
+                      },
+                      "Arguments": []
+                    }
+                  ],
+                  "Skip merging": false,
+                  "Plans": [
+                    {
+                      "Node Type": "Expression",
+                      "Node Id": "Expression_20",
+                      "Description": "(Before GROUP BY + )",
+                      "Expression": {
+                        "Inputs": [
+                          {
+                            "Name": "__table1.full_name",
+                            "Type": "Nullable(String)"
+                          },
+                          {
+                            "Name": "__table1.country",
+                            "Type": "Nullable(FixedString(2))"
+                          }
+                        ],
+                        "Actions": [
+                          {
+                            "Node Type": "INPUT",
+                            "Result Type": "Nullable(String)",
+                            "Result Name": "__table1.full_name",
+                            "Arguments": [0],
+                            "Removed Arguments": [0],
+                            "Result": 0
+                          },
+                          {
+                            "Node Type": "INPUT",
+                            "Result Type": "Nullable(FixedString(2))",
+                            "Result Name": "__table1.country",
+                            "Arguments": [1],
+                            "Removed Arguments": [1],
+                            "Result": 1
+                          }
+                        ],
+                        "Outputs": [
+                          {
+                            "Name": "__table1.full_name",
+                            "Type": "Nullable(String)"
+                          }
+                        ],
+                        "Positions": [0]
+                      },
+                      "Plans": [
+                        {
+                          "Node Type": "Expression",
+                          "Node Id": "Expression_24",
+                          "Expression": {
+                            "Inputs": [
+                              {
+                                "Name": "__table1.full_name",
+                                "Type": "Nullable(String)"
+                              },
+                              {
+                                "Name": "__table1.country",
+                                "Type": "Nullable(FixedString(2))"
+                              }
+                            ],
+                            "Actions": [
+                              {
+                                "Node Type": "INPUT",
+                                "Result Type": "Nullable(String)",
+                                "Result Name": "__table1.full_name",
+                                "Arguments": [0],
+                                "Removed Arguments": [0],
+                                "Result": 0
+                              },
+                              {
+                                "Node Type": "INPUT",
+                                "Result Type": "Nullable(FixedString(2))",
+                                "Result Name": "__table1.country",
+                                "Arguments": [1],
+                                "Removed Arguments": [1],
+                                "Result": 1
+                              }
+                            ],
+                            "Outputs": [
+                              {
+                                "Name": "__table1.full_name",
+                                "Type": "Nullable(String)"
+                              },
+                              {
+                                "Name": "__table1.country",
+                                "Type": "Nullable(FixedString(2))"
+                              }
+                            ],
+                            "Positions": [0, 1]
+                          },
+                          "Plans": [
+                            {
+                              "Node Type": "Join",
+                              "Node Id": "Join_23",
+                              "Type": "INNER",
+                              "Strictness": "ALL",
+                              "Algorithm": "HashJoin",
+                              "Clauses": "[(__table2.id) = (__table3.order_id)]",
+                              "Plans": [
+                                {
+                                  "Node Type": "Expression",
+                                  "Node Id": "Expression_18",
+                                  "Expression": {
+                                    "Inputs": [
+                                      {
+                                        "Name": "__table1.full_name",
+                                        "Type": "Nullable(String)"
+                                      },
+                                      {
+                                        "Name": "__table1.country",
+                                        "Type": "Nullable(FixedString(2))"
+                                      },
+                                      {
+                                        "Name": "__table2.id",
+                                        "Type": "UInt32"
+                                      }
+                                    ],
+                                    "Actions": [
+                                      {
+                                        "Node Type": "INPUT",
+                                        "Result Type": "Nullable(String)",
+                                        "Result Name": "__table1.full_name",
+                                        "Arguments": [0],
+                                        "Removed Arguments": [0],
+                                        "Result": 0
+                                      },
+                                      {
+                                        "Node Type": "INPUT",
+                                        "Result Type": "Nullable(FixedString(2))",
+                                        "Result Name": "__table1.country",
+                                        "Arguments": [1],
+                                        "Removed Arguments": [1],
+                                        "Result": 1
+                                      },
+                                      {
+                                        "Node Type": "INPUT",
+                                        "Result Type": "UInt32",
+                                        "Result Name": "__table2.id",
+                                        "Arguments": [2],
+                                        "Removed Arguments": [2],
+                                        "Result": 2
+                                      }
+                                    ],
+                                    "Outputs": [
+                                      {
+                                        "Name": "__table1.full_name",
+                                        "Type": "Nullable(String)"
+                                      },
+                                      {
+                                        "Name": "__table1.country",
+                                        "Type": "Nullable(FixedString(2))"
+                                      },
+                                      {
+                                        "Name": "__table2.id",
+                                        "Type": "UInt32"
+                                      }
+                                    ],
+                                    "Positions": [0, 1, 2]
+                                  },
+                                  "Plans": [
+                                    {
+                                      "Node Type": "Expression",
+                                      "Node Id": "Expression_26",
+                                      "Expression": {
+                                        "Inputs": [
+                                          {
+                                            "Name": "__table1.full_name",
+                                            "Type": "Nullable(String)"
+                                          },
+                                          {
+                                            "Name": "__table1.country",
+                                            "Type": "Nullable(FixedString(2))"
+                                          },
+                                          {
+                                            "Name": "__table2.id",
+                                            "Type": "UInt32"
+                                          }
+                                        ],
+                                        "Actions": [
+                                          {
+                                            "Node Type": "INPUT",
+                                            "Result Type": "Nullable(String)",
+                                            "Result Name": "__table1.full_name",
+                                            "Arguments": [0],
+                                            "Removed Arguments": [0],
+                                            "Result": 0
+                                          },
+                                          {
+                                            "Node Type": "INPUT",
+                                            "Result Type": "Nullable(FixedString(2))",
+                                            "Result Name": "__table1.country",
+                                            "Arguments": [1],
+                                            "Removed Arguments": [1],
+                                            "Result": 1
+                                          },
+                                          {
+                                            "Node Type": "INPUT",
+                                            "Result Type": "UInt32",
+                                            "Result Name": "__table2.id",
+                                            "Arguments": [2],
+                                            "Removed Arguments": [2],
+                                            "Result": 2
+                                          }
+                                        ],
+                                        "Outputs": [
+                                          {
+                                            "Name": "__table1.full_name",
+                                            "Type": "Nullable(String)"
+                                          },
+                                          {
+                                            "Name": "__table1.country",
+                                            "Type": "Nullable(FixedString(2))"
+                                          },
+                                          {
+                                            "Name": "__table2.id",
+                                            "Type": "UInt32"
+                                          }
+                                        ],
+                                        "Positions": [0, 1, 2]
+                                      },
+                                      "Plans": [
+                                        {
+                                          "Node Type": "Join",
+                                          "Node Id": "Join_25",
+                                          "Type": "INNER",
+                                          "Strictness": "ALL",
+                                          "Algorithm": "HashJoin",
+                                          "Clauses": "[(__table1.id) = (__table2.customer_id)]",
+                                          "Plans": [
+                                            {
+                                              "Node Type": "Expression",
+                                              "Node Id": "Expression_22",
+                                              "Description": "(WHERE + Change column names to column identifiers)",
+                                              "Expression": {
+                                                "Inputs": [
+                                                  {
+                                                    "Name": "full_name",
+                                                    "Type": "Nullable(String)"
+                                                  },
+                                                  {
+                                                    "Name": "id",
+                                                    "Type": "UInt32"
+                                                  },
+                                                  {
+                                                    "Name": "country",
+                                                    "Type": "Nullable(FixedString(2))"
+                                                  }
+                                                ],
+                                                "Actions": [
+                                                  {
+                                                    "Node Type": "INPUT",
+                                                    "Result Type": "Nullable(String)",
+                                                    "Result Name": "full_name",
+                                                    "Arguments": [0],
+                                                    "Removed Arguments": [],
+                                                    "Result": 0
+                                                  },
+                                                  {
+                                                    "Node Type": "INPUT",
+                                                    "Result Type": "UInt32",
+                                                    "Result Name": "id",
+                                                    "Arguments": [1],
+                                                    "Removed Arguments": [],
+                                                    "Result": 1
+                                                  },
+                                                  {
+                                                    "Node Type": "INPUT",
+                                                    "Result Type": "Nullable(FixedString(2))",
+                                                    "Result Name": "country",
+                                                    "Arguments": [2],
+                                                    "Removed Arguments": [],
+                                                    "Result": 2
+                                                  },
+                                                  {
+                                                    "Node Type": "ALIAS",
+                                                    "Result Type": "Nullable(String)",
+                                                    "Result Name": "__table1.full_name",
+                                                    "Arguments": [0],
+                                                    "Removed Arguments": [0],
+                                                    "Result": 3
+                                                  },
+                                                  {
+                                                    "Node Type": "ALIAS",
+                                                    "Result Type": "UInt32",
+                                                    "Result Name": "__table1.id",
+                                                    "Arguments": [1],
+                                                    "Removed Arguments": [1],
+                                                    "Result": 0
+                                                  },
+                                                  {
+                                                    "Node Type": "ALIAS",
+                                                    "Result Type": "Nullable(FixedString(2))",
+                                                    "Result Name": "__table1.country",
+                                                    "Arguments": [2],
+                                                    "Removed Arguments": [2],
+                                                    "Result": 1
+                                                  }
+                                                ],
+                                                "Outputs": [
+                                                  {
+                                                    "Name": "__table1.full_name",
+                                                    "Type": "Nullable(String)"
+                                                  },
+                                                  {
+                                                    "Name": "__table1.id",
+                                                    "Type": "UInt32"
+                                                  },
+                                                  {
+                                                    "Name": "__table1.country",
+                                                    "Type": "Nullable(FixedString(2))"
+                                                  }
+                                                ],
+                                                "Positions": [3, 0, 1]
+                                              },
+                                              "Plans": [
+                                                {
+                                                  "Node Type": "ReadFromMergeTree",
+                                                  "Node Id": "ReadFromMergeTree_0",
+                                                  "Description": "datanest_test.customers",
+                                                  "Read Type": "Default",
+                                                  "Parts": 1,
+                                                  "Granules": 1,
+                                                  "Prewhere info": {
+                                                    "Need filter": true,
+                                                    "Prewhere filter": {
+                                                      "Prewhere filter column": "notEquals(__table1.country, 'XX'_String)",
+                                                      "Prewhere filter remove filter column": true,
+                                                      "Prewhere filter expression": {
+                                                        "Inputs": [
+                                                          {
+                                                            "Name": "country",
+                                                            "Type": "Nullable(FixedString(2))"
+                                                          }
+                                                        ],
+                                                        "Actions": [
+                                                          {
+                                                            "Node Type": "INPUT",
+                                                            "Result Type": "Nullable(FixedString(2))",
+                                                            "Result Name": "country",
+                                                            "Arguments": [0],
+                                                            "Removed Arguments": [],
+                                                            "Result": 0
+                                                          },
+                                                          {
+                                                            "Node Type": "COLUMN",
+                                                            "Result Type": "String",
+                                                            "Result Name": "'XX'_String",
+                                                            "Column": "Const(String)",
+                                                            "Arguments": [],
+                                                            "Removed Arguments": [],
+                                                            "Result": 1
+                                                          },
+                                                          {
+                                                            "Node Type": "FUNCTION",
+                                                            "Result Type": "Nullable(UInt8)",
+                                                            "Result Name": "notEquals(__table1.country, 'XX'_String)",
+                                                            "Function": "notEquals",
+                                                            "Compiled": false,
+                                                            "Arguments": [0, 1],
+                                                            "Removed Arguments": [1],
+                                                            "Result": 2
+                                                          }
+                                                        ],
+                                                        "Outputs": [
+                                                          {
+                                                            "Name": "country",
+                                                            "Type": "Nullable(FixedString(2))"
+                                                          },
+                                                          {
+                                                            "Name": "notEquals(__table1.country, 'XX'_String)",
+                                                            "Type": "Nullable(UInt8)"
+                                                          }
+                                                        ],
+                                                        "Positions": [0, 2]
+                                                      }
+                                                    }
+                                                  },
+                                                  "Indexes": [
+                                                    {
+                                                      "Type": "PrimaryKey",
+                                                      "Condition": "true",
+                                                      "Initial Parts": 1,
+                                                      "Selected Parts": 1,
+                                                      "Initial Granules": 1,
+                                                      "Selected Granules": 1
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "Node Type": "Expression",
+                                              "Node Id": "Expression_3",
+                                              "Description": "Change column names to column identifiers",
+                                              "Expression": {
+                                                "Inputs": [
+                                                  {
+                                                    "Name": "customer_id",
+                                                    "Type": "UInt32"
+                                                  },
+                                                  {
+                                                    "Name": "id",
+                                                    "Type": "UInt32"
+                                                  }
+                                                ],
+                                                "Actions": [
+                                                  {
+                                                    "Node Type": "INPUT",
+                                                    "Result Type": "UInt32",
+                                                    "Result Name": "customer_id",
+                                                    "Arguments": [0],
+                                                    "Removed Arguments": [],
+                                                    "Result": 0
+                                                  },
+                                                  {
+                                                    "Node Type": "INPUT",
+                                                    "Result Type": "UInt32",
+                                                    "Result Name": "id",
+                                                    "Arguments": [1],
+                                                    "Removed Arguments": [],
+                                                    "Result": 1
+                                                  },
+                                                  {
+                                                    "Node Type": "ALIAS",
+                                                    "Result Type": "UInt32",
+                                                    "Result Name": "__table2.customer_id",
+                                                    "Arguments": [0],
+                                                    "Removed Arguments": [0],
+                                                    "Result": 2
+                                                  },
+                                                  {
+                                                    "Node Type": "ALIAS",
+                                                    "Result Type": "UInt32",
+                                                    "Result Name": "__table2.id",
+                                                    "Arguments": [1],
+                                                    "Removed Arguments": [1],
+                                                    "Result": 0
+                                                  }
+                                                ],
+                                                "Outputs": [
+                                                  {
+                                                    "Name": "__table2.customer_id",
+                                                    "Type": "UInt32"
+                                                  },
+                                                  {
+                                                    "Name": "__table2.id",
+                                                    "Type": "UInt32"
+                                                  }
+                                                ],
+                                                "Positions": [2, 0]
+                                              },
+                                              "Plans": [
+                                                {
+                                                  "Node Type": "ReadFromMergeTree",
+                                                  "Node Id": "ReadFromMergeTree_2",
+                                                  "Description": "datanest_test.orders",
+                                                  "Read Type": "Default",
+                                                  "Parts": 1,
+                                                  "Granules": 1,
+                                                  "Indexes": [
+                                                    {
+                                                      "Type": "PrimaryKey",
+                                                      "Condition": "true",
+                                                      "Initial Parts": 1,
+                                                      "Selected Parts": 1,
+                                                      "Initial Granules": 1,
+                                                      "Selected Granules": 1
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "Node Type": "Expression",
+                                  "Node Id": "Expression_6",
+                                  "Description": "Change column names to column identifiers",
+                                  "Expression": {
+                                    "Inputs": [
+                                      {
+                                        "Name": "order_id",
+                                        "Type": "UInt32"
+                                      }
+                                    ],
+                                    "Actions": [
+                                      {
+                                        "Node Type": "INPUT",
+                                        "Result Type": "UInt32",
+                                        "Result Name": "order_id",
+                                        "Arguments": [0],
+                                        "Removed Arguments": [],
+                                        "Result": 0
+                                      },
+                                      {
+                                        "Node Type": "ALIAS",
+                                        "Result Type": "UInt32",
+                                        "Result Name": "__table3.order_id",
+                                        "Arguments": [0],
+                                        "Removed Arguments": [0],
+                                        "Result": 1
+                                      }
+                                    ],
+                                    "Outputs": [
+                                      {
+                                        "Name": "__table3.order_id",
+                                        "Type": "UInt32"
+                                      }
+                                    ],
+                                    "Positions": [1]
+                                  },
+                                  "Plans": [
+                                    {
+                                      "Node Type": "ReadFromMergeTree",
+                                      "Node Id": "ReadFromMergeTree_5",
+                                      "Description": "datanest_test.order_items",
+                                      "Read Type": "Default",
+                                      "Parts": 1,
+                                      "Granules": 1,
+                                      "Indexes": [
+                                        {
+                                          "Type": "PrimaryKey",
+                                          "Condition": "true",
+                                          "Initial Parts": 1,
+                                          "Selected Parts": 1,
+                                          "Initial Granules": 1,
+                                          "Selected Granules": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

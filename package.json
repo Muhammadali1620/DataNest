@@ -231,6 +231,17 @@
         "icon": "$(debug-stop)"
       },
       {
+        "command": "datanest.query.explain",
+        "title": "%commands.query.explain.title%",
+        "category": "DataNest",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "datanest.query.explainAnalyze",
+        "title": "%commands.query.explainAnalyze.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.transaction.commit",
         "title": "%commands.transaction.commit.title%",
         "category": "DataNest",
@@ -1272,6 +1283,16 @@
           "command": "datanest.query.cancel",
           "when": "editorLangId == sql && datanest.queryRunning",
           "group": "0_datanest@3"
+        },
+        {
+          "command": "datanest.query.explain",
+          "when": "editorLangId == sql",
+          "group": "0_datanest@4"
+        },
+        {
+          "command": "datanest.query.explainAnalyze",
+          "when": "editorLangId == sql",
+          "group": "0_datanest@5"
         }
       ],
       "explorer/context": [

@@ -146,6 +146,16 @@ describe('.github/workflows/ci.yml (V0.11)', () => {
     });
   });
 
+  it('measures the performance budget on its own runner and reports failures', () => {
+    const job = workflow.jobs.perf;
+    expect(job?.['runs-on']).toBe('ubuntu-latest');
+    // Matrices would make runners compete; one job keeps the numbers comparable.
+    expect(job?.strategy).toBeUndefined();
+    expect(runs(job ?? ({ steps: [] } as unknown as Job))).toContain(
+      'node scripts/annotate-failures.mjs "Performance budget" npm run test:perf',
+    );
+  });
+
   it('packages the .vsix after checks pass and keeps it as an artifact', () => {
     const job = workflow.jobs.package;
     expect(job?.needs).toEqual(['check', 'unit']);

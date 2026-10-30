@@ -7,9 +7,10 @@ import type { ResultEdit } from '../core/model/editability';
 import type { SessionTarget } from './connection-manager';
 import type { ResultColumn } from '../drivers/driver';
 import type { ChangePlan } from './change-sql';
-import { type SortDirection, sortRows } from '../shared/cell-compare';
+import { type SortDirection, sortRows, sortRowsPaused } from '../shared/cell-compare';
+import type { PauseOptions } from '../shared/merge-sort';
 import type { TableFilter } from '../shared/table-filter';
-import { findRows, type SearchHits } from '../shared/cell-search';
+import { findRowsPaused, type SearchHits } from '../shared/cell-search';
 import {
   type CellChange,
   type ChangedCell,
@@ -112,6 +113,10 @@ interface StoredResult extends Omit<
   sort?: ResultSort;
   /** Pending changes, keyed by the row object so sorting cannot move them. */
   readonly pending: PendingEdits;
+  /** Grows with every sort request, so a slow sort that was overtaken is not applied. */
+  sortTicket: number;
+  /** Grows with every search, so a newer one stops the one still running. */
+  searchTicket: number;
 }
 
 export interface ResultWindow {
@@ -147,14 +152,36 @@ export interface NewResult {
 export const MAX_RESULTS_PER_DOCUMENT = 20;
 
 /**
+ * Cells all results together may hold — about a gigabyte of ordinary values. Twenty
+ * runs of a million rows would otherwise take the extension host down; past this,
+ * the oldest results go first (V9.1).
+ */
+export const MAX_KEPT_CELLS = 20_000_000;
+
+export interface ResultStoreOptions {
+  /** Cells kept across all results; `MAX_KEPT_CELLS` by default. */
+  readonly maxCells?: number;
+  /** How a long sort or search lets the host breathe; tests make it deterministic. */
+  readonly sortPause?: PauseOptions;
+}
+
+/**
  * Results of every document, newest last. A document keeps only its most recent
- * runs, so a long editing session cannot grow without bound.
+ * runs, and all documents together only so many cells, so a long editing session
+ * cannot grow without bound.
  */
 export class ResultStore {
   private readonly results = new Map<string, StoredResult>();
   private readonly byDocument = new Map<string, string[]>();
   private readonly listeners = new Set<(documentUri: string) => void>();
+  private readonly maxCells: number;
+  private readonly sortPause: PauseOptions | undefined;
   private nextId = 1;
+
+  constructor(options: ResultStoreOptions = {}) {
+    this.maxCells = options.maxCells ?? MAX_KEPT_CELLS;
+    this.sortPause = options.sortPause;
+  }
 
   get size(): number {
     return this.results.size;
@@ -172,6 +199,8 @@ export class ResultStore {
       rows: result.rows,
       original: [...result.rows],
       pending: new PendingEdits(),
+      sortTicket: 0,
+      searchTicket: 0,
       rowCount: result.rows.length,
       truncated: result.truncated,
       ...(result.affectedRows === undefined ? {} : { affectedRows: result.affectedRows }),
@@ -193,8 +222,47 @@ export class ResultStore {
       }
     }
     this.byDocument.set(result.documentUri, ids);
+    const trimmed = this.trimToBudget(id);
     this.notify(result.documentUri);
+    for (const documentUri of trimmed) {
+      if (documentUri !== result.documentUri) {
+        this.notify(documentUri);
+      }
+    }
     return summaryOf(stored);
+  }
+
+  /**
+   * Drops the oldest results until all of them fit the cell budget, and returns the
+   * documents that lost one. The newest result always stays, however big, and so does
+   * any result with unsaved changes: dropping it would throw the user's edits away.
+   */
+  private trimToBudget(newest: string): Set<string> {
+    const touched = new Set<string>();
+    let cells = 0;
+    for (const stored of this.results.values()) {
+      cells += cellsOf(stored);
+    }
+    // Map order is insertion order, so this walks from the oldest result.
+    for (const [id, stored] of this.results) {
+      if (cells <= this.maxCells) {
+        break;
+      }
+      if (id === newest || hasPending(stored)) {
+        continue;
+      }
+      this.results.delete(id);
+      cells -= cellsOf(stored);
+      const ids = this.byDocument.get(stored.documentUri) ?? [];
+      const left = ids.filter((other) => other !== id);
+      if (left.length === 0) {
+        this.byDocument.delete(stored.documentUri);
+      } else {
+        this.byDocument.set(stored.documentUri, left);
+      }
+      touched.add(stored.documentUri);
+    }
+    return touched;
   }
 
   get(id: string): ResultSummary | undefined {
@@ -432,31 +500,58 @@ export class ResultStore {
   /**
    * Re-orders a result by one column, or restores the server's order when
    * `direction` is absent. Sorting happens over every row, not just the loaded
-   * ones, which is the whole point of keeping rows in the host.
+   * ones, which is the whole point of keeping rows in the host. A big result is
+   * sorted in slices, so the host keeps answering meanwhile; undefined when the
+   * result is gone, or when another sort or fresh rows overtook this one.
    */
-  sort(id: string, column: number, direction?: SortDirection): ResultSummary | undefined {
+  async sort(
+    id: string,
+    column: number,
+    direction?: SortDirection,
+  ): Promise<ResultSummary | undefined> {
     const stored = this.results.get(id);
     if (stored === undefined) {
       return undefined;
     }
+    const ticket = ++stored.sortTicket;
+    const source = stored.original;
+    const rows =
+      direction === undefined
+        ? [...source]
+        : await sortRowsPaused(source, column, direction, this.sortPause);
+    if (
+      this.results.get(id) !== stored ||
+      stored.sortTicket !== ticket ||
+      stored.original !== source
+    ) {
+      return undefined;
+    }
+    stored.rows = rows;
     if (direction === undefined) {
-      stored.rows = [...stored.original];
       delete stored.sort;
     } else {
-      stored.rows = sortRows(stored.original, column, direction);
       stored.sort = { column, direction };
     }
     this.notify(stored.documentUri);
     return summaryOf(stored);
   }
 
-  /** Rows containing the text, in the order they are shown. */
-  search(id: string, text: string, limit?: number): SearchHits | undefined {
+  /**
+   * Rows containing the text, in the order they are shown. A big result is searched in
+   * slices; a newer search of the same result, a sort or fresh rows end this one early,
+   * and so does the result going away — all of which give undefined.
+   */
+  async search(id: string, text: string, limit?: number): Promise<SearchHits | undefined> {
     const stored = this.results.get(id);
     if (stored === undefined) {
       return undefined;
     }
-    return findRows(stored.rows, text, limit);
+    const ticket = ++stored.searchTicket;
+    const rows = stored.rows;
+    const stale = (): boolean =>
+      this.results.get(id) !== stored || stored.searchTicket !== ticket || stored.rows !== rows;
+    const hits = await findRowsPaused(rows, text, limit, { ...this.sortPause, stale });
+    return hits === undefined || stale() ? undefined : hits;
   }
 
   /** Every row of a result, for exporting it to a file. */
@@ -500,8 +595,24 @@ export class ResultStore {
   }
 }
 
+function cellsOf(stored: StoredResult): number {
+  return stored.original.length * Math.max(1, stored.columns.length);
+}
+
+function hasPending(stored: StoredResult): boolean {
+  const { pending } = stored;
+  return pending.changedCells + pending.insertedRows + pending.deletedRows > 0;
+}
+
 function summaryOf(stored: StoredResult): ResultSummary {
-  const { rows: _rows, original: _original, pending, ...summary } = stored;
+  const {
+    rows: _rows,
+    original: _original,
+    pending,
+    sortTicket: _sort,
+    searchTicket: _search,
+    ...summary
+  } = stored;
   return {
     ...summary,
     changedCells: pending.changedCells,

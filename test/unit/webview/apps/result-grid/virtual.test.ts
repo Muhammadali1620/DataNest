@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_PAGE_SIZE } from '../../../../../src/shared/protocols/result-grid';
 import {
   columnGeometry,
   columnLayout,
@@ -146,5 +147,25 @@ describe('rangeOf', () => {
   it('is empty when there is nothing to render', () => {
     expect(rangeOf(0, -1)).toEqual([]);
     expect(rangeOf(5, 2)).toEqual([]);
+  });
+});
+
+describe('the largest result', () => {
+  // Chromium cannot make an element taller than this many pixels; a scrollbar past it
+  // would stop short of the last rows.
+  const CHROMIUM_MAX_HEIGHT = 33_554_428;
+
+  it('fits in one scrollable element at the grid row height', () => {
+    // A table view holds at most MAX_PAGE_SIZE rows, and so does the row limit setting;
+    // a few thousand new rows waiting to be inserted come on top.
+    const geometry = rowGeometry(0, 600, 22, MAX_PAGE_SIZE + 10_000);
+    expect(geometry.totalHeight).toBeLessThan(CHROMIUM_MAX_HEIGHT);
+  });
+
+  it('renders only a screenful of rows anywhere in it', () => {
+    for (const scrollTop of [0, 11_000_000, 22_000_000]) {
+      const geometry = rowGeometry(scrollTop, 600, 22, MAX_PAGE_SIZE);
+      expect(geometry.lastIndex - geometry.firstIndex + 1).toBeLessThanOrEqual(50);
+    }
   });
 });

@@ -212,7 +212,7 @@ export class ResultsPanel implements vscode.Disposable {
           })) ?? false;
         return { resultId, applied };
       }
-      const sorted = this.deps.results.sort(resultId, column, direction);
+      const sorted = await this.deps.results.sort(resultId, column, direction);
       return { resultId, applied: sorted !== undefined };
     });
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
@@ -280,8 +280,9 @@ export class ResultsPanel implements vscode.Disposable {
       const applied = (await this.deps.reloadTable?.(resultId, { filter })) ?? false;
       return { resultId, applied };
     });
-    this.rpc.handle('search', ({ resultId, text }) => {
-      const hits = this.deps.results.search(resultId, text, MAX_SEARCH_HITS);
+    this.rpc.handle('search', async ({ resultId, text }) => {
+      // Undefined also when a newer search overtook this one; the page drops the answer.
+      const hits = await this.deps.results.search(resultId, text, MAX_SEARCH_HITS);
       return { resultId, rows: hits?.rows ?? [], total: hits?.total ?? 0 };
     });
     this.rpc.on('ready', () => {

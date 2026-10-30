@@ -237,7 +237,7 @@ describe('ResultSaver', () => {
 
     it('keeps the sort the user chose', async () => {
       editor.editCell(id, 0, 1, { kind: 'text', text: 'x' });
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       await saver.save(id);
       expect(store.window(id, 0, 5)?.rows.map((row) => row[0])).toEqual([5, 1]);
     });

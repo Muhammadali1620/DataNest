@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  MAX_KEPT_CELLS,
   MAX_RESULTS_PER_DOCUMENT,
   ResultStore,
   type NewResult,
@@ -18,6 +19,29 @@ function result(overrides: Partial<NewResult> = {}): NewResult {
     durationMs: 5,
     ...overrides,
   };
+}
+
+/** A store whose sorts and searches wait at every pause until the test lets them go on. */
+function heldStore(): { store: ResultStore; release: () => Promise<void> } {
+  const waiting: (() => void)[] = [];
+  const store = new ResultStore({
+    sortPause: {
+      // A slice of zero ends at every step, so a sort pauses at once.
+      now: () => 0,
+      sliceMs: 0,
+      pause: () => new Promise<void>((resolve) => waiting.push(resolve)),
+    },
+  });
+  const release = async (): Promise<void> => {
+    while (waiting.length > 0) {
+      for (const resolve of waiting.splice(0)) {
+        resolve();
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  };
+  return { store, release };
 }
 
 describe('ResultStore', () => {
@@ -199,11 +223,11 @@ describe('ResultStore', () => {
       expect(store.allRows(id)).toEqual(rows);
     });
 
-    it('keeps a change with its row when the result is sorted', () => {
+    it('keeps a change with its row when the result is sorted', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows, columns: [{ name: 'id' }, { name: 'v' }] }));
       store.setChange(id, 0, 1, { kind: 'value', value: 'z' });
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       const window = store.window(id, 0, 3);
       expect(window?.rows).toEqual([
         [3, 'c'],
@@ -338,17 +362,17 @@ describe('ResultStore', () => {
       expect(store.window(id, 0, 10)?.rowCount).toBe(3);
     });
 
-    it('keeps a deleted row marked after sorting', () => {
+    it('keeps a deleted row marked after sorting', async () => {
       const { store, id } = add();
       store.deleteRow(id, 0);
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       expect(store.window(id, 0, 3)?.states).toEqual([{ row: 2, state: 'deleted' }]);
     });
 
-    it('keeps new rows after the server rows when sorted', () => {
+    it('keeps new rows after the server rows when sorted', async () => {
       const { store, id } = add();
       store.addRow(id, new Map([[0, { kind: 'value', value: 0 }]]));
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       expect(store.window(id, 0, 4)?.rows.map((row) => row[0])).toEqual([3, 2, 1, 0]);
     });
 
@@ -442,9 +466,9 @@ describe('ResultStore', () => {
       expect(store.revertRows('result-404', [0])).toBe(false);
     });
 
-    it('swaps in fresh rows, dropping pending changes and keeping the sort', () => {
+    it('swaps in fresh rows, dropping pending changes and keeping the sort', async () => {
       const { store, id } = add();
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       store.setChange(id, 0, 1, { kind: 'default' });
       expect(
         store.replaceRows(
@@ -468,7 +492,7 @@ describe('ResultStore', () => {
         [10, 'x'],
       ]);
       // Clearing the sort goes back to the server's order of the fresh rows.
-      store.sort(id, 0);
+      await store.sort(id, 0);
       expect(store.window(id, 0, 5)?.rows.map((row) => row[0])).toEqual([10, 11]);
     });
 
@@ -552,65 +576,201 @@ describe('ResultStore', () => {
       [2, 'b'],
     ];
 
-    it('orders the stored rows and reports the order on the summary', () => {
+    it('orders the stored rows and reports the order on the summary', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      const sorted = store.sort(id, 0, 'asc');
+      const sorted = await store.sort(id, 0, 'asc');
       expect(sorted?.sort).toEqual({ column: 0, direction: 'asc' });
       expect(store.window(id, 0, 10)?.rows.map((row) => row[0])).toEqual([1, 2, 3]);
     });
 
-    it('sorts every row, not just a loaded window', () => {
+    it('sorts every row, not just a loaded window', async () => {
       const store = new ResultStore();
       const many = Array.from({ length: 500 }, (_, index) => [500 - index]);
       const { id } = store.add(result({ rows: many }));
-      store.sort(id, 0, 'asc');
+      await store.sort(id, 0, 'asc');
       // The first window now holds what was at the very end before.
       expect(store.window(id, 0, 3)?.rows).toEqual([[1], [2], [3]]);
     });
 
-    it('sorts descending', () => {
+    it('sorts descending', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       expect(store.window(id, 0, 10)?.rows.map((row) => row[0])).toEqual([3, 2, 1]);
     });
 
-    it('restores the server order when no direction is given', () => {
+    it('restores the server order when no direction is given', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      store.sort(id, 0, 'asc');
-      const restored = store.sort(id, 0);
+      await store.sort(id, 0, 'asc');
+      const restored = await store.sort(id, 0);
       expect(restored?.sort).toBeUndefined();
       expect(store.window(id, 0, 10)?.rows.map((row) => row[0])).toEqual([3, 1, 2]);
     });
 
-    it('sorts from the server order every time, not from the last sort', () => {
+    it('sorts from the server order every time, not from the last sort', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      store.sort(id, 0, 'asc');
-      store.sort(id, 1, 'desc');
+      await store.sort(id, 0, 'asc');
+      await store.sort(id, 1, 'desc');
       expect(store.window(id, 0, 10)?.rows.map((row) => row[1])).toEqual(['c', 'b', 'a']);
     });
 
-    it('keeps the row count and the rest of the summary', () => {
+    it('keeps the row count and the rest of the summary', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows, durationMs: 9 }));
-      const sorted = store.sort(id, 0, 'asc');
+      const sorted = await store.sort(id, 0, 'asc');
       expect(sorted).toMatchObject({ rowCount: 3, durationMs: 9, statement: 'SELECT 1' });
     });
 
-    it('tells the document that its results changed', () => {
+    it('tells the document that its results changed', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
       const changed = vi.fn();
       store.onDidChange(changed);
-      store.sort(id, 0, 'asc');
+      await store.sort(id, 0, 'asc');
       expect(changed).toHaveBeenCalledWith(DOC);
     });
 
-    it('returns nothing for an unknown result', () => {
-      expect(new ResultStore().sort('result-404', 0, 'asc')).toBeUndefined();
+    it('returns nothing for an unknown result', async () => {
+      expect(await new ResultStore().sort('result-404', 0, 'asc')).toBeUndefined();
+    });
+
+    const many = Array.from({ length: 5000 }, (_, index) => [`row ${(index * 31) % 5000}`]);
+
+    it('lets a newer sort win over one that is still running', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const first = store.sort(id, 0, 'asc');
+      const second = store.sort(id, 0, 'desc');
+      await release();
+      expect(await first).toBeUndefined();
+      expect((await second)?.sort).toEqual({ column: 0, direction: 'desc' });
+      // Numbers inside text compare by value, so 4999 comes after 999.
+      expect(store.window(id, 0, 1)?.rows).toEqual([['row 4999']]);
+    });
+
+    it('drops a sort whose result was cleared meanwhile', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const sorting = store.sort(id, 0, 'asc');
+      store.clearDocument(DOC);
+      await release();
+      expect(await sorting).toBeUndefined();
+      expect(store.get(id)).toBeUndefined();
+    });
+
+    it('drops a sort of rows that were replaced meanwhile', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const sorting = store.sort(id, 0, 'asc');
+      store.replaceRows(id, [{ name: 'one' }], [['z'], ['a']], false);
+      await release();
+      expect(await sorting).toBeUndefined();
+      expect(store.window(id, 0, 5)?.rows).toEqual([['z'], ['a']]);
+      expect(store.get(id)?.sort).toBeUndefined();
+    });
+
+    it('keeps the rows readable while a sort is running', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const sorting = store.sort(id, 0, 'asc');
+      // The server order is still what the grid gets until the sort is done.
+      expect(store.window(id, 0, 1)?.rows).toEqual([['row 0']]);
+      expect(store.window(id, 1, 1)?.rows).toEqual([['row 31']]);
+      await release();
+      await sorting;
+      expect(store.window(id, 0, 2)?.rows).toEqual([['row 0'], ['row 1']]);
+    });
+
+    it('sorts a million rows without holding the host for long', async () => {
+      const big = Array.from({ length: 1_000_000 }, (_, index) => [(index * 7919) % 1_000_000]);
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows: big }));
+      let longest = 0;
+      let last = performance.now();
+      const probe = setInterval(() => {
+        const now = performance.now();
+        longest = Math.max(longest, now - last);
+        last = now;
+      }, 1);
+      try {
+        last = performance.now();
+        await store.sort(id, 0, 'desc');
+      } finally {
+        clearInterval(probe);
+      }
+      expect(store.window(id, 0, 2)?.rows).toEqual([[999_999], [999_998]]);
+      // Generous for slow machines: before V9.1 the whole sort ran in one go.
+      expect(longest).toBeLessThan(500);
+    });
+  });
+
+  describe('cell budget', () => {
+    const rows = (count: number): number[][] =>
+      Array.from({ length: count }, (_, index) => [index]);
+
+    it('is about twenty million cells by default', () => {
+      expect(MAX_KEPT_CELLS).toBe(20_000_000);
+    });
+
+    it('drops the oldest results of any document once the budget is passed', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const old = store.add(result({ documentUri: 'a', rows: rows(60) }));
+      const kept = store.add(result({ documentUri: 'b', rows: rows(30) }));
+      const fresh = store.add(result({ documentUri: 'c', rows: rows(40) }));
+      expect(store.get(old.id)).toBeUndefined();
+      expect(store.forDocument('a')).toEqual([]);
+      expect(store.get(kept.id)).toBeDefined();
+      expect(store.get(fresh.id)).toBeDefined();
+    });
+
+    it('counts cells, not rows', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const wide = store.add(
+        result({ columns: [{ name: 'a' }, { name: 'b' }, { name: 'c' }], rows: rows(20) }),
+      );
+      store.add(result({ rows: rows(45) }));
+      // 60 + 45 cells: one over the budget, so the wide result goes.
+      expect(store.get(wide.id)).toBeUndefined();
+    });
+
+    it('always keeps the newest result, however big', () => {
+      const store = new ResultStore({ maxCells: 10 });
+      const older = store.add(result({ rows: rows(5) }));
+      const huge = store.add(result({ rows: rows(1000) }));
+      expect(store.get(huge.id)?.rowCount).toBe(1000);
+      expect(store.get(older.id)).toBeUndefined();
+    });
+
+    it('keeps a result with unsaved changes and drops the next oldest instead', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const edited = store.add(result({ documentUri: 'a', rows: rows(40) }));
+      store.setChange(edited.id, 0, 0, { kind: 'value', value: 'x' });
+      const plain = store.add(result({ documentUri: 'b', rows: rows(40) }));
+      store.add(result({ documentUri: 'c', rows: rows(40) }));
+      expect(store.get(edited.id)?.changedCells).toBe(1);
+      expect(store.get(plain.id)).toBeUndefined();
+    });
+
+    it('tells every document that lost a result', () => {
+      const store = new ResultStore({ maxCells: 50 });
+      store.add(result({ documentUri: 'a', rows: rows(30) }));
+      store.add(result({ documentUri: 'b', rows: rows(10) }));
+      const changed = vi.fn();
+      store.onDidChange(changed);
+      store.add(result({ documentUri: 'c', rows: rows(30) }));
+      expect(changed.mock.calls.map(([uri]) => uri as string).sort()).toEqual(['a', 'c']);
+    });
+
+    it('keeps the remaining results of a document that lost its oldest', () => {
+      const store = new ResultStore({ maxCells: 50 });
+      const first = store.add(result({ rows: rows(30) }));
+      const second = store.add(result({ rows: rows(10) }));
+      store.add(result({ documentUri: 'other', rows: rows(15) }));
+      expect(store.forDocument(DOC).map((summary) => summary.id)).toEqual([second.id]);
+      expect(store.get(first.id)).toBeUndefined();
     });
   });
 
@@ -621,37 +781,79 @@ describe('ResultStore', () => {
       [3, 'carol@example.com'],
     ];
 
-    it('finds the rows that contain the text', () => {
+    it('finds the rows that contain the text', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      expect(store.search(id, 'example.com')).toEqual({ rows: [0, 2], total: 2 });
+      expect(await store.search(id, 'example.com')).toEqual({ rows: [0, 2], total: 2 });
     });
 
-    it('searches in the order the rows are shown', () => {
+    it('searches in the order the rows are shown', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      store.sort(id, 0, 'desc');
+      await store.sort(id, 0, 'desc');
       // carol is now the first row, so her index moved.
-      expect(store.search(id, 'carol')?.rows).toEqual([0]);
+      expect((await store.search(id, 'carol'))?.rows).toEqual([0]);
     });
 
-    it('honours the cap it is given', () => {
+    it('honours the cap it is given', async () => {
       const store = new ResultStore();
       const many = Array.from({ length: 30 }, () => ['match']);
       const { id } = store.add(result({ rows: many }));
-      const hits = store.search(id, 'match', 5);
+      const hits = await store.search(id, 'match', 5);
       expect(hits?.rows).toHaveLength(5);
       expect(hits?.total).toBe(30);
     });
 
-    it('finds nothing for a blank search', () => {
+    it('finds nothing for a blank search', async () => {
       const store = new ResultStore();
       const { id } = store.add(result({ rows }));
-      expect(store.search(id, '  ')).toEqual({ rows: [], total: 0 });
+      expect(await store.search(id, '  ')).toEqual({ rows: [], total: 0 });
     });
 
-    it('returns nothing for an unknown result', () => {
-      expect(new ResultStore().search('result-404', 'x')).toBeUndefined();
+    it('returns nothing for an unknown result', async () => {
+      expect(await new ResultStore().search('result-404', 'x')).toBeUndefined();
+    });
+
+    const many = Array.from({ length: 5000 }, (_, index) => [`row ${index}`]);
+
+    it('stops a search that a newer one overtook', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const first = store.search(id, 'row 1');
+      const second = store.search(id, 'row 4999');
+      await release();
+      expect(await first).toBeUndefined();
+      expect(await second).toEqual({ rows: [4999], total: 1 });
+    });
+
+    it('stops a search when fresh rows replace the searched ones', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const searching = store.search(id, 'row 7');
+      store.replaceRows(id, [{ name: 'one' }], [['row 7']], false);
+      await release();
+      expect(await searching).toBeUndefined();
+      expect(await store.search(id, 'row 7')).toEqual({ rows: [0], total: 1 });
+    });
+
+    it('stops a search when the result goes away', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const searching = store.search(id, 'row');
+      store.clear();
+      await release();
+      expect(await searching).toBeUndefined();
+    });
+
+    it('searches separate results independently', async () => {
+      const { store, release } = heldStore();
+      const one = store.add(result({ rows: many }));
+      const two = store.add(result({ rows: many }));
+      const first = store.search(one.id, 'row 10');
+      const second = store.search(two.id, 'row 20');
+      await release();
+      expect((await first)?.total).toBe(111);
+      expect((await second)?.total).toBe(111);
     });
   });
 });

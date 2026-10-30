@@ -759,6 +759,37 @@ describe('result grid App', () => {
       });
     });
 
+    it('keeps the answer of the latest text when an older one comes back last', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      // The first search is slow (a big result) and answers after the second.
+      let answerFirst: (() => void) | undefined;
+      harness.host.handle('search', ({ resultId, text }: { resultId: string; text: string }) =>
+        text === 'ex'
+          ? new Promise((resolve) => {
+              answerFirst = () => {
+                resolve({ resultId, rows: [1, 2, 3, 4], total: 4 });
+              };
+            })
+          : { resultId, rows: [9], total: 1 },
+      );
+      const input = screen.getByLabelText('Find in results');
+      await fireEvent.input(input, { target: { value: 'ex' } });
+      await waitFor(() => {
+        expect(answerFirst).toBeDefined();
+      });
+      await fireEvent.input(input, { target: { value: 'example' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 1');
+      });
+      answerFirst?.();
+      await flush();
+      expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 1');
+    });
+
     it('says when nothing matched', async () => {
       const harness = await withState({
         tabs: [tab({ rowCount: 100 })],
@@ -1196,5 +1227,44 @@ describe('result grid App', () => {
       });
       expect(screen.queryByRole('button', { name: 'CSV' })).toBeNull();
     });
+  });
+});
+
+describe('result grid App with a million rows', () => {
+  const MILLION = 1_000_000;
+
+  it('draws only the rows on screen and asks the host for one window', async () => {
+    const harness = setup();
+    const handler = vi.fn(
+      ({ resultId, offset, limit }: { resultId: string; offset: number; limit: number }) => ({
+        resultId,
+        offset,
+        rows: Array.from({ length: Math.min(limit, MILLION - offset) }, (_, index) => [
+          offset + index,
+          `user${offset + index}@example.com`,
+        ]),
+        rowCount: MILLION,
+        changes: [],
+        states: [],
+      }),
+    );
+    harness.host.handle('rows', handler);
+    await flush();
+    harness.host.emit('state', {
+      tabs: [tab({ rowCount: MILLION })],
+      activeId: 'result-1',
+      running: false,
+    });
+    await waitFor(() => {
+      expect(cellTexts()[0]?.slice(1)).toEqual(['0', 'user0@example.com']);
+    });
+    // A few dozen rows in the DOM, not a million (ARCHITECTURE.md §7).
+    expect(cellTexts().length).toBeLessThan(60);
+    for (const [request] of handler.mock.calls) {
+      expect(request.limit).toBeLessThanOrEqual(1000);
+    }
+    // The scrollbar still spans every row.
+    const canvas = document.querySelector<HTMLElement>('.canvas');
+    expect(canvas?.style.height).toBe(`${MILLION * 22}px`);
   });
 });

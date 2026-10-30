@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareCells, sortRows } from '../../../src/shared/cell-compare';
+import { compareCells, sortRows, sortRowsPaused } from '../../../src/shared/cell-compare';
 import type { CellValue } from '../../../src/shared/cell-value';
 
 /** Values in the order the comparator should produce. */
@@ -64,6 +64,38 @@ describe('compareCells', () => {
       { kind: 'datetime', text: '2024-01-01 00:00:00' },
     ];
     expect(compareCells(values[0] as CellValue, values[1] as CellValue)).toBeGreaterThan(0);
+  });
+
+  it('compares a plain number with an exact decimal by its digits', () => {
+    // As doubles both are 0.3; the decimal's digits say it is a little more.
+    const decimal: CellValue = { kind: 'decimal', text: '0.30000000000000001' };
+    expect(compareCells(0.3, decimal)).toBeLessThan(0);
+    expect(compareCells(decimal, 0.3)).toBeGreaterThan(0);
+    expect(compareCells(2, { kind: 'decimal', text: '2.000' })).toBe(0);
+  });
+
+  it('orders negative exact numbers and zeros by value', () => {
+    const values: CellValue[] = [
+      { kind: 'decimal', text: '-1.5' },
+      { kind: 'decimal', text: '-10.25' },
+      { kind: 'decimal', text: '007' },
+      { kind: 'decimal', text: '0.0' },
+    ];
+    const texts = [...values].sort(compareCells).map((value) => (value as { text: string }).text);
+    expect(texts).toEqual(['-10.25', '-1.5', '0.0', '007']);
+  });
+
+  it('orders numbers written as text by value', () => {
+    expect(sorted(['100', '20', '3'])).toEqual(['3', '20', '100']);
+  });
+
+  it('orders a number spelled with an exponent among other numbers', () => {
+    expect(sorted([1e21, 5, -1e21])).toEqual([-1e21, 5, 1e21]);
+  });
+
+  it('holds texts the collator cannot tell apart as equal', () => {
+    // é written as one code point and as e + a combining accent.
+    expect(compareCells('caf\u00e9', 'cafe\u0301')).toBe(0);
   });
 
   it('puts numbers before text in a mixed column', () => {
@@ -137,8 +169,103 @@ describe('sortRows', () => {
     expect(sortRows(ragged, 0, 'asc').map((row) => row[0])).toEqual([0, 1, undefined]);
   });
 
+  it('keeps a missing cell last in both directions, like NULL', () => {
+    const ragged: CellValue[][] = [[1], [], [2]];
+    expect(sortRows(ragged, 0, 'desc').map((row) => row[0])).toEqual([2, 1, undefined]);
+  });
+
+  it('keeps equal texts in server order and texts the collator holds equal together', () => {
+    const rows: CellValue[][] = [
+      ['b', 1],
+      ['caf\u00e9', 2],
+      ['a', 3],
+      ['cafe\u0301', 4],
+      ['b', 5],
+    ];
+    expect(sortRows(rows, 0, 'asc').map((row) => row[1])).toEqual([3, 1, 5, 2, 4]);
+    expect(sortRows(rows, 0, 'desc').map((row) => row[1])).toEqual([2, 4, 1, 5, 3]);
+  });
+
+  it('orders a column that mixes every kind of value', () => {
+    const rows: CellValue[][] = [
+      ['text'],
+      [null],
+      [{ kind: 'decimal', text: '2.5' }],
+      [10],
+      [{ kind: 'datetime', text: '2024-01-01 00:00:00' }],
+      [{ kind: 'bigint', text: '-3' }],
+    ];
+    expect(sortRows(rows, 0, 'asc').map((row) => row[0])).toEqual([
+      { kind: 'bigint', text: '-3' },
+      { kind: 'decimal', text: '2.5' },
+      10,
+      { kind: 'datetime', text: '2024-01-01 00:00:00' },
+      'text',
+      null,
+    ]);
+  });
+
   it('handles an empty result and a column that is not there', () => {
     expect(sortRows([], 0, 'asc')).toEqual([]);
     expect(sortRows(rows, 99, 'asc')).toHaveLength(3);
+  });
+});
+
+describe('sortRowsPaused', () => {
+  /** Rows of varied values from a fixed seed. */
+  function sample(length: number): CellValue[][] {
+    let state = 11;
+    const next = (): number => (state = (state * 1103515245 + 12345) % 2147483648);
+    return Array.from({ length }, () => {
+      const pick = next() % 6;
+      const value: CellValue =
+        pick === 0
+          ? null
+          : pick === 1
+            ? next() % 1000
+            : pick === 2
+              ? { kind: 'decimal', text: `${next() % 100}.${next() % 100}` }
+              : pick === 3
+                ? `name ${next() % 300}`
+                : pick === 4
+                  ? { kind: 'datetime', text: `2024-0${1 + (next() % 9)}-01` }
+                  : `Name ${next() % 300}`;
+      return [value, next()];
+    });
+  }
+
+  it('gives exactly the order of sortRows', async () => {
+    const rows = sample(3000);
+    for (const direction of ['asc', 'desc'] as const) {
+      expect(await sortRowsPaused(rows, 0, direction)).toEqual(sortRows(rows, 0, direction));
+    }
+  });
+
+  it('pauses on a big result and still sorts it', async () => {
+    const rows = Array.from({ length: 50_000 }, (_, index) => [`row ${(index * 7919) % 50_000}`]);
+    let pauses = 0;
+    let clock = 0;
+    const sorted = await sortRowsPaused(rows, 0, 'asc', {
+      // Each look at the clock is a "millisecond", so slices end often.
+      now: () => clock++,
+      sliceMs: 5,
+      pause: () => {
+        pauses++;
+        return Promise.resolve();
+      },
+    });
+    expect(pauses).toBeGreaterThan(10);
+    expect(sorted.slice(0, 3)).toEqual([['row 0'], ['row 1'], ['row 2']]);
+    expect(sorted.at(-1)).toEqual(['row 49999']);
+  });
+
+  it('agrees with the pairwise comparator on every pair it orders', async () => {
+    const rows = sample(400);
+    const sorted = await sortRowsPaused(rows, 0, 'asc');
+    for (let index = 1; index < sorted.length; index++) {
+      const previous = sorted[index - 1]?.[0] ?? null;
+      const current = sorted[index]?.[0] ?? null;
+      expect(compareCells(previous, current)).toBeLessThanOrEqual(0);
+    }
   });
 });

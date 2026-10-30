@@ -273,9 +273,9 @@ describe('ResultEditor', () => {
     });
   });
 
-  it('follows the row, not the position, after the result is sorted', () => {
+  it('follows the row, not the position, after the result is sorted', async () => {
     const { store, id, editor } = setup();
-    store.sort(id, 0, 'desc');
+    await store.sort(id, 0, 'desc');
     // The row with id 2 is now first; editing position 0 edits that row.
     editor.editCell(id, 0, 1, { kind: 'text', text: 'zed' });
     expect(store.rowAt(id, 0)?.[0]).toBe(2);

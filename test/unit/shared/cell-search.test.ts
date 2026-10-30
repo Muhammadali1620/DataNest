@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellMatches, findRows } from '../../../src/shared/cell-search';
+import { cellMatches, findRows, findRowsPaused } from '../../../src/shared/cell-search';
 import type { CellValue } from '../../../src/shared/cell-value';
 
 describe('cellMatches', () => {
@@ -75,5 +75,52 @@ describe('findRows', () => {
 
   it('searches an empty result without complaint', () => {
     expect(findRows([], 'x')).toEqual({ rows: [], total: 0 });
+  });
+});
+
+describe('findRowsPaused', () => {
+  const rows: CellValue[][] = Array.from({ length: 10_000 }, (_, index) => [
+    index,
+    index % 3 === 0 ? `fizz ${index}` : null,
+  ]);
+
+  it('finds what findRows finds', async () => {
+    for (const needle of ['fizz 99', 'null', '12', '', 'nothing']) {
+      expect(await findRowsPaused(rows, needle, 50)).toEqual(findRows(rows, needle, 50));
+    }
+  });
+
+  it('pauses on a big result', async () => {
+    let pauses = 0;
+    await findRowsPaused(rows, 'fizz', 1000, {
+      now: () => 0,
+      sliceMs: 0,
+      pause: () => {
+        pauses++;
+        return Promise.resolve();
+      },
+    });
+    expect(pauses).toBeGreaterThan(2);
+  });
+
+  it('ends early once the search went stale', async () => {
+    let asked = 0;
+    const hits = await findRowsPaused(rows, 'fizz', 1000, {
+      stale: () => ++asked >= 2,
+    });
+    expect(hits).toBeUndefined();
+    expect(asked).toBe(2);
+  });
+
+  it('never asks a small search whether it went stale', async () => {
+    let asked = 0;
+    const hits = await findRowsPaused(rows.slice(0, 100), 'fizz', 1000, {
+      stale: () => {
+        asked++;
+        return true;
+      },
+    });
+    expect(hits?.total).toBe(34);
+    expect(asked).toBe(0);
   });
 });

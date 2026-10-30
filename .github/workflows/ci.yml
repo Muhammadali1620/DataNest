@@ -105,6 +105,22 @@ jobs:
         if: runner.os != 'Linux'
         run: node scripts/annotate-failures.mjs "E2E (${{ runner.os }})" npm run test:e2e
 
+  # The performance budget (V9.1): bundle sizes, loading, a million rows in the host
+  # and through SQLite, each against test/perf/budgets.ts. The numbers go to the job
+  # summary, so runs can be compared without opening logs.
+  perf:
+    name: Performance budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: node scripts/annotate-failures.mjs "Performance budget" npm run test:perf
+
   package:
     name: Package .vsix
     needs: [check, unit]

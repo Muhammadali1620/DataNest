@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Fixed
+
+- Sorting a result of a million rows by a text column took over a minute — 85 seconds for
+  distinct names, 50 for dates — and the editor's extensions froze meanwhile; the page
+  even gave up waiting after 30 seconds. Now numbers and dates sort in about a second and
+  distinct text in several, and DataNest keeps answering while it sorts. The order is the
+  same as before.
+- Quick search in a big result ran on every key press and held the extensions for about
+  a second each time; a search now runs in slices, a newer one stops the one still running,
+  and the answer to old text no longer replaces the answer to what you typed last.
+- Results of all editors together keep at most twenty million cells: twenty runs of a
+  million rows could exhaust the memory of the extension host. The oldest results go
+  first; the newest one and results with unsaved changes are always kept.
+
+### Changed
+
+- The DataNest log says how long the extension took to start.
+
 ## [0.8.0] - 2026-10-30
 
 Tools: an ER diagram, visual query plans, schema and data comparison with scripts, a server

@@ -1647,6 +1647,7 @@
     "db:reset": "node scripts/db.mjs reset",
     "db:logs": "node scripts/db.mjs logs",
     "test:integration": "vitest run --config vitest.integration.config.mts --configLoader runner",
+    "test:perf": "node scripts/build.mjs --production && vitest run --config vitest.perf.config.mts",
     "icon": "node scripts/make-icon.mjs"
   },
   "devDependencies": {

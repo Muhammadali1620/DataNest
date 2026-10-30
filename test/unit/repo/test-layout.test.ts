@@ -5,7 +5,7 @@ import { IGNORED_DIRS, listFiles, ROOT } from '../../helpers/repo';
 
 // Enforces ARCHITECTURE.md §11: all tests live only in test/.
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
-const ALLOWED_TEST_DIRS = ['e2e', 'fixtures', 'helpers', 'integration', 'unit'];
+const ALLOWED_TEST_DIRS = ['e2e', 'fixtures', 'helpers', 'integration', 'perf', 'unit'];
 
 describe('test layout', () => {
   it('has no test files outside test/', () => {
@@ -36,6 +36,14 @@ describe('test layout', () => {
       (file) => TEST_FILE.test(file) && !file.endsWith('.int.test.ts'),
     );
     expect(wrong).toEqual([]);
+  });
+
+  it('names perf tests *.perf.test.ts and keeps only the budget beside them', () => {
+    const wrong = listFiles('test/perf').filter(
+      (file) => !file.endsWith('.perf.test.ts') && file !== 'test/perf/budgets.ts',
+    );
+    expect(wrong).toEqual([]);
+    expect(listFiles('test/perf').length).toBeGreaterThan(1);
   });
 
   it('keeps test files out of helpers/ and fixtures/', () => {

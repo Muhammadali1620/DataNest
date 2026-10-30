@@ -1,5 +1,7 @@
 import * as assert from 'node:assert/strict';
+import { appendFileSync } from 'node:fs';
 import * as vscode from 'vscode';
+import { ACTIVATION_MS } from '../perf/budgets';
 
 const EXTENSION_ID = 'datanest.datanest';
 
@@ -17,6 +19,24 @@ function extension(): vscode.Extension<unknown> {
 // other files activate the extension, whatever order they run in.
 const activeAtStartup = vscode.extensions.getExtension(EXTENSION_ID)?.isActive;
 
+// A root hook runs before every suite of every file, so this is the first activation,
+// whichever suite would otherwise activate the extension first (V9.1).
+let activationMs: number | undefined;
+before(async () => {
+  const started = performance.now();
+  await vscode.extensions.getExtension(EXTENSION_ID)?.activate();
+  activationMs = Math.round(performance.now() - started);
+  const line =
+    `First activation in VS Code ${vscode.version} (${process.platform}): ` +
+    `${activationMs} ms (budget ${ACTIVATION_MS} ms)`;
+  // eslint-disable-next-line no-console -- the e2e log keeps the number for local runs
+  console.log(line);
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (summary !== undefined && summary !== '') {
+    appendFileSync(summary, `${line}\n`);
+  }
+});
+
 describe('DataNest extension', () => {
   it('is installed in the test host', () => {
     extension();
@@ -30,6 +50,14 @@ describe('DataNest extension', () => {
   it('activates without errors', async () => {
     await extension().activate();
     assert.equal(extension().isActive, true);
+  });
+
+  it('activates within the performance budget', () => {
+    assert.ok(activationMs !== undefined, 'the root hook did not activate the extension');
+    assert.ok(
+      activationMs <= ACTIVATION_MS,
+      `first activation took ${activationMs} ms, budget ${ACTIVATION_MS} ms`,
+    );
   });
 
   it('registers every command from package.json', async () => {

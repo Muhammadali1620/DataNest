@@ -55,6 +55,8 @@ import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  // Reported in the log, so a slow start can be told from a slow editor (V9.1).
+  const started = performance.now();
   const { logger, channel, disposables } = createOutputLogger();
   context.subscriptions.push(...disposables);
 
@@ -324,7 +326,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const version = (context.extension.packageJSON as { version?: string }).version ?? 'unknown';
   const mode = vscode.ExtensionMode[context.extensionMode].toLowerCase();
-  logger.info(`DataNest ${version} activated (${mode})`);
+  const took = Math.round(performance.now() - started);
+  logger.info(`DataNest ${version} activated (${mode}) in ${took} ms`);
 }
 
 export function deactivate(): void {

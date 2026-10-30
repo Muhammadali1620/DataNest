@@ -174,14 +174,17 @@ describe.each(TARGETS)('$label', (target) => {
     const iterator = session.execute(target.bigQuery)[Symbol.asyncIterator]();
     await iterator.next();
     await sleep(300);
+    // Cancel while nothing reads: back-pressure holds the server, so the statement is
+    // still running when the cancel arrives. Reading on first would let a fast server
+    // send every row while the cancel is still on its way (seen on CI, V9.3), and a
+    // finished statement has nothing left to cancel.
+    await session.cancel();
     const rest = (async () => {
       for (let step = await iterator.next(); step.done !== true; step = await iterator.next()) {
         // Drain whatever arrived before the cancel took hold.
       }
     })();
-    const cancelled = expect(rest).rejects.toMatchObject({ code: 'cancelled' });
-    await session.cancel();
-    await cancelled;
+    await expect(rest).rejects.toMatchObject({ code: 'cancelled' });
     expect(firstColumn(await runAll(session, 'SELECT 3'))).toEqual([3]);
   });
 });

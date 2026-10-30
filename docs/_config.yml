@@ -1,0 +1,8 @@
+# GitHub Pages: Settings → Pages → "Deploy from a branch", branch main, folder /docs.
+# The internal Russian notes (test plan, research) stay out of the site.
+title: DataNest
+description: A free, open-source database client for VS Code and its forks.
+theme: jekyll-theme-cayman
+exclude:
+  - research
+  - test-plan.md

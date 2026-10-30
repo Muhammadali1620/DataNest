@@ -165,6 +165,10 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 2. Press **New Connection**, fill in the form and press **Test connection**.
 3. Save it, expand the connection, and open a table — or press **New Query** and write SQL.
 
+The [documentation](docs/index.md) has a guide to every feature, the
+[keyboard shortcuts](docs/guide/keyboard.md), a [FAQ](docs/faq.md) and a guide to
+[adding a database driver](docs/contributing/adding-a-driver.md).
+
 ## Settings
 
 | Setting | Default | What it does |
@@ -181,7 +185,11 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 | `datanest.format.logicalOperatorNewline` | `before` | Put `AND`/`OR` at the start or the end of a line. |
 | `datanest.format.expressionWidth` | `50` | Shorter parenthesized expressions stay on one line. |
 | `datanest.format.denseOperators` | `false` | Write `a+b` instead of `a + b`. |
+| `datanest.redis.keySeparator` | `:` | What splits Redis key names into folders in the tree. |
+| `datanest.redis.keysPerLoad` | `5000` | Redis keys loaded at a time with `SCAN`. |
 | `datanest.logLevel` | `info` | How much goes to the DataNest output channel. |
+
+Every setting is described in [Settings](docs/guide/settings.md).
 
 ## Privacy
 
@@ -208,11 +216,13 @@ npm run db:up          # start the core test databases (ports 7000–7999)
 npm run db:up -- all   # …or every group; `-- <group>` for one
 npm run test:integration  # core, plus every group that is running
 npm run test:e2e       # smoke tests in a real VS Code
+npm run test:perf      # the performance budget (bundle sizes, a million rows)
 ```
 
 Press `F5` in VS Code to launch the Extension Development Host.
 
-Architecture and contribution rules: [ARCHITECTURE.md](ARCHITECTURE.md).
+How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md). Architecture and rules:
+[ARCHITECTURE.md](ARCHITECTURE.md).
 Plan and progress: [ROADMAP.md](ROADMAP.md).
 
 ## License

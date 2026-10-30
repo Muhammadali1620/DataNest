@@ -14,6 +14,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - The ER diagram can be used from the keyboard: arrows move the picture, `]` and `[` go
   from table to table and say which one, `Enter` opens it.
 - A chart's values can be read with the arrow keys, by a screen reader too.
+- Documentation: a user guide to every feature, the keyboard shortcuts and all settings, a
+  FAQ with fixes for common connection problems, and a guide to adding a database driver
+  ([docs](https://github.com/Muhammadali1620/DataNest/blob/main/docs/index.md)).
 - Keyboard focus is visible on every page, and in high contrast themes selections and
   changes are outlined instead of shown by a background that the theme leaves dark.
 

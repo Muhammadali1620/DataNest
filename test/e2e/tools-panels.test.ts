@@ -105,4 +105,16 @@ describe('tool pages', () => {
     const tab = await waitForTab('datanest.queryPlan');
     assert.equal(tab.label, 'Query Plan');
   });
+
+  it('opens the monitor of a connection, once per connection (V8.5)', async function () {
+    this.timeout(30_000);
+    await vscode.commands.executeCommand('datanest.server.monitor', {
+      kind: 'connection',
+      connectionId: id,
+    });
+    const tab = await waitForTab('datanest.serverMonitor');
+    assert.equal(tab.label, 'Monitor: E2E tools');
+    await vscode.commands.executeCommand('datanest.server.monitor', id);
+    assert.equal(webviewTabs('datanest.serverMonitor').length, 1);
+  });
 });

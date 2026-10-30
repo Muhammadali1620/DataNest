@@ -130,5 +130,6 @@
   "commands.query.explain.title": "План запроса (EXPLAIN)",
   "commands.query.explainAnalyze.title": "EXPLAIN ANALYZE (выполняет запрос)",
   "commands.schema.compare.title": "Сравнить схемы…",
-  "commands.table.compareData.title": "Сравнить данные…"
+  "commands.table.compareData.title": "Сравнить данные…",
+  "commands.server.monitor.title": "Монитор сервера"
 }

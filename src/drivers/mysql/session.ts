@@ -208,14 +208,33 @@ class MysqlSession implements Session {
       queue.end();
     };
 
-    const command = this.conn.query({ sql, rowsAsArray: true });
     const token = {};
-    this.active = token;
     const release = (): void => {
       if (this.active === token) {
         this.active = undefined;
       }
     };
+    // mysql2 reports a lost connection (the server ended the session, the socket
+    // dropped) on the connection, not on a query without a callback; without this the
+    // statement would wait forever. A dead connection also refuses new queries there.
+    const lost = (error: unknown): void => {
+      release();
+      if (!settled) {
+        settled = true;
+        const failure = toMysqlDbError(error);
+        // Only fatal errors arrive here: "closed state" has no code of its own.
+        queue.fail(
+          failure.code === 'internal'
+            ? new DbError('connection-failed', failure.message, { cause: error })
+            : failure,
+        );
+      }
+    };
+    this.conn.on('error', lost);
+    const command = this.conn.query({ sql, rowsAsArray: true });
+    if (!settled) {
+      this.active = token;
+    }
     command.on('fields', (fields: FieldLike | FieldLike[] | undefined) => {
       const list = Array.isArray(fields) ? fields : fields === undefined ? [] : [fields];
       if (list.length === 0) {
@@ -283,6 +302,7 @@ class MysqlSession implements Session {
         yield event;
       }
     } finally {
+      this.conn.off('error', lost);
       if (!settled) {
         // The consumer stopped early; free the server and drop the rest.
         void this.cancel(token);

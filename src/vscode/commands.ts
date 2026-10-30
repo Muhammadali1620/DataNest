@@ -40,6 +40,8 @@ import { TestDataPanel } from './panels/test-data-panel';
 import { ErDiagramPanel } from './panels/er-diagram-panel';
 import { diagramCommandHandlers } from './diagram-commands';
 import { schemaCompareCommandHandlers } from './schema-compare-commands';
+import { monitorCommandHandlers } from './monitor-commands';
+import { ServerMonitorPanel } from './panels/server-monitor-panel';
 import { dataCompareCommandHandlers } from './data-compare-commands';
 import { DataComparePanel } from './panels/data-compare-panel';
 import { SchemaComparePanel } from './panels/schema-compare-panel';
@@ -180,6 +182,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     cache: deps.cache,
     openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
+    logger: deps.logger,
+  });
+  const monitors = monitorCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
     logger: deps.logger,
   });
   const dataCompare = dataCompareCommandHandlers({
@@ -539,6 +547,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.generateData]: (target) => imports.generateData(target),
     [COMMAND_IDS.compareData]: (target) => dataCompare.compareData(target),
     [COMMAND_IDS.compareSchemas]: (target) => schemaCompare.compareSchemas(target),
+    [COMMAND_IDS.showMonitor]: (target) => monitors.showMonitor(target),
     [COMMAND_IDS.showErDiagram]: (target, ...rest: unknown[]) =>
       diagrams.showErDiagram(target, selectionOf(rest[0])),
     [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
@@ -677,6 +686,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         ErDiagramPanel.disposeAll();
         QueryPlanPanel.disposeAll();
         SchemaComparePanel.disposeAll();
+        ServerMonitorPanel.disposeAll();
         DataComparePanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();

@@ -156,6 +156,28 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
     expect(after.rows).toEqual([[3]]);
   });
 
+  it('fails the running statement when the server ends the session (V8.5)', async () => {
+    const victim = await driver.openSession(config(serverId));
+    try {
+      const [id] = firstColumn(await runAll(victim, 'SELECT CONNECTION_ID()'));
+      const started = Date.now();
+      const settled = runAll(victim, 'SELECT SLEEP(20)').then(
+        () => 'finished' as const,
+        (error: unknown) => error,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await runAll(session, `KILL CONNECTION ${Number(id)}`);
+      expect(await settled).toMatchObject({ name: 'DbError', code: 'connection-failed' });
+      expect(Date.now() - started).toBeLessThan(10_000);
+      // Later statements fail at once instead of waiting forever.
+      await expect(runAll(victim, 'SELECT 1')).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+    } finally {
+      await victim.close();
+    }
+  });
+
   it('runs a stored procedure with a result set', async () => {
     const result = await runAll(session, 'CALL customer_orders(1)');
     expect(result.columnSets).toHaveLength(1);

@@ -30,6 +30,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   changed cells marked), which are only on one side. Values spelled differently by
   different servers count as equal. A sync script inserts, updates and, if asked,
   deletes rows so the target matches, with values made to fit the target's columns.
+- Server monitor: the sessions of a server with what each runs, how long and what it waits
+  for (and who blocks it), longest first, refreshed every few seconds; cancel a statement
+  or end a session after a question. The variables of the session and of the server with
+  units, descriptions and the changed ones marked, and the status counters with their
+  change per second; uptime, connections and queries or transactions per second at the
+  top. On MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, TiDB, CockroachDB
+  and YugabyteDB; a SQLite file shows its pragmas.
+
+### Fixed
+
+- A MySQL or MariaDB statement no longer waits forever when the server ends its session
+  (an administrator's KILL, a restart); it fails at once, and so do the next ones.
 
 ## [0.7.0] - 2026-10-29
 

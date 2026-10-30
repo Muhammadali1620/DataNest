@@ -308,6 +308,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "datanest.server.monitor",
+        "title": "%commands.server.monitor.title%",
+        "category": "DataNest",
+        "icon": "$(pulse)"
+      },
+      {
         "command": "datanest.table.compareData",
         "title": "%commands.table.compareData.title%",
         "category": "DataNest",
@@ -1015,6 +1021,11 @@
           "command": "datanest.schema.compare",
           "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
           "group": "4_structure@6"
+        },
+        {
+          "command": "datanest.server.monitor",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected)",
+          "group": "0_query@4"
         },
         {
           "command": "datanest.table.truncate",

@@ -535,5 +535,13 @@
   "Pick another table to compare with": "Выберите для сравнения другую таблицу",
   "The tables have no columns of the same name": "У таблиц нет колонок с одинаковыми именами",
   "Data: {0} → {1}": "Данные: {0} → {1}",
-  "The tables share no key: pick the columns that identify a row": "У таблиц нет общего ключа: выберите колонки, которые определяют строку"
+  "The tables share no key: pick the columns that identify a row": "У таблиц нет общего ключа: выберите колонки, которые определяют строку",
+  "Monitor: {0}": "Монитор: {0}",
+  "The process {0} had already finished": "Процесс {0} уже завершился",
+  "Cancel Statement": "Отменить запрос",
+  "End Session": "Завершить сеанс",
+  "Cancel the statement of process {0}?": "Отменить запрос процесса {0}?",
+  "End the session of process {0}?": "Завершить сеанс процесса {0}?",
+  "Pick the server to monitor": "Выберите сервер для мониторинга",
+  "Pick a SQL connection in the DataNest view to monitor its server": "Выберите SQL-подключение в панели DataNest, чтобы открыть монитор его сервера"
 }

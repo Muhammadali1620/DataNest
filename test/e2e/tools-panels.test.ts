@@ -118,6 +118,22 @@ describe('tool pages', () => {
     assert.equal(webviewTabs('datanest.serverMonitor').length, 1);
   });
 
+  it('opens a chart of the result shown beside the editor (V8.7)', async function () {
+    this.timeout(30_000);
+    await runOn(id, "SELECT 'north' AS region, 10 AS orders UNION ALL SELECT 'south', 5");
+    // The result arrives after the run returns; ask until there is one to chart.
+    const started = Date.now();
+    while (webviewTabs('datanest.resultChart').length === 0) {
+      await vscode.commands.executeCommand('datanest.results.chart');
+      if (Date.now() - started > TAB_TIMEOUT_MS) {
+        throw new Error('No chart tab');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    const tab = await waitForTab('datanest.resultChart');
+    assert.match(tab.label, /^Chart: SELECT 'north'/u);
+  });
+
   it('opens no users page for a SQLite file, which has no users (V8.6)', async function () {
     this.timeout(30_000);
     await vscode.commands.executeCommand('datanest.server.users', id);

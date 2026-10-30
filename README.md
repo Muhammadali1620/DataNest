@@ -126,6 +126,21 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
   console (`GET /products/_search` and a JSON body) sent with Ctrl+Enter, the hits as a
   table and the whole answer as text, 64-bit numbers exact.
 
+**Tools**
+
+- An ER diagram of a database, schema or chosen tables, laid out automatically, with pan,
+  zoom, search and export to SVG or PNG.
+- Visual query plans: the plan of the statement under the cursor as a tree with the
+  costly nodes marked and warnings for full scans, sorts, spills and bad estimates;
+  `EXPLAIN ANALYZE` for statements that read.
+- Compare two schemas and get a migration script; compare the rows of two tables — even
+  in two kinds of database — and get a sync script. Scripts only open in an editor.
+- A server monitor: sessions with what they run and wait for, cancel a statement or end a
+  session; variables and status counters with their change per second.
+- Users and privileges: accounts and roles, grant and revoke on the server, a database, a
+  schema or a table, passwords and locking — every change previewed as SQL first.
+- Charts of a query result — lines, bars or a pie — saved as SVG or PNG.
+
 **Safety and history**
 
 - Safe mode asks before `DELETE` or `UPDATE` without `WHERE`, `DROP` and `TRUNCATE` — and

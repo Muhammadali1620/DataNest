@@ -155,12 +155,19 @@ describe('protocol shape', () => {
     ]);
     expect(Object.keys(resultGridProtocol.host.events).sort()).toEqual([
       'cancel',
+      'chartResult',
       'copyText',
       'exportResult',
       'ready',
       'revealError',
       'selectTab',
     ]);
+  });
+
+  it('takes the result to chart by its id (V8.7)', () => {
+    const chart = resultGridProtocol.host.events.chartResult;
+    expect(chart.parse({ resultId: 'result-1' })).toEqual({ resultId: 'result-1' });
+    expect(() => chart.parse({})).toThrow();
   });
 
   it('gives the page no requests, only the state event', () => {

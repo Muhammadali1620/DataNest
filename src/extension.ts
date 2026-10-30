@@ -16,6 +16,7 @@ import { QueryRunner } from './services/query-runner';
 import { policyOf } from './services/write-policy';
 import { StreamExporter } from './services/stream-export';
 import { exportCommandHandlers } from './vscode/export-commands';
+import { chartCommandHandlers } from './vscode/chart-commands';
 import { ResultLinks } from './services/result-links';
 import type { TableFilter } from './shared/table-filter';
 import { ResultCopier } from './services/result-copier';
@@ -169,6 +170,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
   });
   const exportResult = exports.exportResult;
+  const { chartResult } = chartCommandHandlers({
+    extensionUri: context.extensionUri,
+    results,
+    logger,
+  });
 
   const editor = new ResultEditor(results);
   const copier = new ResultCopier({ results, manager });
@@ -203,6 +209,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         openRelated,
         reloadTable: (resultId, change) => tables.reload(resultId, change),
         exportResult,
+        chartResult,
         policy: (connectionId) => policyOf(store.get(connectionId)),
         logger,
       },
@@ -290,6 +297,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       showResults,
       openTable,
       exportResult,
+      chartResult,
       exportTable: exports.exportTable,
       objectEdits,
       diagnostics,

@@ -49,14 +49,16 @@ function setup(lang = 'en') {
   const copied = vi.fn();
   const revealed = vi.fn();
   const exported = vi.fn();
+  const charted = vi.fn();
   host.on('ready', ready);
   host.on('selectTab', selected);
   host.on('cancel', cancelled);
   host.on('copyText', copied);
   host.on('revealError', revealed);
   host.on('exportResult', exported);
+  host.on('chartResult', charted);
   const view = render(App, { props: { rpc, t: createTranslator(lang) } });
-  return { host, rpc, ready, selected, cancelled, copied, revealed, exported, view };
+  return { host, rpc, ready, selected, cancelled, copied, revealed, exported, charted, view };
 }
 
 const ROWS = [
@@ -1150,6 +1152,30 @@ describe('result grid App', () => {
       });
     });
 
+    it('opens a chart of the shown result (V8.7)', async () => {
+      const { charted } = await withState({
+        tabs: [tab(), tab({ id: 'result-2', title: 'SELECT 2' })],
+        activeId: 'result-2',
+        running: false,
+      });
+      await fireEvent.click(await screen.findByRole('button', { name: 'Chart' }));
+      await waitFor(() => {
+        expect(charted).toHaveBeenCalledWith({ resultId: 'result-2' });
+      });
+    });
+
+    it('offers no chart for a statement without columns', async () => {
+      await withState({
+        tabs: [tab({ columns: [], rowCount: 0, affectedRows: 3 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
+      });
+      expect(screen.queryByRole('button', { name: 'Chart' })).toBeNull();
+    });
+
     it('offers no export for a failed statement', async () => {
       await withState({
         tabs: [tab({ error: { code: 'syntax', message: 'bad' } })],
@@ -1160,6 +1186,7 @@ describe('result grid App', () => {
         expect(screen.getByTestId('error')).toBeTruthy();
       });
       expect(screen.queryByRole('button', { name: 'CSV' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Chart' })).toBeNull();
     });
 
     it('offers cancelling rather than exporting while a query runs', async () => {

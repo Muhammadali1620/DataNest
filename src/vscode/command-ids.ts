@@ -109,6 +109,8 @@ export const COMMAND_IDS = {
   showErDiagram: 'datanest.diagram.show',
   /** Fills a table from a CSV or JSON file (V5.3). */
   importData: 'datanest.table.importData',
+  /** Opens a chart of the shown result (V8.7). */
+  chartResult: 'datanest.results.chart',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

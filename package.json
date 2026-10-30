@@ -2,7 +2,7 @@
   "name": "datanest",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "datanest",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -329,6 +329,12 @@
         "command": "datanest.table.transfer",
         "title": "%commands.table.transfer.title%",
         "category": "DataNest"
+      },
+      {
+        "command": "datanest.results.chart",
+        "title": "%commands.results.chart.title%",
+        "category": "DataNest",
+        "icon": "$(graph)"
       },
       {
         "command": "datanest.results.export",

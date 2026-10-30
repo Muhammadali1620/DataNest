@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-30
+
+Tools: an ER diagram, visual query plans, schema and data comparison with scripts, a server
+monitor, users and privileges, and charts of query results.
+
 ### Added
 
 - ER diagram of a database, schema or chosen tables: a box per table with its columns,
@@ -43,6 +48,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   its SQL first (passwords hidden) and runs only when you say so, or opens in an editor.
   On MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, TiDB, CockroachDB and
   YugabyteDB.
+- Charts of query results: "Chart" beside a result draws it as lines, bars or a pie —
+  labels from a date or text column, values from the number columns, one point per row or
+  rows of one label summed, averaged, counted or taken at their minimum or maximum. A
+  line over dates spaces them by time; a pie folds its smallest slices into "Other". The
+  values show under the pointer; save the chart as SVG or PNG in the theme's colours.
 
 ### Fixed
 

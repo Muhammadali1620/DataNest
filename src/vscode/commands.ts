@@ -43,6 +43,7 @@ import { schemaCompareCommandHandlers } from './schema-compare-commands';
 import { monitorCommandHandlers } from './monitor-commands';
 import { userCommandHandlers } from './user-commands';
 import { UserAdminPanel } from './panels/user-admin-panel';
+import { ResultChartPanel } from './panels/result-chart-panel';
 import { ServerMonitorPanel } from './panels/server-monitor-panel';
 import { dataCompareCommandHandlers } from './data-compare-commands';
 import { DataComparePanel } from './panels/data-compare-panel';
@@ -97,6 +98,8 @@ export interface CommandDeps {
   readonly objectEdits: ObjectEditRegistry;
   /** Writes a result to a file the user picks. */
   readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
+  /** Opens a chart of a result (V8.7). */
+  readonly chartResult: (resultId: string) => void;
   /** Writes every row of a tree table to a file (V5.4). */
   readonly exportTable: (target?: unknown) => Promise<void>;
   /** Reads the project connection files again. */
@@ -584,6 +587,22 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await deps.exportResult(resultId, format);
       return undefined;
     },
+    [COMMAND_IDS.chartResult]: () => {
+      // The results panel itself may have the focus: then the SQL editor beside it counts.
+      const document = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find(
+        (editor) => editor?.document.languageId === 'sql',
+      )?.document;
+      const panel = document === undefined ? undefined : ResultsPanel.find(document.uri.toString());
+      const resultId = panel?.activeResultId;
+      if (resultId === undefined) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Run a query first: there is no result to chart'),
+        );
+        return undefined;
+      }
+      deps.chartResult(resultId);
+      return undefined;
+    },
     [COMMAND_IDS.showHistory]: () => {
       showHistory({ history: deps.history, store: deps.store, editors: deps.editors });
     },
@@ -698,6 +717,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         SchemaComparePanel.disposeAll();
         ServerMonitorPanel.disposeAll();
         UserAdminPanel.disposeAll();
+        ResultChartPanel.disposeAll();
         DataComparePanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();

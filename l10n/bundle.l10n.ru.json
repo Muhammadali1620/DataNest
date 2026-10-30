@@ -549,5 +549,11 @@
   "A SQLite file has no users: whoever can open the file can read it": "У файла SQLite нет пользователей: кто может открыть файл, тот его и читает",
   "Users: {0}": "Пользователи: {0}",
   "Users: {0} · {1}": "Пользователи: {0} · {1}",
-  "Run {0} statements on the production connection \"{1}\"?": "Выполнить операторов: {0} на production-подключении «{1}»?"
+  "Run {0} statements on the production connection \"{1}\"?": "Выполнить операторов: {0} на production-подключении «{1}»?",
+  "The result is gone; run the query again to chart it": "Результата уже нет: выполните запрос снова, чтобы построить график",
+  "The statement returned no rows to chart": "Оператор не вернул строк для графика",
+  "Chart: {0}": "График: {0}",
+  "Run a query first: there is no result to chart": "Сначала выполните запрос: графику не из чего строиться",
+  "Save the Chart": "Сохранить график",
+  "The chart was saved to {0}": "График сохранён в {0}"
 }

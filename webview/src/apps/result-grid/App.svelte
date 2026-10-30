@@ -716,6 +716,19 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {t('grid.cancel')}
         </button>
       {:else if activeTab !== undefined && activeTab.error === undefined}
+        {#if activeTab.columns.length > 0}
+          <button
+            type="button"
+            class="cancel"
+            title={t('grid.chartHint')}
+            data-testid="chart"
+            onclick={() => {
+              rpc.emit('chartResult', { resultId: activeTab.id });
+            }}
+          >
+            {t('grid.chart')}
+          </button>
+        {/if}
         <button
           type="button"
           class="cancel"

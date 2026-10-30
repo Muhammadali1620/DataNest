@@ -44,6 +44,8 @@ export interface ResultsPanelDeps {
   readonly copier: ResultCopier;
   /** Writes a result to a file the user picks. */
   readonly exportResult?: (resultId: string, format: ExportFormat) => Promise<void>;
+  /** Opens a chart of a result (V8.7). */
+  readonly chartResult?: (resultId: string) => void;
   /** Production and read-only flags of a connection, checked before saving edits. */
   readonly policy?: (connectionId: string) => WritePolicy;
   readonly logger: Logger;
@@ -299,6 +301,9 @@ export class ResultsPanel implements vscode.Disposable {
     });
     this.rpc.on('exportResult', ({ resultId, format }) => {
       void this.deps.exportResult?.(resultId, format);
+    });
+    this.rpc.on('chartResult', ({ resultId }) => {
+      this.deps.chartResult?.(resultId);
     });
     this.subscriptions.push(
       deps.results.onDidChange((documentUri) => {

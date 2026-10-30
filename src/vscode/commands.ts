@@ -41,6 +41,8 @@ import { ErDiagramPanel } from './panels/er-diagram-panel';
 import { diagramCommandHandlers } from './diagram-commands';
 import { schemaCompareCommandHandlers } from './schema-compare-commands';
 import { monitorCommandHandlers } from './monitor-commands';
+import { userCommandHandlers } from './user-commands';
+import { UserAdminPanel } from './panels/user-admin-panel';
 import { ServerMonitorPanel } from './panels/server-monitor-panel';
 import { dataCompareCommandHandlers } from './data-compare-commands';
 import { DataComparePanel } from './panels/data-compare-panel';
@@ -188,6 +190,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     extensionUri: deps.extensionUri,
     store: deps.store,
     manager: deps.manager,
+    logger: deps.logger,
+  });
+  const users = userCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
+    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
     logger: deps.logger,
   });
   const dataCompare = dataCompareCommandHandlers({
@@ -548,6 +557,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.compareData]: (target) => dataCompare.compareData(target),
     [COMMAND_IDS.compareSchemas]: (target) => schemaCompare.compareSchemas(target),
     [COMMAND_IDS.showMonitor]: (target) => monitors.showMonitor(target),
+    [COMMAND_IDS.showUsers]: (target) => users.showUsers(target),
     [COMMAND_IDS.showErDiagram]: (target, ...rest: unknown[]) =>
       diagrams.showErDiagram(target, selectionOf(rest[0])),
     [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
@@ -687,6 +697,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         QueryPlanPanel.disposeAll();
         SchemaComparePanel.disposeAll();
         ServerMonitorPanel.disposeAll();
+        UserAdminPanel.disposeAll();
         DataComparePanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();

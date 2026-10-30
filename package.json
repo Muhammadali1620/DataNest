@@ -308,6 +308,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "datanest.server.users",
+        "title": "%commands.server.users.title%",
+        "category": "DataNest",
+        "icon": "$(person)"
+      },
+      {
         "command": "datanest.server.monitor",
         "title": "%commands.server.monitor.title%",
         "category": "DataNest",
@@ -1026,6 +1032,11 @@
           "command": "datanest.server.monitor",
           "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected)",
           "group": "0_query@4"
+        },
+        {
+          "command": "datanest.server.users",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database)",
+          "group": "4_structure@7"
         },
         {
           "command": "datanest.table.truncate",

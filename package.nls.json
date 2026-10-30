@@ -131,5 +131,6 @@
   "commands.query.explainAnalyze.title": "Explain Analyze (Runs the Statement)",
   "commands.schema.compare.title": "Compare Schemas…",
   "commands.table.compareData.title": "Compare Data…",
-  "commands.server.monitor.title": "Server Monitor"
+  "commands.server.monitor.title": "Server Monitor",
+  "commands.server.users.title": "Users and Privileges"
 }

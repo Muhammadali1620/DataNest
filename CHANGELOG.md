@@ -37,6 +37,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   change per second; uptime, connections and queries or transactions per second at the
   top. On MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, TiDB, CockroachDB
   and YugabyteDB; a SQLite file shows its pragmas.
+- Users and privileges: the accounts and roles of a server with what each may do — on the
+  server, a database, a schema, a table, through roles. Make an account, change its
+  password, lock it, grant and revoke privileges and roles, drop it; every change shows
+  its SQL first (passwords hidden) and runs only when you say so, or opens in an editor.
+  On MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, TiDB, CockroachDB and
+  YugabyteDB.
 
 ### Fixed
 

@@ -543,5 +543,11 @@
   "Cancel the statement of process {0}?": "Отменить запрос процесса {0}?",
   "End the session of process {0}?": "Завершить сеанс процесса {0}?",
   "Pick the server to monitor": "Выберите сервер для мониторинга",
-  "Pick a SQL connection in the DataNest view to monitor its server": "Выберите SQL-подключение в панели DataNest, чтобы открыть монитор его сервера"
+  "Pick a SQL connection in the DataNest view to monitor its server": "Выберите SQL-подключение в панели DataNest, чтобы открыть монитор его сервера",
+  "Pick the server whose users to manage": "Выберите сервер, пользователями которого управлять",
+  "Pick a SQL connection in the DataNest view to manage its users": "Выберите SQL-подключение в панели DataNest, чтобы управлять его пользователями",
+  "A SQLite file has no users: whoever can open the file can read it": "У файла SQLite нет пользователей: кто может открыть файл, тот его и читает",
+  "Users: {0}": "Пользователи: {0}",
+  "Users: {0} · {1}": "Пользователи: {0} · {1}",
+  "Run {0} statements on the production connection \"{1}\"?": "Выполнить операторов: {0} на production-подключении «{1}»?"
 }

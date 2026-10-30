@@ -117,4 +117,11 @@ describe('tool pages', () => {
     await vscode.commands.executeCommand('datanest.server.monitor', id);
     assert.equal(webviewTabs('datanest.serverMonitor').length, 1);
   });
+
+  it('opens no users page for a SQLite file, which has no users (V8.6)', async function () {
+    this.timeout(30_000);
+    await vscode.commands.executeCommand('datanest.server.users', id);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(webviewTabs('datanest.userAdmin').length, 0);
+  });
 });

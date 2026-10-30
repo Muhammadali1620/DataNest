@@ -99,6 +99,8 @@ export const COMMAND_IDS = {
   generateData: 'datanest.table.generateData',
   /** Compares the rows of two tables and writes the script that syncs them (V8.4). */
   compareData: 'datanest.table.compareData',
+  /** Lists the users of a SQL server and grants and revokes their privileges (V8.6). */
+  showUsers: 'datanest.server.users',
   /** Shows the sessions, settings and status of a SQL server (V8.5). */
   showMonitor: 'datanest.server.monitor',
   /** Compares two schemas and writes the script that makes one like the other (V8.3). */

@@ -20,6 +20,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   "Explain Analyze" runs a reading statement for the real rows and times. Works on
   PostgreSQL, MySQL, MariaDB, SQLite, SQL Server (with its missing index advice),
   ClickHouse, Oracle, TiDB, CockroachDB and YugabyteDB.
+- Schema comparison: compare two databases or schemas of the same kind and see what is
+  new, different or only in the target — columns, keys, indexes and comments of tables,
+  and the definitions of views, routines, triggers and sequences line by line. Tick the
+  differences to keep and open a migration script in an editor on the target: it creates,
+  alters and drops in an order that works, and runs only when you run it.
 
 ## [0.7.0] - 2026-10-29
 

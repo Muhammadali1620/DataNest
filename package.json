@@ -302,6 +302,12 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "datanest.schema.compare",
+        "title": "%commands.schema.compare.title%",
+        "category": "DataNest",
+        "icon": "$(diff)"
+      },
+      {
         "command": "datanest.table.transfer",
         "title": "%commands.table.transfer.title%",
         "category": "DataNest"
@@ -994,6 +1000,11 @@
           "command": "datanest.diagram.show",
           "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.table)",
           "group": "4_structure@5"
+        },
+        {
+          "command": "datanest.schema.compare",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "group": "4_structure@6"
         },
         {
           "command": "datanest.table.truncate",

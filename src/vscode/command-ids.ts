@@ -97,6 +97,8 @@ export const COMMAND_IDS = {
   transferTables: 'datanest.table.transfer',
   /** Fills a table with generated rows (V5.5). */
   generateData: 'datanest.table.generateData',
+  /** Compares two schemas and writes the script that makes one like the other (V8.3). */
+  compareSchemas: 'datanest.schema.compare',
   /** Draws the tables of a scope and the keys between them (V8.1). */
   showErDiagram: 'datanest.diagram.show',
   /** Fills a table from a CSV or JSON file (V5.3). */

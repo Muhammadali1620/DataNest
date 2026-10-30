@@ -128,5 +128,6 @@
   "commands.elastic.pickConnection.title": "Выбрать подключение запроса Elasticsearch…",
   "commands.diagram.show.title": "Показать ER-диаграмму",
   "commands.query.explain.title": "План запроса (EXPLAIN)",
-  "commands.query.explainAnalyze.title": "EXPLAIN ANALYZE (выполняет запрос)"
+  "commands.query.explainAnalyze.title": "EXPLAIN ANALYZE (выполняет запрос)",
+  "commands.schema.compare.title": "Сравнить схемы…"
 }

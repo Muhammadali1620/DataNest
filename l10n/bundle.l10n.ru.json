@@ -521,5 +521,11 @@
   "Pick a database, schema or tables in the DataNest view to draw": "Выберите базу, схему или таблицы в панели DataNest, чтобы построить диаграмму",
   "Pick the connection to draw": "Выберите подключение для диаграммы",
   "Query Plan": "План запроса",
-  "Nothing to explain": "Нечего объяснять: курсор не в запросе"
+  "Nothing to explain": "Нечего объяснять: курсор не в запросе",
+  "Pick the source: the schema to follow": "Выберите источник: схему-образец",
+  "Pick the source schema": "Выберите схему-источник",
+  "Pick the target: the schema the script will change": "Выберите цель: схему, которую изменит скрипт",
+  "Pick the target schema": "Выберите схему-цель",
+  "Pick another database or schema to compare with": "Выберите для сравнения другую базу или схему",
+  "Compare {0} → {1}": "Сравнение {0} → {1}"
 }

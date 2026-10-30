@@ -474,6 +474,7 @@
     min-width: 0;
   }
   .twisty {
+    font: inherit;
     background: none;
     border: none;
     color: inherit;

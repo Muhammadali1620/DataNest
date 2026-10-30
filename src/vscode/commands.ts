@@ -39,6 +39,8 @@ import { DataImportPanel } from './panels/data-import-panel';
 import { TestDataPanel } from './panels/test-data-panel';
 import { ErDiagramPanel } from './panels/er-diagram-panel';
 import { diagramCommandHandlers } from './diagram-commands';
+import { schemaCompareCommandHandlers } from './schema-compare-commands';
+import { SchemaComparePanel } from './panels/schema-compare-panel';
 import { SqlDumper } from '../services/sql-dump';
 import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
@@ -168,6 +170,14 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     cache: deps.cache,
     openTable: deps.openTable,
+    logger: deps.logger,
+  });
+  const schemaCompare = schemaCompareCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
+    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
     logger: deps.logger,
   });
   const filters = filterCommandHandlers({
@@ -517,6 +527,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.importData]: (target) => imports.importData(target),
     [COMMAND_IDS.generateData]: (target) => imports.generateData(target),
+    [COMMAND_IDS.compareSchemas]: (target) => schemaCompare.compareSchemas(target),
     [COMMAND_IDS.showErDiagram]: (target, ...rest: unknown[]) =>
       diagrams.showErDiagram(target, selectionOf(rest[0])),
     [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
@@ -654,6 +665,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         TestDataPanel.disposeAll();
         ErDiagramPanel.disposeAll();
         QueryPlanPanel.disposeAll();
+        SchemaComparePanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
         RedisConsolePanel.disposeAll();

@@ -46,9 +46,22 @@ function same(a: Buffer, b: Buffer): boolean {
 /** A host key generated once per test run; generating keys is the slow part. */
 let hostKey: string | undefined;
 
+/**
+ * Like user keys below, a generated host key is now and then one ssh2 cannot read
+ * back; every test of a run shares it, so one such key failed a whole file in CI.
+ */
 export function testHostKey(): string {
-  hostKey ??= utils.generateKeyPairSync('ed25519').private;
+  hostKey ??= readableKey(() => utils.generateKeyPairSync('ed25519').private);
   return hostKey;
+}
+
+function readableKey(make: () => string): string {
+  for (let attempt = 0; ; attempt += 1) {
+    const key = make();
+    if (!(utils.parseKey(key) instanceof Error) || attempt >= 20) {
+      return key;
+    }
+  }
 }
 
 /**

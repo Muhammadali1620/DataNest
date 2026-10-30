@@ -1,7 +1,7 @@
 // Where a schema comparison (V8.3) starts, read off the clicked tree item. Free of
 // `vscode`, so every kind of item is covered by unit tests.
 
-import type { ObjectScope } from '../../core/model/objects';
+import type { ObjectScope, TableRef } from '../../core/model/objects';
 import { type TreeNode, scopeOf } from './nodes';
 
 export interface CompareStart {
@@ -44,4 +44,12 @@ export function compareStartOf(target: TreeNode): CompareStart | undefined {
 export function scopeLabel(connectionName: string, scope: ObjectScope): string {
   const where = [scope.database, scope.schema].filter((part) => part !== undefined).join('.');
   return where === '' ? connectionName : `${connectionName} · ${where}`;
+}
+
+/** `Local · shop.public.orders`: the connection, then the table with its scope. */
+export function tableLabel(connectionName: string, table: TableRef): string {
+  const name = [table.database, table.schema, table.name]
+    .filter((part) => part !== undefined)
+    .join('.');
+  return `${connectionName} · ${name}`;
 }

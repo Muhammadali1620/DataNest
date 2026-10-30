@@ -25,6 +25,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   and the definitions of views, routines, triggers and sequences line by line. Tick the
   differences to keep and open a migration script in an editor on the target: it creates,
   alters and drops in an order that works, and runs only when you run it.
+- Data comparison: compare the rows of two tables — in one database, two databases or
+  two kinds of database — matched by key: how many are the same, which differ (with the
+  changed cells marked), which are only on one side. Values spelled differently by
+  different servers count as equal. A sync script inserts, updates and, if asked,
+  deletes rows so the target matches, with values made to fit the target's columns.
 
 ## [0.7.0] - 2026-10-29
 

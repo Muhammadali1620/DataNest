@@ -129,5 +129,6 @@
   "commands.diagram.show.title": "Show ER Diagram",
   "commands.query.explain.title": "Explain Plan",
   "commands.query.explainAnalyze.title": "Explain Analyze (Runs the Statement)",
-  "commands.schema.compare.title": "Compare Schemas…"
+  "commands.schema.compare.title": "Compare Schemas…",
+  "commands.table.compareData.title": "Compare Data…"
 }

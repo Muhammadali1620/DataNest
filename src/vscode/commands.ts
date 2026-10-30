@@ -40,6 +40,8 @@ import { TestDataPanel } from './panels/test-data-panel';
 import { ErDiagramPanel } from './panels/er-diagram-panel';
 import { diagramCommandHandlers } from './diagram-commands';
 import { schemaCompareCommandHandlers } from './schema-compare-commands';
+import { dataCompareCommandHandlers } from './data-compare-commands';
+import { DataComparePanel } from './panels/data-compare-panel';
 import { SchemaComparePanel } from './panels/schema-compare-panel';
 import { SqlDumper } from '../services/sql-dump';
 import { ScriptRunner } from '../services/script-runner';
@@ -173,6 +175,14 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     logger: deps.logger,
   });
   const schemaCompare = schemaCompareCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
+    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
+    logger: deps.logger,
+  });
+  const dataCompare = dataCompareCommandHandlers({
     extensionUri: deps.extensionUri,
     store: deps.store,
     manager: deps.manager,
@@ -527,6 +537,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.importData]: (target) => imports.importData(target),
     [COMMAND_IDS.generateData]: (target) => imports.generateData(target),
+    [COMMAND_IDS.compareData]: (target) => dataCompare.compareData(target),
     [COMMAND_IDS.compareSchemas]: (target) => schemaCompare.compareSchemas(target),
     [COMMAND_IDS.showErDiagram]: (target, ...rest: unknown[]) =>
       diagrams.showErDiagram(target, selectionOf(rest[0])),
@@ -666,6 +677,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         ErDiagramPanel.disposeAll();
         QueryPlanPanel.disposeAll();
         SchemaComparePanel.disposeAll();
+        DataComparePanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
         RedisConsolePanel.disposeAll();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareStartOf, scopeLabel } from '../../../../src/vscode/tree/compare-target';
+import { compareStartOf, scopeLabel, tableLabel } from '../../../../src/vscode/tree/compare-target';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
 
 describe('compareStartOf', () => {
@@ -34,5 +34,14 @@ describe('scopeLabel', () => {
   it('joins the connection and the scope', () => {
     expect(scopeLabel('Local', { database: 'shop', schema: 'public' })).toBe('Local · shop.public');
     expect(scopeLabel('app.db', {})).toBe('app.db');
+  });
+});
+
+describe('tableLabel', () => {
+  it('names the connection and the table with its scope', () => {
+    expect(tableLabel('Local', { database: 'shop', schema: 'public', name: 'orders' })).toBe(
+      'Local · shop.public.orders',
+    );
+    expect(tableLabel('app.db', { name: 'orders' })).toBe('app.db · orders');
   });
 });

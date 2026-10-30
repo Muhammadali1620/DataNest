@@ -129,5 +129,6 @@
   "commands.diagram.show.title": "Показать ER-диаграмму",
   "commands.query.explain.title": "План запроса (EXPLAIN)",
   "commands.query.explainAnalyze.title": "EXPLAIN ANALYZE (выполняет запрос)",
-  "commands.schema.compare.title": "Сравнить схемы…"
+  "commands.schema.compare.title": "Сравнить схемы…",
+  "commands.table.compareData.title": "Сравнить данные…"
 }

@@ -308,6 +308,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "datanest.table.compareData",
+        "title": "%commands.table.compareData.title%",
+        "category": "DataNest",
+        "icon": "$(diff-multiple)"
+      },
+      {
         "command": "datanest.table.transfer",
         "title": "%commands.table.transfer.title%",
         "category": "DataNest"
@@ -766,6 +772,10 @@
         {
           "command": "datanest.elastic.pickConnection",
           "when": "editorLangId == datanest-es"
+        },
+        {
+          "command": "datanest.table.compareData",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -1085,6 +1095,11 @@
           "command": "datanest.table.generateData",
           "when": "view == datanest.connections && viewItem == datanest.table",
           "group": "7_export@4"
+        },
+        {
+          "command": "datanest.table.compareData",
+          "when": "view == datanest.connections && viewItem == datanest.table",
+          "group": "7_export@6"
         },
         {
           "command": "datanest.redis.findKey",

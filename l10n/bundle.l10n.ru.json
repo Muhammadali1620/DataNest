@@ -527,5 +527,13 @@
   "Pick the target: the schema the script will change": "Выберите цель: схему, которую изменит скрипт",
   "Pick the target schema": "Выберите схему-цель",
   "Pick another database or schema to compare with": "Выберите для сравнения другую базу или схему",
-  "Compare {0} → {1}": "Сравнение {0} → {1}"
+  "Compare {0} → {1}": "Сравнение {0} → {1}",
+  "Pick a table in the DataNest view to compare its data": "Выберите таблицу в панели DataNest, данные которой сравнить",
+  "Pick the connection of the target table": "Выберите подключение таблицы-цели",
+  "Pick the schema of the target table": "Выберите схему таблицы-цели",
+  "Pick the target table: the one a sync script would change": "Выберите таблицу-цель: её изменит скрипт синхронизации",
+  "Pick another table to compare with": "Выберите для сравнения другую таблицу",
+  "The tables have no columns of the same name": "У таблиц нет колонок с одинаковыми именами",
+  "Data: {0} → {1}": "Данные: {0} → {1}",
+  "The tables share no key: pick the columns that identify a row": "У таблиц нет общего ключа: выберите колонки, которые определяют строку"
 }

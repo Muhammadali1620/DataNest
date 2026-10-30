@@ -93,6 +93,8 @@ export const COMMAND_IDS = {
   transferTables: 'datanest.table.transfer',
   /** Fills a table with generated rows (V5.5). */
   generateData: 'datanest.table.generateData',
+  /** Draws the tables of a scope and the keys between them (V8.1). */
+  showErDiagram: 'datanest.diagram.show',
   /** Fills a table from a CSV or JSON file (V5.3). */
   importData: 'datanest.table.importData',
   /** Writes the shown result to a CSV or JSON file. */

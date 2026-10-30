@@ -35,6 +35,8 @@ import { TableTransferService } from '../services/transfer/table-transfer';
 import { importCommandHandlers } from './import-commands';
 import { DataImportPanel } from './panels/data-import-panel';
 import { TestDataPanel } from './panels/test-data-panel';
+import { ErDiagramPanel } from './panels/er-diagram-panel';
+import { diagramCommandHandlers } from './diagram-commands';
 import { SqlDumper } from '../services/sql-dump';
 import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
@@ -156,6 +158,14 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     store: deps.store,
     manager: deps.manager,
     cache: deps.cache,
+    logger: deps.logger,
+  });
+  const diagrams = diagramCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
+    openTable: deps.openTable,
     logger: deps.logger,
   });
   const filters = filterCommandHandlers({
@@ -498,6 +508,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.runSqlFile]: (target) => scripts.runFile(target),
     [COMMAND_IDS.importData]: (target) => imports.importData(target),
     [COMMAND_IDS.generateData]: (target) => imports.generateData(target),
+    [COMMAND_IDS.showErDiagram]: (target, ...rest: unknown[]) =>
+      diagrams.showErDiagram(target, selectionOf(rest[0])),
     [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
       transfers.transfer(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportData]: (target) => deps.exportTable(target),
@@ -629,6 +641,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         TableDesignerPanel.disposeAll();
         DataImportPanel.disposeAll();
         TestDataPanel.disposeAll();
+        ErDiagramPanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
         RedisConsolePanel.disposeAll();

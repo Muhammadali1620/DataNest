@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Added
+
+- ER diagram of a database, schema or chosen tables: a box per table with its columns,
+  primary and foreign key marks, and the keys between tables in crow's foot notation.
+  Tables are laid out automatically — a referenced table left of the tables that point at
+  it — and can be dragged; pan, zoom, find a table, highlight its keys, open its rows with
+  a double click. Show all columns, key columns only or just names. Save the diagram as
+  SVG or PNG in the colours of the current theme.
+
 ## [0.7.0] - 2026-10-29
 
 NoSQL: Redis, MongoDB and Elasticsearch, each with the tree, pages and an editor of its

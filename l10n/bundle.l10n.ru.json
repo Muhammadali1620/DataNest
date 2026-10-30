@@ -513,5 +513,11 @@
   "closed": "закрыт",
   "{0} docs": "документов: {0}",
   "Health: {0}": "Состояние: {0}",
-  "The document count includes nested documents": "В числе документов учтены вложенные (nested)"
+  "The document count includes nested documents": "В числе документов учтены вложенные (nested)",
+  "ER Diagram: {0}": "ER-диаграмма: {0}",
+  "Save the ER Diagram": "Сохранить ER-диаграмму",
+  "The diagram was saved to {0}": "Диаграмма сохранена в {0}",
+  "Pick the schema to draw": "Выберите схему для диаграммы",
+  "Pick a database, schema or tables in the DataNest view to draw": "Выберите базу, схему или таблицы в панели DataNest, чтобы построить диаграмму",
+  "Pick the connection to draw": "Выберите подключение для диаграммы"
 }

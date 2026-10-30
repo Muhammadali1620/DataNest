@@ -125,5 +125,6 @@
   "commands.elastic.newQuery.title": "New Elasticsearch Query",
   "commands.elastic.runQuery.title": "Send Elasticsearch Request",
   "commands.elastic.runRequest.title": "Send This Request",
-  "commands.elastic.pickConnection.title": "Pick the Connection of the Elasticsearch Query…"
+  "commands.elastic.pickConnection.title": "Pick the Connection of the Elasticsearch Query…",
+  "commands.diagram.show.title": "Show ER Diagram"
 }

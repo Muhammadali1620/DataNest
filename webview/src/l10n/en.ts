@@ -687,6 +687,26 @@ export const en = {
   'testData.report.done': 'Done: {0} rows inserted',
   'testData.report.cancelled': 'Stopped: nothing was inserted',
   'testData.report.stopped': 'Nothing was inserted: {0}',
+  'er.loading': 'Reading the tables…',
+  'er.title': 'ER diagram of {0}',
+  'er.counts': 'Tables: {0}, keys: {1}',
+  'er.details': 'Show',
+  'er.details.all': 'All columns',
+  'er.details.keys': 'Key columns',
+  'er.details.names': 'Table names',
+  'er.search': 'Find a table',
+  'er.zoomOut': 'Zoom out (-)',
+  'er.zoomReset': 'Actual size',
+  'er.zoomIn': 'Zoom in (+)',
+  'er.fit': 'Fit',
+  'er.arrange': 'Arrange',
+  'er.refresh': 'Refresh',
+  'er.saveSvg': 'Save SVG',
+  'er.savePng': 'Save PNG',
+  'er.progress': 'Reading the tables: {0} of {1}',
+  'er.empty': 'There are no tables here',
+  'er.help':
+    'Drag boxes to move them, drag the background to pan, Ctrl+wheel to zoom; a click highlights the keys of a table, a double click opens its rows.',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -1,4 +1,6 @@
+import { release } from 'node:os';
 import * as vscode from 'vscode';
+import { bugReportUrl } from '../services/issue-report';
 import type { Logger } from '../core/logging/logger';
 import { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
@@ -79,6 +81,8 @@ import { elasticCommands } from './elastic/elastic-commands';
 import { ElasticResultPanel } from './panels/elastic-result-panel';
 
 export interface CommandDeps {
+  /** This extension's version, for the bug form. */
+  readonly extensionVersion: string;
   readonly logger: Logger;
   readonly channel: vscode.OutputChannel;
   readonly extensionUri: vscode.Uri;
@@ -506,6 +510,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const handlers: Record<CommandId, (target?: CommandTarget, ...rest: unknown[]) => unknown> = {
     [COMMAND_IDS.showLogs]: () => {
       deps.channel.show(true);
+    },
+    [COMMAND_IDS.reportIssue]: async () => {
+      const url = bugReportUrl({
+        extensionVersion: deps.extensionVersion,
+        editorName: vscode.env.appName,
+        editorVersion: vscode.version,
+        platform: process.platform,
+        arch: process.arch,
+        osRelease: release(),
+        language: vscode.env.language,
+      });
+      await vscode.env.openExternal(vscode.Uri.parse(url));
     },
     [COMMAND_IDS.addConnection]: connections.add,
     [COMMAND_IDS.createFolder]: folders.createFolder,

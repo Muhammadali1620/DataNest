@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-30
+
+The public beta: faster with big results, fully in Russian, usable from the keyboard and
+with a screen reader, documented — and a way to tell us what does not work.
+
 ### Added
 
 - The result grid works with screen readers: it is one stop of the Tab key, the cell under
@@ -17,6 +22,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - Documentation: a user guide to every feature, the keyboard shortcuts and all settings, a
   FAQ with fixes for common connection problems, and a guide to adding a database driver
   ([docs](https://github.com/Muhammadali1620/DataNest/blob/main/docs/index.md)).
+- **Report a Problem…** (Command Palette, or the "…" menu of the Connections view) opens
+  the bug form on GitHub with the DataNest, editor and system versions filled in —
+  nothing about your connections.
 - Keyboard focus is visible on every page, and in high contrast themes selections and
   changes are outlined instead of shown by a background that the theme leaves dark.
 
@@ -43,6 +51,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   them, not the operating system's.
 - An import that lost its connection no longer tries to move the table's sequence
   afterwards, which added a second, confusing failure to the report.
+- Searching a big result again for the same text no longer flashes "no matches" for a
+  moment.
 
 ### Changed
 

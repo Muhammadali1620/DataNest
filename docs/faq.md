@@ -80,7 +80,8 @@ and OpenSearch; another server answering on that port is refused.
 `datanest.logLevel` to `debug` for every detail, repeat what failed, and attach the log to
 an issue — passwords and tokens are masked, but read it through before sharing.
 
-**How do I report a bug?** Open an issue on
-[GitHub](https://github.com/Muhammadali1620/DataNest/issues) with the DataNest and editor
-versions (**Help → About**), the database and its version, what you did, what you expected
-and the log.
+**How do I report a bug?** Run **DataNest: Report a Problem…** from the Command Palette
+(or the "…" menu of the Connections view). It opens the bug form on
+[GitHub](https://github.com/Muhammadali1620/DataNest/issues) with the DataNest, editor and
+system versions filled in; add the database and its version, what you did, what you
+expected and the log. Nothing about your connections is sent — only what you write.

@@ -1,0 +1,19 @@
+name: Feature request
+description: An idea for DataNest.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The task, and what makes it hard today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How DataNest could help
+  - type: input
+    id: database
+    attributes:
+      label: Databases it concerns

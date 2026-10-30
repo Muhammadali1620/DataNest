@@ -5,9 +5,10 @@ every size are welcome — a bug report, a translation fix, a test, a driver.
 
 ## Reporting problems
 
-Open an [issue](https://github.com/Muhammadali1620/DataNest/issues) with the DataNest and
-editor versions, the database and its version, the steps, what you expected and what
-happened. **Show Logs** with `datanest.logLevel` set to `debug` usually tells the most;
+Run **DataNest: Report a Problem…** in the editor — it opens the bug form with the DataNest,
+editor and system versions filled in — or open an
+[issue](https://github.com/Muhammadali1620/DataNest/issues/new/choose) yourself. Give the
+database and its version, the steps, what you expected and what happened. **Show Logs** with `datanest.logLevel` set to `debug` usually tells the most;
 read it through before attaching it.
 
 ## Working on the code

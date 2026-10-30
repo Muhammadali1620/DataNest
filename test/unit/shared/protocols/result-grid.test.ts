@@ -417,6 +417,18 @@ describe('search request', () => {
     });
   });
 
+  it('can say that the answer was overtaken by a newer search', () => {
+    expect(search.result.parse({ resultId: 'r', rows: [], total: 0, stale: true })).toEqual({
+      resultId: 'r',
+      rows: [],
+      total: 0,
+      stale: true,
+    });
+    expect(() =>
+      search.result.parse({ resultId: 'r', rows: [], total: 0, stale: 'yes' }),
+    ).toThrow();
+  });
+
   it('caps the needle and the number of hits', () => {
     expect(() =>
       search.params.parse({ resultId: 'r', text: 'x'.repeat(MAX_SEARCH_LENGTH + 1) }),

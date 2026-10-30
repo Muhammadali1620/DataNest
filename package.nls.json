@@ -5,6 +5,7 @@
   "views.connections.name": "Connections",
   "viewsWelcome.connections.empty": "No connections yet.\n[New Connection](command:datanest.connections.add)\n[Add from URL](command:datanest.connections.addFromUrl) · [Import from .env](command:datanest.connections.importEnv) · [Import a list](command:datanest.connections.import)",
   "commands.logs.show.title": "Show Logs",
+  "commands.help.reportIssue.title": "Report a Problem…",
   "configuration.logLevel.description": "How much DataNest writes to its output channel. Passwords and tokens are never logged.",
   "configuration.logLevel.error": "Only errors.",
   "configuration.logLevel.warn": "Errors and warnings.",

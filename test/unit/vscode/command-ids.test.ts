@@ -141,7 +141,13 @@ describe('tree menus', () => {
       COMMAND_IDS.importConnections,
       COMMAND_IDS.exportConnections,
       COMMAND_IDS.createFolder,
+      COMMAND_IDS.reportIssue,
     ]);
+  });
+
+  it('keeps "Report a Problem…" last in the view menu, in a group of its own (V9.6)', () => {
+    const report = title.find((entry) => entry.command === COMMAND_IDS.reportIssue);
+    expect(report?.group).toBe('9_help@1');
   });
 
   it('offers on project connections what applies to them, and no user folders (V4.7)', () => {

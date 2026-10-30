@@ -282,9 +282,12 @@ export class ResultsPanel implements vscode.Disposable {
       return { resultId, applied };
     });
     this.rpc.handle('search', async ({ resultId, text }) => {
-      // Undefined also when a newer search overtook this one; the page drops the answer.
+      // Undefined when a newer search overtook this one (or the result is gone): the
+      // page keeps what it shows instead of flashing "no matches".
       const hits = await this.deps.results.search(resultId, text, MAX_SEARCH_HITS);
-      return { resultId, rows: hits?.rows ?? [], total: hits?.total ?? 0 };
+      return hits === undefined
+        ? { resultId, rows: [], total: 0, stale: true }
+        : { resultId, rows: hits.rows, total: hits.total };
     });
     this.rpc.on('ready', () => {
       this.update();

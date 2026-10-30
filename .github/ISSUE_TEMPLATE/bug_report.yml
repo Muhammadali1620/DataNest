@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in DataNest does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting. **DataNest: Report a Problem…** in the Command Palette opens
+        this form with the versions filled in. Please leave out passwords, hosts and data you
+        would not share in public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and the error message if there was one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Connect to a PostgreSQL 16 database
+        2. Run `SELECT …`
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: input
+    id: database
+    attributes:
+      label: Database and version
+      placeholder: PostgreSQL 16.4, MySQL 8.4, SQLite, Redis 7.4, …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DataNest version
+    validations:
+      required: true
+  - type: input
+    id: editor
+    attributes:
+      label: Editor and version
+      placeholder: Visual Studio Code 1.105.0, VSCodium, Cursor, …
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+  - type: input
+    id: language
+    attributes:
+      label: Display language
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: >-
+        **DataNest: Show Logs**, with `datanest.logLevel` set to `debug` while you repeat the
+        problem. Passwords and tokens are masked, but read it through before you paste it.
+      render: text

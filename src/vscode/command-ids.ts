@@ -3,6 +3,8 @@
 /** Every command the extension contributes: `<extId>.<area>.<action>` (ARCHITECTURE.md §10). */
 export const COMMAND_IDS = {
   showLogs: 'datanest.logs.show',
+  /** Opens the bug form on GitHub with the versions filled in (V9.6). */
+  reportIssue: 'datanest.help.reportIssue',
   /** Opens the form for a new connection. */
   addConnection: 'datanest.connections.add',
   /** Opens the form filled from a connection URL. */

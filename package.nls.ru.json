@@ -5,6 +5,7 @@
   "views.connections.name": "Подключения",
   "viewsWelcome.connections.empty": "Пока нет подключений.\n[Новое подключение](command:datanest.connections.add)\n[Добавить по URL](command:datanest.connections.addFromUrl) · [Импорт из .env](command:datanest.connections.importEnv) · [Импорт списка](command:datanest.connections.import)",
   "commands.logs.show.title": "Показать логи",
+  "commands.help.reportIssue.title": "Сообщить о проблеме…",
   "configuration.logLevel.description": "Сколько DataNest пишет в свой канал вывода. Пароли и токены никогда не попадают в лог.",
   "configuration.logLevel.error": "Только ошибки.",
   "configuration.logLevel.warn": "Ошибки и предупреждения.",

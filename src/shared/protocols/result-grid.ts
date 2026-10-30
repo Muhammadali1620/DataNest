@@ -247,6 +247,8 @@ export const resultGridProtocol = defineProtocol({
           resultId,
           rows: array(number({ integer: true, min: 0 }), { maxLength: MAX_SEARCH_HITS }),
           total: number({ integer: true, min: 0 }),
+          /** A newer search, a sort or fresh rows overtook this one: keep what is shown. */
+          stale: optional(boolean()),
         }),
       },
       /**

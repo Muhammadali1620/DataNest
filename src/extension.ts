@@ -290,6 +290,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     ...registerCommands({
+      extensionVersion:
+        (context.extension.packageJSON as { version?: string }).version ?? 'unknown',
       logger,
       channel,
       extensionUri: context.extensionUri,

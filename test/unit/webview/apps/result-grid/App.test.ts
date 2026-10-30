@@ -791,6 +791,32 @@ describe('result grid App', () => {
       expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 1');
     });
 
+    it('keeps the matches it shows when an answer comes back overtaken (V9.6)', async () => {
+      const harness = await withState({
+        tabs: [tab({ rowCount: 100 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      let calls = 0;
+      harness.host.handle('search', ({ resultId }: { resultId: string }) =>
+        ++calls === 1
+          ? { resultId, rows: [3, 7], total: 2 }
+          : { resultId, rows: [], total: 0, stale: true },
+      );
+      const input = screen.getByLabelText('Find in results');
+      await fireEvent.input(input, { target: { value: 'ex' } });
+      await waitFor(() => {
+        expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 2');
+      });
+      // The same text again, e.g. after a sort: this answer was overtaken by a newer one.
+      await fireEvent.input(input, { target: { value: 'ex' } });
+      await waitFor(() => {
+        expect(calls).toBe(2);
+      });
+      await flush();
+      expect(screen.getByTestId('hits').textContent.trim()).toBe('1 of 2');
+    });
+
     it('says when nothing matched', async () => {
       const harness = await withState({
         tabs: [tab({ rowCount: 100 })],

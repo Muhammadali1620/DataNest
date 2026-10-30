@@ -522,7 +522,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
     try {
       const found = await rpc.request('search', { resultId: tab.id, text });
       // Typing on while a big result is searched: only the latest text's answer counts.
-      if (found.resultId !== gridState?.activeId || search !== text) {
+      if (found.resultId !== gridState?.activeId || search !== text || found.stale === true) {
         return;
       }
       hits = found.rows;

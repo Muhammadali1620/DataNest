@@ -6,7 +6,9 @@ import {
   fit,
   formatNumber,
   hitAt,
+  hitForIndex,
   niceTicks,
+  pointText,
   type Shape,
   spacedLabels,
 } from '../../../../../webview/src/apps/result-chart/chart-view';
@@ -184,5 +186,62 @@ describe('chartScene', () => {
     });
     expect(hitAt(scene, scene.xs[2] ?? 0, (scene.plot.top + scene.plot.bottom) / 2)?.index).toBe(2);
     expect(hitAt(scene, 1, 1)).toBeUndefined();
+  });
+});
+
+describe('keyboard cursor helpers', () => {
+  const bars = chartScene({
+    data: data({
+      series: [
+        { name: 'v', values: [1, 3, 2] },
+        { name: 'w', values: [4, 5, 6] },
+      ],
+    }),
+    kind: 'bar',
+    width: 600,
+    height: 300,
+    otherLabel: 'Other',
+  });
+
+  it('finds the place of a label and stands it for every series', () => {
+    const hit = hitForIndex(bars, 1);
+    expect(hit?.index).toBe(1);
+    expect(hit?.series).toBeUndefined();
+    expect(hit?.width).toBeGreaterThan(0);
+  });
+
+  it('finds nothing past the labels', () => {
+    expect(hitForIndex(bars, 3)).toBeUndefined();
+    expect(hitForIndex(bars, -1)).toBeUndefined();
+  });
+
+  it('finds the slices of a pie', () => {
+    const pie = chartScene({
+      data: data(),
+      kind: 'pie',
+      width: 400,
+      height: 300,
+      otherLabel: 'Other',
+    });
+    expect(hitForIndex(pie, 2)?.index).toBe(2);
+  });
+
+  it('says a label and its values in words', () => {
+    const view = data({
+      series: [
+        { name: 'orders', values: [10, null, 7] },
+        { name: 'total', values: [12500, 40, 3.25] },
+      ],
+    });
+    expect(pointText(view, 0, { otherLabel: 'Other' })).toBe('a: orders 10, total 12.5K');
+    expect(pointText(view, 1, { otherLabel: 'Other' })).toBe('b: orders —, total 40');
+    expect(pointText(view, 2, { locale: 'ru', otherLabel: 'Прочее' })).toBe(
+      'c: orders 7, total 3,25',
+    );
+  });
+
+  it('names the folded slice of a pie', () => {
+    const view = data({ labels: ['a', ''], series: [{ name: 'v', values: [1, 2] }], folded: 3 });
+    expect(pointText(view, 1, { otherLabel: 'Other' })).toBe('Other: v 2');
   });
 });

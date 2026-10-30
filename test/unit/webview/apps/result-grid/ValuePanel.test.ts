@@ -196,6 +196,9 @@ describe('ValuePanel', () => {
     );
     const next = await screen.findByTestId('value-hex-next');
     expect(screen.getByTestId('value-hex-prev').hasAttribute('disabled')).toBe(true);
+    // The arrows are named for screen readers, not read out as symbols.
+    expect(screen.getByRole('button', { name: 'Next bytes' })).toBe(next);
+    expect(screen.getByRole('button', { name: 'Previous bytes' })).toBeTruthy();
     await fireEvent.click(next);
     expect(screen.getByTestId('value-hex').textContent).toContain('00001000');
     expect(next.hasAttribute('disabled')).toBe(true);

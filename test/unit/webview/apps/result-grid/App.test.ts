@@ -408,10 +408,11 @@ describe('result grid App', () => {
 
     it('exposes the row and column counts for assistive technology', async () => {
       await withState({ tabs: [tab({ rowCount: 500 })], activeId: 'result-1', running: false });
+      // The header row and the row-number column count too.
       await waitFor(() => {
-        expect(screen.getByTestId('grid').getAttribute('aria-rowcount')).toBe('500');
+        expect(screen.getByTestId('grid').getAttribute('aria-rowcount')).toBe('501');
       });
-      expect(screen.getByTestId('grid').getAttribute('aria-colcount')).toBe('2');
+      expect(screen.getByTestId('grid').getAttribute('aria-colcount')).toBe('3');
     });
   });
 
@@ -486,7 +487,7 @@ describe('result grid App', () => {
         expect(
           screen
             .getAllByRole('gridcell')
-            .filter((item) => item.getAttribute('aria-colindex') !== null).length,
+            .filter((item) => item.getAttribute('data-column') !== null).length,
         ).toBeGreaterThan(0);
       });
       return harness;
@@ -495,7 +496,7 @@ describe('result grid App', () => {
     function cell(row: number, column: number): HTMLElement {
       const cells = screen
         .getAllByRole('gridcell')
-        .filter((item) => item.getAttribute('aria-colindex') === String(column + 1));
+        .filter((item) => item.getAttribute('data-column') === String(column));
       const found = cells[row];
       if (found === undefined) {
         throw new Error(`no cell at row ${row}, column ${column}`);
@@ -866,9 +867,10 @@ describe('result grid App', () => {
         target: { value: 'bob' },
       });
       await waitFor(() => {
+        // Row 1 of the result is the grid's third row: the header is the first.
         const row = screen
           .getAllByRole('row')
-          .find((item) => item.getAttribute('aria-rowindex') === '2');
+          .find((item) => item.getAttribute('aria-rowindex') === '3');
         expect(row?.querySelector('[aria-selected="true"]')).not.toBeNull();
       });
     });

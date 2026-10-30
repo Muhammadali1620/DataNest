@@ -67,21 +67,21 @@ async function open() {
 function dataCells(): HTMLElement[] {
   return screen
     .queryAllByRole('gridcell')
-    .filter((item) => item.getAttribute('aria-colindex') !== null);
+    .filter((item) => item.getAttribute('data-column') !== null);
 }
 
 /** The column numbers (1-based) of the header cells, left to right. */
 function headerOrder(): number[] {
   return screen
     .getAllByRole('columnheader')
-    .filter((item) => item.getAttribute('aria-colindex') !== null)
-    .map((item) => Number(item.getAttribute('aria-colindex')));
+    .filter((item) => item.getAttribute('data-column') !== null)
+    .map((item) => Number(item.getAttribute('data-column')) + 1);
 }
 
 function cell(row: number, column: number): HTMLElement {
-  const found = dataCells().filter(
-    (item) => item.getAttribute('aria-colindex') === String(column + 1),
-  )[row];
+  const found = dataCells().filter((item) => item.getAttribute('data-column') === String(column))[
+    row
+  ];
   if (found === undefined) {
     throw new Error(`no cell at ${row},${column}`);
   }
@@ -134,7 +134,7 @@ describe('result grid column menu', () => {
     await waitFor(() => {
       expect(headerOrder()).toEqual([1, 3, 4]);
     });
-    expect(dataCells().filter((c) => c.getAttribute('aria-colindex') === '2')).toHaveLength(0);
+    expect(dataCells().filter((c) => c.getAttribute('data-column') === '1')).toHaveLength(0);
     expect(screen.getByTestId('columns-toggle').textContent).toContain('1 hidden');
     await fireEvent.click(checkbox('name'));
     await waitFor(() => {
@@ -213,7 +213,7 @@ describe('result grid column menu', () => {
     await fireEvent.pointerDown(cell(0, 0), { button: 0 });
     await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'ArrowRight' });
     const focused = dataCells().find((c) => c.classList.contains('focused'));
-    expect(focused?.getAttribute('aria-colindex')).toBe('3');
+    expect(focused?.getAttribute('data-column')).toBe('2');
   });
 
   it('moves by the pinned order too', async () => {
@@ -226,7 +226,7 @@ describe('result grid column menu', () => {
     await fireEvent.pointerDown(cell(0, 3), { button: 0 });
     await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'ArrowRight' });
     const focused = dataCells().find((c) => c.classList.contains('focused'));
-    expect(focused?.getAttribute('aria-colindex')).toBe('1');
+    expect(focused?.getAttribute('data-column')).toBe('0');
   });
 
   it('copies what is on screen: a selection across a hidden column skips it', async () => {
@@ -317,8 +317,7 @@ describe('result grid column widths', () => {
     Number.parseInt(
       screen
         .getAllByRole('columnheader')
-        .find((item) => item.getAttribute('aria-colindex') === String(index + 1))?.style.width ??
-        '0',
+        .find((item) => item.getAttribute('data-column') === String(index))?.style.width ?? '0',
       10,
     );
 

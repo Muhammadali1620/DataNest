@@ -191,6 +191,39 @@ describe('result chart page', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
+  it('reads the values with the keyboard, for screen readers too (V9.3)', async () => {
+    await setup();
+    const values = screen.getByRole('slider', { name: 'Values of the chart' });
+    expect(values.tabIndex).toBe(0);
+    expect(values.getAttribute('aria-valuemax')).toBe('3');
+    expect(values.getAttribute('aria-valuetext')).toBe('Use the arrow keys to read the values');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await fireEvent.keyDown(values, { key: 'ArrowRight' });
+    expect(values.getAttribute('aria-valuenow')).toBe('1');
+    expect(values.getAttribute('aria-valuetext')).toBe('north: orders 10, total 100');
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain('north');
+    expect(tip.textContent).toContain('total: 100');
+    await fireEvent.keyDown(values, { key: 'End' });
+    expect(values.getAttribute('aria-valuetext')).toBe('east: orders 7, total —');
+    await fireEvent.keyDown(values, { key: 'ArrowRight' });
+    expect(values.getAttribute('aria-valuenow')).toBe('3');
+    await fireEvent.keyDown(values, { key: 'ArrowLeft' });
+    expect(values.getAttribute('aria-valuenow')).toBe('2');
+    await fireEvent.keyDown(values, { key: 'Home' });
+    expect(values.getAttribute('aria-valuenow')).toBe('1');
+    await fireEvent.keyDown(values, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(values.getAttribute('aria-valuetext')).toBe('Use the arrow keys to read the values');
+  });
+
+  it('starts from the last label when stepping back with nothing chosen', async () => {
+    await setup();
+    const values = screen.getByRole('slider');
+    await fireEvent.keyDown(values, { key: 'ArrowLeft' });
+    expect(values.getAttribute('aria-valuenow')).toBe('3');
+  });
+
   it('says when there is nothing to draw, and when the result was cut', async () => {
     await setup({
       ...STATE,

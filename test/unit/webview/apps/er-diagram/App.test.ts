@@ -265,6 +265,90 @@ describe('ER diagram page', () => {
     expect(screen.getByTitle('Actual size').textContent).not.toBe('100%');
   });
 
+  describe('with the keyboard (V9.3)', () => {
+    const canvas = (): HTMLElement => screen.getByRole('application');
+    const transform = (): string =>
+      canvas().querySelector('svg > g')?.getAttribute('transform') ?? '';
+    const announced = (): string => screen.getByTestId('er-announce').textContent.trim();
+
+    it('pans with the arrow keys, further with Shift', async () => {
+      await setup();
+      const start = transform();
+      await fireEvent.keyDown(canvas(), { key: 'ArrowRight' });
+      const right = transform();
+      expect(right).not.toBe(start);
+      await fireEvent.keyDown(canvas(), { key: 'ArrowLeft' });
+      expect(transform()).toBe(start);
+      await fireEvent.keyDown(canvas(), { key: 'ArrowDown', shiftKey: true });
+      const [, , before] = /translate\(([-\d.]+) ([-\d.]+)\)/u.exec(start) ?? [];
+      const [, , after] = /translate\(([-\d.]+) ([-\d.]+)\)/u.exec(transform()) ?? [];
+      expect(Number(before) - Number(after)).toBe(200);
+    });
+
+    it('walks the tables by name with ] and [, round the ends, and says which one', async () => {
+      await setup();
+      expect(announced()).toBe('');
+      await fireEvent.keyDown(canvas(), { key: ']' });
+      expect(boxOf('customers').classList.contains('selected')).toBe(true);
+      expect(announced()).toBe('Table customers: 1 columns, 0 foreign keys, referenced by 1');
+      await fireEvent.keyDown(canvas(), { key: 'n' });
+      expect(boxOf('orders').classList.contains('selected')).toBe(true);
+      expect(announced()).toBe('Table orders: 3 columns, 1 foreign keys, referenced by 0');
+      await fireEvent.keyDown(canvas(), { key: ']' });
+      expect(boxOf('ext').classList.contains('selected')).toBe(true);
+      await fireEvent.keyDown(canvas(), { key: ']' });
+      expect(boxOf('customers').classList.contains('selected')).toBe(true);
+      await fireEvent.keyDown(canvas(), { key: '[' });
+      expect(boxOf('ext').classList.contains('selected')).toBe(true);
+      await fireEvent.keyDown(canvas(), { key: 'p' });
+      expect(boxOf('orders').classList.contains('selected')).toBe(true);
+    });
+
+    it('starts from the last table when walking backwards with nothing selected', async () => {
+      await setup();
+      await fireEvent.keyDown(canvas(), { key: '[' });
+      expect(boxOf('ext').classList.contains('selected')).toBe(true);
+    });
+
+    it('centres the table it moves to', async () => {
+      await setup();
+      const start = transform();
+      await fireEvent.keyDown(canvas(), { key: ']' });
+      expect(transform()).not.toBe(start);
+    });
+
+    it('opens the selected table with Enter and clears the choice with Esc', async () => {
+      const page = await setup();
+      await fireEvent.keyDown(canvas(), { key: ']' });
+      await fireEvent.keyDown(canvas(), { key: 'Enter' });
+      await waitFor(() => {
+        expect(page.events.openTable).toHaveBeenCalledWith({ id: 'customers' });
+      });
+      await fireEvent.keyDown(canvas(), { key: 'Escape' });
+      expect(boxOf('customers').classList.contains('selected')).toBe(false);
+      expect(announced()).toBe('');
+    });
+
+    it('describes its keys and names the zoom buttons', async () => {
+      await setup();
+      const help = document.getElementById(canvas().getAttribute('aria-describedby') ?? '');
+      expect(help?.textContent).toContain('] and [');
+      expect(screen.getByRole('button', { name: 'Zoom in (+)' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Zoom out (-)' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Actual size: 100%' })).toBeTruthy();
+    });
+
+    it('leaves keys typed into the search box alone', async () => {
+      await setup();
+      const search = screen.getByLabelText('Find a table');
+      const start = transform();
+      await fireEvent.keyDown(search, { key: 'ArrowRight' });
+      await fireEvent.keyDown(search, { key: ']' });
+      expect(transform()).toBe(start);
+      expect(document.querySelector('g.box.selected')).toBeNull();
+    });
+  });
+
   it('pans when the background is dragged', async () => {
     await setup();
     const canvas = screen.getByRole('application');

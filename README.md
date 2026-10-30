@@ -149,6 +149,16 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
   database family.
 - Every statement goes to a searchable history, with passwords masked, ready to rerun.
 
+**Language and accessibility**
+
+- English and Russian, following the editor's display language — the messages of every
+  driver included.
+- Every page works from the keyboard and follows the editor's theme, high contrast
+  included. The result grid is one tab stop that screen readers walk cell by cell:
+  arrows move, `Shift+Alt+↑` sorts by the column, `Shift+Alt+←`/`→` change its width,
+  `F4` shows the whole value. The ER diagram walks its tables with `]` and `[`, a chart
+  reads its values with the arrow keys.
+
 ## Getting started
 
 1. Open the DataNest view in the activity bar.

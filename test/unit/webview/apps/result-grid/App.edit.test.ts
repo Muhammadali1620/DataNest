@@ -101,13 +101,11 @@ async function open(tab: ResultTab = EDITABLE_TAB, answer: EditAnswer = { ok: tr
 function cells(): HTMLElement[] {
   return screen
     .queryAllByRole('gridcell')
-    .filter((item) => item.getAttribute('aria-colindex') !== null);
+    .filter((item) => item.getAttribute('data-column') !== null);
 }
 
 function cell(row: number, column: number): HTMLElement {
-  const found = cells().filter((item) => item.getAttribute('aria-colindex') === String(column + 1))[
-    row
-  ];
+  const found = cells().filter((item) => item.getAttribute('data-column') === String(column))[row];
   if (found === undefined) {
     throw new Error(`no cell at ${row},${column}`);
   }
@@ -294,10 +292,12 @@ describe('result grid editing', () => {
       running: false,
     });
     await waitFor(() => {
-      expect(cell(0, 1).textContent.trim()).toBe('bob');
+      // On screen the value; for screen readers a word that it is not saved yet.
+      expect(cell(0, 1).textContent.trim()).toBe('bob (changed, not saved)');
+      expect(cell(0, 1).querySelector('.sr-only')?.textContent).toBe('(changed, not saved)');
     });
     expect(cell(0, 1).classList.contains('changed')).toBe(true);
-    expect(cell(1, 1).textContent.trim()).toBe('DEFAULT');
+    expect(cell(1, 1).textContent.trim()).toBe('DEFAULT (changed, not saved)');
     expect(cell(1, 1).classList.contains('defaulted')).toBe(true);
     expect(cell(0, 0).classList.contains('changed')).toBe(false);
     expect(screen.getByTestId('changed-count').textContent.trim()).toBe('2 unsaved changes');
@@ -440,6 +440,31 @@ describe('result grid editing', () => {
       });
     });
 
+    it('marks new and deleted rows by a sign and in words, not by colour alone', async () => {
+      const { host, served, tab } = await open();
+      served.rows = [...ROWS, [null, null, null, null]];
+      served.states = [
+        { row: 0, state: 'deleted' },
+        { row: 2, state: 'inserted' },
+      ];
+      host.emit('state', {
+        tabs: [{ ...tab, revision: 1, insertedRows: 1, deletedRows: 1 }],
+        activeId: tab.id,
+        running: false,
+      });
+      const header = (row: number): HTMLElement | undefined =>
+        screen.getAllByRole('rowheader')[row];
+      await waitFor(() => {
+        expect(header(2)?.querySelector('.mark')?.textContent).toBe('+');
+      });
+      expect(header(2)?.querySelector('.mark')?.getAttribute('aria-hidden')).toBe('true');
+      expect(header(2)?.querySelector('.sr-only')?.textContent).toBe('new row,');
+      expect(header(0)?.querySelector('.mark')?.textContent).toBe('−');
+      expect(header(0)?.querySelector('.sr-only')?.textContent).toBe('deleted row,');
+      expect(header(1)?.querySelector('.mark')).toBeNull();
+      expect(header(1)?.textContent.trim()).toBe('2');
+    });
+
     it('grows the grid by the rows waiting to be inserted', async () => {
       const { host, served, tab } = await open();
       served.rows = [...ROWS, [null, null, null, null]];
@@ -454,7 +479,7 @@ describe('result grid editing', () => {
           screen.getAllByRole('row').filter((row) => row.classList.contains('inserted')),
         ).toHaveLength(1);
       });
-      expect(screen.getByTestId('grid').getAttribute('aria-rowcount')).toBe('3');
+      expect(screen.getByTestId('grid').getAttribute('aria-rowcount')).toBe('4');
       expect(screen.getByTestId('changed-count').textContent.trim()).toBe('1 unsaved changes');
     });
 

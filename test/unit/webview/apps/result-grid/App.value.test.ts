@@ -74,7 +74,7 @@ async function open() {
 function cell(row: number, column: number): HTMLElement {
   const found = screen
     .queryAllByRole('gridcell')
-    .filter((item) => item.getAttribute('aria-colindex') === String(column + 1))[row];
+    .filter((item) => item.getAttribute('data-column') === String(column))[row];
   if (found === undefined) {
     throw new Error(`no cell at ${row},${column}`);
   }

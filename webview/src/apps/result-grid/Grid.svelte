@@ -80,6 +80,8 @@
     onFollow?: ((row: number, column: number) => void) | undefined;
     /** Called for Shift+F4, which opens or closes the record card. */
     onToggleRecord?: (() => void) | undefined;
+    /** What screen readers call the grid, e.g. the statement that produced it. */
+    label?: string | undefined;
     t: Translate;
   }
 
@@ -111,8 +113,15 @@
     onToggleRecord,
     linkTarget,
     onFollow,
+    label,
     t,
   }: Props = $props();
+
+  /** Prefix of the cells' ids, unique per grid, for `aria-activedescendant`. */
+  const uid = $props.id();
+
+  /** A step of a keyboard resize; Shift makes it bigger. */
+  const RESIZE_STEP = 16;
 
   /** One row is exactly this tall, which is what makes the arithmetic simple. */
   const ROW_HEIGHT = 22;
@@ -261,6 +270,23 @@
     const info = editColumns?.[column];
     return isEditableColumn(info) ? info : undefined;
   }
+
+  function cellId(row: number, position: number): string {
+    return `${uid}-r${row}-c${position}`;
+  }
+
+  /**
+   * The focused cell for screen readers: DOM focus stays on the grid (one tab stop),
+   * and this names the cell they should read. Only a drawn cell can be named.
+   */
+  const activeCell = $derived.by(() => {
+    const focus = selection?.focus;
+    if (focus === undefined || !rowIndexes.includes(focus.row)) {
+      return undefined;
+    }
+    const drawn = focus.column < pinned || scrollPositions.includes(focus.column);
+    return drawn ? cellId(focus.row, focus.column) : undefined;
+  });
 
   /** The focused cell in the result's own column numbers. */
   const focusCell = $derived(
@@ -433,6 +459,22 @@
 
   function onKeyDown(event: KeyboardEvent): void {
     const modifier = event.ctrlKey || event.metaKey;
+    // Shift+Alt with arrows acts on the focused column, like its header does for the
+    // mouse; VS Code binds these only in text editors, so a page may use them.
+    if (event.shiftKey && event.altKey && !modifier && focusCell !== undefined) {
+      const column = focusCell.column;
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        onSort(column);
+        return;
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        const step = event.key === 'ArrowLeft' ? -RESIZE_STEP : RESIZE_STEP;
+        onResize(column, Math.max(MIN_COLUMN_WIDTH, widthOf(column) + step));
+        return;
+      }
+    }
     if (event.key === 'F12' && selection !== undefined) {
       event.preventDefault();
       follow(focusCell?.row ?? 0, focusCell?.column ?? 0);
@@ -583,14 +625,20 @@
   onpointerup={endSelect}
   onpointerleave={endSelect}
   role="grid"
-  aria-rowcount={rowCount}
-  aria-colcount={columns.length}
+  aria-label={label}
+  aria-describedby={`${uid}-keys`}
+  aria-rowcount={rowCount + 1}
+  aria-colcount={order.length + 1}
+  aria-multiselectable="true"
+  aria-readonly={editColumns === undefined}
+  aria-activedescendant={activeCell}
   tabindex="0"
   data-testid="grid"
 >
+  <p class="sr-only" id={`${uid}-keys`}>{t('grid.keys')}</p>
   <div class="canvas" style="height: {rows.totalHeight}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
-    <div class="header" role="row" style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
-      <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader">#</div>
+    <div class="header" role="row" aria-rowindex={1} style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
+      <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader" aria-colindex={1}>#</div>
       {#each pinnedPositions as position (position)}
         {@render headCell(position)}
       {/each}
@@ -607,14 +655,19 @@
         class:inserted={stateAt(index) === 'inserted'}
         class:deleted={stateAt(index) === 'deleted'}
         role="row"
-        aria-rowindex={index + 1}
+        aria-rowindex={index + 2}
         style="top: {index * ROW_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
       >
-        <div class="cell rownum" style="width: {ROW_NUMBER_WIDTH}px;" role="rowheader">
+        <div class="cell rownum" style="width: {ROW_NUMBER_WIDTH}px;" role="rowheader" aria-colindex={1}>
+          {#if stateAt(index) === 'inserted'}
+            <span class="mark" aria-hidden="true">+</span><span class="sr-only">{t('grid.rowNew')}</span>
+          {:else if stateAt(index) === 'deleted'}
+            <span class="mark" aria-hidden="true">−</span><span class="sr-only">{t('grid.rowDeleted')}</span>
+          {/if}
           {index + 1}
         </div>
         {#if cells === undefined}
-          <div class="cell pending" style="width: {layout.totalWidth}px;" role="gridcell">
+          <div class="cell pending" style="width: {layout.totalWidth}px;" role="gridcell" aria-colindex={2}>
             {t('grid.loading')}
           </div>
         {:else}
@@ -637,16 +690,19 @@
     class="cell head"
     class:pinned={position < pinned}
     role="columnheader"
-    aria-colindex={index + 1}
+    aria-colindex={position + 2}
+    data-column={index}
     aria-sort={sort?.column === index ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     style="width: {widthOf(index)}px;{position < pinned
       ? ` left: ${ROW_NUMBER_WIDTH + (layout.offsets[position] ?? 0)}px;`
       : ''}"
     title={columns[index]?.dataType ?? columns[index]?.name ?? ''}
   >
+    <!-- Out of the tab order: the grid is one stop, and Shift+Alt+↑ sorts from a cell. -->
     <button
       type="button"
       class="name"
+      tabindex="-1"
       onclick={() => {
         onSort(index);
       }}
@@ -683,7 +739,9 @@
   <div
     class="cell"
     role="gridcell"
-    aria-colindex={column + 1}
+    id={cellId(index, position)}
+    aria-colindex={position + 2}
+    data-column={column}
     aria-selected={isSelected(selection, index, position)}
     tabindex={-1}
     class:null={cell.isNull}
@@ -717,6 +775,7 @@
   >
     {#if editor === undefined}
       {mark === 'default' ? t('grid.defaultLabel') : cell.text}
+      {#if mark !== undefined}<span class="sr-only">{t('grid.cellChanged')}</span>{/if}
     {:else if editor.control.type === 'select'}
       <select
         class="editor"
@@ -908,6 +967,20 @@
     text-align: right;
     background: var(--vscode-editor-background);
     user-select: none;
+  }
+
+  /* A new or deleted row says so by a sign too, not only by its colour. */
+  .rownum .mark {
+    float: left;
+    font-weight: bold;
+  }
+
+  .row.inserted .rownum .mark {
+    color: var(--vscode-gitDecoration-addedResourceForeground, currentColor);
+  }
+
+  .row.deleted .rownum .mark {
+    color: var(--vscode-gitDecoration-deletedResourceForeground, currentColor);
   }
 
   .cell.pinned {

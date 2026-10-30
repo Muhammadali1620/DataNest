@@ -172,8 +172,15 @@
     }
     const at = selected === undefined ? -1 : matches.indexOf(selected);
     const id = matches[(at + 1) % matches.length];
+    if (id !== undefined) {
+      centerOn(id);
+    }
+  }
+
+  /** Selects a table and moves the view so it sits in the middle. */
+  function centerOn(id: string): void {
     const box = scene.boxes.find((candidate) => candidate.table.id === id);
-    if (id === undefined || box === undefined) {
+    if (box === undefined) {
       return;
     }
     selected = id;
@@ -183,6 +190,41 @@
       y: height / 2 - (box.y + box.height / 2) * view.zoom,
     };
   }
+
+  /** Tables in name order, which is how the keyboard walks through them. */
+  const byName = $derived(
+    [...scene.boxes]
+      .sort((left, right) => left.table.label.localeCompare(right.table.label))
+      .map((box) => box.table.id),
+  );
+
+  /** The next (or previous) table by name, round the end, from the selected one. */
+  function step(delta: 1 | -1): void {
+    if (byName.length === 0) {
+      return;
+    }
+    const at = selected === undefined ? -1 : byName.indexOf(selected);
+    const next = at === -1 ? (delta === 1 ? 0 : byName.length - 1) : at + delta;
+    const id = byName[(next + byName.length) % byName.length];
+    if (id !== undefined) {
+      centerOn(id);
+    }
+  }
+
+  /** What a screen reader says about the selected table: its name, columns and keys. */
+  const announcement = $derived.by(() => {
+    const table = page?.tables.find((candidate) => candidate.id === selected);
+    if (table === undefined) {
+      return '';
+    }
+    const relations = page?.relations ?? [];
+    const out = relations.filter((relation) => relation.from === table.id).length;
+    const into = relations.filter((relation) => relation.to === table.id).length;
+    return t('er.selected', table.label, table.columns.length, out, into);
+  });
+
+  /** Pixels one arrow key moves the picture; Shift moves five times as far. */
+  const PAN_STEP = 40;
 
   // Dragging a box or the whole picture.
   type Drag =
@@ -257,7 +299,16 @@
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
       return;
     }
-    if (event.key === '+' || event.key === '=') {
+    const pan = event.shiftKey ? PAN_STEP * 5 : PAN_STEP;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      view = { ...view, x: view.x + (event.key === 'ArrowLeft' ? pan : -pan) };
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      view = { ...view, y: view.y + (event.key === 'ArrowUp' ? pan : -pan) };
+    } else if (event.key === ']' || event.key === 'n') {
+      step(1);
+    } else if (event.key === '[' || event.key === 'p') {
+      step(-1);
+    } else if (event.key === '+' || event.key === '=') {
       zoomBy(1.2);
     } else if (event.key === '-') {
       zoomBy(1 / 1.2);
@@ -375,7 +426,7 @@
           }
         }}
       />
-      <button type="button" class="button secondary" title={t('er.zoomOut')} onclick={() => {
+      <button type="button" class="button secondary" title={t('er.zoomOut')} aria-label={t('er.zoomOut')} onclick={() => {
           zoomBy(1 / 1.2);
         }}
         >−</button
@@ -384,11 +435,12 @@
         type="button"
         class="button secondary zoom"
         title={t('er.zoomReset')}
+        aria-label={`${t('er.zoomReset')}: ${zoomLabel}`}
         onclick={() => {
           view = clampZoom({ ...view, zoom: 1 });
         }}>{zoomLabel}</button
       >
-      <button type="button" class="button secondary" title={t('er.zoomIn')} onclick={() => {
+      <button type="button" class="button secondary" title={t('er.zoomIn')} aria-label={t('er.zoomIn')} onclick={() => {
           zoomBy(1.2);
         }}
         >+</button
@@ -427,6 +479,7 @@
       tabindex="0"
       role="application"
       aria-label={t('er.title', page.scope)}
+      aria-describedby="er-help"
       bind:this={canvas}
       onpointerdown={startPan}
       onwheel={onWheel}
@@ -487,7 +540,8 @@
         </g>
       </svg>
     </div>
-    <p class="hint footer">{t('er.help')}</p>
+    <p class="hint footer" id="er-help">{t('er.help')} {t('er.keys')}</p>
+    <p class="sr-only" role="status" data-testid="er-announce">{announcement}</p>
   {/if}
 </main>
 

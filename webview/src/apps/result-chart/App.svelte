@@ -12,7 +12,14 @@
   import type { Translate } from '../../lib/i18n';
   import { svgToPng } from '../er-diagram/picture';
   import { type ChartColors, sceneToSvg } from './chart-svg';
-  import { chartScene, formatNumber, hitAt, SERIES_COLORS } from './chart-view';
+  import {
+    chartScene,
+    formatNumber,
+    hitAt,
+    hitForIndex,
+    pointText,
+    SERIES_COLORS,
+  } from './chart-view';
 
   interface Props {
     rpc: RpcPeer<ResultChartProtocol['webview'], ResultChartProtocol['host']>;
@@ -36,6 +43,8 @@
   let width = $state(0);
   let height = $state(0);
   let pointer = $state<{ x: number; y: number } | undefined>(undefined);
+  /** The label the keyboard points at (V9.3); the mouse, when over the chart, wins. */
+  let cursor = $state<number | undefined>(undefined);
 
   const locale = document.documentElement.lang || 'en';
 
@@ -52,8 +61,44 @@
         }),
   );
   const hit = $derived(
-    scene === undefined || pointer === undefined ? undefined : hitAt(scene, pointer.x, pointer.y),
+    scene === undefined
+      ? undefined
+      : pointer !== undefined
+        ? hitAt(scene, pointer.x, pointer.y)
+        : cursor !== undefined
+          ? hitForIndex(scene, cursor)
+          : undefined,
   );
+  /** Where the tooltip goes: by the pointer, or above the point the keyboard chose. */
+  const tipAt = $derived(
+    pointer ?? (hit === undefined ? undefined : { x: hit.x + hit.width / 2, y: hit.y }),
+  );
+
+  /** Arrows step through the labels, Home and End jump, Escape lets go. */
+  function onChartKey(event: KeyboardEvent): void {
+    const count = data?.labels.length ?? 0;
+    if (count === 0) {
+      return;
+    }
+    const last = count - 1;
+    const at = cursor === undefined ? undefined : Math.min(cursor, last);
+    let next: number | undefined;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+      next = at === undefined ? 0 : Math.min(last, at + 1);
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+      next = at === undefined ? last : Math.max(0, at - 1);
+    } else if (event.key === 'Home') {
+      next = 0;
+    } else if (event.key === 'End') {
+      next = last;
+    } else if (event.key === 'Escape') {
+      next = undefined;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    cursor = next;
+  }
   const counting = $derived(config?.aggregate === 'count');
 
   const TYPE_KEYS: Record<ChartConfigData['type'], MessageKey> = {
@@ -290,6 +335,23 @@
       {#if data.labels.length === 0 || data.series.length === 0}
         <p class="hint">{t('chart.empty')}</p>
       {:else if scene !== undefined}
+        <div
+          class="values"
+          role="slider"
+          tabindex="0"
+          aria-label={t('chart.cursor')}
+          aria-valuemin={1}
+          aria-valuemax={data.labels.length}
+          aria-valuenow={cursor === undefined ? 1 : Math.min(cursor, data.labels.length - 1) + 1}
+          aria-valuetext={cursor === undefined
+            ? t('chart.cursorHint')
+            : pointText(data, Math.min(cursor, data.labels.length - 1), {
+                locale,
+                otherLabel: t('chart.other'),
+              })}
+          data-testid="chart-values"
+          onkeydown={onChartKey}
+        >
         <svg
           width={scene.width}
           height={scene.height}
@@ -320,8 +382,9 @@
             <line x1={x} y1={scene.plot.top} x2={x} y2={scene.plot.bottom} class="guide" />
           {/if}
         </svg>
-        {#if hit !== undefined && pointer !== undefined}
-          <div class="tip" role="tooltip" style={`left: ${pointer.x + 14}px; top: ${pointer.y + 10}px`}>
+        </div>
+        {#if hit !== undefined && tipAt !== undefined}
+          <div class="tip" role="tooltip" style={`left: ${tipAt.x + 14}px; top: ${tipAt.y + 10}px`}>
             <b>{data.labels[hit.index] === '' && data.folded !== undefined ? t('chart.other') : data.labels[hit.index]}</b>
             {#each data.series as series, seriesIndex (seriesIndex)}
               {#if hit.series === undefined || hit.series === seriesIndex}

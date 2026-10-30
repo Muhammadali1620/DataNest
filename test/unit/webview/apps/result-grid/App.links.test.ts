@@ -68,9 +68,8 @@ async function open(reply: { ok: boolean; error?: LinkError } = { ok: true }) {
   host.emit('state', { tabs: [TAB], activeId: TAB.id, running: false });
   await waitFor(() => {
     expect(
-      screen
-        .queryAllByRole('gridcell')
-        .filter((item) => item.getAttribute('aria-colindex') !== null).length,
+      screen.queryAllByRole('gridcell').filter((item) => item.getAttribute('data-column') !== null)
+        .length,
     ).toBeGreaterThan(0);
   });
   return { follow };
@@ -79,7 +78,7 @@ async function open(reply: { ok: boolean; error?: LinkError } = { ok: true }) {
 function cell(row: number, column: number): HTMLElement {
   const found = screen
     .queryAllByRole('gridcell')
-    .filter((item) => item.getAttribute('aria-colindex') === String(column + 1))[row];
+    .filter((item) => item.getAttribute('data-column') === String(column))[row];
   if (found === undefined) {
     throw new Error(`no cell at ${row},${column}`);
   }

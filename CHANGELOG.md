@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Added
+
+- The result grid works with screen readers: it is one stop of the Tab key, the cell under
+  the keyboard is read out as you move, and new, deleted and changed rows and cells are
+  said in words. `Shift+Alt+↑` sorts by the column of that cell, `Shift+Alt+←` and `→`
+  change its width.
+- The ER diagram can be used from the keyboard: arrows move the picture, `]` and `[` go
+  from table to table and say which one, `Enter` opens it.
+- A chart's values can be read with the arrow keys, by a screen reader too.
+- Keyboard focus is visible on every page, and in high contrast themes selections and
+  changes are outlined instead of shown by a background that the theme leaves dark.
+
 ### Fixed
 
 - Sorting a result of a million rows by a text column took over a minute — 85 seconds for

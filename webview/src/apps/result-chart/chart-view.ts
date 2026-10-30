@@ -439,6 +439,30 @@ export function hitAt(scene: Scene, x: number, y: number): Hit | undefined {
     .find((hit) => x >= hit.x && x <= hit.x + hit.width && y >= hit.y && y <= hit.y + hit.height);
 }
 
+/**
+ * The place of a label for the keyboard cursor (V9.3): its first hit area, standing
+ * for every series of that label, as the pointer over a line chart does.
+ */
+export function hitForIndex(scene: Scene, index: number): Hit | undefined {
+  const found = scene.hits.find((hit) => hit.index === index);
+  return found === undefined ? undefined : { ...found, series: undefined };
+}
+
+/** A label and its values in words, e.g. `2024-01: orders 12, total 340.5`. */
+export function pointText(
+  data: ChartDataView,
+  index: number,
+  options: { readonly locale?: string; readonly otherLabel: string },
+): string {
+  const label = data.labels[index] ?? '';
+  const name = label === '' && data.folded !== undefined ? options.otherLabel : label;
+  const values = data.series.map((series) => {
+    const value = series.values[index];
+    return `${series.name} ${value === null || value === undefined ? '—' : formatNumber(value, options.locale)}`;
+  });
+  return `${name}: ${values.join(', ')}`;
+}
+
 function round(value: number): number {
   return Math.round(value * 10) / 10;
 }

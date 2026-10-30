@@ -241,6 +241,7 @@
             type="button"
             class="mode"
             disabled={hexPage === 0}
+            aria-label={t('value.hexPrev')}
             data-testid="value-hex-prev"
             onclick={() => {
               hexPage -= 1;
@@ -253,6 +254,7 @@
             type="button"
             class="mode"
             disabled={hexPage >= pages - 1}
+            aria-label={t('value.hexNext')}
             data-testid="value-hex-next"
             onclick={() => {
               hexPage += 1;

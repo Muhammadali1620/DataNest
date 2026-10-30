@@ -609,7 +609,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   {#if gridState === undefined}
     <p class="hint">{t('grid.loading')}</p>
   {:else if gridState.tabs.length === 0}
-    <p class="hint">{gridState.running ? t('grid.running') : t('grid.empty')}</p>
+    <p class="hint" role="status">{gridState.running ? t('grid.running') : t('grid.empty')}</p>
   {:else}
     <div class="tabs" role="tablist">
       {#each gridState.tabs as tab (tab.id)}
@@ -873,7 +873,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </p>
       </div>
     {:else}
-      <p class="summary" data-testid="summary">
+      <p class="summary" role="status" data-testid="summary">
         {#if activeTab.affectedRows !== undefined}
           {t('grid.affected', activeTab.affectedRows, activeTab.durationMs)}
         {:else}
@@ -925,7 +925,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             }}
           />
           {#if search.trim() !== ''}
-            <span class="hits" data-testid="hits">
+            <span class="hits" role="status" data-testid="hits">
               {hitTotal === 0
                 ? t('grid.noMatches')
                 : t('grid.matchOf', hitIndex + 1, hitTotal)}
@@ -1006,6 +1006,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           sort={activeTab.sort}
           {onSort}
           {revealRow}
+          label={activeTab.title}
           columns={activeTab.columns}
           rowCount={displayCount(activeTab)}
           {widths}

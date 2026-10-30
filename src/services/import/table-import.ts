@@ -172,7 +172,9 @@ export class TableImporter {
           rolledBack = true;
         }
       }
-      if (state.inserted > 0 && !rolledBack) {
+      // With the link gone there is no session to move a sequence with; trying would
+      // only add a second, confusing failure to the report.
+      if (state.inserted > 0 && !rolledBack && !state.linkLost) {
         await this.moveSequences(session, request, state);
       }
     } catch (error) {
@@ -266,6 +268,7 @@ export class TableImporter {
           message: errorMessage(dbError),
         });
         state.outcome = dbError.code === 'cancelled' ? 'cancelled' : 'stopped';
+        state.linkLost = dbError.code === 'connection-failed';
         return false;
       }
     }
@@ -278,6 +281,7 @@ export class TableImporter {
         state.fail({ line: row.line, message: errorMessage(dbError) });
         if (dbError.code === 'connection-failed' || dbError.code === 'cancelled') {
           state.outcome = dbError.code === 'cancelled' ? 'cancelled' : 'stopped';
+          state.linkLost = dbError.code === 'connection-failed';
           return false;
         }
       }
@@ -309,6 +313,8 @@ export class TableImporter {
 
 class ImportState {
   outcome: ImportReport['outcome'] = 'done';
+  /** The server went away: nothing more can be done on this session. */
+  linkLost = false;
   read = 0;
   inserted = 0;
   failedCount = 0;

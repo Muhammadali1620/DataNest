@@ -41,6 +41,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   stays as they say it.
 - Numbers in the tree and in questions are grouped the way the editor's language writes
   them, not the operating system's.
+- An import that lost its connection no longer tries to move the table's sequence
+  afterwards, which added a second, confusing failure to the report.
 
 ### Changed
 

@@ -842,7 +842,6 @@
   "Init command \"{0}\" failed: {1}": "Команда при подключении «{0}» не выполнена: {1}",
   "The init commands of a read-only connection may not change anything: {0}": "Команды при подключении для подключения только для чтения не могут ничего изменять: {0}",
   "These changes are already being saved": "Эти изменения уже сохраняются",
-  "This result cannot be saved": "Этот результат нельзя сохранить",
   "The open transaction of this editor failed; roll it back before saving": "Открытая транзакция этого редактора завершилась ошибкой; откатите её перед сохранением",
   "A row was not found: it was changed or deleted since it was read. Nothing was saved.": "Строка не найдена: её изменили или удалили после чтения. Ничего не сохранено.",
   "A statement affected {0} rows instead of {1}. Nothing was saved.": "Оператор затронул {0} строк вместо {1}. Ничего не сохранено.",

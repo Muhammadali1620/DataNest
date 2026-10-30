@@ -207,6 +207,8 @@ export class FakeSession implements Session {
   cancelCount = 0;
   /** Thrown while iterating execute() when set. */
   executeError: Error | undefined;
+  /** Rows a statement changed; set, the statement returns no result set (an UPDATE). */
+  affectedFor: ((sql: string) => number | undefined) | undefined;
   /** When it returns true for a statement, that statement fails. */
   failExecuteWhen: ((sql: string) => boolean) | undefined;
   /**
@@ -281,9 +283,15 @@ export class FakeSession implements Session {
       throw new DbError('permission-denied', `Not allowed: ${sql}`);
     }
     this.noteTransaction(sql, false);
-    yield { kind: 'columns', columns: this.columns };
-    yield { kind: 'rows', rows: this.rowsFor?.(sql) ?? this.rows };
-    yield { kind: 'done' };
+    const affected = this.affectedFor?.(sql);
+    // A statement that changes rows returns no result set, only how many it changed.
+    if (affected === undefined) {
+      yield { kind: 'columns', columns: this.columns };
+      yield { kind: 'rows', rows: this.rowsFor?.(sql) ?? this.rows };
+      yield { kind: 'done' };
+    } else {
+      yield { kind: 'done', affectedRows: affected };
+    }
   }
 }
 
@@ -316,6 +324,8 @@ export class FakeDriver implements Driver {
   sessionRowsFor: ((sql: string) => CellValue[][] | undefined) | undefined;
   /** Columns each new session reports from execute(). */
   sessionColumns: ResultColumn[] = [{ name: 'one' }];
+  /** Copied to every session: rows a statement changed, for statements without rows. */
+  sessionAffectedFor: ((sql: string) => number | undefined) | undefined;
   /** While true, every statement waits for `releaseExecute()`. */
   holdExecute = false;
   /** Copied onto every session: it reports transactions like a server. */
@@ -360,6 +370,7 @@ export class FakeDriver implements Driver {
     session.rows = [...this.sessionRows];
     session.columns = [...this.sessionColumns];
     session.rowsFor = this.sessionRowsFor;
+    session.affectedFor = this.sessionAffectedFor;
     session.tracksTransactions = this.tracksTransactions;
     session.gate = () => this.waitGate();
     session.metadata.databases = [...this.sessionMetadata.databases];

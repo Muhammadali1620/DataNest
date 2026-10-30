@@ -242,6 +242,32 @@ describe('ScriptRunner', () => {
     expect(harness.released).toHaveLength(1);
   });
 
+  it('still stops as cancelled when the server refuses the cancel', async () => {
+    const harness = new Harness();
+    const abort = new AbortController();
+    let release: () => void = () => undefined;
+    harness.session.cancel = () => Promise.reject(new Error('cancel refused'));
+    harness.session.gate = () =>
+      harness.session.executed.length === 1
+        ? new Promise<void>((resolve) => {
+            release = resolve;
+            abort.abort();
+          })
+        : Promise.resolve();
+    const running = harness.runner().run({
+      target: TARGET,
+      chunks: chunksOf('SELECT 1;\nSELECT 2;'),
+      continueOnError: false,
+      signal: abort.signal,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    const report = await running;
+    expect(report.outcome).toBe('cancelled');
+    expect(harness.session.executed).toEqual(['SELECT 1']);
+    expect(harness.released).toHaveLength(1);
+  });
+
   it('stops before the next statement once aborted between statements', async () => {
     const harness = new Harness();
     const abort = new AbortController();

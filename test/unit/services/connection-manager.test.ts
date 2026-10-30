@@ -811,6 +811,37 @@ describe('ConnectionManager with Redis (V7.1)', () => {
     expect(manager.connectedIds()).toEqual([]);
   });
 
+  it('tests through a private SSH tunnel and closes it', async () => {
+    await manager.test(
+      {
+        name: 'p',
+        driver: 'redis',
+        host: 'cache.internal',
+        ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'password' },
+      },
+      'pw',
+      { b: { password: 'typed' } },
+    );
+    expect(redis.opened[0]).toMatchObject({ host: '127.0.0.1', port: 40_000 });
+    expect(tunnels.privates[0]?.spec.hops[0]?.password).toBe('typed');
+    expect(tunnels.privates[0]?.closeCount).toBe(1);
+    expect(redis.sessions[0]?.closed).toBe(true);
+  });
+
+  it('gives the SSH reason when a test cannot open through the tunnel', async () => {
+    tunnels.forwardFailure = new DbError('connection-failed', 'The SSH server cannot reach it');
+    redis.openError = new DbError('connection-failed', 'reset');
+    await expect(
+      manager.test({
+        name: 'p',
+        driver: 'redis',
+        host: 'cache.internal',
+        ssh: { id: 'b', host: 'bastion', user: 'u', auth: 'agent' },
+      }),
+    ).rejects.toMatchObject({ message: 'The SSH server cannot reach it' });
+    expect(tunnels.privates[0]?.closeCount).toBe(1);
+  });
+
   it('fails a test whose init commands fail, still closing the session', async () => {
     redis = new FakeRedisDriver((words) =>
       words[0] === 'SET' ? new DbError('permission-denied', 'NOPERM') : bulk('OK'),

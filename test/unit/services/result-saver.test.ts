@@ -373,6 +373,36 @@ describe('ResultSaver', () => {
       expect(store.get(id)?.changedCells).toBe(1);
     });
 
+    it('says why when the connection of the result is gone before saving', async () => {
+      makeChanges();
+      const orphaned = new ResultSaver({
+        manager: {
+          acquire: () => Promise.resolve(session),
+          driverOf: () =>
+            Promise.reject(new DbError('not-found', 'Connection "c1" does not exist')),
+          transactionState: () => undefined,
+        },
+        results: store,
+        isBusy: () => false,
+        rowLimit: () => 10,
+        logger: new RecordingLogger(),
+      });
+      expect(await orphaned.save(id)).toMatchObject({
+        ok: false,
+        code: 'not-found',
+        message: 'Connection "c1" does not exist',
+      });
+      expect(session.executed).toEqual([]);
+      expect(store.get(id)?.changedCells).toBe(1);
+    });
+
+    it('marks the re-read rows cut when there are more than the limit', async () => {
+      editor.editCell(id, 0, 1, { kind: 'text', text: 'x' });
+      session.reread = Array.from({ length: 1500 }, (_, index) => [index, 'row']);
+      expect(await saver.save(id)).toMatchObject({ ok: true, refreshed: true });
+      expect(store.get(id)).toMatchObject({ rowCount: 1000, truncated: true });
+    });
+
     it('can be tried again after a failure', async () => {
       editor.rowAction(id, 'delete', [0]);
       session.affected = () => 0;

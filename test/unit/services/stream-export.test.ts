@@ -193,6 +193,63 @@ describe('StreamExporter', () => {
     await expect(update.export('csv')).rejects.toThrow(/no rows/u);
   });
 
+  it('writes only the first result set of a statement that returns several', async () => {
+    const harness = new Harness(COLUMNS, ROWS);
+    harness.session.execute = () =>
+      (async function* stream() {
+        await Promise.resolve();
+        yield { kind: 'columns' as const, columns: [{ name: 'a' }] };
+        yield { kind: 'rows' as const, rows: [[1], [2]] };
+        yield { kind: 'columns' as const, columns: [{ name: 'other' }] };
+        yield { kind: 'rows' as const, rows: [['not this']] };
+        yield { kind: 'done' as const };
+      })();
+    const report = await harness.export('csv');
+    expect(harness.sink.text).toBe('a\r\n1\r\n2\r\n');
+    expect(report.rows).toBe(2);
+  });
+
+  it('cancels the running query when aborted midway, even if the cancel fails', async () => {
+    const harness = new Harness(COLUMNS, ROWS);
+    const abort = new AbortController();
+    let cancels = 0;
+    harness.session.cancel = () => {
+      cancels++;
+      return Promise.reject(new Error('cancel refused'));
+    };
+    harness.session.execute = () =>
+      (async function* stream() {
+        await Promise.resolve();
+        yield { kind: 'columns' as const, columns: COLUMNS };
+        abort.abort();
+        yield { kind: 'rows' as const, rows: ROWS };
+      })();
+    await expect(harness.export('csv', { signal: abort.signal })).rejects.toMatchObject({
+      code: 'cancelled',
+    });
+    expect(cancels).toBe(1);
+    expect(harness.released).toHaveLength(1);
+  });
+
+  it('aligns a Markdown column left when it holds only NULLs', async () => {
+    const harness = new Harness(
+      [{ name: 'n' }, { name: 'x' }],
+      [
+        [1, null],
+        [2, null],
+      ],
+    );
+    await harness.export('markdown');
+    expect(harness.sink.text.split('\n')[1]).toBe('| ---: | --- |');
+  });
+
+  it('writes a binary value as its preview when the bytes are no longer kept', async () => {
+    const value: BinaryValue = { kind: 'binary', size: 4, preview: 'dead' };
+    const harness = new Harness([{ name: 'b' }], [[value]]);
+    await harness.export('json');
+    expect(harness.sink.text).toContain('dead');
+  });
+
   it('reports progress after each batch', async () => {
     const harness = new Harness(COLUMNS, ROWS);
     const seen: number[] = [];

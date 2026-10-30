@@ -2,7 +2,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { WriteStream } from 'node:fs';
 import { FileSink, PART_SUFFIX } from '../../../src/services/file-sink';
+
+/** The sink's stream, to make it fail the way a full disk would. */
+function streamOf(sink: FileSink): WriteStream {
+  return (sink as unknown as { stream: WriteStream }).stream;
+}
 
 let dir: string;
 
@@ -60,5 +66,64 @@ describe('FileSink', () => {
 
   it('fails at once for a folder that does not exist', async () => {
     await expect(FileSink.create(join(dir, 'missing', 'x.sql'))).rejects.toThrow(/ENOENT/u);
+  });
+
+  it('writes bytes as they are, after the text written before them', async () => {
+    const path = join(dir, 'mixed.bin');
+    const sink = await FileSink.create(path);
+    await sink.write('head:');
+    await sink.writeBytes(new Uint8Array([0, 255, 10]));
+    await sink.write(':tail');
+    await sink.close();
+    expect([...readFileSync(path)]).toEqual([
+      ...Buffer.from('head:'),
+      0,
+      255,
+      10,
+      ...Buffer.from(':tail'),
+    ]);
+    expect(sink.bytes).toBe(5 + 3 + 5);
+  });
+
+  it('writes only the bytes of a view, not its whole buffer', async () => {
+    const path = join(dir, 'view.bin');
+    const sink = await FileSink.create(path);
+    const whole = new Uint8Array([1, 2, 3, 4, 5]);
+    await sink.writeBytes(whole.subarray(1, 3));
+    await sink.close();
+    expect([...readFileSync(path)]).toEqual([2, 3]);
+  });
+
+  it('can be discarded twice, and after the stream has closed', async () => {
+    const path = join(dir, 'twice.sql');
+    const sink = await FileSink.create(path);
+    await sink.write('x');
+    await sink.discard();
+    await sink.discard();
+    expect(existsSync(`${path}${PART_SUFFIX}`)).toBe(false);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('fails the next write after the stream failed, and does not put a file in place', async () => {
+    const path = join(dir, 'full.sql');
+    const sink = await FileSink.create(path);
+    await sink.write('before');
+    streamOf(sink).emit('error', new Error('ENOSPC: no space left on device'));
+    await expect(sink.write('x'.repeat(70 * 1024))).rejects.toThrow('ENOSPC');
+    await expect(sink.close()).rejects.toThrow('ENOSPC');
+    expect(existsSync(path)).toBe(false);
+    await sink.discard();
+    expect(existsSync(`${path}${PART_SUFFIX}`)).toBe(false);
+  });
+
+  it('fails a write that waits for the disk when the stream fails meanwhile', async () => {
+    const path = join(dir, 'slow.bin');
+    const sink = await FileSink.create(path);
+    // Far over the stream's buffer, so the write waits for "drain".
+    const writing = sink.writeBytes(new Uint8Array(4 * 1024 * 1024));
+    const failed = expect(writing).rejects.toThrow('EIO');
+    streamOf(sink).emit('error', new Error('EIO: i/o error'));
+    await failed;
+    await sink.discard();
   });
 });

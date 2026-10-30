@@ -113,7 +113,32 @@ describe('ManagedSession', () => {
       await expect(session.metadata.listTypeDumps({})).rejects.toMatchObject({
         code: 'connection-failed',
       });
-      expect(lost).toHaveBeenCalledTimes(9);
+      await expect(session.metadata.listUniqueKeys({ name: 't' })).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      await expect(session.metadata.describeTable({ name: 't' })).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      await expect(session.metadata.listForeignKeys({ name: 't' })).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      expect(lost).toHaveBeenCalledTimes(12);
+    });
+
+    it('passes the key and structure readers through', async () => {
+      const inner = fake();
+      inner.metadata.uniqueKeys = [['email']];
+      inner.metadata.structure = {
+        columns: [
+          { name: 'id', dataType: 'int', nullable: false, autoIncrement: true, generated: false },
+        ],
+        primaryKey: ['id'],
+        indexes: [],
+        foreignKeys: [],
+      };
+      const { session } = managed(inner);
+      expect(await session.metadata.listUniqueKeys({ name: 't' })).toEqual([['email']]);
+      expect((await session.metadata.describeTable({ name: 't' })).primaryKey).toEqual(['id']);
     });
 
     it('passes the structure readers of V3 through', async () => {
@@ -255,6 +280,34 @@ describe('ManagedSession', () => {
       await vi.advanceTimersByTimeAsync(2000);
       expect(lost).not.toHaveBeenCalled();
       expect(inner.executed).toHaveLength(2);
+    });
+
+    it('skips a ping that falls due while a statement runs', async () => {
+      const inner = fake();
+      let release: () => void = () => undefined;
+      inner.gate = () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      const lost = vi.fn();
+      const session = new ManagedSession(inner, { onLinkLost: lost, keepAliveMs: 1000 });
+      const running = collect(session.execute('SELECT sleep(5)'));
+      // Something asks for a ping while the statement is still going.
+      session.scheduleKeepAlive();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(inner.executed).toEqual(['SELECT sleep(5)']);
+      inner.gate = undefined;
+      release();
+      await running;
+    });
+
+    it('works without the optional hooks', async () => {
+      const inner = fake();
+      inner.tracksTransactions = true;
+      const session = new ManagedSession(inner, { onLinkLost: () => undefined });
+      await collect(session.execute('BEGIN'));
+      await session.close();
+      expect(inner.closeCount).toBe(1);
     });
 
     it('stops when closed, and does nothing without an interval', async () => {

@@ -270,6 +270,133 @@ describe('SqlDumper', () => {
     expect(harness.released).toHaveLength(1);
   });
 
+  it('leaves the Views section out when the server hides every view, and lists them', async () => {
+    const harness = new Harness();
+    harness.session.metadata.getDefinition = (object) =>
+      object.kind === 'view'
+        ? Promise.reject(new DbError('permission-denied', 'no rights'))
+        : Promise.resolve(
+            harness.session.metadata.definitions.get(`${object.kind}:${object.name}`) ?? [],
+          );
+    const report = await harness.dumper().dump(harness.request());
+    expect(harness.sink.text).not.toContain('-- Views');
+    expect(report.skipped.map((item) => item.name).sort()).toEqual(['base', 'top']);
+    expect(report.views).toBe(2);
+  });
+
+  it('asks for a materialized view as one', async () => {
+    const harness = new Harness();
+    const asked: unknown[] = [];
+    const getDefinition = harness.session.metadata.getDefinition.bind(harness.session.metadata);
+    harness.session.metadata.getDefinition = (object) => {
+      asked.push(object);
+      return getDefinition(object);
+    };
+    await harness.dumper().dump(
+      harness.request({
+        relations: [
+          { name: 'orders', kind: 'table' },
+          { name: 'top', kind: 'view', materialized: true },
+          { name: 'base', kind: 'view' },
+        ],
+      }),
+    );
+    expect(asked).toContainEqual(expect.objectContaining({ name: 'top', materialized: true }));
+    expect(asked).toContainEqual(expect.not.objectContaining({ name: 'base', materialized: true }));
+  });
+
+  it('writes no rows for a table whose every column is computed', async () => {
+    const harness = new Harness();
+    harness.session.metadata.structure = {
+      ...STRUCTURE,
+      columns: STRUCTURE.columns.map((column) => ({ ...column, generated: true })),
+    };
+    const report = await harness.dumper().dump(harness.request({ content: 'data' }));
+    expect(harness.sink.text).not.toContain('INSERT');
+    expect(harness.sink.text).not.toContain('-- Rows of orders');
+    expect(report.rows).toBe(0);
+  });
+
+  it('resets a sequence that fills a column through nextval()', async () => {
+    const harness = new Harness();
+    harness.session.metadata.structure = {
+      ...STRUCTURE,
+      columns: [
+        {
+          name: 'id',
+          dataType: 'int',
+          nullable: false,
+          autoIncrement: false,
+          generated: false,
+          defaultExpression: "nextval('orders_id_seq'::regclass)",
+        },
+        { name: 'name', dataType: 'text', nullable: true, autoIncrement: false, generated: false },
+      ],
+    };
+    harness.driver.dialect = {
+      ...harness.driver.dialect,
+      dump: {
+        ...harness.driver.dialect.dump,
+        resetSequence: (table, column) => `RESET ${table.schema ?? ''}.${table.name}.${column}`,
+      },
+    };
+    await harness.dumper().dump(harness.request({ content: 'data' }));
+    expect(harness.sink.text).toContain('RESET sales.orders.id');
+    expect(harness.sink.text).not.toContain('RESET sales.orders.name');
+  });
+
+  it('fails when reading a definition fails for a reason other than rights', async () => {
+    const harness = new Harness();
+    harness.session.metadata.getDefinition = () =>
+      Promise.reject(new DbError('connection-failed', 'server went away'));
+    await expect(harness.dumper().dump(harness.request())).rejects.toMatchObject({
+      code: 'connection-failed',
+    });
+    expect(harness.session.executed.at(-1)).toBe('END SNAPSHOT');
+    expect(harness.released).toHaveLength(1);
+  });
+
+  it('logs a failed cancel and still stops as cancelled', async () => {
+    const harness = new Harness();
+    const logger = new RecordingLogger();
+    const abort = new AbortController();
+    harness.rows = Array.from({ length: 500 }, (_, i) => [i, 'x']);
+    harness.session.cancel = () => Promise.reject(new Error('cancel refused'));
+    const dumper = new SqlDumper({
+      manager: {
+        driverOf: () => Promise.resolve(harness.driver as Driver),
+        acquire: () => Promise.resolve(harness.session as Session),
+        release: () => Promise.resolve(),
+      },
+      logger,
+    });
+    const dumped = dumper.dump(
+      harness.request({
+        signal: abort.signal,
+        onProgress: () => {
+          abort.abort();
+        },
+      }),
+    );
+    await expect(dumped).rejects.toMatchObject({ code: 'cancelled' });
+    await Promise.resolve();
+    expect(
+      logger.entries.some((entry) => entry.message.includes('Cancelling the dump query failed')),
+    ).toBe(true);
+  });
+
+  it('dumps a database without schemas under bare table names', async () => {
+    const harness = new Harness();
+    await harness.dumper().dump(
+      harness.request({
+        scope: { database: 'shop' },
+        target: { connectionId: 'c', database: 'shop' },
+      }),
+    );
+    expect(harness.sink.text).not.toContain('CREATE SCHEMA');
+    expect(harness.sink.text).toContain('INSERT INTO "orders"');
+  });
+
   it('reports progress per table and row', async () => {
     const harness = new Harness();
     const seen: unknown[] = [];

@@ -265,4 +265,128 @@ describe('TableImporter', () => {
       expect(report).toMatchObject({ outcome: 'stopped', inserted: 0, rolledBack: false });
     });
   });
+
+  describe('when things go wrong midway (V9.5)', () => {
+    it('stops reading the file once a full batch is refused in all-or-nothing mode', async () => {
+      const harness = new Harness();
+      harness.session.failExecuteWhen = (sql) => sql.startsWith('INSERT');
+      const report = await harness.importer().run(harness.request(rows(INSERT_ROWS * 3)));
+      expect(harness.inserts).toHaveLength(1);
+      expect(harness.session.executed.at(-1)).toBe('ROLLBACK');
+      expect(report).toMatchObject({ outcome: 'stopped', inserted: 0, read: INSERT_ROWS });
+    });
+
+    it('rolls back and passes on an error of the file itself', async () => {
+      const harness = new Harness();
+      async function* broken(): AsyncGenerator<SourceRecord> {
+        await Promise.resolve();
+        yield { line: 1, values: ['1', 'a'] };
+        throw new DbError('syntax', 'The file ends inside a record');
+      }
+      await expect(
+        harness.importer().run(harness.request([], { records: broken() })),
+      ).rejects.toMatchObject({ code: 'syntax', message: 'The file ends inside a record' });
+      expect(harness.session.executed).toEqual(['BEGIN', 'ROLLBACK']);
+      expect(harness.released).toHaveLength(1);
+    });
+
+    it('calls it cancelled when the file fails after the import was stopped', async () => {
+      const harness = new Harness();
+      const abort = new AbortController();
+      async function* stopping(): AsyncGenerator<SourceRecord> {
+        await Promise.resolve();
+        abort.abort();
+        if (abort.signal.aborted) {
+          throw new Error('read interrupted');
+        }
+        yield { line: 1, values: ['1', 'a'] };
+      }
+      await expect(
+        harness.importer().run(harness.request([], { records: stopping(), signal: abort.signal })),
+      ).rejects.toMatchObject({ code: 'cancelled' });
+    });
+
+    it('logs a cancel the server refuses and still stops', async () => {
+      const harness = new Harness();
+      const abort = new AbortController();
+      harness.session.cancel = () => Promise.reject(new Error('cancel refused'));
+      const report = await harness.importer().run(
+        harness.request(rows(INSERT_ROWS * 2), {
+          signal: abort.signal,
+          onProgress: () => {
+            abort.abort();
+          },
+        }),
+      );
+      expect(report.outcome).toBe('cancelled');
+    });
+
+    it('fails a row whose value the dialect cannot write, and keeps the others in skip mode', async () => {
+      const harness = new Harness();
+      const dialect = harness.driver.dialect;
+      harness.driver.dialect = {
+        ...dialect,
+        literal: (value) => {
+          if (value === 'too big') {
+            throw new Error('Oracle takes a binary value of at most 32767 bytes');
+          }
+          return dialect.literal(value);
+        },
+      };
+      const records = [
+        { line: 1, values: ['1', 'a'] },
+        { line: 2, values: ['2', 'too big'] },
+        { line: 3, values: ['3', 'c'] },
+      ];
+      const report = await harness.importer().run(harness.request(records, { mode: 'skip' }));
+      expect(report.inserted).toBe(2);
+      expect(report.failures).toEqual([
+        { line: 2, column: 'name', message: 'Oracle takes a binary value of at most 32767 bytes' },
+      ]);
+    });
+
+    it('stops in skip mode when a single row loses the link', async () => {
+      const harness = new Harness();
+      // The batch is refused, so the rows go one by one; the second finds the server gone.
+      harness.session.failExecuteWhen = (sql) => sql.includes('), (');
+      const execute = harness.session.execute.bind(harness.session);
+      harness.session.execute = (sql, options) => {
+        if (sql.startsWith('INSERT') && !sql.includes('), (') && sql.includes("'n2'")) {
+          harness.session.executeError = new DbError(
+            'connection-failed',
+            'server closed the connection',
+          );
+        }
+        return execute(sql, options);
+      };
+      const report = await harness.importer().run(harness.request(rows(3), { mode: 'skip' }));
+      expect(report).toMatchObject({ outcome: 'stopped', inserted: 1 });
+      expect(report.failures.at(-1)).toMatchObject({
+        line: 2,
+        message: 'server closed the connection',
+      });
+      expect(harness.inserts.some((sql) => sql.includes("'n3'") && !sql.includes('), ('))).toBe(
+        false,
+      );
+    });
+
+    it('leaves sequences alone for a dialect that has nothing to move them with', async () => {
+      const harness = new Harness();
+      const { resetSequence: _unused, ...dump } = harness.driver.dialect.dump;
+      harness.driver.dialect = { ...harness.driver.dialect, dump };
+      const report = await harness.importer().run(harness.request(rows(2)));
+      expect(harness.session.executed).not.toContain('RESET people.id');
+      expect(report.outcome).toBe('done');
+    });
+
+    it('reports a sequence it could not move, keeping the rows', async () => {
+      const harness = new Harness();
+      harness.session.failExecuteWhen = (sql) => sql.startsWith('RESET');
+      const report = await harness.importer().run(harness.request(rows(2)));
+      expect(report).toMatchObject({ outcome: 'done', inserted: 2 });
+      expect(report.failures).toEqual([
+        { line: 0, column: 'id', message: 'Not allowed: RESET people.id' },
+      ]);
+    });
+  });
 });

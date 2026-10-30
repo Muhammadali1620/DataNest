@@ -7,7 +7,7 @@ import type { Logger } from '../core/logging/logger';
 import type { Dialect, ResultColumn, Session } from '../drivers/driver';
 import { buildChangeStatements, type ChangeStatement } from './change-sql';
 import type { ConnectionManager } from './connection-manager';
-import type { ResultRow, ResultStore, ResultSummary } from './result-store';
+import type { ResultRow, ResultStore, ResultSummary, ResultOrigin } from './result-store';
 import { msg } from '../core/user-message';
 
 export interface SaveFailure {
@@ -77,6 +77,8 @@ export interface ResultSaverDeps {
 
 interface Prepared {
   readonly summary: ResultSummary;
+  /** Where the rows came from; a result without one is refused before this. */
+  readonly origin: ResultOrigin;
   readonly statements: ChangeStatement[];
   readonly dialect: Dialect;
 }
@@ -101,10 +103,9 @@ export class ResultSaver {
     if ('ok' in prepared) {
       return prepared;
     }
-    const origin = prepared.summary.origin;
     const fence = fenceOf(
       prepared.dialect,
-      origin !== undefined && this.deps.manager.transactionState(origin.owner) === 'open',
+      this.deps.manager.transactionState(prepared.origin.owner) === 'open',
     );
     const lines = [
       `-- DataNest: pending changes of  ${oneLine(prepared.summary.statement)}`,
@@ -133,11 +134,7 @@ export class ResultSaver {
     if ('ok' in prepared) {
       return prepared;
     }
-    const { summary, statements, dialect } = prepared;
-    const origin = summary.origin;
-    if (origin === undefined) {
-      return failure('not-editable', msg('This result cannot be saved'));
-    }
+    const { summary, origin, statements, dialect } = prepared;
     let session: Session;
     try {
       session = await this.deps.manager.acquire(origin.owner, origin.target);
@@ -216,7 +213,7 @@ export class ResultSaver {
       if (statements.length === 0) {
         return failure('no-changes', msg('There are no changes to save'));
       }
-      return { summary, statements, dialect: driver.dialect };
+      return { summary, origin: summary.origin, statements, dialect: driver.dialect };
     } catch (error) {
       const dbError = toDbError(error);
       return failure(dbError.code, dbError.message);

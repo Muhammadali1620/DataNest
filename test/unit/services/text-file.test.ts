@@ -70,6 +70,15 @@ describe('readTextChunks', () => {
     );
   });
 
+  it('ends a file cut inside a character with a replacement character', async () => {
+    // "ё" is two bytes in UTF-8; the file ends after the first.
+    const path = file('cut.sql', new Uint8Array([0x61, 0xd1]));
+    const chunks = await readAll(path);
+    expect(chunks.map((chunk) => chunk.text).join('')).toBe('a\ufffd');
+    // The last piece adds no bytes: they were counted when read.
+    expect(chunks.at(-1)).toEqual({ text: '\ufffd', bytes: 0 });
+  });
+
   it('gives nothing for an empty file', async () => {
     expect(await readAll(file('empty.sql', ''))).toEqual([]);
   });

@@ -200,6 +200,28 @@ describe('QueryRunner', () => {
   });
 
   describe('failures', () => {
+    it('stores a statement that changes rows with their count and nothing to edit', async () => {
+      drivers.driver('mysql').sessionAffectedFor = (sql) =>
+        sql.startsWith('UPDATE') ? 3 : undefined;
+      const outcome = await runner.run(request("UPDATE t SET a = 1 WHERE b = 'x'"));
+      const result = outcome.results[0];
+      expect(result).toMatchObject({ affectedRows: 3, rowCount: 0, columns: [] });
+      expect(result?.edit).toBeUndefined();
+      expect(history.list()[0]).toMatchObject({ ok: true, affected: 3 });
+      expect(history.list()[0]).not.toHaveProperty('rows');
+    });
+
+    it('stores the error even when the driver of the connection cannot be named', async () => {
+      drivers.driver('mysql').failExecuteWhen = () => true;
+      const driverOf = manager.driverOf.bind(manager);
+      let calls = 0;
+      // Opening the session finds the driver; asking again after the failure does not.
+      manager.driverOf = (id) => (++calls > 1 ? Promise.reject(new Error('gone')) : driverOf(id));
+      const outcome = await runner.run(request('SELECT broken'));
+      expect(outcome.results[0]?.error).toMatchObject({ code: 'permission-denied' });
+      expect(outcome.results[0]?.error?.position).toBeUndefined();
+    });
+
     it('stores the error instead of throwing', async () => {
       drivers.driver('mysql').executeError = new DbError('syntax', 'near "SELEC"');
       const outcome = await runner.run(request('SELECTT 1'));
@@ -462,6 +484,22 @@ describe('QueryRunner', () => {
       const error = outcome.results[0]?.error;
       expect(error?.code).toBe('timeout');
       expect(error?.message).toContain('datanest.queryTimeout');
+    });
+
+    it('calls it a timeout too when the server itself reports a timeout after the limit', async () => {
+      timeoutMs = 20;
+      const driver = drivers.driver('mysql');
+      driver.holdExecute = true;
+      const running = runner.run(request('SELECT SLEEP(100)'));
+      await until(() => driver.lastSession?.cancelCount === 1);
+      const session = driver.lastSession;
+      if (session !== undefined) {
+        session.executeError = new DbError('timeout', 'Query execution was interrupted');
+      }
+      driver.releaseExecute();
+      const outcome = await running;
+      expect(outcome.results[0]?.error).toMatchObject({ code: 'timeout' });
+      expect(outcome.results[0]?.error?.message).toContain('Cancelled after 0 s');
     });
 
     it('still reports a user cancel as cancelled, not as a timeout', async () => {

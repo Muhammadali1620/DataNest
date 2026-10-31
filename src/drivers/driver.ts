@@ -13,6 +13,7 @@ import type {
   RelationKind,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../core/model/objects';
 import type { CellValue } from '../shared/cell-value';
@@ -154,6 +155,16 @@ export interface DumpDialect {
     identity: boolean,
   ): string;
   /**
+   * The same INSERT with the rows of a query, run by the server itself: a copy of a
+   * table inside one database (V10.2.3).
+   */
+  insertSelect(
+    quotedTable: string,
+    quotedColumns: readonly string[],
+    select: string,
+    identity: boolean,
+  ): string;
+  /**
    * After a table's rows: moves the sequence behind a column past the highest value,
    * so new rows do not collide. Absent where inserting does that by itself.
    */
@@ -278,6 +289,11 @@ export interface MetadataReader {
   /** Schemas of a database; only when `capabilities.schemas`. */
   listSchemas(database?: string): Promise<string[]>;
   listTables(scope: ObjectScope): Promise<TableInfo[]>;
+  /**
+   * Estimated rows, size and comment of the tables and views of a scope, from the
+   * server's statistics (V10.2.3); absent where the database keeps none (SQLite).
+   */
+  tableStats?(scope: ObjectScope): Promise<TableStats[]>;
   listColumns(table: TableRef): Promise<ColumnInfo[]>;
   /**
    * Unique indexes of a table other than the primary key, as column names in index

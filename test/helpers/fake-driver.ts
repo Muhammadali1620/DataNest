@@ -13,6 +13,7 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../../src/core/model/objects';
 import type {
@@ -88,6 +89,8 @@ export const fakeDialect: Dialect = {
     keysAfterData: false,
     insert: (table, columns, rows, identity) =>
       `INSERT INTO ${table} (${columns.join(', ')})${identity ? ' IDENTITY' : ''} VALUES ${rows.join(', ')}`,
+    insertSelect: (table, columns, select, identity) =>
+      `INSERT INTO ${table} (${columns.join(', ')})${identity ? ' IDENTITY' : ''} ${select}`,
     resetSequence: (table, column) => `RESET ${table.name}.${column}`,
     dropRelations: (tables, kind) =>
       tables.length === 0
@@ -118,6 +121,8 @@ export class FakeMetadata implements MetadataReader {
   /** Thrown by every reader when set. */
   error: Error | undefined;
   readonly calls: string[] = [];
+  /** Set by a test to give the fake server statistics (V10.2.3); absent like SQLite's. */
+  tableStats?: (scope: ObjectScope) => Promise<TableStats[]>;
 
   listDatabases(): Promise<string[]> {
     return this.answer('listDatabases', this.databases);
@@ -385,6 +390,9 @@ export class FakeDriver implements Driver {
     session.metadata.objects = [...this.sessionMetadata.objects];
     session.metadata.indexes = [...this.sessionMetadata.indexes];
     session.metadata.structure = this.sessionMetadata.structure;
+    if (this.sessionMetadata.tableStats !== undefined) {
+      session.metadata.tableStats = this.sessionMetadata.tableStats;
+    }
     session.metadata.error = this.metadataError;
     this.sessions.push(session);
     return Promise.resolve(session);

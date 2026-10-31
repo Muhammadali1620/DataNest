@@ -13,6 +13,7 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../core/model/objects';
 import type {
@@ -173,10 +174,18 @@ export class ManagedSession implements Session {
 }
 
 class ManagedMetadata implements MetadataReader {
+  /** Present only when the driver keeps statistics, so callers can tell (V10.2.3). */
+  readonly tableStats?: (scope: ObjectScope) => Promise<TableStats[]>;
+
   constructor(
     private readonly inner: MetadataReader,
     private readonly report: (error: unknown) => void,
-  ) {}
+  ) {
+    const stats = inner.tableStats?.bind(inner);
+    if (stats !== undefined) {
+      this.tableStats = async (scope) => await this.guard(() => stats(scope));
+    }
+  }
 
   async listDatabases(): Promise<string[]> {
     return await this.guard(() => this.inner.listDatabases());

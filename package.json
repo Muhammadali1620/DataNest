@@ -98,6 +98,11 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.connections.openSqliteFile",
+        "title": "%commands.connections.openSqliteFile.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.connections.import",
         "title": "%commands.connections.import.title%",
         "category": "DataNest"
@@ -200,6 +205,12 @@
         "command": "datanest.tree.copyName",
         "title": "%commands.tree.copyName.title%",
         "category": "DataNest"
+      },
+      {
+        "command": "datanest.tree.filterTables",
+        "title": "%commands.tree.filterTables.title%",
+        "category": "DataNest",
+        "icon": "$(filter)"
       },
       {
         "command": "datanest.query.new",
@@ -333,6 +344,11 @@
       {
         "command": "datanest.table.transfer",
         "title": "%commands.table.transfer.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.table.duplicate",
+        "title": "%commands.table.duplicate.title%",
         "category": "DataNest"
       },
       {
@@ -799,6 +815,14 @@
         {
           "command": "datanest.table.compareData",
           "when": "false"
+        },
+        {
+          "command": "datanest.table.duplicate",
+          "when": "false"
+        },
+        {
+          "command": "datanest.tree.filterTables",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -1032,6 +1056,11 @@
         {
           "command": "datanest.table.rename",
           "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "4_structure@4"
+        },
+        {
+          "command": "datanest.table.duplicate",
+          "when": "view == datanest.connections && viewItem == datanest.table",
           "group": "4_structure@4"
         },
         {
@@ -1283,6 +1312,16 @@
           "command": "datanest.elastic.deleteIndex",
           "when": "view == datanest.connections && viewItem == datanest.elasticIndex",
           "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.tree.filterTables",
+          "when": "view == datanest.connections && (viewItem == datanest.group.tables || viewItem == datanest.group.views)",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.tree.filterTables",
+          "when": "view == datanest.connections && (viewItem == datanest.group.tables || viewItem == datanest.group.views)",
+          "group": "1_state@4"
         }
       ],
       "editor/title": [
@@ -1364,6 +1403,11 @@
           "command": "datanest.script.run",
           "when": "resourceExtname == .sql",
           "group": "datanest@1"
+        },
+        {
+          "command": "datanest.connections.openSqliteFile",
+          "when": "resourceScheme == file && resourceExtname =~ /^\\.(db|sqlite|sqlite3|db3)$/i",
+          "group": "datanest@2"
         }
       ],
       "editor/title/context": [
@@ -1400,6 +1444,11 @@
           "default": false,
           "markdownDescription": "%configuration.showSystemObjects.description%",
           "scope": "window"
+        },
+        "datanest.tree.tableStats": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.tree.tableStats.description%"
         },
         "datanest.rowLimit": {
           "type": "integer",

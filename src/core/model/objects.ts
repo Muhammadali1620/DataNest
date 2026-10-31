@@ -20,6 +20,19 @@ export interface TableInfo {
   readonly materialized?: boolean;
 }
 
+/**
+ * What the server's own statistics say about a table or view (V10.2.3): estimates,
+ * never a `COUNT(*)`. Fields the server does not know are absent.
+ */
+export interface TableStats {
+  readonly name: string;
+  /** Estimated rows. */
+  readonly rows?: number;
+  /** Space on disk, data and indexes, in bytes. */
+  readonly bytes?: number;
+  readonly comment?: string;
+}
+
 /** What DDL calls a table or a view. */
 export type RelationKind = 'table' | 'view' | 'materialized-view';
 

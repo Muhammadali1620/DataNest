@@ -25,6 +25,9 @@ you never use cost nothing.
   **Add Connection from URL…**.
 - **From `.env` files**: **Import Connections from .env…** finds `DATABASE_URL`-style
   variables in the workspace and offers each as a connection.
+- **From a SQLite file**: right-click a `.db`, `.sqlite`, `.sqlite3` or `.db3` file in the
+  Explorer and pick **Open SQLite Database…** (or run it from the Command Palette and pick
+  the file). The file's connection is made if there is none yet, connected and shown.
 - **Edit**, **Duplicate** and **Delete** are in the connection's context menu.
 
 ## SSH tunnels

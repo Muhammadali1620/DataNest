@@ -3,7 +3,7 @@
 
 import { DbError, errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
-import type { ListedObjectKind, ObjectScope, TableRef } from '../../core/model/objects';
+import type { ListedObjectKind, ObjectScope, TableRef, TableStats } from '../../core/model/objects';
 import { withoutSystemDatabases, withoutSystemSchemas } from '../../core/model/system-objects';
 import { filterNames } from '../../shared/name-filter';
 import type { DriverCapabilities, MetadataReader } from '../../drivers/driver';
@@ -31,11 +31,14 @@ import {
   GROUP_OF_KIND,
   KIND_OF_GROUP,
   type FolderNode,
+  type GroupNode,
+  nodeId,
   type ObjectFolder,
   type ObjectGroup,
   type TableFolder,
   type TreeNode,
 } from './nodes';
+import { normalizeTableFilter, tableFilter } from './table-filter';
 import { msg } from '../../core/user-message';
 
 /** What a project node says when it has nothing to list (V4.7). */
@@ -77,6 +80,8 @@ export interface TreeTexts {
 export interface TreeSettings {
   /** `datanest.showSystemObjects`: show the server's own databases and schemas. */
   showSystemObjects(): boolean;
+  /** `datanest.tree.tableStats`: rows, size and comment of tables (V10.2.3). */
+  tableStats?(): boolean;
 }
 
 /** Where the project files of the workspace are read from. */
@@ -103,6 +108,8 @@ export class TreeModel {
   private readonly logger: Logger;
   /** Key counts of Redis databases as last listed, for nodes rebuilt as parents. */
   private readonly redisCounts = new Map<string, number>();
+  /** The Filter… text of Tables and Views folders, by node id; for this session only. */
+  private readonly groupFilters = new Map<string, string>();
 
   constructor(deps: TreeModelDeps) {
     this.deps = deps;
@@ -213,7 +220,7 @@ export class TreeModel {
           schema: node.schema,
         });
       case 'group':
-        return await this.groupChildren(node.connectionId, node.scope, node.group);
+        return await this.groupChildren(node);
       case 'table':
         return await this.tableChildren(node);
       case 'folder':
@@ -479,11 +486,41 @@ export class TreeModel {
     return groups.map((group) => ({ kind: 'group', group, connectionId, scope }));
   }
 
-  private async groupChildren(
-    connectionId: string,
+  /** The Filter… text of a Tables or Views folder, if it has one. */
+  groupFilter(node: GroupNode): string | undefined {
+    return this.groupFilters.get(nodeId(node));
+  }
+
+  /** Sets or (with undefined) clears the Filter… text of a folder. */
+  setGroupFilter(node: GroupNode, text: string | undefined): void {
+    const normalized = text === undefined ? undefined : normalizeTableFilter(text);
+    if (normalized === undefined) {
+      this.groupFilters.delete(nodeId(node));
+    } else {
+      this.groupFilters.set(nodeId(node), normalized);
+    }
+  }
+
+  /** Statistics by table name; nothing when they are off, missing or fail to load. */
+  private async statsOf(
+    metadata: MetadataReader,
     scope: ObjectScope,
-    group: ObjectGroup,
-  ): Promise<TreeNode[]> {
+  ): Promise<ReadonlyMap<string, TableStats>> {
+    if (this.deps.settings.tableStats?.() === false || metadata.tableStats === undefined) {
+      return new Map();
+    }
+    try {
+      const stats = await metadata.tableStats(scope);
+      return new Map(stats.map((entry) => [entry.name, entry]));
+    } catch (error) {
+      // Statistics only decorate the list; a server that refuses them still lists tables.
+      this.logger.warn('Could not read table statistics', error);
+      return new Map();
+    }
+  }
+
+  private async groupChildren(node: GroupNode): Promise<TreeNode[]> {
+    const { connectionId, scope, group } = node;
     if (group !== 'tables' && group !== 'views') {
       return await this.objectChildren(
         connectionId,
@@ -495,8 +532,15 @@ export class TreeModel {
     }
     const metadata = await this.metadataOf(connectionId, scope.database);
     const wanted = group === 'tables' ? 'table' : 'view';
-    const found = (await metadata.listTables(scope)).filter((table) => table.kind === wanted);
-    if (found.length === 0) {
+    const [listed, stats] = await Promise.all([
+      metadata.listTables(scope),
+      this.statsOf(metadata, scope),
+    ]);
+    const all = listed.filter((table) => table.kind === wanted);
+    const filter = this.groupFilter(node);
+    const visible = filter === undefined ? undefined : tableFilter(filter);
+    const found = visible === undefined ? all : all.filter((table) => visible(table.name));
+    if (all.length === 0) {
       return [
         {
           kind: 'message',
@@ -505,14 +549,21 @@ export class TreeModel {
         },
       ];
     }
-    return found.map((table) => ({
-      kind: 'table',
-      connectionId,
-      scope,
-      name: table.name,
-      tableKind: table.kind,
-      ...(table.materialized === true ? { materialized: true } : {}),
-    }));
+    return [
+      ...found.map((table): TreeNode => {
+        const known = stats.get(table.name);
+        return {
+          kind: 'table',
+          connectionId,
+          scope,
+          name: table.name,
+          tableKind: table.kind,
+          ...(table.materialized === true ? { materialized: true } : {}),
+          ...(known === undefined ? {} : { stats: known }),
+        };
+      }),
+      ...this.hiddenLeaf(connectionId, all.length - found.length),
+    ];
   }
 
   /** Objects of one kind in a scope, narrowed by `keep`; an empty list says so. */

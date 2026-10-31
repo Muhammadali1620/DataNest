@@ -53,6 +53,12 @@ export const mssqlDump: DumpDialect = {
       ? `SET IDENTITY_INSERT ${quotedTable} ON;\n${insert};\nSET IDENTITY_INSERT ${quotedTable} OFF`
       : insert;
   },
+  insertSelect: (quotedTable, quotedColumns, select, identity) => {
+    const insert = `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')})\n${select}`;
+    return identity
+      ? `SET IDENTITY_INSERT ${quotedTable} ON;\n${insert};\nSET IDENTITY_INSERT ${quotedTable} OFF`
+      : insert;
+  },
   // An identity takes the highest value inserted by itself, so there is nothing to reset.
   dropRelations: (tables: readonly TableRef[], kind: RelationKind) => {
     if (tables.length === 0) {

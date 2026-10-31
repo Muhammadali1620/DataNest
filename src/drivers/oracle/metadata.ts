@@ -14,8 +14,10 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../../core/model/objects';
+import { tableStats } from '../common/stats';
 import { splitStatements } from '../../core/sql/split';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
@@ -169,6 +171,20 @@ export class OracleMetadata implements MetadataReader {
        ORDER BY c.column_id`,
       { owner: owner(table), name: table.name },
     );
+  }
+
+  async tableStats(written: ObjectScope): Promise<TableStats[]> {
+    const scope = await this.scoped(written);
+    // NUM_ROWS comes from the optimizer statistics and is NULL until they are gathered.
+    const rows = await this.read(
+      `SELECT c.table_name, t.num_rows, c.comments
+       FROM all_tab_comments c
+       LEFT JOIN all_tables t ON t.owner = c.owner AND t.table_name = c.table_name
+       WHERE c.owner = ${OWNER} AND c.table_type IN ('TABLE', 'VIEW')
+       ORDER BY 1`,
+      { owner: owner(scope) },
+    );
+    return rows.map((row) => tableStats(text(row[0]), row[1], undefined, row[2]));
   }
 
   async listColumns(written: TableRef): Promise<ColumnInfo[]> {

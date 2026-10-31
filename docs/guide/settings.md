@@ -28,6 +28,7 @@ once, without a restart.
 | Setting | Default | Values | What it does |
 |---|---|---|---|
 | `datanest.showSystemObjects` | `false` | | Show the databases and schemas the server keeps for itself, such as `information_schema` and `pg_catalog`. |
+| `datanest.tree.tableStats` | `true` | | Show each table's estimated rows in the tree, and its size and comment in the tooltip, from the server's statistics. |
 | `datanest.redis.keySeparator` | `:` | | What splits Redis key names into folders, e.g. `user:1:name` → `user` → `1`. Empty: no folders. |
 | `datanest.redis.keysPerLoad` | `5000` | 100 – 100 000 | How many Redis keys are loaded at a time with `SCAN`; **Load More Keys** brings the next portion. |
 

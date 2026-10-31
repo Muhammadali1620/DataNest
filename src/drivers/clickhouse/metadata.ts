@@ -14,8 +14,10 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../../core/model/objects';
+import { tableStats } from '../common/stats';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { msg } from '../../core/user-message';
 
@@ -105,6 +107,17 @@ export class ClickhouseMetadata implements MetadataReader {
           }
         : { name: text(row[0]), kind: 'table' as const };
     });
+  }
+
+  async tableStats(scope: ObjectScope): Promise<TableStats[]> {
+    // Exact for MergeTree tables, NULL for engines that do not count (views, Log, …).
+    const rows = await this.read(
+      `SELECT name, total_rows, total_bytes, comment FROM system.tables
+       WHERE database = ${CURRENT} AND NOT is_temporary AND NOT startsWith(name, '.inner')
+       ORDER BY name`,
+      { db: databaseOf(scope) },
+    );
+    return rows.map((row) => tableStats(text(row[0]), row[1], row[2], row[3]));
   }
 
   private async columns(table: TableRef): Promise<unknown[][]> {

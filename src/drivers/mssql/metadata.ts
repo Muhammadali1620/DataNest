@@ -8,8 +8,10 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../../core/model/objects';
+import { tableStats } from '../common/stats';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import {
@@ -63,6 +65,27 @@ export class MssqlMetadata implements MetadataReader {
       name: text(row[0]),
       kind: text(row[1]) === 'V' ? ('view' as const) : ('table' as const),
     }));
+  }
+
+  async tableStats(scope: ObjectScope): Promise<TableStats[]> {
+    // Rows from the heap or clustered index only; space from every partition and index.
+    const rows = await this.read(
+      `SELECT o.name,
+              (SELECT SUM(p.rows) FROM sys.partitions p
+               WHERE p.object_id = o.object_id AND p.index_id IN (0, 1)),
+              (SELECT SUM(a.total_pages) * 8192 FROM sys.partitions p
+               JOIN sys.allocation_units a ON a.container_id = p.partition_id
+               WHERE p.object_id = o.object_id),
+              CAST(ep.value AS nvarchar(max))
+       FROM sys.objects o
+       LEFT JOIN sys.extended_properties ep
+         ON ep.class = 1 AND ep.major_id = o.object_id AND ep.minor_id = 0
+        AND ep.name = 'MS_Description'
+       WHERE o.schema_id = SCHEMA_ID(@p1) AND o.type IN ('U', 'V') AND o.is_ms_shipped = 0
+       ORDER BY o.name`,
+      [schemaOf(scope)],
+    );
+    return rows.map((row) => tableStats(text(row[0]), row[1], row[2], row[3]));
   }
 
   async listColumns(table: TableRef): Promise<ColumnInfo[]> {

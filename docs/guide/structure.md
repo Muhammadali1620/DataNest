@@ -6,6 +6,13 @@ A connection opens to databases, schemas, then folders of tables, views, functio
 procedures, triggers, sequences and events — whichever the server has. A table shows its
 columns (with type, primary key and `NOT NULL`), indexes, foreign keys and triggers.
 
+Next to each table the tree shows its estimated number of rows, and its tooltip the size
+on disk and the table's comment — all from the server's own statistics, never a
+`COUNT(*)`, so they are as fresh as the server keeps them (`datanest.tree.tableStats`
+turns them off; SQLite keeps none). **Filter…** on a **Tables** or **Views** folder narrows
+it for this session: a word finds the names that contain it, and `*`, `?` and `!` work as in
+the database filter (`order*, !tmp_*`); an empty filter shows everything again.
+
 The structure is cached: expanding a node twice does not ask the server twice. **Refresh**
 on a node reads it again; DataNest also forgets what a statement you ran may have changed.
 **Find Database Object…** searches every connected connection for a table, view or
@@ -28,6 +35,10 @@ designer rebuilds the table and keeps its rows.
 
 ## Other actions
 
+- **Duplicate Table…** makes a copy beside the table under a new name — structure and rows,
+  or the structure alone. The server copies the rows itself; indexes and keys get names of
+  their own, a key to the table itself points at the copy, and numbering goes on after the
+  copied rows.
 - **Rename…**, **Empty Table (TRUNCATE)…** and **Drop…** on tables and views; **Drop…** on
   routines, triggers and sequences. Each asks first; on a production connection with the
   connection's name.

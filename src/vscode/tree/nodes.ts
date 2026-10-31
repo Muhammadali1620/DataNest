@@ -11,6 +11,7 @@ import type {
   RelationKind,
   TableKind,
   TableRef,
+  TableStats,
 } from '../../core/model/objects';
 import type { ElasticFieldInfo, ElasticIndexInfo } from '../../services/elasticsearch/catalog';
 import type { MongoIndexInfo } from '../../services/mongodb/catalog';
@@ -159,6 +160,8 @@ export interface TableNode {
   readonly tableKind: TableKind;
   /** A PostgreSQL materialized view. */
   readonly materialized?: boolean;
+  /** Estimated rows, size and comment, when the server keeps them (V10.2.3). */
+  readonly stats?: TableStats;
 }
 
 export interface ColumnNode {

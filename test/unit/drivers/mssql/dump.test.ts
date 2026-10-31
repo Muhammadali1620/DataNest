@@ -5,6 +5,15 @@ const orders = { schema: 'dbo', name: 'orders' };
 const items = { schema: 'dbo', name: 'order_items' };
 
 describe('mssql dump dialect', () => {
+  it('copies rows inside the database with INSERT … SELECT (V10.2.3)', () => {
+    expect(mssqlDump.insertSelect('[t]', ['[id]'], 'SELECT [id] FROM [s]', false)).toBe(
+      'INSERT INTO [t] ([id])\nSELECT [id] FROM [s]',
+    );
+    expect(mssqlDump.insertSelect('[t]', ['[id]'], 'SELECT [id] FROM [s]', true)).toBe(
+      'SET IDENTITY_INSERT [t] ON;\nINSERT INTO [t] ([id])\nSELECT [id] FROM [s];\nSET IDENTITY_INSERT [t] OFF',
+    );
+  });
+
   it('reads in a snapshot only where the database allows one', () => {
     expect(mssqlDump.beginSnapshot[0]).toMatch(
       /^IF \(SELECT snapshot_isolation_state FROM sys\.databases WHERE database_id = DB_ID\(\)\) = 1 SET TRANSACTION ISOLATION LEVEL SNAPSHOT$/u,

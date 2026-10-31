@@ -200,6 +200,10 @@ describe('sqlite driver', () => {
       });
     });
 
+    it('keeps no table statistics, so the tree shows none (V10.2.3)', () => {
+      expect(session.metadata.tableStats === undefined).toBe(true);
+    });
+
     it('lists tables and views without sqlite internals', async () => {
       const tables = await session.metadata.listTables({});
       const byName = new Map(tables.map((t) => [t.name, t.kind]));

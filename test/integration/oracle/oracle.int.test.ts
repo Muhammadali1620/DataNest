@@ -201,6 +201,28 @@ describe('oracle driver', () => {
       ).toEqual(['STOCK_LEVELS', 'WAREHOUSES']);
     });
 
+    it('reads rows from the optimizer statistics and the comment (V10.2.3)', async () => {
+      await runAll(session, 'DROP TABLE IF EXISTS stats_probe PURGE');
+      await runAll(session, 'CREATE TABLE stats_probe (id NUMBER PRIMARY KEY)');
+      try {
+        await runAll(session, "COMMENT ON TABLE stats_probe IS 'Probe of statistics'");
+        for (const id of [1, 2, 3]) {
+          await runAll(session, `INSERT INTO stats_probe VALUES (${id})`);
+        }
+        await runAll(session, 'COMMIT');
+        await runAll(session, "BEGIN DBMS_STATS.GATHER_TABLE_STATS(USER, 'STATS_PROBE'); END;");
+        const stats = (await session.metadata.tableStats?.({ schema: SCHEMA })) ?? [];
+        expect(stats.find((entry) => entry.name === 'STATS_PROBE')).toEqual({
+          name: 'STATS_PROBE',
+          rows: 3,
+          comment: 'Probe of statistics',
+        });
+        expect(stats.find((entry) => entry.name === 'ORDER_TOTALS')?.rows).toBeUndefined();
+      } finally {
+        await runAll(session, 'DROP TABLE stats_probe PURGE');
+      }
+    });
+
     it('lists columns with DDL types, keys and defaults, no sequence for identity columns', async () => {
       expect(await session.metadata.listColumns({ schema: SCHEMA, name: 'PRODUCTS' })).toEqual([
         { name: 'ID', dataType: 'NUMBER(10)', nullable: false, primaryKey: true },

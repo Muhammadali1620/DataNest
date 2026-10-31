@@ -56,6 +56,8 @@ export const mysqlDump: DumpDialect = {
   portable: withoutDefiner,
   insert: (quotedTable, quotedColumns, rows) =>
     `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')}) VALUES\n${rows.join(',\n')}`,
+  insertSelect: (quotedTable, quotedColumns, select) =>
+    `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')})\n${select}`,
   dropRelations: (tables: readonly TableRef[], kind: RelationKind) =>
     tables.length === 0
       ? []

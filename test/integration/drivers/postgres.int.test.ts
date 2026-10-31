@@ -176,6 +176,27 @@ describe('postgres driver', () => {
       expect(await session.metadata.listTables({ schema: 'no_such_schema' })).toEqual([]);
     });
 
+    it('reads estimated rows, size and comment from the statistics (V10.2.3)', async () => {
+      await runAll(session, 'DROP TABLE IF EXISTS public.stats_probe');
+      await runAll(session, 'CREATE TABLE public.stats_probe (id int PRIMARY KEY)');
+      try {
+        await runAll(session, "COMMENT ON TABLE public.stats_probe IS 'Probe of statistics'");
+        // Before the first ANALYZE the server does not know the rows.
+        const before = await session.metadata.tableStats?.({ schema: 'public' });
+        expect(before?.find((entry) => entry.name === 'stats_probe')?.rows).toBeUndefined();
+        await runAll(session, 'INSERT INTO public.stats_probe SELECT generate_series(1, 500)');
+        await runAll(session, 'ANALYZE public.stats_probe');
+        const stats = (await session.metadata.tableStats?.({ schema: 'public' })) ?? [];
+        const probe = stats.find((entry) => entry.name === 'stats_probe');
+        expect(probe).toMatchObject({ rows: 500, comment: 'Probe of statistics' });
+        expect(probe?.bytes).toBeGreaterThan(0);
+        expect(stats.find((entry) => entry.name === 'order_totals')?.rows).toBeUndefined();
+        expect(await session.metadata.tableStats?.({ schema: 'no_such_schema' })).toEqual([]);
+      } finally {
+        await runAll(session, 'DROP TABLE public.stats_probe');
+      }
+    });
+
     it('defaults to the public schema', async () => {
       const tables = await session.metadata.listTables({});
       expect(tables.map((t) => t.name)).toContain('customers');

@@ -9,8 +9,10 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../../core/model/objects';
+import { tableStats } from '../common/stats';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { type PgRowReader, readPgDefinition } from './definitions';
@@ -70,6 +72,24 @@ export class PostgresMetadata implements MetadataReader {
         ...(relkind === 'm' ? { materialized: true } : {}),
       };
     });
+  }
+
+  async tableStats(scope: ObjectScope): Promise<TableStats[]> {
+    // Only the catalog, no file sizes: reltuples is -1 until the first ANALYZE, and the
+    // pages are counted by the same statistics (CockroachDB and YugabyteDB keep zeros).
+    const rows = await this.query(
+      `SELECT c.relname,
+              CASE WHEN c.relkind IN ('r', 'p', 'm') THEN c.reltuples::float8 END,
+              CASE WHEN c.relpages > 0
+                   THEN c.relpages::float8 * current_setting('block_size')::float8 END,
+              obj_description(c.oid, 'pg_class')
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = $1 AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+       ORDER BY c.relname`,
+      [scope.schema ?? DEFAULT_SCHEMA],
+    );
+    return rows.map((row) => tableStats(asText(row[0]) ?? '', row[1], row[2], row[3]));
   }
 
   async listColumns(table: TableRef): Promise<ColumnInfo[]> {

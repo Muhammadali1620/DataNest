@@ -207,6 +207,33 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
       expect(byName.get('order_totals')).toBe('view');
     });
 
+    it('reads estimated rows, size and comment from the statistics (V10.2.3)', async () => {
+      await runAll(session, 'DROP TABLE IF EXISTS datanest_empty.stats_probe');
+      await runAll(
+        session,
+        "CREATE TABLE datanest_empty.stats_probe (id int PRIMARY KEY) COMMENT = 'Probe of statistics'",
+      );
+      try {
+        await runAll(session, 'INSERT INTO datanest_empty.stats_probe VALUES (1), (2), (3)');
+        await runAll(session, 'ANALYZE TABLE datanest_empty.stats_probe');
+        const [probe] = (await session.metadata.tableStats?.({ database: 'datanest_empty' })) ?? [];
+        expect(probe?.name).toBe('stats_probe');
+        expect(probe?.comment).toBe('Probe of statistics');
+        expect(probe?.rows).toBeGreaterThanOrEqual(0);
+        expect(probe?.rows).toBeLessThan(100);
+        expect(probe?.bytes).toBeGreaterThan(0);
+        // Views have no rows, and the server's comment "VIEW" is not theirs.
+        await runAll(session, 'ANALYZE TABLE datanest_test.big_table');
+        const all = (await session.metadata.tableStats?.({ database: 'datanest_test' })) ?? [];
+        const view = all.find((entry) => entry.name === 'order_totals');
+        expect(view).toEqual({ name: 'order_totals' });
+        const big = all.find((entry) => entry.name === 'big_table');
+        expect(big?.rows).toBeGreaterThan(1000);
+      } finally {
+        await runAll(session, 'DROP TABLE datanest_empty.stats_probe');
+      }
+    });
+
     it('lists tables of an explicit database and an empty database', async () => {
       const tables = await session.metadata.listTables({ database: 'datanest_test' });
       expect(tables.length).toBeGreaterThanOrEqual(6);

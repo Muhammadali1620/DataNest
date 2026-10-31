@@ -253,6 +253,27 @@ describe('mssql driver', () => {
       expect(inventory.map((table) => table.name)).toEqual(['stock_levels', 'warehouses']);
     });
 
+    it('reads rows, space and description from the catalog (V10.2.3)', async () => {
+      await runAll(session, 'DROP TABLE IF EXISTS dbo.stats_probe');
+      await runAll(session, 'CREATE TABLE dbo.stats_probe (id int PRIMARY KEY)');
+      try {
+        await runAll(session, 'INSERT INTO dbo.stats_probe VALUES (1), (2), (3)');
+        await runAll(
+          session,
+          "EXEC sp_addextendedproperty 'MS_Description', N'Probe of statistics', 'SCHEMA', 'dbo', 'TABLE', 'stats_probe'",
+        );
+        const stats = (await session.metadata.tableStats?.({ schema: 'dbo' })) ?? [];
+        const probe = stats.find((entry) => entry.name === 'stats_probe');
+        expect(probe).toMatchObject({ rows: 3, comment: 'Probe of statistics' });
+        expect(probe?.bytes).toBeGreaterThan(0);
+        expect(stats.find((entry) => entry.name === 'order_totals')).toEqual({
+          name: 'order_totals',
+        });
+      } finally {
+        await runAll(session, 'DROP TABLE dbo.stats_probe');
+      }
+    });
+
     it('lists columns with DDL types, keys and unwrapped defaults', async () => {
       const columns = await session.metadata.listColumns({ schema: 'dbo', name: 'products' });
       expect(columns).toEqual([

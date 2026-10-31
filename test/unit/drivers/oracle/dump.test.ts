@@ -32,6 +32,15 @@ describe('dropIfExists', () => {
 });
 
 describe('oracleDump', () => {
+  it('copies rows inside the database with INSERT … SELECT (V10.2.3)', () => {
+    expect(oracleDump.insertSelect('"T"', ['"ID"'], 'SELECT "ID" FROM "S"', false)).toBe(
+      'INSERT INTO "T" ("ID")\nSELECT "ID" FROM "S"',
+    );
+    expect(oracleDump.insertSelect('"T"', ['"ID"'], 'SELECT "ID" FROM "S"', true)).toBe(
+      'INSERT INTO "T" ("ID")\nSELECT "ID" FROM "S"',
+    );
+  });
+
   it("makes the dumped schema the session's own, so unqualified names in bodies mean it", () => {
     expect(oracleDump.createSchema?.('DATANEST')).toBe(
       'ALTER SESSION SET CURRENT_SCHEMA = "DATANEST"',

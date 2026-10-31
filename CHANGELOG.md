@@ -16,6 +16,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   statements, block comments, `-- #region` markers and indentation. Settings
   `datanest.editor.codeLens`, `datanest.editor.highlightStatement` and
   `datanest.editor.foldStatements` turn the Run lenses, the highlight and the folding off.
+- The tree shows each table's estimated rows, and its size and comment in the tooltip, from
+  the server's own statistics (`datanest.tree.tableStats`). **Filter…** narrows a long
+  Tables or Views folder.
+- **Duplicate Table…** copies a table beside itself, with or without its rows; the server
+  copies the rows, and keys, indexes and numbering follow the copy.
+- **Open SQLite Database…** on `.db`, `.sqlite`, `.sqlite3` and `.db3` files in the Explorer.
+
+### Changed
+
+- Copying tables between schemas of one database now runs on one session and lets the
+  server move the rows, instead of streaming them through the editor.
 
 ## [0.9.0] - 2026-10-30
 

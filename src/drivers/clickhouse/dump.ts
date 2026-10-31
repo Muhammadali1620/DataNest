@@ -18,6 +18,8 @@ export const clickhouseDump: DumpDialect = {
   routinesFirst: false,
   insert: (quotedTable, quotedColumns, rows) =>
     `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')}) VALUES\n${rows.join(',\n')}`,
+  insertSelect: (quotedTable, quotedColumns, select) =>
+    `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')})\n${select}`,
   dropRelations: (tables: readonly TableRef[], kind: RelationKind) =>
     tables.map(
       (table) => `DROP ${kind === 'table' ? 'TABLE' : 'VIEW'} IF EXISTS ${quoteTable(table)}`,

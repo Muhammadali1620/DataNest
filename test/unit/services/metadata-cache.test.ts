@@ -116,6 +116,22 @@ describe('MetadataCache', () => {
       ]);
     });
 
+    it('caches table statistics per scope, and has none where the reader has none', async () => {
+      const inner = reader();
+      expect(cache.wrap('c1', inner).tableStats === undefined).toBe(true);
+      let reads = 0;
+      inner.tableStats = (scope) => {
+        reads++;
+        return Promise.resolve([{ name: scope.schema ?? 'none', rows: reads }]);
+      };
+      const wrapped = cache.wrap('c1', inner);
+      expect(await wrapped.tableStats?.({ schema: 'a' })).toEqual([{ name: 'a', rows: 1 }]);
+      expect(await wrapped.tableStats?.({ schema: 'a' })).toEqual([{ name: 'a', rows: 1 }]);
+      expect(await wrapped.tableStats?.({ schema: 'b' })).toEqual([{ name: 'b', rows: 2 }]);
+      cache.invalidate('c1');
+      expect(await wrapped.tableStats?.({ schema: 'a' })).toEqual([{ name: 'a', rows: 3 }]);
+    });
+
     it('tells scopes apart even when a name contains the separator', async () => {
       const inner = reader();
       const wrapped = cache.wrap('c1', inner);

@@ -37,6 +37,11 @@ export interface TransferRequest {
   readonly tables: readonly string[];
   readonly content: TransferContent;
   readonly existing: ExistingTable;
+  /**
+   * New names on the target, by source name (V10.2.3: a duplicate in the same scope).
+   * Index and key names follow, and keys between copied tables point at the copies.
+   */
+  readonly renames?: ReadonlyMap<string, string>;
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: TransferProgress) => void;
 }
@@ -113,6 +118,9 @@ export class TableTransferService {
     const run = nextTransfer++;
     const readOwner = ConnectionManager.taskOwner(`transfer-${run}-read`);
     const writeOwner = ConnectionManager.taskOwner(`transfer-${run}-write`);
+    // Inside one database the server copies the rows itself, on one session: a second
+    // one would wait for the first's snapshot (SQLite locks the whole file).
+    const local = sameDatabase(request.source.target, request.destination.target);
     const reader = await this.manager.acquire(readOwner, request.source.target);
     let writer: Session | undefined;
     const cancel = (): void => {
@@ -126,11 +134,13 @@ export class TableTransferService {
     const results: TableTransfer[] = [];
     let rows = 0;
     try {
-      writer = await this.manager.acquire(writeOwner, request.destination.target);
+      writer = local ? reader : await this.manager.acquire(writeOwner, request.destination.target);
       await each(reader, fromDriver.dialect.dump.prepare);
-      await each(reader, fromDriver.dialect.dump.beginSnapshot);
+      if (!local) {
+        await each(reader, fromDriver.dialect.dump.beginSnapshot);
+      }
       await each(writer, toDriver.dialect.dump.header);
-      const job = new Job(fromDriver, toDriver, reader, writer, request);
+      const job = new Job(fromDriver, toDriver, reader, writer, request, local);
       const existing = new Set(
         (await writer.metadata.listTables(request.destination.scope))
           .filter((table) => table.kind === 'table')
@@ -167,13 +177,17 @@ export class TableTransferService {
         await job.addKeys(planned, results);
         await each(writer, toDriver.dialect.dump.footer);
       }
-      await each(reader, fromDriver.dialect.dump.endSnapshot).catch((error: unknown) => {
-        this.logger.warn('Ending the transfer snapshot failed', error);
-      });
+      if (!local) {
+        await each(reader, fromDriver.dialect.dump.endSnapshot).catch((error: unknown) => {
+          this.logger.warn('Ending the transfer snapshot failed', error);
+        });
+      }
     } finally {
       request.signal?.removeEventListener('abort', cancel);
       await this.manager.release(readOwner);
-      await this.manager.release(writeOwner);
+      if (!local) {
+        await this.manager.release(writeOwner);
+      }
     }
     const order = new Map(request.tables.map((name, index) => [name, index]));
     results.sort((a, b) => (order.get(a.table) ?? 0) - (order.get(b.table) ?? 0));
@@ -201,6 +215,8 @@ class Job {
     private readonly reader: Session,
     private readonly writer: Session,
     private readonly request: TransferRequest,
+    /** Source and target are one database on one session (`INSERT … SELECT`). */
+    private readonly local = false,
   ) {
     this.from = fromDriver.dialect;
     this.to = toDriver.dialect;
@@ -210,8 +226,8 @@ class Job {
   async prepare(name: string, existing: ReadonlySet<string>): Promise<Planned | TableTransfer> {
     const { request } = this;
     const source: TableRef = { ...request.source.scope, name };
-    const target: TableRef = { ...request.destination.scope, name };
-    const exists = existing.has(name.toLowerCase());
+    const target: TableRef = { ...request.destination.scope, name: this.targetName(name) };
+    const exists = existing.has(target.name.toLowerCase());
     const failed = (error: unknown, created = false): TableTransfer => ({
       table: name,
       outcome: 'failed',
@@ -277,6 +293,11 @@ class Job {
     }
   }
 
+  /** The name a table gets on the target. */
+  private targetName(name: string): string {
+    return this.request.renames?.get(name) ?? name;
+  }
+
   /** The table's design for the target: types, defaults and keys in its words. */
   private translate(name: string, structure: TableStructure, notes: TransferNote[]): TableDesign {
     const from = this.fromDriver.id;
@@ -297,25 +318,37 @@ class Job {
     // Index names belong to the schema in PostgreSQL and SQLite, to the table in MySQL;
     // constraint names to the schema in SQL Server and to the database in MySQL. A name
     // that does not say its table (SQLite calls every key fk_1) gets the table in front.
-    const own = (original: string): string =>
-      from === to || original.toLowerCase().includes(name.toLowerCase())
+    const renamed = this.targetName(name);
+    const own = (original: string): string => {
+      if (renamed !== name) {
+        // A copy beside its table needs names of its own: orders_pkey → orders_copy_pkey.
+        const at = original.toLowerCase().indexOf(name.toLowerCase());
+        return (
+          at === -1
+            ? `${renamed}_${original}`
+            : `${original.slice(0, at)}${renamed}${original.slice(at + name.length)}`
+        ).slice(0, 63);
+      }
+      return from === to || original.toLowerCase().includes(name.toLowerCase())
         ? original
         : `${name}_${original}`.slice(0, 63);
+    };
     let design: TableDesign = {
       ...loaded,
+      name: renamed,
       columns,
       indexes: loaded.indexes.map((index) => ({ ...index, name: own(index.name) })),
       // A key goes along when its table does, from the same scope; it then points at
       // the copy in the target scope.
       foreignKeys: loaded.foreignKeys.flatMap((key) => {
-        const copied = this.request.tables.some(
+        const copied = this.request.tables.find(
           (table) => table.toLowerCase() === key.targetTable.toLowerCase(),
         );
-        if (!copied || key.targetSchema !== undefined) {
+        if (copied === undefined || key.targetSchema !== undefined) {
           notes.push({ kind: 'key-dropped', key: key.name, target: key.targetTable });
           return [];
         }
-        return [{ ...key, name: own(key.name) }];
+        return [{ ...key, name: own(key.name), targetTable: this.targetName(copied) }];
       }),
     };
     // The target may refuse what the source allowed (auto-numbering a non-key column).
@@ -377,6 +410,44 @@ class Job {
     };
   }
 
+  /** The server copies the rows in one statement; the copy's rows are counted after. */
+  private async copyLocally(
+    table: Planned,
+    quotedTable: string,
+    quotedColumns: readonly string[],
+    select: string,
+  ): Promise<TableTransfer> {
+    const { created } = table;
+    try {
+      await each(this.writer, [
+        this.to.dump.insertSelect(quotedTable, quotedColumns, select, table.identity),
+      ]);
+      await this.resetSequences(table);
+      const rows = await countRows(this.writer, `SELECT COUNT(*) FROM ${quotedTable}`);
+      return { table: table.name, outcome: 'copied', created, rows, notes: table.notes };
+    } catch (error) {
+      const cancelled = aborted(this.request.signal);
+      return {
+        table: table.name,
+        outcome: 'failed',
+        created,
+        rows: 0,
+        notes: table.notes,
+        error: cancelled ? 'cancelled' : errorMessage(error),
+      };
+    }
+  }
+
+  private async resetSequences(table: Planned): Promise<void> {
+    const reset = this.to.dump.resetSequence;
+    if (reset !== undefined) {
+      await each(
+        this.writer,
+        table.sequenced.map((column) => reset(table.target, column)),
+      );
+    }
+  }
+
   /** Streams the rows across in batches; a failure ends this table, not the transfer. */
   async copy(table: Planned, progress: (rows: number) => void): Promise<TableTransfer> {
     const { created } = table;
@@ -386,6 +457,9 @@ class Job {
     const quotedTable = this.to.quoteTable(table.target);
     const quotedColumns = table.columns.map((column) => this.to.quoteIdentifier(column.name));
     const select = `SELECT ${table.columns.map((column) => this.from.quoteIdentifier(column.name)).join(', ')} FROM ${this.from.quoteTable(table.source)}`;
+    if (this.local) {
+      return await this.copyLocally(table, quotedTable, quotedColumns, select);
+    }
     const batcher = new RowBatcher();
     let rows = 0;
     const flush = async (tuples: string[]): Promise<void> => {
@@ -416,13 +490,7 @@ class Job {
         progress(rows);
       }
       await flush(batcher.take());
-      const reset = this.to.dump.resetSequence;
-      if (reset !== undefined) {
-        await each(
-          this.writer,
-          table.sequenced.map((column) => reset(table.target, column)),
-        );
-      }
+      await this.resetSequences(table);
       return { table: table.name, outcome: 'copied', created, rows, notes: table.notes };
     } catch (error) {
       if (aborted(this.request.signal)) {
@@ -482,6 +550,24 @@ function composedOf(column: ColumnDesign | undefined): string | undefined {
 
 function aborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
+}
+
+/** The same connection and database: one place to read from and write to. */
+function sameDatabase(a: SessionTarget, b: SessionTarget): boolean {
+  return a.connectionId === b.connectionId && (a.database ?? '') === (b.database ?? '');
+}
+
+/** The first cell of a `SELECT COUNT(*)`, whatever type the client hands it over as. */
+async function countRows(session: Session, sql: string): Promise<number> {
+  let count = 0;
+  for await (const event of session.execute(sql)) {
+    if (event.kind === 'rows') {
+      const cell = event.rows[0]?.[0];
+      const value = typeof cell === 'object' && cell !== null && 'text' in cell ? cell.text : cell;
+      count = Number(value ?? 0);
+    }
+  }
+  return Number.isFinite(count) ? count : 0;
 }
 
 async function each(session: Session, statements: readonly string[]): Promise<void> {

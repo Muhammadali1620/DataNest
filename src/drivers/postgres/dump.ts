@@ -36,6 +36,10 @@ export const postgresDump: DumpDialect = {
     `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')})${
       identity ? ' OVERRIDING SYSTEM VALUE' : ''
     } VALUES\n${rows.join(',\n')}`,
+  insertSelect: (quotedTable, quotedColumns, select, identity) =>
+    `INSERT INTO ${quotedTable} (${quotedColumns.join(', ')})${
+      identity ? ' OVERRIDING SYSTEM VALUE' : ''
+    }\n${select}`,
   // Moves the sequence only when there are rows; an empty table keeps its START.
   resetSequence: (table: TableRef, column: string) => {
     const name = quoteIdentifier(column);

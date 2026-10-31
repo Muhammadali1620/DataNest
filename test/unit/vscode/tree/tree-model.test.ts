@@ -430,6 +430,115 @@ describe('TreeModel', () => {
       expect(driver.lastSession?.metadata.calls).toContain('listTables:app/public');
     });
 
+    it('puts the statistics of the server on each table (V10.2.3)', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.tables = [
+        { name: 'orders', kind: 'table' },
+        { name: 'quiet', kind: 'table' },
+      ];
+      metadata.tableStats = () =>
+        Promise.resolve([
+          { name: 'orders', rows: 1200, bytes: 65536, comment: 'All orders' },
+          { name: 'gone', rows: 5 },
+        ]);
+      const nodes = await model.children(group());
+      expect(nodes).toEqual([
+        {
+          kind: 'table',
+          connectionId: mysql.id,
+          scope: {},
+          name: 'orders',
+          tableKind: 'table',
+          stats: { name: 'orders', rows: 1200, bytes: 65536, comment: 'All orders' },
+        },
+        { kind: 'table', connectionId: mysql.id, scope: {}, name: 'quiet', tableKind: 'table' },
+      ]);
+    });
+
+    it('reads the statistics once, from the cache after that', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      let reads = 0;
+      metadata.tableStats = () => {
+        reads++;
+        return Promise.resolve([{ name: 'customers', rows: 1 }]);
+      };
+      await model.children(group());
+      await model.children(group());
+      expect(reads).toBe(1);
+    });
+
+    it('lists the tables without statistics when the setting is off', async () => {
+      let reads = 0;
+      drivers.driver('mysql').sessionMetadata.tableStats = () => {
+        reads++;
+        return Promise.resolve([{ name: 'customers', rows: 1 }]);
+      };
+      const quiet = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => false, tableStats: () => false },
+        logger,
+        texts: TEXTS,
+      });
+      expect(await quiet.children(group())).toEqual([
+        { kind: 'table', connectionId: mysql.id, scope: {}, name: 'customers', tableKind: 'table' },
+      ]);
+      expect(reads).toBe(0);
+    });
+
+    it('still lists the tables when the statistics fail, and says so in the log', async () => {
+      drivers.driver('mysql').sessionMetadata.tableStats = () =>
+        Promise.reject(new DbError('permission-denied', 'no access to the statistics'));
+      expect(await model.children(group())).toEqual([
+        { kind: 'table', connectionId: mysql.id, scope: {}, name: 'customers', tableKind: 'table' },
+      ]);
+      expect(logger.entries.some((entry) => entry.message.includes('statistics'))).toBe(true);
+    });
+
+    it('shows only what the Filter… lets through, then how many it hid (V10.2.3)', async () => {
+      drivers.driver('mysql').sessionMetadata.tables = [
+        { name: 'orders', kind: 'table' },
+        { name: 'order_items', kind: 'table' },
+        { name: 'customers', kind: 'table' },
+        { name: 'order_totals', kind: 'view' },
+      ];
+      const tables = group();
+      const texts = { ...TEXTS, hiddenByFilter: (count: number) => `${count} hidden` };
+      const filtered = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => false },
+        logger,
+        texts,
+      });
+      expect(tables.kind === 'group' && filtered.groupFilter(tables)).toBe(undefined);
+      if (tables.kind !== 'group') {
+        return;
+      }
+      filtered.setGroupFilter(tables, '  order ');
+      expect(filtered.groupFilter(tables)).toBe('order');
+      expect(
+        (await filtered.children(tables)).map((node) =>
+          node.kind === 'table' ? node.name : node.kind === 'message' ? node.text : '',
+        ),
+      ).toEqual(['orders', 'order_items', '1 hidden']);
+      // Each folder has its own filter; the Views folder is not filtered.
+      const views: TreeNode = { kind: 'group', group: 'views', connectionId: mysql.id, scope: {} };
+      expect((await filtered.children(views)).length).toBe(1);
+      filtered.setGroupFilter(tables, 'nothing*');
+      expect(await filtered.children(tables)).toEqual([
+        { kind: 'message', text: '3 hidden', connectionId: mysql.id },
+      ]);
+      filtered.setGroupFilter(tables, '');
+      expect(filtered.groupFilter(tables)).toBeUndefined();
+      expect(await filtered.children(tables)).toHaveLength(3);
+      filtered.setGroupFilter(tables, 'order');
+      filtered.setGroupFilter(tables, undefined);
+      expect(filtered.groupFilter(tables)).toBeUndefined();
+    });
+
     it('says when a group is empty', async () => {
       drivers.driver('mysql').sessionMetadata.tables = [];
       expect(await model.children(group())).toEqual([

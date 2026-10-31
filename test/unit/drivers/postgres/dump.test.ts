@@ -3,6 +3,15 @@ import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { postgresDump } from '../../../../src/drivers/postgres/dump';
 
 describe('postgresDump', () => {
+  it('copies rows inside the database with INSERT … SELECT (V10.2.3)', () => {
+    expect(postgresDump.insertSelect('"t"', ['"id"'], 'SELECT "id" FROM "s"', false)).toBe(
+      'INSERT INTO "t" ("id")\nSELECT "id" FROM "s"',
+    );
+    expect(postgresDump.insertSelect('"t"', ['"id"'], 'SELECT "id" FROM "s"', true)).toBe(
+      'INSERT INTO "t" ("id") OVERRIDING SYSTEM VALUE\nSELECT "id" FROM "s"',
+    );
+  });
+
   it('is the dump part of the PostgreSQL dialect', () => {
     expect(postgresDialect.dump).toBe(postgresDump);
   });

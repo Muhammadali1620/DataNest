@@ -97,6 +97,9 @@ export const COMMAND_IDS = {
   exportData: 'datanest.table.exportData',
   /** Copies tables to another connection, of any kind of database (V5.6). */
   transferTables: 'datanest.table.transfer',
+  duplicateTable: 'datanest.table.duplicate',
+  openSqliteFile: 'datanest.connections.openSqliteFile',
+  filterTables: 'datanest.tree.filterTables',
   /** Fills a table with generated rows (V5.5). */
   generateData: 'datanest.table.generateData',
   /** Compares the rows of two tables and writes the script that syncs them (V8.4). */
@@ -187,6 +190,8 @@ export const CONFIG_KEYS = {
   logLevel: 'logLevel',
   /** Show the server's own databases and schemas in the tree. */
   showSystemObjects: 'showSystemObjects',
+  /** Rows, size and comment of tables in the tree (V10.2.3). */
+  treeTableStats: 'tree.tableStats',
   /** Largest number of rows one statement brings back. */
   rowLimit: 'rowLimit',
   /** Rows one page of a table view holds. */

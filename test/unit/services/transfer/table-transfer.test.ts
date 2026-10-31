@@ -255,3 +255,138 @@ describe('TableTransferService', () => {
     ]);
   });
 });
+
+describe('TableTransferService inside one database (V10.2.3)', () => {
+  /** One PostgreSQL session that is both ends, as a duplicate beside the table has. */
+  function local(rows: number | null = 2) {
+    const harness = new Harness('postgres', 'postgres');
+    const session = harness.reader;
+    session.metadata.structure = {
+      ...ORDERS,
+      columns: ORDERS.columns.filter((column) => !column.generated),
+      foreignKeys: [
+        {
+          name: 'orders_fk_parent',
+          columns: ['customer_id'],
+          target: { schema: 'public', name: 'orders' },
+          targetColumns: ['id'],
+        },
+        ...ORDERS.foreignKeys,
+      ],
+    };
+    session.metadata.tables = [{ name: 'orders', kind: 'table' }];
+    session.rowsFor = (sql) => (sql.startsWith('SELECT COUNT(*)') && rows !== null ? [[rows]] : []);
+    const acquired: string[] = [];
+    const service = new TableTransferService({
+      manager: {
+        driverOf: () => Promise.resolve(harness.fromDriver as Driver),
+        acquire: (owner) => {
+          acquired.push(owner);
+          return Promise.resolve(session as Session);
+        },
+        release: (owner) => {
+          harness.released.push(owner);
+          return Promise.resolve();
+        },
+      },
+      logger: new RecordingLogger(),
+      now: () => 0,
+    });
+    const end = { target: { connectionId: 'db', database: 'shop' }, scope: { schema: 'public' } };
+    const run = async (overrides: Partial<TransferRequest> = {}) =>
+      await service.transfer({
+        source: end,
+        destination: end,
+        tables: ['orders'],
+        renames: new Map([['orders', 'orders_copy']]),
+        content: 'all',
+        existing: 'skip',
+        ...overrides,
+      });
+    return { harness, session, acquired, run };
+  }
+
+  it('copies on one session, without a snapshot, the server moving the rows', async () => {
+    const { harness, session, acquired, run } = local();
+    const report = await run();
+    expect(acquired).toHaveLength(1);
+    expect(harness.released).toEqual([expect.stringMatching(/-read$/u)]);
+    const sql = session.executed.join('\n');
+    expect(sql).not.toContain('BEGIN ISOLATION LEVEL');
+    expect(sql).toContain('CREATE TABLE "public"."orders_copy"');
+    expect(sql).toContain(
+      'INSERT INTO "public"."orders_copy" ("id", "customer_id", "paid", "made_at") OVERRIDING SYSTEM VALUE\nSELECT "id", "customer_id", "paid", "made_at" FROM "public"."orders"',
+    );
+    expect(sql).toContain('SELECT COUNT(*) FROM "public"."orders_copy"');
+    expect(report.tables[0]).toMatchObject({
+      table: 'orders',
+      outcome: 'copied',
+      created: true,
+      rows: 2,
+    });
+  });
+
+  it('names indexes and keys after the copy, and points a key to itself at the copy', async () => {
+    const { session, run } = local();
+    await run();
+    const sql = session.executed.join('\n');
+    expect(sql).toContain('CREATE INDEX "orders_copy_ix_customer"');
+    expect(sql).toContain(
+      'ADD CONSTRAINT "orders_copy_fk_parent" FOREIGN KEY ("customer_id") REFERENCES "public"."orders_copy"',
+    );
+    // A key to a table that is not copied is left out, as in any transfer.
+    expect(sql).not.toContain('fk_customer');
+  });
+
+  it('moves the numbering past the copied rows', async () => {
+    const { session, run } = local();
+    await run();
+    expect(session.executed.join('\n')).toContain(
+      'pg_catalog.pg_get_serial_sequence(\'"public"."orders_copy"\', \'id\')',
+    );
+  });
+
+  it('copies the structure alone without touching the rows', async () => {
+    const { session, run } = local();
+    const report = await run({ content: 'structure' });
+    expect(session.executed.some((sql) => sql.startsWith('INSERT'))).toBe(false);
+    expect(report.tables[0]).toMatchObject({ outcome: 'copied', rows: 0 });
+  });
+
+  it('leaves a copy that is already there alone', async () => {
+    const { session, run } = local();
+    session.metadata.tables = [
+      { name: 'orders', kind: 'table' },
+      { name: 'ORDERS_COPY', kind: 'table' },
+    ];
+    const report = await run();
+    expect(report.tables[0]).toMatchObject({ outcome: 'skipped', created: false });
+    expect(session.executed.some((sql) => sql.startsWith('CREATE'))).toBe(false);
+  });
+
+  it('reports a copy whose rows the server refused', async () => {
+    const { session, run } = local();
+    session.failExecuteWhen = (sql) => sql.startsWith('INSERT');
+    const report = await run();
+    expect(report.tables[0]).toMatchObject({ outcome: 'failed', created: true });
+    expect(report.tables[0]?.error).toContain('Not allowed: INSERT');
+  });
+
+  it('counts no rows when the count says nothing', async () => {
+    const { run } = local(null);
+    expect((await run()).tables[0]).toMatchObject({ outcome: 'copied', rows: 0 });
+  });
+
+  it('keeps two databases of one connection apart: those still stream across', async () => {
+    const harness = new Harness('postgres', 'postgres');
+    const report = await harness.service().transfer({
+      source: { target: { connectionId: 'from', database: 'a' }, scope: { schema: 'public' } },
+      destination: { target: { connectionId: 'to', database: 'b' }, scope: { schema: 'public' } },
+      tables: ['orders'],
+      content: 'structure',
+      existing: 'replace',
+    });
+    expect(report.outcome).toBe('done');
+    expect(harness.released).toHaveLength(2);
+  });
+});

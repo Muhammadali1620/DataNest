@@ -3,6 +3,15 @@ import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import { sqliteDump } from '../../../../src/drivers/sqlite/dump';
 
 describe('sqliteDump', () => {
+  it('copies rows inside the database with INSERT … SELECT (V10.2.3)', () => {
+    expect(sqliteDump.insertSelect('"t"', ['"a"'], 'SELECT "a" FROM "s"', false)).toBe(
+      'INSERT INTO "t" ("a")\nSELECT "a" FROM "s"',
+    );
+    expect(sqliteDump.insertSelect('"t"', ['"a"'], 'SELECT "a" FROM "s"', true)).toBe(
+      'INSERT INTO "t" ("a")\nSELECT "a" FROM "s"',
+    );
+  });
+
   it('is the dump part of the SQLite dialect', () => {
     expect(sqliteDialect.dump).toBe(sqliteDump);
   });

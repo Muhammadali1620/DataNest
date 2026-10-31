@@ -56,6 +56,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Structure is cached, so expanding a node twice does not ask the server twice.
 - The server's own databases and schemas are hidden until you ask for them.
 - “Open Table” shows a table page by page with the total row count.
+- Estimated rows of each table in the tree, size and comment in its tooltip; a filter for
+  long lists of tables; “Duplicate Table…”; SQLite files open from the Explorer.
 
 **Database structure**
 

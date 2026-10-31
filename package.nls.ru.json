@@ -142,5 +142,9 @@
   "configuration.editor.codeLens.description": "Показывать **▶ Run** над каждым запросом SQL-редактора.",
   "configuration.editor.highlightStatement.description": "Подсвечивать запрос под курсором — тот, что выполнит `Ctrl+Enter`, — когда в SQL-файле их несколько. Цвет — `datanest.statementHighlightBackground` в `workbench.colorCustomizations`.",
   "configuration.editor.foldStatements.description": "Сворачивать SQL по запросам, а также по блочным комментариям, меткам `-- #region` и отступам. Выключено — обычное сворачивание редактора по отступам.",
-  "color.statementHighlightBackground": "Фон запроса под курсором в SQL-редакторе."
+  "color.statementHighlightBackground": "Фон запроса под курсором в SQL-редакторе.",
+  "configuration.tree.tableStats.description": "Показывать в дереве оценку числа строк каждой таблицы, а размер и комментарий — в подсказке. Берётся из статистики самого сервера, без `COUNT(*)`. У SQLite такой статистики нет.",
+  "commands.table.duplicate.title": "Дублировать таблицу…",
+  "commands.connections.openSqliteFile.title": "Открыть базу SQLite…",
+  "commands.tree.filterTables.title": "Фильтр…"
 }

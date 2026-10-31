@@ -3,6 +3,15 @@ import { mysqlDialect } from '../../../../src/drivers/mysql/dialect';
 import { mysqlDump, withoutDefiner } from '../../../../src/drivers/mysql/dump';
 
 describe('mysqlDump', () => {
+  it('copies rows inside the database with INSERT … SELECT (V10.2.3)', () => {
+    expect(mysqlDump.insertSelect('`t`', ['`a`', '`b`'], 'SELECT `a`, `b` FROM `s`', false)).toBe(
+      'INSERT INTO `t` (`a`, `b`)\nSELECT `a`, `b` FROM `s`',
+    );
+    expect(mysqlDump.insertSelect('`t`', ['`a`', '`b`'], 'SELECT `a`, `b` FROM `s`', true)).toBe(
+      'INSERT INTO `t` (`a`, `b`)\nSELECT `a`, `b` FROM `s`',
+    );
+  });
+
   it('is the dump part of the MySQL dialect', () => {
     expect(mysqlDialect.dump).toBe(mysqlDump);
   });

@@ -82,6 +82,28 @@ describe('ManagedSession', () => {
       ]);
     });
 
+    it('passes table statistics through only where the driver has them (V10.2.3)', async () => {
+      const without = managed(fake()).session;
+      expect(without.metadata.tableStats === undefined).toBe(true);
+      const inner = fake();
+      inner.metadata.tableStats = (scope) =>
+        Promise.resolve([{ name: `t-${scope.database ?? ''}`, rows: 3 }]);
+      const { session } = managed(inner);
+      expect(await session.metadata.tableStats?.({ database: 'main' })).toEqual([
+        { name: 't-main', rows: 3 },
+      ]);
+    });
+
+    it('reports a lost link from the statistics too', async () => {
+      const inner = fake();
+      inner.metadata.tableStats = () => Promise.reject(linkLostError());
+      const { session, lost } = managed(inner);
+      await expect(session.metadata.tableStats?.({})).rejects.toMatchObject({
+        code: 'connection-failed',
+      });
+      expect(lost).toHaveBeenCalledTimes(1);
+    });
+
     it('reports a lost link from any reader', async () => {
       const inner = fake();
       inner.metadata.error = linkLostError();

@@ -54,7 +54,8 @@ export function createTempDir(prefix = 'datanest-test-'): { path: string; dispos
   return {
     path,
     dispose: () => {
-      rmSync(path, { recursive: true, force: true });
+      // On Windows a process that just exited (esbuild) can hold the folder a moment longer.
+      rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }

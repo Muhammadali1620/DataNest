@@ -42,6 +42,7 @@ import { transferCommandHandlers } from './connection-transfer-commands';
 import { scriptCommandHandlers } from './script-commands';
 import { dumpCommandHandlers } from './dump-commands';
 import { tableTransferCommandHandlers } from './transfer-commands';
+import { openSqliteFileCommand } from './sqlite-file-commands';
 import { TableTransferService } from '../services/transfer/table-transfer';
 import { importCommandHandlers } from './import-commands';
 import { DataImportPanel } from './panels/data-import-panel';
@@ -609,6 +610,28 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       diagrams.showErDiagram(target, selectionOf(rest[0])),
     [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
       transfers.transfer(target, selectionOf(rest[0])),
+    [COMMAND_IDS.duplicateTable]: (target) => transfers.duplicate(target),
+    [COMMAND_IDS.openSqliteFile]: openSqliteFileCommand({
+      store: deps.store,
+      manager: deps.manager,
+      treeView: deps.treeView,
+    }),
+    [COMMAND_IDS.filterTables]: async (target) => {
+      if (!isTreeNode(target) || target.kind !== 'group') {
+        return;
+      }
+      const text = await vscode.window.showInputBox({
+        title:
+          target.group === 'views' ? vscode.l10n.t('Filter Views') : vscode.l10n.t('Filter Tables'),
+        prompt: vscode.l10n.t(
+          'Words find names that contain them; * and ? are wildcards, ! hides: app_*, !tmp. Empty shows all.',
+        ),
+        value: deps.tree.groupFilter(target) ?? '',
+      });
+      if (text !== undefined) {
+        deps.tree.setGroupFilter(target, text);
+      }
+    },
     [COMMAND_IDS.exportData]: (target) => deps.exportTable(target),
     [COMMAND_IDS.dumpSql]: (target, ...rest: unknown[]) => dumps.dump(target, selectionOf(rest[0])),
     [COMMAND_IDS.exportResult]: async () => {

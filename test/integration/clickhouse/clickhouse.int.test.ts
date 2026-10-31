@@ -226,6 +226,25 @@ describe('clickhouse driver', () => {
       });
     });
 
+    it('reads rows, bytes and the comment of tables (V10.2.3)', async () => {
+      await runAll(session, 'DROP TABLE IF EXISTS datanest_test.stats_probe');
+      await runAll(
+        session,
+        "CREATE TABLE datanest_test.stats_probe (id UInt32) ENGINE = MergeTree ORDER BY id COMMENT 'Probe of statistics'",
+      );
+      try {
+        await runAll(session, 'INSERT INTO datanest_test.stats_probe VALUES (1), (2), (3)');
+        const stats = (await session.metadata.tableStats?.({ database: 'datanest_test' })) ?? [];
+        const probe = stats.find((entry) => entry.name === 'stats_probe');
+        expect(probe).toMatchObject({ rows: 3, comment: 'Probe of statistics' });
+        expect(probe?.bytes).toBeGreaterThan(0);
+        expect(stats.find((entry) => entry.name === 'order_totals')?.rows).toBeUndefined();
+        expect(stats.some((entry) => entry.name.startsWith('.inner'))).toBe(false);
+      } finally {
+        await runAll(session, 'DROP TABLE datanest_test.stats_probe');
+      }
+    });
+
     it('lists columns with nullability and defaults, but no key that identifies rows', async () => {
       const columns = await session.metadata.listColumns(TABLE);
       expect(columns).toEqual([

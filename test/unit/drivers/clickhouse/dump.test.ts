@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { clickhouseDump } from '../../../../src/drivers/clickhouse/dump';
 
 describe('clickhouseDump', () => {
+  it('copies rows inside the database with INSERT … SELECT (V10.2.3)', () => {
+    expect(clickhouseDump.insertSelect('`t`', ['`a`'], 'SELECT `a` FROM `s`', false)).toBe(
+      'INSERT INTO `t` (`a`)\nSELECT `a` FROM `s`',
+    );
+    expect(clickhouseDump.insertSelect('`t`', ['`a`'], 'SELECT `a` FROM `s`', true)).toBe(
+      'INSERT INTO `t` (`a`)\nSELECT `a` FROM `s`',
+    );
+  });
+
   it('needs no snapshot, header, footer or later keys', () => {
     expect(clickhouseDump).toMatchObject({
       prepare: [],

@@ -10,8 +10,10 @@ import type {
   ObjectScope,
   TableInfo,
   TableRef,
+  TableStats,
   TableStructure,
 } from '../../core/model/objects';
+import { tableStats } from '../common/stats';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { readMysqlDefinition } from './definitions';
@@ -21,6 +23,9 @@ import { msg } from '../../core/user-message';
 
 /** Reads structure from information_schema; shares the session's connection. */
 export class MysqlMetadata implements MetadataReader {
+  /** Set once the session reads fresh statistics, or knows it cannot ask for them. */
+  private freshStats = false;
+
   constructor(private readonly conn: Connection) {}
 
   async listDatabases(): Promise<string[]> {
@@ -53,6 +58,25 @@ export class MysqlMetadata implements MetadataReader {
       name: asText(row[0]) ?? '',
       kind: (asText(row[1]) ?? '').includes('VIEW') ? ('view' as const) : ('table' as const),
     }));
+  }
+
+  async tableStats(scope: ObjectScope): Promise<TableStats[]> {
+    if (!this.freshStats) {
+      this.freshStats = true;
+      // MySQL 8 answers from a cache refreshed once a day, so a filled table says 0
+      // rows; MariaDB and TiDB have no such cache, nor the variable.
+      await this.query('SET SESSION information_schema_stats_expiry = 0').catch(() => undefined);
+    }
+    // TABLE_ROWS is InnoDB's estimate; views have no rows, and their comment is "VIEW".
+    const rows = await this.query(
+      `SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH,
+              CASE WHEN TABLE_TYPE LIKE '%VIEW' THEN NULL ELSE TABLE_COMMENT END
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = COALESCE(?, DATABASE()) AND TABLE_TYPE <> 'SEQUENCE'
+       ORDER BY TABLE_NAME`,
+      [scope.database ?? null],
+    );
+    return rows.map((row) => tableStats(asText(row[0]) ?? '', row[1], row[2], row[3]));
   }
 
   async listColumns(table: TableRef): Promise<ColumnInfo[]> {

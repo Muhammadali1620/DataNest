@@ -142,5 +142,9 @@
   "configuration.editor.codeLens.description": "Show **▶ Run** above each statement of a SQL editor.",
   "configuration.editor.highlightStatement.description": "Highlight the statement under the cursor — the one `Ctrl+Enter` runs — when a SQL file holds several. The colour is `datanest.statementHighlightBackground` in `workbench.colorCustomizations`.",
   "configuration.editor.foldStatements.description": "Fold SQL by statements, as well as by block comments, `-- #region` markers and indentation. Off: the editor's own folding by indentation.",
-  "color.statementHighlightBackground": "Background of the statement under the cursor in a SQL editor."
+  "color.statementHighlightBackground": "Background of the statement under the cursor in a SQL editor.",
+  "configuration.tree.tableStats.description": "Show the estimated rows of each table in the tree, and its size and comment in the tooltip — from the server's own statistics, never a `COUNT(*)`. SQLite keeps no such statistics.",
+  "commands.table.duplicate.title": "Duplicate Table…",
+  "commands.connections.openSqliteFile.title": "Open SQLite Database…",
+  "commands.tree.filterTables.title": "Filter…"
 }

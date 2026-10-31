@@ -37,7 +37,19 @@ export class MetadataCache {
 
   /** A reader that answers from the cache and falls back to `reader`. */
   wrap(connectionId: string, reader: MetadataReader): MetadataReader {
+    const stats = reader.tableStats?.bind(reader);
     return {
+      // Estimates as of the last look: Refresh or a structure change reads them again.
+      ...(stats === undefined
+        ? {}
+        : {
+            tableStats: async (scope: ObjectScope) =>
+              await this.read(
+                connectionId,
+                `stats:${scopeKey(scope)}`,
+                async () => await stats(scope),
+              ),
+          }),
       listDatabases: async () =>
         await this.read(connectionId, 'databases', async () => await reader.listDatabases()),
       listSchemas: async (database?: string) =>

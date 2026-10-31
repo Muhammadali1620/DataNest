@@ -223,6 +223,17 @@ describe.each(TARGETS)('$id', (target) => {
     expect(design.indexes.map((index) => index.name)).toContain('ix_orders_customer');
   });
 
+  it('reads table statistics, or at least names every table and view (V10.2.3)', async () => {
+    const stats = (await session.metadata.tableStats?.(target.scope)) ?? [];
+    const names = stats.map((entry) => entry.name);
+    expect(names).toEqual(expect.arrayContaining(['customers', 'order_totals']));
+    for (const entry of stats) {
+      expect(entry.rows === undefined || entry.rows >= 0).toBe(true);
+      expect(entry.bytes === undefined || entry.bytes > 0).toBe(true);
+    }
+    expect(stats.find((entry) => entry.name === 'order_totals')?.rows).toBeUndefined();
+  });
+
   it('reads the definitions of a table and a view that load anywhere', async () => {
     const [table] = await session.metadata.getDefinition({
       kind: 'table',

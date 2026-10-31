@@ -22,6 +22,7 @@ import {
   connectionContext,
   nodeId,
   TREE_CONTEXT,
+  type GroupNode,
   type ObjectGroup,
   type ObjectNode,
   type TableFolder,
@@ -29,6 +30,8 @@ import {
 } from './nodes';
 import { type ProjectSource, TreeModel, type TreeSettings } from './tree-model';
 import { formatCount } from '../../core/number-format';
+import type { TableStats } from '../../core/model/objects';
+import { formatSize } from '../../shared/byte-size';
 
 export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
@@ -142,6 +145,17 @@ export class ConnectionsTreeProvider
     this.changed.fire(node);
   }
 
+  /** The Filter… text of a Tables or Views folder (V10.2.3). */
+  groupFilter(node: GroupNode): string | undefined {
+    return this.model.groupFilter(node);
+  }
+
+  /** Sets or clears the Filter… text of a folder and lists it again. */
+  setGroupFilter(node: GroupNode, text: string | undefined): void {
+    this.model.setGroupFilter(node, text);
+    this.refresh(node);
+  }
+
   getTreeItem(node: TreeNode): vscode.TreeItem {
     switch (node.kind) {
       case 'project': {
@@ -170,8 +184,8 @@ export class ConnectionsTreeProvider
         return expandable(node, node.database, 'database', TREE_CONTEXT.database);
       case 'schema':
         return expandable(node, node.schema, 'symbol-namespace', TREE_CONTEXT.schema);
-      case 'group':
-        return expandable(
+      case 'group': {
+        const item = expandable(
           node,
           groupLabel(node.group),
           GROUP_ICONS[node.group],
@@ -181,6 +195,12 @@ export class ConnectionsTreeProvider
               ? TREE_CONTEXT.viewsGroup
               : TREE_CONTEXT.group,
         );
+        const filter = this.model.groupFilter(node);
+        if (filter !== undefined) {
+          item.description = vscode.l10n.t('filter: {0}', filter);
+        }
+        return item;
+      }
       case 'folder':
         return expandable(
           node,
@@ -211,7 +231,13 @@ export class ConnectionsTreeProvider
           node.tableKind === 'view' ? 'eye' : 'table',
           node.tableKind === 'view' ? TREE_CONTEXT.view : TREE_CONTEXT.table,
         );
-        item.tooltip = qualifiedName(node.scope, node.name);
+        item.tooltip = tableTooltip(qualifiedName(node.scope, node.name), node.stats);
+        if (node.stats?.rows !== undefined && node.tableKind === 'table') {
+          item.description = vscode.l10n.t(
+            '≈ {0} rows',
+            formatCount(node.stats.rows, vscode.env.language),
+          );
+        }
         return item;
       }
       case 'column': {
@@ -516,6 +542,21 @@ function leaf(node: TreeNode, label: string, icon: string): vscode.TreeItem {
   item.id = nodeId(node);
   item.iconPath = new vscode.ThemeIcon(icon);
   return item;
+}
+
+/** The table's full name, then what the server's statistics say about it. */
+function tableTooltip(name: string, stats: TableStats | undefined): string {
+  const lines = [name];
+  if (stats?.rows !== undefined) {
+    lines.push(vscode.l10n.t('Rows (estimate): {0}', formatCount(stats.rows, vscode.env.language)));
+  }
+  if (stats?.bytes !== undefined) {
+    lines.push(vscode.l10n.t('Size: {0}', formatSize(stats.bytes)));
+  }
+  if (stats?.comment !== undefined) {
+    lines.push('', stats.comment);
+  }
+  return lines.join('\n');
 }
 
 function qualifiedName(scope: { database?: string; schema?: string }, name: string): string {

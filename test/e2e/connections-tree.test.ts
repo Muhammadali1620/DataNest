@@ -22,6 +22,32 @@ describe('connections view', () => {
     assert.ok(all.includes(`${VIEW_ID}.focus`), 'the view command is missing');
   });
 
+  it('offers the tree commands of V10.2.3, and Open SQLite Database on SQLite files', async () => {
+    const all = await vscode.commands.getCommands(true);
+    for (const id of [
+      'datanest.table.duplicate',
+      'datanest.tree.filterTables',
+      'datanest.connections.openSqliteFile',
+    ]) {
+      assert.ok(all.includes(id), `${id} is not registered`);
+    }
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    const menus = (
+      extension?.packageJSON as {
+        contributes: { menus: Record<string, { command: string; when?: string }[]> };
+      }
+    ).contributes.menus;
+    const explorer = menus['explorer/context']?.find(
+      (entry) => entry.command === 'datanest.connections.openSqliteFile',
+    );
+    assert.match(explorer?.when ?? '', /sqlite3/);
+    assert.equal(
+      vscode.workspace.getConfiguration('datanest').get('tree.tableStats'),
+      true,
+      'table statistics are on by default',
+    );
+  });
+
   it('hides system objects by default and can be switched at runtime', async () => {
     const config = vscode.workspace.getConfiguration('datanest');
     assert.equal(config.get('showSystemObjects'), false);

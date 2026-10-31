@@ -18,6 +18,10 @@ export function createSettings(): TreeSettings {
       vscode.workspace
         .getConfiguration(CONFIG_SECTION)
         .get<boolean>(CONFIG_KEYS.showSystemObjects, false),
+    tableStats: () =>
+      vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<boolean>(CONFIG_KEYS.treeTableStats, true),
   };
 }
 

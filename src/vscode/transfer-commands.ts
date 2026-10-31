@@ -18,6 +18,11 @@ import type {
   TransferReport,
 } from '../services/transfer/table-transfer';
 import { changeVerdict, policyOf } from '../services/write-policy';
+import {
+  copyName,
+  duplicateNameProblem,
+  tableNameLimit,
+} from '../services/transfer/duplicate-name';
 import { pickConnection, pickScope } from './connection-pick';
 import { dumpStartOf } from './tree/dump-target';
 import { isTreeNode, type TreeNode } from './tree/nodes';
@@ -49,7 +54,114 @@ function targetOf(connectionId: string, scope: ObjectScope): SessionTarget {
 
 export function tableTransferCommandHandlers(deps: TransferCommandDeps): {
   transfer: (target?: unknown, selection?: readonly TreeNode[]) => Promise<void>;
+  duplicate: (target?: unknown) => Promise<void>;
 } {
+  /** "Duplicate Table…" (V10.2.3): a copy beside the table, under a new name. */
+  const duplicate = async (target?: unknown): Promise<void> => {
+    if (!isTreeNode(target) || target.kind !== 'table' || target.tableKind !== 'table') {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t('Pick a table in the DataNest view first'),
+      );
+      return;
+    }
+    const { connectionId, scope, name } = target;
+    const config = deps.store.get(connectionId);
+    if (config === undefined) {
+      return;
+    }
+    const policy = policyOf(config);
+    const verdict = changeVerdict(policy);
+    if (verdict === 'refuse') {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t('"{0}" is read-only: nothing can be copied into it.', policy.name),
+      );
+      return;
+    }
+    const metadata = deps.cache.wrap(
+      connectionId,
+      (await browseSession(deps.manager, connectionId, scope.database)).metadata,
+    );
+    const existing = (await metadata.listTables(scope)).map((table) => table.name);
+    const limit = tableNameLimit(config.driver);
+    const copy = await vscode.window.showInputBox({
+      title: vscode.l10n.t('Duplicate Table "{0}"', name),
+      prompt: vscode.l10n.t('The name of the copy, beside the table'),
+      value: copyName(name, existing, limit),
+      validateInput: (value) => {
+        switch (duplicateNameProblem(value, existing, limit)) {
+          case 'empty':
+            return vscode.l10n.t('Give the copy a name');
+          case 'too-long':
+            return vscode.l10n.t('A name can be at most {0} characters here', limit);
+          case 'taken':
+            return vscode.l10n.t('There is already a table or view of this name');
+          case undefined:
+            return undefined;
+        }
+      },
+    });
+    if (copy === undefined) {
+      return;
+    }
+    const content = (
+      await vscode.window.showQuickPick(
+        [
+          { label: vscode.l10n.t('Structure and data'), content: 'all' as const },
+          { label: vscode.l10n.t('Structure only'), content: 'structure' as const },
+        ],
+        { title: vscode.l10n.t('Duplicate Table "{0}"', name), placeHolder: copy.trim() },
+      )
+    )?.content;
+    if (content === undefined) {
+      return;
+    }
+    if (verdict === 'confirm') {
+      const create = vscode.l10n.t('Create');
+      const choice = await vscode.window.showWarningMessage(
+        vscode.l10n.t(
+          'PRODUCTION "{0}": {1}',
+          policy.name,
+          vscode.l10n.t('Create the table {0}?', copy.trim()),
+        ),
+        { modal: true },
+        create,
+      );
+      if (choice !== create) {
+        return;
+      }
+    }
+    const where = label(deps.store, connectionId, scope);
+    const end = { target: targetOf(connectionId, scope), scope };
+    const report = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: vscode.l10n.t('Copying {0} to {1}', name, copy.trim()),
+        cancellable: true,
+      },
+      async (_progress, token) => {
+        const abort = new AbortController();
+        const subscription = token.onCancellationRequested(() => {
+          abort.abort();
+        });
+        try {
+          return await deps.service.transfer({
+            source: end,
+            destination: end,
+            tables: [name],
+            renames: new Map([[name, copy.trim()]]),
+            content,
+            existing: 'skip',
+            signal: abort.signal,
+          });
+        } finally {
+          subscription.dispose();
+        }
+      },
+    );
+    deps.refresh(connectionId);
+    await showOutcome(report, `${where} / ${name}`, `${where} / ${copy.trim()}`);
+  };
+
   const transfer = async (target?: unknown, selection?: readonly TreeNode[]): Promise<void> => {
     const start = isTreeNode(target)
       ? dumpStartOf(target, selection)
@@ -172,7 +284,7 @@ export function tableTransferCommandHandlers(deps: TransferCommandDeps): {
     deps.refresh(toConnection);
     await showOutcome(report, from, to);
   };
-  return { transfer };
+  return { transfer, duplicate };
 }
 
 async function pickContent(): Promise<TransferContent | undefined> {
@@ -251,7 +363,8 @@ async function confirm(
   return choice === copy;
 }
 
-async function showOutcome(report: TransferReport, from: string, to: string): Promise<void> {
+/** The totals of a copy, with the report a click away when there is something to read. */
+export async function showOutcome(report: TransferReport, from: string, to: string): Promise<void> {
   const copied = report.tables.filter((table) => table.outcome === 'copied').length;
   const summary = vscode.l10n.t(
     'Copied {0} tables, {1} rows, in {2}',

@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Added
+
+- Query variables: write `:name` or `${name}` where a value goes, and DataNest asks for it
+  when the statement runs, offering the value given last time
+  (`datanest.queryVariables`). Values go in as literals of the connection's dialect.
+
 ## [0.9.0] - 2026-10-30
 
 The public beta: faster with big results, fully in Russian, usable from the keyboard and

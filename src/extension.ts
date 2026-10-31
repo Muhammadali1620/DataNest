@@ -24,6 +24,7 @@ import { ResultCopier } from './services/result-copier';
 import { ResultEditor } from './services/result-editor';
 import { ResultSaver } from './services/result-saver';
 import { QueryHistory } from './services/history';
+import { QueryVariableMemory } from './services/query-variables';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
@@ -45,6 +46,7 @@ import {
   readHistoryLimit,
   readPageSize,
   readQueryTimeoutMs,
+  readQueryVariablesMode,
   readRowLimit,
   readTransactionMode,
 } from './vscode/settings';
@@ -288,6 +290,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const objectEdits = new ObjectEditRegistry();
   context.subscriptions.push(new ObjectEditors(objectEdits));
 
+  const variableMemory = new QueryVariableMemory(context.workspaceState);
   context.subscriptions.push(
     ...registerCommands({
       extensionVersion:
@@ -312,6 +315,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       reloadProjects: () => projects.reloadAll(),
       transactions,
       transactionModes,
+      variableMemory,
       redisKeys,
       treeView,
       redisKeySeparator: () => redisKeySettings.separator(),
@@ -323,6 +327,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // A smaller limit takes effect now, not at the next statement.
       if (event.affectsConfiguration(`${CONFIG_SECTION}.${CONFIG_KEYS.historyLimit}`)) {
         history.enforceLimit();
+      }
+      // Values that are no longer to be remembered are not kept either.
+      if (
+        event.affectsConfiguration(`${CONFIG_SECTION}.${CONFIG_KEYS.queryVariables}`) &&
+        readQueryVariablesMode() !== 'remember'
+      ) {
+        void variableMemory.clear();
       }
     }),
   );

@@ -9,6 +9,8 @@ import type { TransactionState } from '../../drivers/driver';
 import { riskyStatements, type RiskyStatement } from '../../services/safe-mode';
 import { policyOf, runVerdict, type WritePolicy } from '../../services/write-policy';
 import { summaryLine } from '../../services/history-format';
+import { type FilledStatements, inDocument } from '../../services/query-variables';
+import type { Substitution } from '../../core/sql/variables';
 import { readSafeMode } from '../settings';
 import { COMMAND_IDS } from '../command-ids';
 import type { DriverId } from '../../shared/connection';
@@ -31,6 +33,12 @@ export interface RunQueryDeps {
   readonly isManual?: (documentUri: string) => boolean;
   /** The transaction of the document's session, as the server last reported it. */
   readonly transactionState?: (documentUri: string) => TransactionState | undefined;
+  /** Asks for the values of query variables (V10.2.1); undefined when cancelled. */
+  readonly fillVariables?: (
+    statements: readonly SqlStatement[],
+    connectionId: string,
+    driver: DriverId | undefined,
+  ) => Promise<FilledStatements | undefined>;
 }
 
 export type RunCommandName = 'run' | 'runAll' | 'cancel' | 'runRange';
@@ -45,7 +53,7 @@ export interface RunRangeArgs {
 export function runCommandHandlers(
   deps: RunQueryDeps,
 ): Record<RunCommandName, (args?: unknown) => unknown> {
-  const run = async (statements: readonly SqlStatement[]): Promise<RunOutcome | undefined> => {
+  const run = async (written: readonly SqlStatement[]): Promise<RunOutcome | undefined> => {
     const editor = sqlEditor();
     if (editor === undefined) {
       void vscode.window.showInformationMessage(
@@ -53,7 +61,7 @@ export function runCommandHandlers(
       );
       return undefined;
     }
-    if (statements.length === 0) {
+    if (written.length === 0) {
       void vscode.window.showInformationMessage(vscode.l10n.t('Nothing to run'));
       return undefined;
     }
@@ -64,6 +72,15 @@ export function runCommandHandlers(
     }
     const policy = policyOf(deps.store.get(target.connectionId));
     const driver = driverOf(deps, documentUri);
+    const filled =
+      deps.fillVariables === undefined
+        ? { statements: written, substitutions: new Map<number, Substitution>() }
+        : await deps.fillVariables(written, target.connectionId, driver);
+    if (filled === undefined) {
+      return undefined;
+    }
+    // Safe mode and the run see the values; the markers go back to the written text.
+    const { statements } = filled;
     if (!(await allowed(statements, driver, policy))) {
       return undefined;
     }
@@ -78,7 +95,11 @@ export function runCommandHandlers(
       statements,
       manualCommit: deps.isManual?.(documentUri) === true,
     });
-    deps.diagnostics?.show(documentUri, outcome.results, driverOf(deps, documentUri));
+    deps.diagnostics?.show(
+      documentUri,
+      inDocument(outcome.results, written, filled.substitutions),
+      driverOf(deps, documentUri),
+    );
     report(outcome, deps.logger);
     return outcome;
   };

@@ -6,9 +6,9 @@ import { defineConfig } from 'vitest/config';
 
 /** Executing statements, editing rows, dumps and files: what must never lose its tests. */
 const CRITICAL_PATHS = `{${[
-  'src/core/sql/{split,script-reader}.ts',
+  'src/core/sql/{split,script-reader,variables}.ts',
   'src/shared/{merge-sort,cell-search,cell-input}.ts',
-  'src/services/{query-runner,result-store,connection-manager,managed-session,transactions,manual-commit,safe-mode,write-policy,session-setup}.ts',
+  'src/services/{query-runner,result-store,connection-manager,managed-session,transactions,manual-commit,safe-mode,write-policy,session-setup,query-variables}.ts',
   'src/services/{pending-edits,change-sql,result-editor,result-saver,result-editability}.ts',
   'src/services/{sql-dump,dump-script,script-runner,file-sink,text-file,sql-literal,stream-export}.ts',
   'src/services/import/table-import.ts',

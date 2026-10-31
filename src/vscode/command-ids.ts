@@ -199,6 +199,8 @@ export const CONFIG_KEYS = {
   safeMode: 'safeMode',
   /** How new SQL editors commit: each statement at once, or on the user's Commit. */
   transactionMode: 'transactionMode',
+  /** What `:name` and `${name}` in a statement do: ask and remember, ask, or nothing. */
+  queryVariables: 'queryVariables',
   // How Format Document writes SQL (sql-formatter options).
   formatKeywordCase: 'format.keywordCase',
   formatDataTypeCase: 'format.dataTypeCase',

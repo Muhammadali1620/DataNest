@@ -8,6 +8,13 @@ import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
 import { runCommandHandlers } from './editor/run-query';
 import { explainCommandHandlers } from './editor/explain-query';
+import { askVariableValue } from './editor/query-variables';
+import {
+  type FilledStatements,
+  fillVariables,
+  type QueryVariableMemory,
+} from '../services/query-variables';
+import type { SqlStatement } from '../core/sql/split';
 import { QueryPlanPanel } from './panels/query-plan-panel';
 import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
@@ -58,13 +65,18 @@ import type { QueryHistory } from '../services/history';
 import { showHistory } from './history/history-picker';
 import { showObjectSearch } from './search/object-search';
 import { templateCommandHandlers } from './tree/template-commands';
-import { createSettings, readQueryTimeoutMs, readSafeMode } from './settings';
+import {
+  createSettings,
+  readQueryTimeoutMs,
+  readQueryVariablesMode,
+  readSafeMode,
+} from './settings';
 import { ResultsPanel } from './panels/results-panel';
 import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
 import type { TransactionModes } from './editor/transaction-modes';
 import type { RedisKeyBrowser } from '../services/redis/key-browser';
-import { describeTarget } from '../shared/connection';
+import { describeTarget, type DriverId } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
 import { askNewKey } from './redis/new-key';
 import { RedisKeyPanel } from './panels/redis-key-panel';
@@ -111,6 +123,8 @@ export interface CommandDeps {
   /** The transaction of the active editor: its status and Commit/Rollback (V4.8). */
   readonly transactions: TransactionStatus;
   readonly transactionModes: TransactionModes;
+  /** The values last given to query variables (V10.2.1). */
+  readonly variableMemory: QueryVariableMemory;
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys: RedisKeyBrowser;
   /** The Connections view, to reveal a key found by a search. */
@@ -220,6 +234,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     cache: deps.cache,
     settings: createSettings(),
   });
+  const fillQueryVariables = async (
+    statements: readonly SqlStatement[],
+    connectionId: string,
+    driver: DriverId | undefined,
+  ): Promise<FilledStatements | undefined> =>
+    await fillVariables(statements, {
+      mode: readQueryVariablesMode(),
+      memory: deps.variableMemory,
+      driver,
+      dialect: async () => (await deps.manager.driverOf(connectionId)).dialect,
+      ask: askVariableValue,
+    });
   const runCommands = runCommandHandlers({
     runner: deps.runner,
     editors: deps.editors,
@@ -230,6 +256,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     isManual: (documentUri) => deps.transactionModes.modeOf(documentUri) === 'manual',
     transactionState: (documentUri) =>
       deps.manager.transactionState(ConnectionManager.editorOwner(documentUri)),
+    fillVariables: fillQueryVariables,
   });
   const explains = explainCommandHandlers({
     extensionUri: deps.extensionUri,
@@ -237,6 +264,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     editors: deps.editors,
     store: deps.store,
     logger: deps.logger,
+    fillVariables: fillQueryVariables,
   });
   /** Opens the DDL of an object in a new SQL editor on its connection and database. */
   const showDefinition = async (connectionId: string, object: ObjectRef): Promise<void> => {

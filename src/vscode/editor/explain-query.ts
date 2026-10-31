@@ -5,7 +5,7 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import { isReadOnlyStatement } from '../../core/sql/read-only';
-import { statementsIn } from '../../core/sql/split';
+import { type SqlStatement, statementsIn } from '../../core/sql/split';
 import { syntaxOf } from '../../core/sql/tokenizer';
 import type { ConnectionStore } from '../../services/connection-store';
 import {
@@ -15,7 +15,8 @@ import {
   planServerOf,
 } from '../../services/explain/explain';
 import type { QueryRunner } from '../../services/query-runner';
-import { isSqlDriver } from '../../shared/connection';
+import { type DriverId, isSqlDriver } from '../../shared/connection';
+import type { FilledStatements } from '../../services/query-variables';
 import { QueryPlanModel } from '../panels/query-plan-model';
 import { QueryPlanPanel } from '../panels/query-plan-panel';
 import type { QueryEditors } from './query-editor';
@@ -27,6 +28,12 @@ export interface ExplainQueryDeps {
   readonly editors: QueryEditors;
   readonly store: ConnectionStore;
   readonly logger: Logger;
+  /** Asks for the values of query variables (V10.2.1); undefined when cancelled. */
+  readonly fillVariables?: (
+    statements: readonly SqlStatement[],
+    connectionId: string,
+    driver: DriverId | undefined,
+  ) => Promise<FilledStatements | undefined>;
 }
 
 export function explainCommandHandlers(deps: ExplainQueryDeps): {
@@ -55,16 +62,21 @@ export function explainCommandHandlers(deps: ExplainQueryDeps): {
       return;
     }
     const { document, selection } = editor;
-    const [statement] = statementsIn(
+    const [written] = statementsIn(
       document.getText(),
       document.offsetAt(selection.start),
       document.offsetAt(selection.end),
       driver,
     );
-    if (statement === undefined) {
+    if (written === undefined) {
       void vscode.window.showInformationMessage(vscode.l10n.t('Nothing to explain'));
       return;
     }
+    const filled = await deps.fillVariables?.([written], target.connectionId, driver);
+    if (deps.fillVariables !== undefined && filled === undefined) {
+      return;
+    }
+    const statement = filled?.statements[0] ?? written;
     const connectionName = deps.store.get(target.connectionId)?.name ?? target.connectionId;
     QueryPlanPanel.show({
       extensionUri: deps.extensionUri,

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DEFAULT_SAFE_MODE, isSafeMode, type SafeMode } from '../services/safe-mode';
 import { DEFAULT_HISTORY_LIMIT } from '../services/history';
+import { isQueryVariablesMode, type QueryVariablesMode } from '../services/query-variables';
 import { DEFAULT_FORMAT_STYLE, type FormatStyle } from '../services/sql-format';
 import { CONFIG_KEYS, CONFIG_SECTION } from './command-ids';
 import { isTransactionMode, type TransactionMode } from './editor/transaction-modes';
@@ -87,6 +88,14 @@ export function readSafeMode(): SafeMode {
     .getConfiguration(CONFIG_SECTION)
     .get<string>(CONFIG_KEYS.safeMode, DEFAULT_SAFE_MODE);
   return isSafeMode(value) ? value : DEFAULT_SAFE_MODE;
+}
+
+/** What query variables do (V10.2.1). */
+export function readQueryVariablesMode(): QueryVariablesMode {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<string>(CONFIG_KEYS.queryVariables, 'remember');
+  return isQueryVariablesMode(value) ? value : 'remember';
 }
 
 /** The mode a SQL editor starts in, until the user switches it there (V4.8). */

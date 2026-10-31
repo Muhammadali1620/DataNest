@@ -15,6 +15,25 @@ The splitter understands strings, comments, `$$ … $$` bodies, MySQL's `DELIMIT
 Server's `GO`, procedure bodies and batch variables, so a statement is never cut in the
 middle.
 
+## Variables
+
+Write `:name` or `${name}` where a value goes, and DataNest asks for it when the statement
+runs — each name once, even when it appears in several statements:
+
+```sql
+SELECT * FROM orders WHERE customer_id = :customer AND created >= ${since};
+```
+
+The value goes in as a literal of the connection's dialect: a number as it is, `NULL`, or
+text, quoted for you. Text in single quotes stays text even when it looks like a number
+(`'007'`, `'42'`). The statement that ran, with its values, is what the results and the
+history show. The value you gave last time is offered next time;
+`datanest.queryVariables` can make DataNest just ask, or leave the variables alone.
+
+Strings, comments and quoted names are never searched, and neither are things that only
+look like variables: casts (`a::int`), assignments (`@x := 1`), array slices, ClickHouse
+parameters (`{id:UInt32}`) and the bodies of routines and triggers (`:new.id`).
+
 ## Help while writing
 
 - Completion knows the tables and columns of the connection, aliases, the columns of every

@@ -78,6 +78,7 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Hover over a table or column for its type, keys and comment; F12 opens its DDL.
 - Format Document in the dialect of the connection, with style settings.
 - Errors from the server are underlined right where they happened.
+- Variables: `:name` or `${name}` in a statement asks for the value when it runs.
 - Generate `SELECT`, `INSERT`, `UPDATE` and `DELETE` templates for a table.
 - A running query shows its elapsed time and can be cancelled.
 - Auto-commit or manual commit per editor: the status bar shows an open transaction,

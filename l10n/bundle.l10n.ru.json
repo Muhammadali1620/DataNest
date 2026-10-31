@@ -937,5 +937,8 @@
   "the CA certificate": "сертификат CA",
   "the client certificate": "клиентский сертификат",
   "the client key": "клиентский ключ",
-  "MONITOR streams every command without end; use redis-cli for it": "MONITOR бесконечно присылает каждую команду; используйте для этого redis-cli"
+  "MONITOR streams every command without end; use redis-cli for it": "MONITOR бесконечно присылает каждую команду; используйте для этого redis-cli",
+  "Value of \"{0}\"": "Значение «{0}»",
+  "Value of \"{0}\" ({1} of {2})": "Значение «{0}» ({1} из {2})",
+  "A number, NULL or text. Text in single quotes stays text even if it looks like a number: '42'.": "Число, NULL или текст. Текст в одинарных кавычках остаётся текстом, даже если похож на число: '42'."
 }

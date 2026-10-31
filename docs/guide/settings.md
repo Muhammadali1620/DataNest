@@ -11,6 +11,7 @@ once, without a restart.
 | `datanest.pageSize` | `200` | 1 – 100 000 | Rows on one page when a table is opened from the tree. |
 | `datanest.queryTimeout` | `0` | 0 – 86 400 s | Seconds a statement may run before DataNest cancels it; `0` means no limit. A connection's own query timeout wins over this. |
 | `datanest.transactionMode` | `auto` | `auto`, `manual` | How a new SQL editor commits: every statement at once, or in a transaction that waits for **Commit** or **Roll Back**. |
+| `datanest.queryVariables` | `remember` | `remember`, `ask`, `off` | What `:name` and `${name}` in a statement do: ask for the value and offer the one given last time, ask every time and keep nothing, or leave them in the text. See [Variables](sql.md#variables). |
 | `datanest.safeMode` | `confirm` | `confirm`, `block`, `off` | What happens before a `DELETE` or `UPDATE` without `WHERE`, a `DROP` or a `TRUNCATE` (and their Redis, MongoDB and Elasticsearch kin): ask, refuse or just run. |
 | `datanest.historyLimit` | `500` | 0 – 10 000 | Statements kept in the query history; `0` turns it off. Passwords in statements are masked before saving. |
 

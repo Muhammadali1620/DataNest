@@ -118,6 +118,12 @@ describe('running queries', () => {
     assert.deepEqual(config.inspect('safeMode')?.defaultValue, 'confirm');
   });
 
+  it('asks for query variables and remembers them unless the user changed it', () => {
+    const config = vscode.workspace.getConfiguration('datanest');
+    assert.equal(config.get('queryVariables'), 'remember');
+    assert.deepEqual(config.inspect('queryVariables')?.defaultValue, 'remember');
+  });
+
   it('opens the object search with nothing connected, and closes it again', async () => {
     const shown = vscode.commands.executeCommand('datanest.objects.search');
     await sleep(200);

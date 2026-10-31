@@ -1462,6 +1462,21 @@
           "default": "auto",
           "markdownDescription": "%configuration.transactionMode.description%"
         },
+        "datanest.queryVariables": {
+          "type": "string",
+          "enum": [
+            "remember",
+            "ask",
+            "off"
+          ],
+          "enumDescriptions": [
+            "%configuration.queryVariables.remember%",
+            "%configuration.queryVariables.ask%",
+            "%configuration.queryVariables.off%"
+          ],
+          "default": "remember",
+          "markdownDescription": "%configuration.queryVariables.description%"
+        },
         "datanest.format.keywordCase": {
           "type": "string",
           "enum": [

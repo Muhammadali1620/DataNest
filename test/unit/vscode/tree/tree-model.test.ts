@@ -646,19 +646,21 @@ describe('TreeModel', () => {
       ]);
     });
 
-    it('does not offer to move the columns of a view, or of a driver that cannot', async () => {
+    it('does not offer to move the columns of a view', async () => {
       const metadata = drivers.driver('mysql').sessionMetadata;
       metadata.tables = [{ name: 'orders', kind: 'view' }];
       const [first] = await model.children({ ...columns, connectionId: mysql.id });
       expect(first).not.toHaveProperty('movable');
+    });
+
+    it('offers to move the columns of PostgreSQL too, by a rebuild script', async () => {
       const pg = await store.add({ name: 'Pg', driver: 'postgres', host: 'h' });
-      const [second] = await model.children({
+      const [first] = await model.children({
         ...columns,
         connectionId: pg.id,
         table: { schema: 'public', name: 'orders' },
       });
-      expect(second).toMatchObject({ kind: 'column' });
-      expect(second).not.toHaveProperty('movable');
+      expect(first).toMatchObject({ kind: 'column', movable: true });
     });
 
     it('marks the columns of a foreign key', async () => {

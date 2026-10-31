@@ -36,9 +36,11 @@
   interface Props {
     rpc: RpcPeer<ServerMonitorProtocol['webview'], ServerMonitorProtocol['host']>;
     t: Translate;
+    /** The Manager page shows one tab at a time, without the page's own title and tab strip. */
+    only?: 'processes' | 'settings' | 'status';
   }
 
-  const { rpc, t }: Props = $props();
+  const { rpc, t, only }: Props = $props();
 
   type Tab = 'processes' | 'settings' | 'status';
 
@@ -46,7 +48,9 @@
   const units = $derived({ seconds: t('monitor.unit.seconds'), days: t('monitor.unit.days') });
 
   let page = $state<ServerMonitorState | undefined>(undefined);
-  let tab = $state<Tab>('processes');
+  // `only` is fixed for the life of the page: it is the tab a host page pins.
+  // svelte-ignore state_referenced_locally
+  let tab = $state<Tab>(only ?? 'processes');
   let auto = $state(true);
   let interval = $state(5);
   // Read by the timer, which Svelte's analysis does not see as a reader.
@@ -199,7 +203,7 @@
     page = next;
     if (first && next.features !== undefined) {
       scope = next.features.scopes[0] ?? 'session';
-      tab = next.features.processes ? 'processes' : 'settings';
+      tab = only ?? (next.features.processes ? 'processes' : 'settings');
       void refresh(tab);
     }
   }
@@ -255,7 +259,7 @@
   }
 </script>
 
-<main>
+<main class:embedded={only !== undefined}>
   {#if page === undefined}
     <div class="empty" role="status">
       <Icon name="loading" size={20} spin />
@@ -264,8 +268,10 @@
   {:else}
     <header class="toolbar-row">
       <div class="title">
-        <Icon name="pulse" />
-        <h1>{page.connectionName}</h1>
+        {#if only === undefined}
+          <Icon name="pulse" />
+          <h1>{page.connectionName}</h1>
+        {/if}
         {#if page.server !== undefined}
           <span class="server" data-testid="server">{page.server}{summary?.version === undefined ? '' : ` ${summary.version}`}</span>
         {/if}
@@ -349,7 +355,7 @@
         {/if}
       </section>
 
-      <div class="tabs" role="tablist">
+      <div class="tabs" role="tablist" hidden={only !== undefined}>
         {#if features.processes}
           <button
             type="button"
@@ -553,6 +559,10 @@
     height: 100vh;
   }
 
+  main.embedded {
+    height: 100%;
+  }
+
   .spacer {
     flex: 1;
   }
@@ -679,6 +689,10 @@
   }
 
   /* Tabs drawn like the editor's panel titles, as the result page has. */
+  .tabs[hidden] {
+    display: none;
+  }
+
   .tabs {
     display: flex;
     flex: none;

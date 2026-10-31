@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TableAction } from '../../../../src/shared/table-actions';
   import { onMount } from 'svelte';
   import {
     type DataCompareProtocol,
@@ -10,6 +11,7 @@
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
+  import TableBar from '../../components/TableBar.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
@@ -106,6 +108,16 @@
 </script>
 
 <main>
+  {#if page?.tableBar !== undefined}
+    <TableBar
+      {t}
+      active="compare"
+      isView={page.tableBar.isView}
+      onAction={(action: TableAction) => {
+        rpc.emit('tableNav', { action, dirty: false });
+      }}
+    />
+  {/if}
   {#if page?.progress !== undefined}
     <div class="progress-bar" aria-hidden="true"></div>
   {/if}

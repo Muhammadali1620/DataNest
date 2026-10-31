@@ -17,9 +17,11 @@
   interface Props {
     rpc: RpcPeer<SchemaCompareProtocol['webview'], SchemaCompareProtocol['host']>;
     t: Translate;
+    /** On the Manager page the comparison fills its section, not the window. */
+    embedded?: boolean;
   }
 
-  const { rpc, t }: Props = $props();
+  const { rpc, t, embedded = false }: Props = $props();
 
   let page = $state<SchemaCompareState | undefined>(undefined);
   let chosen = $state<string[]>([]);
@@ -152,7 +154,7 @@
   </table>
 {/snippet}
 
-<main>
+<main class:embedded>
   {#if page?.loading !== undefined}
     <div class="progress-bar" aria-hidden="true"></div>
   {/if}
@@ -372,6 +374,10 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+  }
+
+  main.embedded {
+    height: 100%;
   }
 
   .grow {

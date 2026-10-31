@@ -467,7 +467,12 @@ export const resultGridProtocol = defineProtocol({
       /** Page → host: open the Tools page (hashes, encoders, colours, images, network). */
       openTools: object({}),
       /** Page → host: run a table tool (properties, ER diagram, history…) on this table view. */
-      tableAction: object({ resultId, action: literal(...TABLE_ACTIONS) }),
+      tableAction: object({
+        resultId,
+        action: literal(...TABLE_ACTIONS),
+        /** Unsaved edits: the host asks before the page is left. */
+        dirty: optional(boolean()),
+      }),
       /** Page → host: open the import page for the table this result shows (V12.1). */
       importInto: object({ resultId }),
     },

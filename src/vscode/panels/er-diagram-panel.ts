@@ -9,6 +9,8 @@ import type { TableRef } from '../../core/model/objects';
 import { RpcPeer } from '../../shared/rpc';
 import { erDiagramProtocol, type ErDiagramProtocol } from '../../shared/protocols/er-diagram';
 import type { ErDiagramModel } from './er-diagram-model';
+import { onTableNav } from './table-nav';
+import type { TablePageView } from './table-action';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface ErDiagramPanelDeps {
@@ -22,6 +24,8 @@ export interface ErDiagramPanelDeps {
   /** Forgets cached structure, so Refresh reads the server again. */
   readonly invalidate: () => void;
   readonly openTable: (table: TableRef) => Promise<void>;
+  /** The table a bar button works on, when the diagram was opened from a table. */
+  readonly barView?: (table: string) => TablePageView;
 }
 
 const PROGRESS_INTERVAL_MS = 150;
@@ -42,6 +46,14 @@ export class ErDiagramPanel implements vscode.Disposable {
     const existing = ErDiagramPanel.open.get(deps.key);
     if (existing !== undefined) {
       existing.panel.reveal();
+      const focus = deps.model.focused;
+      if (focus !== undefined && existing.deps.model.loaded) {
+        // Shown again from another table: the camera goes over that one.
+        existing.deps.model.setFocus(focus);
+        existing.rpc.emit('focus', { id: focus });
+      } else if (focus !== undefined) {
+        existing.deps.model.setFocus(focus);
+      }
       return existing;
     }
     const panel = new ErDiagramPanel(deps);
@@ -91,6 +103,10 @@ export class ErDiagramPanel implements vscode.Disposable {
         deps.invalidate();
         void this.load();
       }
+    });
+    this.rpc.on('tableNav', (event) => {
+      const focus = deps.model.focused;
+      onTableNav(this.panel, 'er', focus === undefined ? undefined : deps.barView?.(focus), event);
     });
     this.rpc.on('openTable', ({ id }) => {
       const table = deps.model.tableOf(id);

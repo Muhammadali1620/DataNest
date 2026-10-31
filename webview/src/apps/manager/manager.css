@@ -1,0 +1,43 @@
+/* What the sections of the Manager page share: empty states and form rows. */
+
+.empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--dn-gap);
+  align-items: center;
+  justify-content: center;
+  padding: var(--dn-gap-xl);
+  color: var(--dn-muted);
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0;
+  color: var(--vscode-foreground);
+  font-size: 14px;
+}
+
+.empty-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  color: var(--dn-accent);
+  background: var(--dn-surface);
+  border-radius: 50%;
+}
+
+.section-head {
+  display: flex;
+  gap: var(--dn-gap);
+  align-items: center;
+  margin: 0 0 var(--dn-gap);
+  font-size: 14px;
+}
+
+.row-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--dn-gap-m);
+}

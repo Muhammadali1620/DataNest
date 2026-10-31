@@ -15,6 +15,8 @@ import {
 } from '../../shared/protocols/test-data';
 import type { ColumnChoice } from '../../services/test-data/test-data';
 import type { TestDataModel } from './test-data-model';
+import type { TablePageView } from './table-action';
+import { onTableNav } from './table-nav';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface TestDataPanelDeps {
@@ -28,6 +30,8 @@ export interface TestDataPanelDeps {
   readonly openSql: (sql: string) => Promise<void>;
   /** Called after rows went in. */
   readonly onInserted: () => void;
+  /** The table the bar of the page works on. */
+  readonly barView?: TablePageView;
 }
 
 const PROGRESS_INTERVAL_MS = 200;
@@ -58,7 +62,10 @@ export class TestDataPanel implements vscode.Disposable {
 
   private constructor(private readonly deps: TestDataPanelDeps) {
     this.log = deps.logger.child('test-data');
-    this.state = deps.model.initialState(deps.tableLabel);
+    this.state = {
+      ...deps.model.initialState(deps.tableLabel),
+      ...(deps.barView === undefined ? {} : { tableBar: { isView: false } }),
+    };
     this.panel = createWebviewAppPanel(deps.extensionUri, {
       viewType: TestDataPanel.viewType,
       title: vscode.l10n.t('Test Data for {0}', deps.tableLabel),
@@ -97,6 +104,9 @@ export class TestDataPanel implements vscode.Disposable {
     });
     this.rpc.on('cancel', () => {
       this.abort?.abort();
+    });
+    this.rpc.on('tableNav', (event) => {
+      onTableNav(this.panel, 'generate', deps.barView, event);
     });
     this.rpc.on('close', () => {
       this.dispose();

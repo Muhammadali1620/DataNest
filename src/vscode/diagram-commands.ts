@@ -64,12 +64,20 @@ export function diagramCommandHandlers(deps: DiagramCommandDeps): {
           ),
         scope,
         ...(start.tables === undefined ? {} : { tables: start.tables }),
+        ...(start.focus === undefined ? {} : { focus: start.focus }),
         scopeLabel: title,
         connectionName,
       }),
       invalidate: () => {
         deps.cache.invalidate(connectionId);
       },
+      barView: (name) => ({
+        target: {
+          connectionId,
+          ...(scope.database === undefined ? {} : { database: scope.database }),
+        },
+        table: { ...(scope.schema === undefined ? {} : { schema: scope.schema }), name },
+      }),
       openTable: async (table) => {
         const tableScope: ObjectScope = {
           ...(table.database === undefined ? {} : { database: table.database }),

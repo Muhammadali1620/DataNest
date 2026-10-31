@@ -42,6 +42,27 @@ dropping one rebuilds the table (a copy, the rows copied over, the old table dro
 copy renamed, indexes and triggers created again). The whole script is shown first and
 rolled back if a row breaks the new condition.
 
+### Moving a column
+
+Hover a column in the tree (or open the **Columns** tab of a stored table) for the up and
+down arrows. MySQL, MariaDB, ClickHouse and SQLite move the column by `ALTER TABLE … AFTER`
+(SQLite by a rebuild) and show the statement first. PostgreSQL, SQL Server and Oracle keep
+columns in the order they were created, so the arrows open a **script that rebuilds the
+table** instead: the rows are copied to a backup table, the table is created again with the
+new order, the rows are copied back, and keys of other tables, checks, triggers and the
+identity counters are put back. The script is never run for you: read it, then run it. In
+PostgreSQL and SQL Server it is one transaction, so a failing step changes nothing; Oracle
+cannot roll back DDL and leaves the rows in the backup table if a step fails. Privileges,
+policies, partitioning and views over the table are not carried over, and a table with
+computed columns is not rebuilt this way.
+
+### The pages of a table
+
+Every page of a table (data, properties, ER diagram, test data, compare, manager) has the
+same bar on top with its own button lit: pressing another one replaces the page in the same
+tab, and **Data** brings the rows back. A page with unsaved changes asks first. The ER
+diagram opens the whole schema with the camera over the table you came from.
+
 ## Other actions
 
 - **Duplicate Table…** makes a copy beside the table under a new name — structure and rows,

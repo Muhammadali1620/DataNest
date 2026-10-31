@@ -659,3 +659,31 @@ kbd {
     display: none;
   }
 }
+
+/*
+ * Tiles (D113): the big rounded icon before a page title, filled with a gradient of its
+ * tone, so a page opens with a splash of colour instead of a grey glyph.
+ */
+.tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: white;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--tone) 65%, white),
+    var(--tone) 55%,
+    color-mix(in srgb, var(--tone) 78%, black)
+  );
+  border-radius: 12px;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
+/* A tile that holds a drawing of its own (a database mark) keeps the tone out of it. */
+.tile.plain {
+  background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  box-shadow: none;
+}

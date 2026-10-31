@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CODICONS, type CodiconName } from '../lib/codicons';
+  import type { Tone } from './tone';
 
   interface Props {
     name: CodiconName;
@@ -7,9 +8,11 @@
     size?: number;
     /** Turns the icon, for a loading or syncing state. */
     spin?: boolean;
+    /** Draws the glyph in a colour of the theme's chart palette. */
+    tone?: Tone | undefined;
   }
 
-  const { name, size = 16, spin = false }: Props = $props();
+  const { name, size = 16, spin = false, tone }: Props = $props();
 </script>
 
 <!--
@@ -17,7 +20,7 @@
   glyph is drawn from an attribute, so it is not part of the text that is copied or read.
 -->
 <span
-  class="codicon-glyph"
+  class="codicon-glyph {tone === undefined ? '' : `tone-${tone}`}"
   class:spin
   aria-hidden="true"
   data-glyph={String.fromCodePoint(CODICONS[name])}
@@ -37,6 +40,10 @@
     text-rendering: auto;
     user-select: none;
     -webkit-font-smoothing: antialiased;
+  }
+
+  .codicon-glyph[class*='tone-'] {
+    color: var(--tone);
   }
 
   .codicon-glyph::before {

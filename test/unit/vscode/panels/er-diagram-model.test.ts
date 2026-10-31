@@ -153,3 +153,29 @@ describe('ErDiagramModel', () => {
     expect(instance.loaded).toBe(false);
   });
 });
+
+describe('ErDiagramModel focus', () => {
+  it('names no focus and no bar until a table was the way in', () => {
+    const { instance } = model();
+    expect(instance.focused).toBeUndefined();
+    expect(instance.state()).not.toHaveProperty('focus');
+    expect(instance.state()).not.toHaveProperty('tableBar');
+  });
+
+  it('sends the focus and the bar with every state, also to a reloaded page', async () => {
+    const { instance } = model();
+    instance.setFocus('b');
+    const first = await instance.load();
+    expect(first).toMatchObject({ focus: 'b', tableBar: { isView: false } });
+    expect(instance.state()).toMatchObject({ focus: 'b' });
+  });
+
+  it('moves the focus when the diagram is shown again from another table', () => {
+    const { instance } = model();
+    instance.setFocus('a');
+    instance.setFocus('b');
+    expect(instance.focused).toBe('b');
+    instance.setFocus(undefined);
+    expect(instance.state()).not.toHaveProperty('focus');
+  });
+});

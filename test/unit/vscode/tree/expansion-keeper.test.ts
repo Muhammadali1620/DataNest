@@ -112,3 +112,80 @@ describe('ExpansionKeeper', () => {
     expect(log).toEqual([]);
   });
 });
+
+describe('ExpansionKeeper.quiet', () => {
+  /** A fake clock: `wait` moves time and runs what the test queued for that moment. */
+  function clocked() {
+    let now = 1000;
+    const waits: number[] = [];
+    const between: (() => void)[] = [];
+    const keeper = new ExpansionKeeper<string>(
+      { idOf: (node) => node, expand: () => undefined, collapse: () => undefined },
+      () => undefined,
+      () => now,
+      (ms) => {
+        waits.push(ms);
+        now += ms;
+        between.shift()?.();
+        return Promise.resolve();
+      },
+    );
+    return {
+      keeper,
+      waits,
+      between,
+      at: () => now,
+      advance: (ms: number) => {
+        now += ms;
+      },
+    };
+  }
+
+  it('gives the children of an arrow click at once, after the short sync wait', async () => {
+    const { keeper, waits } = clocked();
+    await keeper.quiet('t');
+    expect(waits).toEqual([60]);
+  });
+
+  it('holds the children of a click on the label until the double-click window is over', async () => {
+    const { keeper, waits, at } = clocked();
+    keeper.clicked('t');
+    const clickedAt = at();
+    await keeper.quiet('t');
+    // 60 ms to sync, then the rest of the 500 ms window and the grace.
+    expect(waits).toEqual([60, 480]);
+    expect(at()).toBe(clickedAt + 540);
+  });
+
+  it('waits out the window of a second click too', async () => {
+    const { keeper, waits, between, at } = clocked();
+    keeper.clicked('t');
+    // The second click lands while the first window is still running.
+    between.push(
+      () => undefined,
+      () => {
+        keeper.clicked('t');
+      },
+    );
+    await keeper.quiet('t');
+    const last = at() - 40;
+    expect(waits.length).toBe(3);
+    expect(waits[2]).toBeGreaterThan(400);
+    expect(last).toBeGreaterThan(1000 + 500);
+  });
+
+  it('does not hold children for a click that was long ago', async () => {
+    const { keeper, waits, advance } = clocked();
+    keeper.clicked('t');
+    advance(2000);
+    await keeper.quiet('t');
+    expect(waits).toEqual([60]);
+  });
+
+  it('does not hold the children of another row', async () => {
+    const { keeper, waits } = clocked();
+    keeper.clicked('other');
+    await keeper.quiet('t');
+    expect(waits).toEqual([60]);
+  });
+});

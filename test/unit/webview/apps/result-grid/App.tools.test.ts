@@ -9,7 +9,6 @@ import {
 import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/result-grid/App.svelte';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
-import { chooseFromMenu } from '../../../../helpers/webview/menu';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
 type HostPeer = RpcPeer<ResultGridProtocol['host'], ResultGridProtocol['webview']>;
@@ -161,12 +160,17 @@ describe('the table bar', () => {
     ['table-tab-er', 'er'],
     ['table-tab-generate', 'generate'],
     ['table-tab-compare', 'compare'],
+    ['table-tab-manager', 'manager'],
     ['table-history', 'history'],
   ])('asks the host for %s', async (testid, action) => {
     const { tableAction } = await open();
     await fireEvent.click(screen.getByTestId(testid));
     await waitFor(() => {
-      expect(tableAction).toHaveBeenCalledWith({ resultId: 'result-1', action });
+      expect(tableAction).toHaveBeenCalledWith({
+        resultId: 'result-1',
+        action,
+        dirty: false,
+      });
     });
   });
 
@@ -176,8 +180,7 @@ describe('the table bar', () => {
     for (const id of ['er', 'generate', 'compare']) {
       expect(screen.queryByTestId(`table-tab-${id}`), id).toBeNull();
     }
-    await chooseFromMenu('table-more', 'Show DDL');
-    expect(screen.queryByText('Copy to another connection…')).toBeNull();
+    expect(screen.getByTestId('table-tab-manager')).toBeTruthy();
   });
 
   it('has no button that opens the page it is already on', async () => {
@@ -185,16 +188,13 @@ describe('the table bar', () => {
     expect(screen.queryByTestId('table-tab-data')?.tagName).toBe('SPAN');
   });
 
-  it('keeps DDL, dump and transfer in a menu', async () => {
-    const { tableAction } = await open();
-    await chooseFromMenu('table-more', 'Show DDL');
-    await chooseFromMenu('table-more', 'Dump to SQL…');
-    await chooseFromMenu('table-more', 'Copy to another connection…');
-    await waitFor(() => {
-      expect(
-        tableAction.mock.calls.map(([params]) => (params as { action: string }).action),
-      ).toEqual(['ddl', 'dump', 'transfer']);
-    });
+  it('shows every tool as a button, with no overflow menu', async () => {
+    await open();
+    for (const id of ['properties', 'data', 'er', 'generate', 'compare', 'manager']) {
+      expect(screen.getByTestId(`table-tab-${id}`), id).toBeTruthy();
+    }
+    expect(screen.queryByTestId('table-more')).toBeNull();
+    expect(screen.queryByText('Show DDL')).toBeNull();
   });
 });
 

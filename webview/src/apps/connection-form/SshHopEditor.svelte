@@ -34,7 +34,7 @@
 
 <div class="hop">
   <div class="pair">
-    <Field label={name('form.ssh.host')} error={errorFor('ssh-host-empty')}>
+    <Field label={name('form.ssh.host')} error={errorFor('ssh-host-empty')} required>
       <input
         class="control"
         bind:value={hop.host}
@@ -62,7 +62,7 @@
   </div>
 
   <div class="pair">
-    <Field label={name('form.ssh.user')} error={errorFor('ssh-user-empty')}>
+    <Field label={name('form.ssh.user')} error={errorFor('ssh-user-empty')} required>
       <input
         class="control"
         bind:value={hop.user}
@@ -105,7 +105,7 @@
       </label>
     {/if}
   {:else if hop.auth === 'key'}
-    <Field label={name('form.ssh.keyFile')} error={errorFor('ssh-key-empty')}>
+    <Field label={name('form.ssh.keyFile')} error={errorFor('ssh-key-empty')} required>
       <span class="row">
         <input
           class="control grow"

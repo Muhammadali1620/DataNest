@@ -44,7 +44,7 @@ import { projectCommandHandlers } from './project-commands';
 import { filterCommandHandlers } from './tree/filter-commands';
 import { transferCommandHandlers } from './connection-transfer-commands';
 import { scriptCommandHandlers } from './script-commands';
-import { dumpCommandHandlers } from './dump-commands';
+import { managerCommandHandlers } from './manager-commands';
 import { tableTransferCommandHandlers } from './transfer-commands';
 import { openSqliteFileCommand } from './sqlite-file-commands';
 import { toolCommandHandlers } from './tool-commands';
@@ -63,7 +63,7 @@ import { ExpansionKeeper } from './tree/expansion-keeper';
 import { showNodeActions } from './tree/node-actions-ui';
 import { savedQueryCommandHandlers } from './tree/saved-query-commands';
 import { readNodeSql, nodeSqlDatabase } from '../services/node-sql';
-import { planColumnMove } from '../services/column-move';
+import { planColumnReorder } from '../services/column-reorder';
 import type { SavedQueryStore } from '../services/saved-queries';
 import { nodeId } from './tree/nodes';
 import { UserAdminPanel } from './panels/user-admin-panel';
@@ -200,13 +200,6 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
     logger: deps.logger,
   });
-  const dumps = dumpCommandHandlers({
-    store: deps.store,
-    manager: deps.manager,
-    cache: deps.cache,
-    dumper: new SqlDumper({ manager: deps.manager, logger: deps.logger }),
-    logger: deps.logger,
-  });
   const tools = toolCommandHandlers({
     store: deps.store,
     manager: deps.manager,
@@ -245,6 +238,16 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     store: deps.store,
     manager: deps.manager,
     cache: deps.cache,
+    openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
+    logger: deps.logger,
+  });
+  const managers = managerCommandHandlers({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    manager: deps.manager,
+    cache: deps.cache,
+    history: deps.history,
+    dumper: new SqlDumper({ manager: deps.manager, logger: deps.logger }),
     openEditor: async (binding, sql) => await deps.editors.newQuery(binding, sql),
     logger: deps.logger,
   });
@@ -461,6 +464,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       void vscode.commands.executeCommand('list.collapse');
     },
   });
+  deps.tree.holdChildren = async (node) => {
+    await expansion.quiet(node);
+  };
   const expansionEvents = [
     deps.treeView.onDidExpandElement((event) => {
       expansion.expanded(event.element);
@@ -480,7 +486,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         text,
       );
     },
-    showActions: showNodeActions,
+    showActions: (node) => showNodeActions(node, deps.extensionUri),
     tree: deps.tree,
     // Refresh means "ask the server again", for SQL structure and Redis keys alike.
     cache: {
@@ -571,7 +577,14 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await openDesigner(connectionId, scope, table),
     planMove: async (connectionId, table, column, direction) => {
       const { metadata } = await browseSession(deps.manager, connectionId, table.database);
-      return planColumnMove(table, await metadata.describeTable(table), column, direction);
+      const plan = await planColumnReorder(
+        metadata,
+        await deps.manager.driverOf(connectionId),
+        table,
+        column,
+        direction,
+      );
+      return plan?.kind === 'action' ? plan.action : plan;
     },
   });
   const savedQueryCommands = savedQueryCommandHandlers({
@@ -758,6 +771,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.compareData]: (target) => dataCompare.compareData(target),
     [COMMAND_IDS.compareSchemas]: (target) => schemaCompare.compareSchemas(target),
     [COMMAND_IDS.showMonitor]: (target) => monitors.showMonitor(target),
+    [COMMAND_IDS.openManager]: (target) => managers.open(target),
     [COMMAND_IDS.openTools]: () => {
       toolPages.openTools();
     },
@@ -792,7 +806,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       }
     },
     [COMMAND_IDS.exportData]: (target) => deps.exportTable(target),
-    [COMMAND_IDS.dumpSql]: (target, ...rest: unknown[]) => dumps.dump(target, selectionOf(rest[0])),
+    [COMMAND_IDS.dumpSql]: (target) => managers.openDump(target),
     [COMMAND_IDS.exportResult]: async () => {
       const document = vscode.window.activeTextEditor?.document;
       const panel =

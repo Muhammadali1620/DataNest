@@ -142,6 +142,29 @@ describe('connection form App', () => {
     expect(screen.queryByLabelText('Port')).toBeNull();
   });
 
+  it('marks the fields that must be filled with a red star and aria-required', async () => {
+    await withState();
+    expect(field('Host').getAttribute('aria-required')).toBe('true');
+    expect(field('Name').getAttribute('aria-required')).toBe('true');
+    expect(field('Port').hasAttribute('aria-required')).toBe(false);
+    expect(field('Password').hasAttribute('aria-required')).toBe(false);
+    await chooseDatabase('sqlite');
+    await waitFor(() => {
+      expect(field('Database file').getAttribute('aria-required')).toBe('true');
+    });
+  });
+
+  it('draws the mark of the chosen database in the header and on the cards', async () => {
+    await withState();
+    const container = document.body;
+    expect(container.querySelector('.header-icon [data-driver="mysql"]')).not.toBeNull();
+    await chooseDatabase('sqlite');
+    await waitFor(() => {
+      expect(container.querySelector('.header-icon [data-driver="sqlite"]')).not.toBeNull();
+    });
+    expect(container.querySelectorAll('.card-choice [data-driver]').length).toBe(3);
+  });
+
   it('offers the default port of the newly chosen driver', async () => {
     await withState();
     await chooseDatabase('postgres');

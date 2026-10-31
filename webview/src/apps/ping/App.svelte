@@ -51,7 +51,7 @@
 
 <main>
   <header class="page-header">
-    <span class="header-icon"><Icon name="plug" size={20} /></span>
+    <span class="header-icon tile tone-green"><Icon name="plug" size={20} /></span>
     <h1>{t('ping.title')}</h1>
   </header>
   <section class="card">
@@ -94,13 +94,6 @@
     align-items: center;
   }
 
-  .header-icon {
-    display: inline-flex;
-    padding: 9px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border-radius: 10px;
-  }
 
   .card {
     display: flex;

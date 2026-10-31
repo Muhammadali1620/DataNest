@@ -5,17 +5,18 @@ import type { TableRef } from '../../core/model/objects';
 import type { SessionTarget } from '../../services/connection-manager';
 import type { TableAction } from '../../shared/table-actions';
 import { COMMAND_IDS } from '../command-ids';
-import type { TreeNode } from '../tree/nodes';
+import type { TableNode } from '../tree/nodes';
 
-const COMMANDS: Readonly<Record<TableAction, string>> = {
+/** The Manager page of the table's database (log, dashboard, processes, dump, sync). */
+export const MANAGER_COMMAND = 'datanest.manager.open';
+
+const COMMANDS: Readonly<Record<Exclude<TableAction, 'manager'>, string>> = {
   properties: COMMAND_IDS.designTable,
-  ddl: COMMAND_IDS.showDefinition,
+  data: COMMAND_IDS.openTable,
   er: COMMAND_IDS.showErDiagram,
   generate: COMMAND_IDS.generateData,
   compare: COMMAND_IDS.compareData,
   history: COMMAND_IDS.showHistory,
-  dump: COMMAND_IDS.dumpSql,
-  transfer: COMMAND_IDS.transferTables,
 };
 
 /** The tree node of the table a table view shows, as the tree commands expect it. */
@@ -23,7 +24,7 @@ export function tableNodeOf(view: {
   target: SessionTarget;
   table: TableRef;
   kind?: 'table' | 'view';
-}): TreeNode {
+}): TableNode {
   const database = view.table.database ?? view.target.database;
   return {
     kind: 'table',
@@ -35,6 +36,13 @@ export function tableNodeOf(view: {
     name: view.table.name,
     tableKind: view.kind ?? 'table',
   };
+}
+
+/** What a page needs to know about its table to answer the bar. */
+export interface TablePageView {
+  readonly target: SessionTarget;
+  readonly table: TableRef;
+  readonly kind?: 'table' | 'view';
 }
 
 export interface TableActionCall {
@@ -51,6 +59,19 @@ export function tableActionCall(
     return {
       command: COMMANDS.history,
       args: [{ connectionId: view.target.connectionId, table: view.table.name }],
+    };
+  }
+  if (action === 'manager') {
+    const node = tableNodeOf(view);
+    return {
+      command: MANAGER_COMMAND,
+      args: [
+        {
+          connectionId: node.connectionId,
+          scope: node.scope,
+          table: { name: node.name, kind: view.kind ?? 'table' },
+        },
+      ],
     };
   }
   // A view's "Properties" is its definition editor; the designer is for tables.

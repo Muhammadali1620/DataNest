@@ -2,7 +2,7 @@
   "name": "datanest",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "datanest",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -358,6 +358,12 @@
         "title": "%commands.server.monitor.title%",
         "category": "DataNest",
         "icon": "$(pulse)"
+      },
+      {
+        "command": "datanest.manager.open",
+        "title": "%commands.manager.open.title%",
+        "category": "DataNest",
+        "icon": "$(dashboard)"
       },
       {
         "command": "datanest.tools.open",
@@ -1291,6 +1297,11 @@
           "group": "0_query@4"
         },
         {
+          "command": "datanest.manager.open",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.table || viewItem == datanest.view)",
+          "group": "0_query@6"
+        },
+        {
           "command": "datanest.server.users",
           "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database)",
           "group": "4_structure@7"
@@ -2075,7 +2086,8 @@
     "db:logs": "node scripts/db.mjs logs",
     "test:integration": "vitest run --config vitest.integration.config.mts --configLoader runner",
     "test:perf": "node scripts/build.mjs --production && vitest run --config vitest.perf.config.mts",
-    "icon": "node scripts/make-icon.mjs"
+    "icon": "node scripts/make-icon.mjs",
+    "icons": "node scripts/make-icons.mjs"
   },
   "devDependencies": {
     "@clickhouse/client": "1.24.1",

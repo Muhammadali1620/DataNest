@@ -35,6 +35,7 @@ import { buildState, errorOffsetOf, followActive } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 import { formatCount } from '../../core/number-format';
 import { tableActionCall } from './table-action';
+import { navigateTable } from './table-nav';
 
 export interface ResultsPanelDeps {
   readonly extensionUri: vscode.Uri;
@@ -421,7 +422,7 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.on('openTools', () => {
       void vscode.commands.executeCommand('datanest.tools.open');
     });
-    this.rpc.on('tableAction', ({ resultId, action }) => {
+    this.rpc.on('tableAction', ({ resultId, action, dirty }) => {
       const view =
         this.deps.results.get(resultId) === undefined
           ? undefined
@@ -432,8 +433,11 @@ export class ResultsPanel implements vscode.Disposable {
         );
         return;
       }
-      const call = tableActionCall(action, view);
-      void vscode.commands.executeCommand(call.command, ...call.args);
+      // Data is this page; the other pages replace it in its tab.
+      if (action === 'data') {
+        return;
+      }
+      void navigateTable(this.panel, tableActionCall(action, view), dirty === true);
     });
     this.rpc.on('chartResult', ({ resultId }) => {
       this.deps.chartResult?.(resultId);

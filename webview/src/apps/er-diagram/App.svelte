@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TableAction } from '../../../../src/shared/table-actions';
   import { onMount, untrack } from 'svelte';
   import {
     ER_DETAILS,
@@ -10,6 +11,7 @@
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import MenuButton from '../../components/MenuButton.svelte';
+  import TableBar from '../../components/TableBar.svelte';
   import { CODICONS } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
   import {
@@ -50,6 +52,8 @@
   let canvas = $state<HTMLDivElement | undefined>(undefined);
   /** A fit asked for before the canvas had a size; done once it has one. */
   let fitPending = false;
+  /** The table the camera goes over once the boxes are placed and the canvas has a size. */
+  let focusId: string | undefined;
 
   const measured = $derived(
     page === undefined ? new Map() : measureBoxes(page.tables, details, measure),
@@ -91,8 +95,10 @@
     if (selected !== undefined && !next.tables.some((table) => table.id === selected)) {
       selected = undefined;
     }
+    focusId = next.focus;
     if (next.positions.length > 0) {
       positions = Object.fromEntries(next.positions.map(({ id, x, y }) => [id, { x, y }]));
+      focusNow();
       return;
     }
     arrange(next);
@@ -122,6 +128,28 @@
   function fit(): void {
     fitPending = width === 0 || height === 0;
     view = fitView(scene.bounds, width, height);
+    if (!fitPending) {
+      focusNow();
+    }
+  }
+
+  /** The whole diagram is there; the camera stands over the table it was opened from. */
+  function focusNow(): void {
+    if (focusId === undefined || width === 0 || height === 0) {
+      return;
+    }
+    const id = focusId;
+    focusId = undefined;
+    const box = scene.boxes.find((candidate) => candidate.table.id === id);
+    if (box === undefined) {
+      return;
+    }
+    selected = id;
+    view = clampZoom({
+      zoom: 1,
+      x: width / 2 - (box.x + box.width / 2),
+      y: height / 2 - (box.y + box.height / 2),
+    });
   }
 
   $effect(() => {
@@ -134,6 +162,8 @@
       height = element.clientHeight;
       if (fitPending && width > 0 && height > 0) {
         fit();
+      } else if (focusId !== undefined) {
+        focusNow();
       }
     };
     // Untracked: the effect depends on the element only, never on what it measures.
@@ -362,6 +392,11 @@
       rpc.on('state', (next) => {
         applyState(next);
       }),
+      rpc.on('focus', ({ id }) => {
+        focusId = id;
+        selected = undefined;
+        focusNow();
+      }),
       rpc.on('failed', ({ message }) => {
         loading = undefined;
         failure = message;
@@ -413,6 +448,16 @@
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
 
 <main>
+  {#if page?.tableBar !== undefined}
+    <TableBar
+      {t}
+      active="er"
+      isView={page.tableBar.isView}
+      onAction={(action: TableAction) => {
+        rpc.emit('tableNav', { action, dirty: false });
+      }}
+    />
+  {/if}
   {#if page !== undefined && loading !== undefined}
     <div class="progress-bar" role="progressbar" aria-label={t('er.loading')}></div>
   {/if}

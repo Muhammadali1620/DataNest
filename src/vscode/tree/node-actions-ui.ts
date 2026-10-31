@@ -3,6 +3,7 @@
 
 import * as vscode from 'vscode';
 import { COMMAND_IDS } from '../command-ids';
+import { actionIconPath } from './action-icons';
 import { actionsOf } from './node-actions';
 import type { TreeNode } from './nodes';
 
@@ -35,12 +36,24 @@ export function actionLabels(): Readonly<Record<string, { label: string; icon: s
   };
 }
 
+/** A coloured icon of our own where the action has one, else the editor's glyph in the label. */
+function actionItem(
+  shown: { label: string; icon: string },
+  extensionUri: vscode.Uri | undefined,
+): vscode.QuickPickItem {
+  const file = actionIconPath(shown.icon);
+  if (extensionUri !== undefined && file !== undefined) {
+    return { label: shown.label, iconPath: vscode.Uri.joinPath(extensionUri, ...file) };
+  }
+  return { label: `$(${shown.icon}) ${shown.label}` };
+}
+
 /** Lists what the node can do and runs the pick on it. */
-export async function showNodeActions(node: TreeNode): Promise<void> {
+export async function showNodeActions(node: TreeNode, extensionUri?: vscode.Uri): Promise<void> {
   const labels = actionLabels();
   const items = actionsOf(node).flatMap((command) => {
     const shown = labels[command];
-    return shown === undefined ? [] : [{ label: `$(${shown.icon}) ${shown.label}`, command }];
+    return shown === undefined ? [] : [{ ...actionItem(shown, extensionUri), command }];
   });
   if (items.length === 0) {
     return;

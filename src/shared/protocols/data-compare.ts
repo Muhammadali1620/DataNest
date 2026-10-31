@@ -2,6 +2,7 @@
 // the rows to show; the page asks for them a page at a time and for the sync script.
 
 import { defineProtocol } from '../rpc';
+import { tableBarSchema, tableNavSchema } from '../table-actions';
 import {
   array,
   boolean,
@@ -28,6 +29,8 @@ const pairSchema = object({
 const countSchema = number({ integer: true, min: 0 });
 
 const stateSchema = object({
+  /** The bar of the table's pages, when the page belongs to a table. */
+  tableBar: optional(tableBarSchema),
   source: string({ maxLength: NAME * 3 }),
   target: string({ maxLength: NAME * 3 }),
   key: array(pairSchema, { maxLength: 1000 }),
@@ -76,6 +79,8 @@ export const dataCompareProtocol = defineProtocol({
     },
     events: {
       ready: object({}),
+      /** The bar of the table was pressed: go to another page of the table. */
+      tableNav: tableNavSchema,
       refresh: object({}),
       cancel: object({}),
     },

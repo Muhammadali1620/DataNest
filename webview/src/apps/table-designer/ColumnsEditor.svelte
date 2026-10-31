@@ -28,11 +28,21 @@
     showProblems: boolean;
     /** False where existing columns cannot change places (PostgreSQL). */
     canReorder: boolean;
+    /**
+     * A stored table on a database that cannot move a column in place: the buttons ask the
+     * host for a script that rebuilds the table (named by the column's stored name).
+     */
+    rebuild?: {
+      readonly busy: boolean;
+      /** Unsaved edits: the script is built from the stored table, so they must go first. */
+      readonly dirty: boolean;
+      readonly move: (column: string, direction: 'up' | 'down') => void;
+    };
     t: Translate;
     onchange: (design: TableDesign) => void;
   }
 
-  const { design, driver, features, problems, showProblems, canReorder, t, onchange }: Props =
+  const { design, driver, features, problems, showProblems, canReorder, rebuild, t, onchange }: Props =
     $props();
 
   type Patch = Partial<Omit<ColumnDesign, 'id' | 'original'>>;
@@ -108,7 +118,26 @@
                   <Icon name="key" size={14} />
                 </span>
               {/if}
-              {#if canReorder}
+              {#if rebuild !== undefined && column.original !== undefined}
+                <IconButton
+                  icon="arrow-up"
+                  label={t('designer.rebuildUp', labelOf(column, index))}
+                  hint={rebuild.dirty ? t('designer.rebuildSaveFirst') : t('designer.rebuildHint')}
+                  disabled={index === 0 || rebuild.busy || rebuild.dirty}
+                  onclick={() => {
+                    rebuild.move(column.original ?? '', 'up');
+                  }}
+                />
+                <IconButton
+                  icon="arrow-down"
+                  label={t('designer.rebuildDown', labelOf(column, index))}
+                  hint={rebuild.dirty ? t('designer.rebuildSaveFirst') : t('designer.rebuildHint')}
+                  disabled={index === design.columns.length - 1 || rebuild.busy || rebuild.dirty}
+                  onclick={() => {
+                    rebuild.move(column.original ?? '', 'down');
+                  }}
+                />
+              {:else if canReorder}
                 <IconButton
                   icon="arrow-up"
                   label={t('designer.moveUp', labelOf(column, index))}

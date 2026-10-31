@@ -11,6 +11,8 @@ export interface DriverChoice {
   /** The theme chart colour of the mark. */
   readonly tone: Tone;
   readonly compatible: boolean;
+  /** The driver whose own drawing (D113) the card shows; a compatible server has letters. */
+  readonly driver?: DriverId;
   /** Tooltip of a compatible server: which driver it uses. */
   readonly hint?: string;
 }
@@ -57,6 +59,7 @@ export function driverChoices(
       mark: DRIVER_MARKS[driver][0],
       tone: DRIVER_MARKS[driver][1],
       compatible: false,
+      driver,
     })),
     ...presets
       .filter((preset) => offered.has(preset.driver))

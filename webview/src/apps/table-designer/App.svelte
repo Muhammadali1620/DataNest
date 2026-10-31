@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TableAction } from '../../../../src/shared/table-actions';
   import { onMount, tick } from 'svelte';
   import type {
     DesignPreview,
@@ -14,6 +15,8 @@
   } from '../../../../src/shared/table-design';
   import Field from '../../components/Field.svelte';
   import Icon from '../../components/Icon.svelte';
+  import type { Tone } from '../../components/tone';
+  import TableBar from '../../components/TableBar.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
@@ -36,15 +39,15 @@
 
   type Tab = TableTab;
 
-  const TABS: readonly { readonly id: Tab; readonly label: MessageKey; readonly icon: CodiconName }[] =
+  const TABS: readonly { readonly id: Tab; readonly label: MessageKey; readonly icon: CodiconName; readonly tone: Tone }[] =
     [
-      { id: 'ddl', label: 'designer.tabDdl', icon: 'file-code' },
-      { id: 'columns', label: 'designer.tabColumns', icon: 'symbol-field' },
-      { id: 'indexes', label: 'designer.tabIndexes', icon: 'list-ordered' },
-      { id: 'keys', label: 'designer.tabKeys', icon: 'references' },
-      { id: 'triggers', label: 'designer.tabTriggers', icon: 'symbol-event' },
-      { id: 'checks', label: 'designer.tabChecks', icon: 'checklist' },
-      { id: 'sql', label: 'designer.tabSql', icon: 'code' },
+      { id: 'ddl', label: 'designer.tabDdl', icon: 'file-code', tone: 'teal' },
+      { id: 'columns', label: 'designer.tabColumns', icon: 'symbol-field', tone: 'blue' },
+      { id: 'indexes', label: 'designer.tabIndexes', icon: 'list-ordered', tone: 'orange' },
+      { id: 'keys', label: 'designer.tabKeys', icon: 'references', tone: 'pink' },
+      { id: 'triggers', label: 'designer.tabTriggers', icon: 'symbol-event', tone: 'yellow' },
+      { id: 'checks', label: 'designer.tabChecks', icon: 'checklist', tone: 'green' },
+      { id: 'sql', label: 'designer.tabSql', icon: 'code', tone: 'purple' },
     ];
 
   const SAVE_MODIFIER = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
@@ -58,6 +61,12 @@
   let design = $state<TableDesign | undefined>(undefined);
   /** The design as the host sent it: what Revert goes back to. */
   let original = $state<TableDesign | undefined>(undefined);
+  /** Unsaved edits of a stored table; leaving the page would lose them. */
+  const isDirty = $derived(
+    original !== undefined &&
+      design !== undefined &&
+      JSON.stringify($state.snapshot(design)) !== JSON.stringify($state.snapshot(original)),
+  );
   let notes = $state<DesignPreview['notes']>([]);
   let tab = $state<Tab>('columns');
   let statements = $state<string[]>([]);
@@ -297,6 +306,26 @@
     }
   }
 
+  let moving = $state(false);
+
+  /** A stored column one place up or down by a rebuild script, which opens in an editor. */
+  async function moveStored(column: string, direction: 'up' | 'down'): Promise<void> {
+    moving = true;
+    try {
+      const { outcome } = await rpc.request('moveColumn', { column, direction });
+      notice =
+        outcome === 'opened'
+          ? { kind: 'info', text: t('designer.rebuildOpened') }
+          : outcome === 'unsupported'
+            ? { kind: 'error', text: t('designer.rebuildUnsupported') }
+            : undefined;
+    } catch (error) {
+      notice = { kind: 'error', text: messageOf(error) };
+    } finally {
+      moving = false;
+    }
+  }
+
   async function textAction(action: 'copy' | 'open', text: string): Promise<void> {
     try {
       await rpc.request('textAction', { action, text });
@@ -441,8 +470,18 @@
   </div>
 {:else}
   <main class="page">
+    {#if designerState.tableBar !== undefined}
+      <TableBar
+        {t}
+        active="properties"
+        isView={designerState.tableBar.isView}
+        onAction={(action: TableAction) => {
+          rpc.emit('tableNav', { action, dirty: isDirty });
+        }}
+      />
+    {/if}
     <header class="page-header">
-      <span class="header-icon"><Icon name="table" size={20} /></span>
+      <span class="header-icon tile tone-purple"><Icon name="table" size={20} /></span>
       <div class="header-text">
         <h1>{title}</h1>
         <p class="subtitle">{editing ? t('designer.subtitleEdit') : t('designer.subtitle')}</p>
@@ -452,7 +491,7 @@
     <div class="content">
       <section class="card general" aria-label={t('designer.section.table')}>
         <div class="head">
-          <Field label={t('designer.name')} error={nameError}>
+          <Field label={t('designer.name')} error={nameError} required>
             <input
               class="control"
               value={design.name}
@@ -512,7 +551,10 @@
                 openTab(item.id);
               }}
             >
-              <Icon name={troubled.has(item.id) ? 'error' : item.icon} /><span
+              <Icon
+                name={troubled.has(item.id) ? 'error' : item.icon}
+                tone={troubled.has(item.id) ? undefined : item.tone}
+              /><span
                 >{t(item.label)}</span
               >{#if troubled.has(item.id)}<span class="sr-only"
                   >{`, ${t('designer.tabProblems')}`}</span
@@ -537,6 +579,9 @@
               driver={designerState.driver}
               features={designerState.features}
               canReorder={!editing || designerState.features.reorder}
+              rebuild={editing && !designerState.features.reorder
+                ? { busy: moving, dirty: isDirty, move: moveStored }
+                : undefined}
               {problems}
               {showProblems}
               {t}
@@ -703,13 +748,6 @@
     padding: 18px var(--dn-gap-xl) 14px;
   }
 
-  .header-icon {
-    display: inline-flex;
-    padding: 9px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border-radius: 10px;
-  }
 
   .header-text {
     min-width: 0;

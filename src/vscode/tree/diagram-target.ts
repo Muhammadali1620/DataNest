@@ -10,12 +10,15 @@ export interface DiagramStart {
   readonly scope: ObjectScope | undefined;
   /** Only these tables; the whole scope when absent. */
   readonly tables?: readonly string[];
+  /** The table the diagram opens on: centred and selected, the rest still drawn. */
+  readonly focus?: string;
 }
 
 /**
- * A database, schema or the Tables folder shows every table in it; tables selected
- * together show just them (those of the clicked table's scope) and what they point
- * at; a connection still needs its scope picked.
+ * A database, schema or the Tables folder shows every table in it; one table shows
+ * its whole scope centred on it; tables selected together show just them (those of
+ * the clicked table's scope) and what they point at; a connection still needs its
+ * scope picked.
  */
 export function diagramStartOf(
   target: TreeNode,
@@ -38,7 +41,14 @@ export function diagramStartOf(
       const names = picked.some((node) => node.name === target.name)
         ? picked.map((node) => node.name)
         : [target.name];
-      return { connectionId: target.connectionId, scope, tables: names };
+      // One table opens the whole scope with the camera over it; several chosen tables
+      // draw just those and what they point at.
+      return {
+        connectionId: target.connectionId,
+        scope,
+        ...(names.length > 1 ? { tables: names } : {}),
+        focus: target.name,
+      };
     }
     case 'group':
       return target.group === 'tables'

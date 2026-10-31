@@ -63,10 +63,11 @@ async function setup(initial: DataCompareState | null = done()) {
   });
   const requests: { kind: RowKind; offset: number }[] = [];
   const scripts: { insert: boolean; update: boolean; delete: boolean }[] = [];
-  const events = { ready: vi.fn(), refresh: vi.fn(), cancel: vi.fn() };
+  const events = { ready: vi.fn(), refresh: vi.fn(), cancel: vi.fn(), tableNav: vi.fn() };
   host.on('ready', events.ready);
   host.on('refresh', events.refresh);
   host.on('cancel', events.cancel);
+  host.on('tableNav', events.tableNav);
   host.handle('rows', ({ kind, offset, limit }) => {
     requests.push({ kind, offset });
     return { rows: ROWS[kind].slice(offset, offset + limit) };
@@ -197,5 +198,21 @@ describe('data comparison page', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('repeat in the target');
     });
+  });
+});
+
+describe('the bar of the table', () => {
+  it('lights Compare and sends the user to another page of the table', async () => {
+    const { events } = await setup({ ...done(), tableBar: { isView: false } });
+    expect(screen.getByTestId('table-tab-compare').getAttribute('aria-current')).toBe('page');
+    await fireEvent.click(screen.getByTestId('table-tab-properties'));
+    await waitFor(() => {
+      expect(events.tableNav).toHaveBeenCalledWith({ action: 'properties', dirty: false });
+    });
+  });
+
+  it('is not there without a table', async () => {
+    await setup();
+    expect(screen.queryByTestId('table-bar')).toBeNull();
   });
 });

@@ -136,6 +136,7 @@
   "commands.schema.compare.title": "Сравнить схемы…",
   "commands.table.compareData.title": "Сравнить данные…",
   "commands.server.monitor.title": "Монитор сервера",
+  "commands.manager.open.title": "Менеджер",
   "commands.tools.open.title": "Открыть инструменты",
   "commands.server.users.title": "Пользователи и права",
   "commands.results.chart.title": "График по результату",

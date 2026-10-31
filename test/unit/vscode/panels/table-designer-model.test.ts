@@ -519,3 +519,91 @@ describe('TableDesignerModel: the table properties page', () => {
     expect([copied, opened]).toEqual([['a'], ['b']]);
   });
 });
+
+describe('moveColumn (D113)', () => {
+  const PLAIN: TableStructure = {
+    columns: [
+      { name: 'id', dataType: 'integer', nullable: false, autoIncrement: false, generated: false },
+      { name: 'a', dataType: 'text', nullable: true, autoIncrement: false, generated: false },
+      { name: 'b', dataType: 'text', nullable: true, autoIncrement: false, generated: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [{ name: 'orders_pkey', columns: ['id'], unique: true, primary: true }],
+    foreignKeys: [],
+  };
+
+  it('opens a rebuild script for PostgreSQL, with the columns in the new order', async () => {
+    const { instance, opened, perform } = harness('postgres', {
+      table: 'orders',
+      scope: { schema: 'public' },
+      structure: PLAIN,
+    });
+    expect(await instance.moveColumn('b', 'up')).toEqual({ outcome: 'opened' });
+    expect(perform).not.toHaveBeenCalled();
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toContain('Move column b up in orders');
+    expect(opened[0]).toContain('"id" integer');
+    const create = (opened[0] ?? '').slice(
+      (opened[0] ?? '').indexOf('CREATE TABLE "public"."orders" ('),
+    );
+    expect(create.indexOf('"b" text')).toBeLessThan(create.indexOf('"a" text'));
+  });
+
+  it('confirms an ALTER where the database moves columns itself', async () => {
+    const { instance, opened, perform } = harness('mysql', { table: 'orders', structure: PLAIN });
+    expect(await instance.moveColumn('b', 'up')).toEqual({ outcome: 'ran' });
+    expect(perform).toHaveBeenCalledTimes(1);
+    expect(perform.mock.calls[0]?.[1].kind).toBe('alterTable');
+    expect(opened).toEqual([]);
+  });
+
+  it('does nothing at the edge', async () => {
+    const { instance, opened, perform } = harness('postgres', {
+      table: 'orders',
+      structure: PLAIN,
+    });
+    expect(await instance.moveColumn('id', 'up')).toEqual({ outcome: 'cancelled' });
+    expect(opened).toEqual([]);
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('reports a refused change as cancelled', async () => {
+    const { instance } = harness('mysql', {
+      table: 'orders',
+      structure: PLAIN,
+      outcome: 'refused',
+    });
+    expect(await instance.moveColumn('b', 'up')).toEqual({ outcome: 'cancelled' });
+  });
+
+  it('refuses a table with computed columns on PostgreSQL', async () => {
+    const { instance, opened } = harness('postgres', { table: 'orders' });
+    await expect(instance.moveColumn('note', 'up')).rejects.toThrow(/computed columns/u);
+    expect(opened).toEqual([]);
+  });
+});
+
+describe('barView', () => {
+  it('names the connection and the table of a stored table, none for a new one', () => {
+    const stored = harness('postgres', {
+      table: 'orders',
+      scope: { database: 'shop', schema: 'public' },
+    });
+    expect(stored.instance.barView()).toEqual({
+      target: { connectionId: 'c1', database: 'shop' },
+      table: { schema: 'public', name: 'orders' },
+    });
+    expect(harness('postgres').instance.barView()).toBeUndefined();
+    expect(harness('sqlite', { table: 't' }).instance.barView()).toEqual({
+      target: { connectionId: 'c1' },
+      table: { name: 't' },
+    });
+  });
+
+  it('shows the bar in the state of a stored table only', async () => {
+    const stored = harness('postgres', { table: 'orders', structure: undefined });
+    stored.setStructure({ ...ORDERS, columns: ORDERS.columns.slice(0, 2) });
+    expect(await stored.instance.state()).toMatchObject({ tableBar: { isView: false } });
+    expect(await harness('postgres').instance.state()).not.toHaveProperty('tableBar');
+  });
+});

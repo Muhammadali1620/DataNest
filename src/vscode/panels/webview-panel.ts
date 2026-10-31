@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import type { RpcTransport } from '../../shared/rpc';
+import { takeColumnHint } from './column-hint';
 import {
   createNonce,
   panelIconPaths,
@@ -28,13 +29,17 @@ export function createWebviewAppPanel(
   options: WebviewAppPanelOptions,
 ): vscode.WebviewPanel {
   const root = vscode.Uri.joinPath(extensionUri, ...WEBVIEW_ASSET_DIR);
+  // A page reached from the bar of another page of a table takes that page's place.
+  const handedColumn = takeColumnHint();
   const panel = vscode.window.createWebviewPanel(
     options.viewType,
     options.title,
-    {
-      viewColumn: options.column ?? vscode.ViewColumn.Active,
-      preserveFocus: options.preserveFocus ?? false,
-    },
+    handedColumn === undefined
+      ? {
+          viewColumn: options.column ?? vscode.ViewColumn.Active,
+          preserveFocus: options.preserveFocus ?? false,
+        }
+      : { viewColumn: handedColumn, preserveFocus: false },
     { enableScripts: true, localResourceRoots: [root] },
   );
   const icon = panelIconPaths(options.app);

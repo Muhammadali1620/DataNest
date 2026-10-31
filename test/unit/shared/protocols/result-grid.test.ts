@@ -662,6 +662,9 @@ describe('tableAction event', () => {
   it('takes a result and any action of the table bar', () => {
     for (const action of TABLE_ACTIONS) {
       expect(tableAction.parse({ resultId: 'r', action })).toEqual({ resultId: 'r', action });
+      expect(tableAction.parse({ resultId: 'r', action, dirty: true })).toMatchObject({
+        dirty: true,
+      });
     }
   });
 

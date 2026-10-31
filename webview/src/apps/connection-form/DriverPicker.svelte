@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import DbMark from '../../components/DbMark.svelte';
   import type { DriverChoice } from './driver-choices';
 
   interface Props {
@@ -72,8 +73,12 @@
       void select(choice.value);
     }}
   >
-    <!-- The mark is drawn from an attribute, so the card's name is the database alone. -->
-    <span class="mark {choice.tone}" aria-hidden="true" data-mark={choice.mark}></span>
+    <!-- The mark is decorative, so the card's name is the database alone. -->
+    {#if choice.driver !== undefined}
+      <span class="mark drawn"><DbMark driver={choice.driver} size={24} /></span>
+    {:else}
+      <span class="mark {choice.tone}" aria-hidden="true" data-mark={choice.mark}></span>
+    {/if}
     <span class="name">{choice.label}</span>
   </button>
 {/snippet}
@@ -162,8 +167,8 @@
     flex: none;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     color: var(--tone);
     background: color-mix(in srgb, var(--tone) 16%, transparent);
     border-radius: 5px;
@@ -174,6 +179,15 @@
 
   .mark::before {
     content: attr(data-mark);
+  }
+
+  /* The drawing carries its own colours, so the card adds none. */
+  .mark.drawn {
+    background: transparent;
+  }
+
+  .mark.drawn::before {
+    content: none;
   }
 
   .compatible .mark {

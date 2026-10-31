@@ -203,23 +203,17 @@ describe('panel tab icons', () => {
     }
   });
 
-  it('draws our own icons in the light and dark icon colours', () => {
-    const own = Object.entries(PANEL_ICONS)
-      .filter(([, icon]) => icon === OWN_ICON)
-      .map(([app]) => app);
-    // The Tools tab wears the extension's logo, the results tab our own grid.
-    expect(own.sort()).toEqual(['result-grid', 'tools']);
-    for (const app of own) {
+  it('draws every page as a coloured tile, the same in light and dark themes', () => {
+    for (const app of apps) {
       const light = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-light.svg`), 'utf8');
       const dark = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-dark.svg`), 'utf8');
-      expect(light).toContain('fill="#424242"');
-      expect(dark).toContain('fill="#C5C5C5"');
-      expect(light.replace(/#424242/g, '#C5C5C5'), app).toBe(dark);
+      expect(light, app).toContain('<linearGradient');
+      expect(light, app).toContain('fill="#fff"');
+      expect(dark, app).toBe(light);
     }
   });
 
-  it('draws the shape of the named editor icon in the light and dark icon colours', () => {
-    const shape = (svg: string): string => svg.replace(/fill="[^"]*"/, '').trim();
+  it('draws the shapes of the named editor icon on the tile', () => {
     for (const [app, icon] of Object.entries(PANEL_ICONS)) {
       if (icon === OWN_ICON) {
         continue;
@@ -228,12 +222,9 @@ describe('panel tab icons', () => {
         join(ROOT, 'node_modules/@vscode/codicons/src/icons', `${icon}.svg`),
         'utf8',
       );
-      const light = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-light.svg`), 'utf8');
-      const dark = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-dark.svg`), 'utf8');
-      expect(shape(light), app).toBe(shape(source));
-      expect(shape(dark), app).toBe(shape(source));
-      expect(light).toContain('fill="#424242"');
-      expect(dark).toContain('fill="#C5C5C5"');
+      const shapes = source.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+      const file = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-dark.svg`), 'utf8');
+      expect(file, app).toContain(shapes);
     }
   });
 });

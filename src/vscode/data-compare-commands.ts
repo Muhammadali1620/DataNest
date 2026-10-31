@@ -162,6 +162,13 @@ export function dataCompareCommandHandlers(deps: DataCompareCommandDeps): {
           text,
         );
       },
+      barView: {
+        target:
+          sourceTable.database === undefined
+            ? { connectionId: clicked.connectionId }
+            : { connectionId: clicked.connectionId, database: sourceTable.database },
+        table: sourceTable,
+      },
     });
   };
   return { compareData };

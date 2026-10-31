@@ -1,0 +1,80 @@
+// Writes the coloured icons of the extension (D113): the database marks of the tree, the
+// tab icons of the pages and the icons of the "actions" list. Run it with `npm run icons`
+// after changing the art; a unit test fails when the files are out of date.
+// The art is TypeScript shared with the pages, so esbuild bundles it in memory first.
+
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * @param {string} source
+ * @returns {Promise<unknown>}
+ */
+async function load(source) {
+  const result = await build({
+    entryPoints: [join(ROOT, source)],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'node',
+  });
+  const code = result.outputFiles[0]?.text ?? '';
+  return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+}
+
+const { DRIVER_IDS } = /** @type {typeof import('../src/shared/connection')} */ (
+  await load('src/shared/connection.ts')
+);
+const { dbMarkSvg, dbMarkFile } = /** @type {typeof import('../src/shared/db-marks')} */ (
+  await load('src/shared/db-marks.ts')
+);
+const { ACTION_ICONS, PANEL_TILES, TONES, actionSvg, panelSvg } =
+  /** @type {typeof import('../src/shared/icon-art')} */ (await load('src/shared/icon-art.ts'));
+const CODICONS = join(ROOT, 'node_modules/@vscode/codicons/src/icons');
+
+/** The shapes inside an icon of the package, as the page icons draw them. */
+/** @param {string} name */
+function glyphOf(name) {
+  const svg = readFileSync(join(CODICONS, `${name}.svg`), 'utf8');
+  return {
+    shapes: svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, ''),
+    // Most icons are drawn in 16 pixels, a few in 24.
+    size: Number(/viewBox="0 0 (\d+)/.exec(svg)?.[1] ?? 16),
+  };
+}
+
+/**
+ * @param {string} relative
+ * @param {string} text
+ */
+function write(relative, text) {
+  const file = join(ROOT, relative);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text);
+}
+
+for (const driver of DRIVER_IDS) {
+  write(`resources/icons/db/${dbMarkFile(driver)}`, dbMarkSvg(driver));
+  for (const state of /** @type {const} */ (['off', 'on', 'error'])) {
+    write(`resources/icons/db/${dbMarkFile(driver, state)}`, dbMarkSvg(driver, 16, state));
+  }
+}
+
+for (const [app, tile] of Object.entries(PANEL_TILES)) {
+  const glyph =
+    tile.own === undefined ? glyphOf(tile.glyph) : { shapes: tile.own, size: tile.ownSize };
+  const svg = panelSvg(app, glyph.shapes, tile.tone, glyph.size);
+  write(`resources/icons/panels/${app}-light.svg`, svg);
+  write(`resources/icons/panels/${app}-dark.svg`, svg);
+}
+
+for (const [name, tone] of Object.entries(ACTION_ICONS)) {
+  write(
+    `resources/icons/actions/${name}.svg`,
+    actionSvg(glyphOf(name).shapes, TONES[tone].mid, glyphOf(name).size),
+  );
+}

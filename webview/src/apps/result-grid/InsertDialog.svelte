@@ -194,7 +194,9 @@
   }
 
   .required {
+    margin-inline-end: 3px;
     color: var(--dn-danger);
+    font-weight: 700;
   }
 
   .type {

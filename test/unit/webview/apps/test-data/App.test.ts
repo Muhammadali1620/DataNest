@@ -69,6 +69,8 @@ async function setup(initial: TestDataState = state()) {
   });
   const cancelled = vi.fn();
   host.on('cancel', cancelled);
+  const nav = vi.fn();
+  host.on('tableNav', nav);
   render(App, { props: { rpc, t: createTranslator('en'), previewDelay: 0 } });
   await flush();
   host.emit('state', initial);
@@ -77,6 +79,7 @@ async function setup(initial: TestDataState = state()) {
   });
   return {
     host,
+    nav,
     previews,
     inserts,
     scripts,
@@ -219,5 +222,31 @@ describe('test data page layout (V11)', () => {
       expect(screen.getByLabelText('What fills team_id').getAttribute('aria-invalid')).toBe('true');
     });
     expect(screen.getByLabelText('What fills email').getAttribute('aria-invalid')).toBe('false');
+  });
+});
+
+describe('the bar of the table', () => {
+  it('lights Test data and sends the user to another page of the table', async () => {
+    const { nav } = await setup(state({ tableBar: { isView: false } }));
+    expect(screen.getByTestId('table-tab-generate').getAttribute('aria-current')).toBe('page');
+    await fireEvent.click(screen.getByTestId('table-tab-compare'));
+    await waitFor(() => {
+      expect(nav).toHaveBeenCalledWith({ action: 'compare', dirty: false });
+    });
+  });
+
+  it('warns that a run in progress would stop', async () => {
+    const { nav } = await setup(
+      state({ tableBar: { isView: false }, progress: { done: 1, total: 10 } }),
+    );
+    await fireEvent.click(screen.getByTestId('table-tab-data'));
+    await waitFor(() => {
+      expect(nav).toHaveBeenCalledWith({ action: 'data', dirty: true });
+    });
+  });
+
+  it('is not there for a page without a table', async () => {
+    await setup();
+    expect(screen.queryByTestId('table-bar')).toBeNull();
   });
 });

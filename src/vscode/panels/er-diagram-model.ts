@@ -15,14 +15,28 @@ export interface ErDiagramModelDeps {
   /** `shop.public`, for the heading and file names. */
   readonly scopeLabel: string;
   readonly connectionName: string;
+  /** The table the diagram opens on. */
+  readonly focus?: string;
 }
 
 export class ErDiagramModel {
   private schema: ErSchema | undefined;
   private positions = new Map<string, { x: number; y: number }>();
   private details: ErDetails = 'all';
+  private focus: string | undefined;
 
-  constructor(private readonly deps: ErDiagramModelDeps) {}
+  constructor(private readonly deps: ErDiagramModelDeps) {
+    this.focus = deps.focus;
+  }
+
+  /** The camera goes over another table when the diagram is shown again. */
+  setFocus(focus: string | undefined): void {
+    this.focus = focus;
+  }
+
+  get focused(): string | undefined {
+    return this.focus;
+  }
 
   get loaded(): boolean {
     return this.schema !== undefined;
@@ -52,6 +66,7 @@ export class ErDiagramModel {
     const schema = this.schema ?? { tables: [], relations: [] };
     const ids = new Set(schema.tables.map((table) => table.id));
     return {
+      ...(this.focus === undefined ? {} : { focus: this.focus, tableBar: { isView: false } }),
       scope: this.deps.scopeLabel,
       connection: this.deps.connectionName,
       tables: schema.tables.map((table) => ({

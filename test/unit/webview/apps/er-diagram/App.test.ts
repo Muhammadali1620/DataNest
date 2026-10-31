@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
   erDiagramProtocol,
@@ -87,11 +87,13 @@ async function setup(options: { initial?: ErDiagramState | null } = {}) {
     refresh: vi.fn(),
     openTable: vi.fn(),
     details: vi.fn(),
+    tableNav: vi.fn(),
   };
   host.on('ready', events.ready);
   host.on('refresh', events.refresh);
   host.on('openTable', events.openTable);
   host.on('details', events.details);
+  host.on('tableNav', events.tableNav);
   host.on('positions', (event) => positions.push(event.positions));
   host.handle('save', (request) => {
     saves.push(request);
@@ -477,5 +479,92 @@ describe('ER diagram page', () => {
       expect(document.querySelector('[data-table="customers"]')).toBeNull();
     });
     expect(boxOf('orders').classList.contains('faded')).toBe(false);
+  });
+});
+
+describe('opened from a table', () => {
+  const sized = () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    return () => {
+      width.mockRestore();
+      height.mockRestore();
+    };
+  };
+
+  const placed = [
+    { id: 'customers', x: 5000, y: 3000 },
+    { id: 'orders', x: 0, y: 0 },
+    { id: 'ext', x: 0, y: 400 },
+  ];
+
+  /** Where the group of boxes is drawn: the camera of the page. */
+  const camera = (): string =>
+    document.querySelector('svg g[transform^="translate("]')?.getAttribute('transform') ?? '';
+
+  it('draws every table, selects that one and stands over it at actual size', async () => {
+    const restore = sized();
+    try {
+      await setup({ initial: state({ focus: 'customers', positions: placed }) });
+      expect(document.querySelectorAll('[data-table]')).toHaveLength(3);
+      expect(boxOf('customers').classList.contains('selected')).toBe(true);
+      expect(screen.getByTitle('Actual size').textContent).toBe('100%');
+      // The far box is in the middle of the 800 × 600 canvas, not off screen.
+      const found = /translate\((-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)\)/u.exec(camera());
+      expect(found).not.toBeNull();
+      const [x, y] = (found ?? []).slice(1).map(Number);
+      expect(x).toBeLessThan(-4000);
+      expect(y).toBeLessThan(-2000);
+    } finally {
+      restore();
+    }
+  });
+
+  it('waits for the canvas to have a size before it moves the camera', async () => {
+    await setup({ initial: state({ focus: 'customers', positions: placed }) });
+    expect(boxOf('customers').classList.contains('selected')).toBe(false);
+    const restore = sized();
+    try {
+      window.dispatchEvent(new Event('resize'));
+      await flush();
+      expect(boxOf('customers').classList.contains('selected')).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('ignores a table the diagram does not have', async () => {
+    const restore = sized();
+    try {
+      await setup({ initial: state({ focus: 'gone', positions: placed }) });
+      expect(document.querySelector('[data-table].selected')).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it('moves the camera when the host shows the open diagram again from another table', async () => {
+    const restore = sized();
+    try {
+      const page = await setup({ initial: state({ focus: 'customers', positions: placed }) });
+      page.host.emit('focus', { id: 'orders' });
+      await flush();
+      expect(boxOf('orders').classList.contains('selected')).toBe(true);
+      expect(boxOf('customers').classList.contains('selected')).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('has the bar of the table with its own page lit, and none without a table', async () => {
+    const page = await setup({ initial: state({ focus: 'orders', tableBar: { isView: false } }) });
+    expect(screen.getByTestId('table-tab-er').getAttribute('aria-current')).toBe('page');
+    await fireEvent.click(screen.getByTestId('table-tab-properties'));
+    await waitFor(() => {
+      expect(page.events.tableNav).toHaveBeenCalledWith({ action: 'properties', dirty: false });
+    });
+    cleanup();
+    await setup();
+    expect(screen.queryByTestId('table-bar')).toBeNull();
   });
 });

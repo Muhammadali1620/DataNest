@@ -140,6 +140,7 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
       onInserted: () => {
         deps.cache.invalidate(target.connectionId);
       },
+      barView: { target: sessionTarget, table },
     });
   };
 

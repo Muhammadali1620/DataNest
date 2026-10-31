@@ -20,6 +20,7 @@ import {
 const TEXTS: SchemaTexts = {
   noDatabases: 'no databases',
   columnAtEdge: (name, direction) => `${name} ${direction} edge`,
+  columnRebuildOpened: (name) => `${name} rebuild opened`,
   noSchemas: 'no schemas',
   newDatabaseName: 'database name',
   newSchemaName: 'schema name',

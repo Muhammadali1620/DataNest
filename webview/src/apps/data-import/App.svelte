@@ -167,7 +167,7 @@
 {:else}
   <main class="page">
     <header class="page-header">
-      <span class="header-icon"><Icon name="insert" size={20} /></span>
+      <span class="header-icon tile tone-teal"><Icon name="insert" size={20} /></span>
       <div class="header-text">
         <h1>{t('import.title', page.file, page.table)}</h1>
         <p class="subtitle">
@@ -479,13 +479,6 @@
     padding: 18px var(--dn-gap-xl) 14px;
   }
 
-  .header-icon {
-    display: inline-flex;
-    padding: 9px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border-radius: 10px;
-  }
 
   .header-text {
     min-width: 0;

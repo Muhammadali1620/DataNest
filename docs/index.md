@@ -20,8 +20,9 @@ account, no limits and no telemetry.
 7. [Redis, MongoDB and Elasticsearch](guide/nosql.md)
 8. [Tools](guide/tools.md) — ER diagram, query plans, schema and data comparison, server
    monitor, users and privileges.
-9. [Keyboard and accessibility](guide/keyboard.md)
-10. [Settings](guide/settings.md)
+9. [Manager](guide/manager.md) — log, dashboard, processes, dump and structure sync of a connection.
+10. [Keyboard and accessibility](guide/keyboard.md)
+11. [Settings](guide/settings.md)
 
 ## Help
 

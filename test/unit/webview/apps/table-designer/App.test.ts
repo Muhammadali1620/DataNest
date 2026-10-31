@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type DesignPreview,
@@ -106,10 +106,18 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     parts.textCalls.push(call);
     return {};
   });
+  const moves: { column: string; direction: string }[] = [];
+  let moveOutcome: 'opened' | 'unsupported' | 'cancelled' = 'opened';
+  host.handle('moveColumn', (call) => {
+    moves.push(call);
+    return { outcome: moveOutcome };
+  });
   const ready = vi.fn();
   const closed = vi.fn();
   host.on('ready', ready);
   host.on('close', closed);
+  const nav = vi.fn();
+  host.on('tableNav', nav);
   render(App, { props: { rpc, t: createTranslator(lang), previewDelay: 0 } });
   await flush();
   host.emit('state', initial);
@@ -120,6 +128,11 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     host,
     ready,
     closed,
+    nav,
+    moves,
+    setMoveOutcome: (outcome: typeof moveOutcome) => {
+      moveOutcome = outcome;
+    },
     previews,
     saves,
     askedColumns,
@@ -806,5 +819,111 @@ describe('table designer App: the properties tabs', () => {
     await setup(stored(), 'ru');
     expect(screen.getByRole('tab', { name: /Триггеры/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Проверки/ })).toBeTruthy();
+  });
+});
+
+describe('the bar of the table', () => {
+  it('shows the pages of the table with Properties lit', async () => {
+    await setup(state({ tableBar: { isView: false } }));
+    expect(screen.getByTestId('table-tab-properties').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('table-tab-data').tagName).toBe('BUTTON');
+    expect(screen.getByTestId('table-tab-manager')).toBeTruthy();
+  });
+
+  it('asks the host to go to another page, with no unsaved edits to lose', async () => {
+    const { nav } = await setup(state({ tableBar: { isView: false } }));
+    await fireEvent.click(screen.getByTestId('table-tab-data'));
+    await waitFor(() => {
+      expect(nav).toHaveBeenCalledWith({ action: 'data', dirty: false });
+    });
+  });
+
+  it('says so when the design was edited', async () => {
+    const { nav } = await setup(state({ tableBar: { isView: false } }));
+    await fireEvent.input(screen.getByLabelText(/Table name/u), { target: { value: 'renamed' } });
+    await fireEvent.click(screen.getByTestId('table-tab-er'));
+    await waitFor(() => {
+      expect(nav).toHaveBeenCalledWith({ action: 'er', dirty: true });
+    });
+  });
+
+  it('is not there while a new table is designed', async () => {
+    await setup();
+    expect(screen.queryByTestId('table-bar')).toBeNull();
+  });
+});
+
+describe('moving a stored column where the database cannot', () => {
+  const stored = (extra: Partial<TableDesignerState> = {}): TableDesignerState => {
+    const base = state();
+    return state({
+      mode: 'edit',
+      driver: 'postgres',
+      features: { ...base.features, reorder: false },
+      design: {
+        name: 'orders',
+        comment: '',
+        columns: ['id', 'a', 'b'].map((name, at) => ({
+          id: `col-${at + 1}`,
+          original: name,
+          name,
+          type: 'integer',
+          length: '',
+          nullable: false,
+          defaultValue: '',
+          autoIncrement: false,
+          primaryKey: at === 0,
+          comment: '',
+        })),
+        indexes: [],
+        foreignKeys: [],
+      },
+      ...extra,
+    });
+  };
+
+  it('asks the host for a rebuild script and says it is open', async () => {
+    const { moves } = await setup(stored());
+    await fireEvent.click(screen.getByRole('button', { name: 'Move b up' }));
+    await waitFor(() => {
+      expect(moves).toEqual([{ column: 'b', direction: 'up' }]);
+    });
+    expect(await screen.findByText(/script that rebuilds the table/u)).toBeTruthy();
+  });
+
+  it('moves down by the stored name, with no button past the ends', async () => {
+    const { moves } = await setup(stored());
+    expect(screen.getByRole('button', { name: 'Move id up' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Move b down' }).hasAttribute('disabled')).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Move a down' }));
+    await waitFor(() => {
+      expect(moves).toEqual([{ column: 'a', direction: 'down' }]);
+    });
+  });
+
+  it('waits for unsaved edits to be saved or reverted', async () => {
+    await setup(stored());
+    await fireEvent.input(screen.getAllByLabelText(/^Name/u)[0] ?? document.body, {
+      target: { value: 'renamed' },
+    });
+    expect(screen.getByRole('button', { name: 'Move a up' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('says so when the table cannot be rebuilt', async () => {
+    const page = await setup(stored());
+    page.setMoveOutcome('unsupported');
+    await fireEvent.click(screen.getByRole('button', { name: 'Move b up' }));
+    expect(await screen.findByText('This table cannot be rebuilt to move a column')).toBeTruthy();
+  });
+
+  it('keeps the form buttons where the database moves columns itself, and has none for a new table', async () => {
+    await setup(state({ driver: 'postgres', features: { ...state().features, reorder: false } }));
+    expect(screen.queryByRole('button', { name: 'Move b up' })).toBeNull();
+    cleanup();
+    await setup(state({ mode: 'edit', design: stored().design }));
+    expect(screen.queryByRole('button', { name: 'Move b up' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Move column b up$/u }).length).toBeGreaterThan(
+      0,
+    );
   });
 });

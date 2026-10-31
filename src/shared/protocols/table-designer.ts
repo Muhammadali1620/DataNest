@@ -3,6 +3,7 @@
 
 import { DRIVER_IDS } from '../connection';
 import { defineProtocol } from '../rpc';
+import { tableBarSchema, tableNavSchema } from '../table-actions';
 import {
   array,
   boolean,
@@ -105,6 +106,8 @@ const checkSchema = object({
 const actionOutcomeSchema = literal('ran', 'opened', 'cancelled', 'unsupported');
 
 const stateSchema = object({
+  /** The bar of the table's pages; absent while designing a new table. */
+  tableBar: optional(tableBarSchema),
   /** `create` for a new table; `edit` for an existing one, whose design is as stored. */
   mode: literal('create', 'edit'),
   driver: literal(...DRIVER_IDS),
@@ -191,6 +194,17 @@ export const tableDesignerProtocol = defineProtocol({
           error: optional(string({ maxLength: 2000 })),
         }),
       },
+      /**
+       * Moves a stored column one place where the database cannot do it in place: a
+       * script that rebuilds the table is opened for review (D116).
+       */
+      moveColumn: {
+        params: object({
+          column: string({ maxLength: DESIGN_LIMITS.name }),
+          direction: literal('up', 'down'),
+        }),
+        result: object({ outcome: actionOutcomeSchema }),
+      },
       /** Copies text to the clipboard or opens it in a SQL editor. */
       textAction: {
         params: object({
@@ -203,6 +217,8 @@ export const tableDesignerProtocol = defineProtocol({
     events: {
       ready: object({}),
       close: object({}),
+      /** The bar of the table was pressed: go to another page of the table. */
+      tableNav: tableNavSchema,
     },
   },
   webview: {

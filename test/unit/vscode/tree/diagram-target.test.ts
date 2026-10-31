@@ -16,11 +16,11 @@ const table = (
 });
 
 describe('diagramStartOf', () => {
-  it('draws the clicked table alone when nothing else is selected', () => {
+  it('draws the whole schema over the clicked table when nothing else is selected', () => {
     expect(diagramStartOf(table('orders'), undefined)).toEqual({
       connectionId: 'c',
       scope: { database: 'shop', schema: 'public' },
-      tables: ['orders'],
+      focus: 'orders',
     });
   });
 
@@ -34,10 +34,13 @@ describe('diagramStartOf', () => {
       { kind: 'database', connectionId: 'c', database: 'shop' },
     ]);
     expect(start?.tables).toEqual(['a', 'b']);
+    expect(start?.focus).toBe('a');
   });
 
   it('ignores a selection the clicked table is not part of', () => {
-    expect(diagramStartOf(table('a'), [table('b')])?.tables).toEqual(['a']);
+    const start = diagramStartOf(table('a'), [table('b')]);
+    expect(start?.tables).toBeUndefined();
+    expect(start?.focus).toBe('a');
   });
 
   it('draws nothing from a view', () => {

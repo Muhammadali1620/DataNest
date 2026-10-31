@@ -3,6 +3,7 @@
 // reloaded page (D21) shows the boxes where the user left them.
 
 import { defineProtocol } from '../rpc';
+import { tableBarSchema, tableNavSchema } from '../table-actions';
 import { array, boolean, type Infer, literal, number, object, optional, string } from '../schema';
 
 const NAME = 1000;
@@ -45,6 +46,10 @@ const positionSchema = object({
 export const ER_DETAILS = ['all', 'keys', 'names'] as const;
 
 const stateSchema = object({
+  /** The table the diagram opens on: centred and selected. */
+  focus: optional(string({ maxLength: NAME * 4 })),
+  /** The bar of the table's pages, when the diagram was opened from a table. */
+  tableBar: optional(tableBarSchema),
   /** `shop` or `shop.public`, for the heading and file names. */
   scope: string({ maxLength: NAME * 2 }),
   connection: string({ maxLength: NAME }),
@@ -82,6 +87,8 @@ export const erDiagramProtocol = defineProtocol({
       refresh: object({}),
       /** Opens the rows of a table of the scope. */
       openTable: object({ id: string({ maxLength: NAME * 4 }) }),
+      /** The bar of the table was pressed: go to another page of the table. */
+      tableNav: tableNavSchema,
     },
   },
   webview: {
@@ -90,6 +97,8 @@ export const erDiagramProtocol = defineProtocol({
       /** Reading the tables: how far it got. */
       loading: progressSchema,
       state: stateSchema,
+      /** The diagram is open already: move the camera over this table. */
+      focus: object({ id: string({ maxLength: NAME * 4 }) }),
       /** Reading failed; the message says why. */
       failed: object({ message: string({ maxLength: 4000 }) }),
     },

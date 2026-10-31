@@ -29,6 +29,7 @@
   import MongoFields from './MongoFields.svelte';
   import DriverPicker from './DriverPicker.svelte';
   import { driverChoices } from './driver-choices';
+  import DbMark from '../../components/DbMark.svelte';
   import Icon from '../../components/Icon.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
@@ -297,7 +298,10 @@
       }}
     >
       <header class="page-header">
-        <span class="header-icon"><Icon name="database" size={20} /></span>
+        <!-- The mark of the chosen database, so the page shows at once which one it sets up. -->
+        <span class="header-icon tile plain"
+          ><DbMark driver={fields.driver} size={30} /></span
+        >
         <div class="header-text">
           <h1>{formState?.connectionId === undefined ? t('form.titleNew') : t('form.titleEdit')}</h1>
           <p class="subtitle">{t('form.subtitle')}</p>
@@ -331,7 +335,7 @@
         </section>
 
         <section class="card">
-          <h2 class="section-title"><Icon name="server" />{t('form.section.type')}</h2>
+          <h2 class="section-title"><Icon name="server" tone="blue" />{t('form.section.type')}</h2>
           <DriverPicker
             choices={choices}
             value={choice}
@@ -350,9 +354,9 @@
         </section>
 
         <section class="card">
-          <h2 class="section-title"><Icon name="plug" />{t('form.section.connection')}</h2>
+          <h2 class="section-title"><Icon name="plug" tone="green" />{t('form.section.connection')}</h2>
           {#if isFile}
-            <Field label={t('form.file')} error={errorFor('file-empty')}>
+            <Field label={t('form.file')} error={errorFor('file-empty')} required>
               <span class="row">
                 <input
                   class="control grow"
@@ -374,6 +378,7 @@
             <div class="pair">
               <Field
                 label={t('form.host')}
+                required={!(supportsSocket(fields.driver) && fields.socket.trim() !== '')}
                 error={errorFor('host-empty')}
                 hint={isMongo
                   ? fields.mongoMode === 'srv'
@@ -451,6 +456,7 @@
               </Field>
               {#if fields.redisMode === 'sentinel'}
                 <Field
+                  required
                   label={t('form.redis.masterName')}
                   error={errorFor('redis-master-empty')}
                   hint={t('form.redis.masterNameHint')}
@@ -636,7 +642,7 @@
         </section>
 
         <section class="card">
-          <h2 class="section-title"><Icon name="tag" />{t('form.section.general')}</h2>
+          <h2 class="section-title"><Icon name="tag" tone="orange" />{t('form.section.general')}</h2>
           {#if formState?.project !== undefined}
             <p class="place" data-testid="project-note">
               {t('form.place.inProject', formState.project.name)}
@@ -652,7 +658,7 @@
             </Field>
           {/if}
 
-          <Field label={t('form.name')} error={errorFor('name-empty')}>
+          <Field label={t('form.name')} error={errorFor('name-empty')} required>
             <input
               class="control"
               bind:value={fields.name}
@@ -716,7 +722,7 @@
         </section>
 
         {#if !isFile}
-          <h2 class="group-title"><Icon name="shield" />{t('form.section.security')}</h2>
+          <h2 class="group-title"><Icon name="shield" tone="red" />{t('form.section.security')}</h2>
             {#if optionSupport(fields.driver).tls}
             <fieldset class="section">
               <TlsEditor
@@ -738,7 +744,7 @@
               <legend>
                 <label class="check">
                   <input type="checkbox" bind:checked={fields.useSsh} />
-                  {t('form.ssh.use')}
+                  <Icon name="terminal" tone="teal" />{t('form.ssh.use')}
                 </label>
               </legend>
               {#if fields.useSsh}
@@ -820,7 +826,7 @@
               <legend>
                 <label class="check">
                   <input type="checkbox" bind:checked={fields.useProxy} data-testid="use-proxy" />
-                  {t('form.proxy.use')}
+                  <Icon name="globe" tone="orange" />{t('form.proxy.use')}
                 </label>
               </legend>
               {#if fields.useProxy}
@@ -832,7 +838,7 @@
                   </select>
                 </Field>
                 <div class="pair">
-                  <Field label={t('form.proxy.host')} error={errorFor('proxy-host-empty')}>
+                  <Field label={t('form.proxy.host')} error={errorFor('proxy-host-empty')} required>
                     <input
                       class="control"
                       bind:value={fields.proxyHost}
@@ -901,7 +907,7 @@
             {/if}
         {/if}
 
-        <h2 class="group-title"><Icon name="settings-gear" />{t('form.section.advanced')}</h2>
+        <h2 class="group-title"><Icon name="settings-gear" tone="purple" />{t('form.section.advanced')}</h2>
           <details class="section options" open={hasOptions}>
             <summary>{t('form.options')}</summary>
             <OptionsEditor {fields} {t} {errorFor} />
@@ -1012,13 +1018,6 @@
     padding: 18px 24px 14px;
   }
 
-  .header-icon {
-    display: inline-flex;
-    padding: 9px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border-radius: 10px;
-  }
 
   .subtitle {
     margin: 2px 0 0;
@@ -1055,11 +1054,6 @@
     gap: 8px;
     align-items: center;
     margin: 0 0 2px;
-  }
-
-  .section-title :global(.codicon-glyph),
-  .group-title :global(.codicon-glyph) {
-    color: var(--dn-muted);
   }
 
   .group-title {

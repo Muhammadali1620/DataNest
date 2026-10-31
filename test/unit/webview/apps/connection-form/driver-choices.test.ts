@@ -30,7 +30,12 @@ describe('driverChoices', () => {
       mark: 'Pg',
       tone: 'blue',
       compatible: false,
+      driver: 'postgres',
     });
+    // A database has its own drawing; a compatible server keeps its letters.
+    expect(choices.filter((choice) => choice.driver !== undefined).length).toBe(
+      choices.filter((choice) => !choice.compatible).length,
+    );
   });
 
   it('offers only the compatible servers whose driver is there', () => {

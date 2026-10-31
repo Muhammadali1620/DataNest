@@ -60,6 +60,8 @@ export interface SchemaTexts {
   readonly apply: string;
   /** Said when a column cannot move further up or down. */
   columnAtEdge(name: string, direction: 'up' | 'down'): string;
+  /** Said when the table has to be rebuilt to move a column: the script is open for review. */
+  columnRebuildOpened(name: string): string;
   dropRelation(name: string): string;
   rename(from: string, to: string): string;
   truncate(name: string): string;
@@ -97,7 +99,7 @@ export interface SchemaCommandDeps {
     table: TableRef,
     column: string,
     direction: 'up' | 'down',
-  ) => Promise<SchemaAction | undefined>;
+  ) => Promise<SchemaAction | { readonly kind: 'script'; readonly sql: string } | undefined>;
 }
 
 export type SchemaCommandName =
@@ -234,6 +236,18 @@ export function schemaCommandHandlers(
     const action = await deps.planMove(node.connectionId, node.table, node.column.name, direction);
     if (action === undefined) {
       ui.info(texts.columnAtEdge(node.column.name, direction));
+      return;
+    }
+    if (action.kind === 'script') {
+      // The database cannot move a column: a rebuild script is opened to read, not run.
+      const { connectionId, table } = node;
+      await deps.openEditor(
+        table.database === undefined
+          ? { connectionId }
+          : { connectionId, database: table.database },
+        action.sql,
+      );
+      ui.info(texts.columnRebuildOpened(node.column.name));
       return;
     }
     await perform(node.connectionId, action, texts.alterTable(node.table.name), texts.apply);

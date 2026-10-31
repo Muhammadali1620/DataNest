@@ -12,6 +12,13 @@ describe('Icon', () => {
     expect(container.textContent).toBe('');
   });
 
+  it('takes a colour tone of the theme palette', () => {
+    const { container } = render(Icon, { props: { name: 'add', tone: 'purple' } });
+    expect(container.querySelector('.codicon-glyph')?.classList.contains('tone-purple')).toBe(true);
+    const plain = render(Icon, { props: { name: 'add' } });
+    expect(plain.container.querySelector('.codicon-glyph')?.className).not.toContain('tone-');
+  });
+
   it('takes a size and can spin', () => {
     const { container } = render(Icon, { props: { name: 'loading', size: 28, spin: true } });
     const glyph = container.querySelector<HTMLElement>('.codicon-glyph');

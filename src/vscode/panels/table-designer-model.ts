@@ -26,8 +26,10 @@ import {
   triggersSupported,
   triggerTemplate,
 } from '../../services/table-checks';
+import { planColumnReorder } from '../../services/column-reorder';
 import { designFromStructure, type LoadedTable } from '../../services/table-structure';
 import type { PerformOutcome } from '../tree/schema-commands';
+import type { TablePageView } from './table-action';
 
 export interface TableDesignerTexts {
   createTable(name: string): string;
@@ -87,6 +89,21 @@ export class TableDesignerModel {
     return [database, schema].filter((part) => part !== undefined).join('.');
   }
 
+  /** The connection and table the bar of the page works on; undefined for a new table. */
+  barView(): TablePageView | undefined {
+    if (this.table === undefined) {
+      return undefined;
+    }
+    const { database, schema } = this.deps.scope;
+    return {
+      target: {
+        connectionId: this.deps.connectionId,
+        ...(database === undefined ? {} : { database }),
+      },
+      table: { ...(schema === undefined ? {} : { schema }), name: this.table },
+    };
+  }
+
   /** The name of the edited table, for the panel title; undefined for a new one. */
   get tableName(): string | undefined {
     return this.table;
@@ -120,6 +137,7 @@ export class TableDesignerModel {
     const loaded = await this.load(this.table);
     return {
       mode: 'edit',
+      tableBar: { isView: false },
       driver: driver.id,
       scope: this.scopeLabel,
       features,
@@ -130,6 +148,36 @@ export class TableDesignerModel {
         columns: [...loaded.background.generatedColumns],
       },
     };
+  }
+
+  /**
+   * Moves a stored column one place: an ALTER to confirm where the database moves columns,
+   * otherwise a script that rebuilds the table, opened to read and never run from here.
+   */
+  async moveColumn(column: string, direction: 'up' | 'down'): Promise<{ outcome: ActionOutcome }> {
+    const { driver, texts } = this.deps;
+    const table = this.ref();
+    const plan = await planColumnReorder(
+      await this.deps.metadata(),
+      driver,
+      table,
+      column,
+      direction,
+    );
+    if (plan === undefined) {
+      return { outcome: 'cancelled' };
+    }
+    if (plan.kind === 'script') {
+      await this.deps.openSql(plan.sql);
+      return { outcome: 'opened' };
+    }
+    const outcome = await this.deps.perform(
+      this.deps.connectionId,
+      plan.action,
+      texts.alterTable(table.name),
+      texts.apply,
+    );
+    return { outcome: outcome === 'refused' ? 'cancelled' : outcome };
   }
 
   /** The CREATE statements of the stored table, as a script. */

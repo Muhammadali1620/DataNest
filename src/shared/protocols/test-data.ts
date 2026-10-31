@@ -3,6 +3,7 @@
 
 import { DRIVER_IDS } from '../connection';
 import { defineProtocol } from '../rpc';
+import { tableBarSchema, tableNavSchema } from '../table-actions';
 import {
   array,
   boolean,
@@ -93,6 +94,8 @@ const reportSchema = object({
 });
 
 const stateSchema = object({
+  /** The bar of the table's pages, when the page belongs to a table. */
+  tableBar: optional(tableBarSchema),
   driver: literal(...DRIVER_IDS),
   table: string({ maxLength: NAME }),
   columns: array(columnSchema, { maxLength: 10_000 }),
@@ -128,6 +131,8 @@ export const testDataProtocol = defineProtocol({
     },
     events: {
       ready: object({}),
+      /** The bar of the table was pressed: go to another page of the table. */
+      tableNav: tableNavSchema,
       cancel: object({}),
       close: object({}),
     },

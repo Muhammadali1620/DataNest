@@ -5,16 +5,15 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../core/logging/logger';
 import type { ObjectScope } from '../core/model/objects';
-import { browseSession } from '../services/browse-session';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
-import { readSchemaSnapshot } from '../services/schema-compare/snapshot';
 import { describeTarget } from '../shared/connection';
 import { pickConnection, pickScope } from './connection-pick';
+import { compareSideOf } from './panels/compare-side';
 import { type CompareSide, SchemaCompareModel } from './panels/schema-compare-model';
 import { SchemaComparePanel } from './panels/schema-compare-panel';
-import { compareStartOf, scopeLabel } from './tree/compare-target';
+import { compareStartOf } from './tree/compare-target';
 import { isTreeNode } from './tree/nodes';
 
 export interface SchemaCompareCommandDeps {
@@ -33,30 +32,8 @@ export interface SchemaCompareCommandDeps {
 export function schemaCompareCommandHandlers(deps: SchemaCompareCommandDeps): {
   compareSchemas: (target?: unknown) => Promise<void>;
 } {
-  const side = async (connectionId: string, scope: ObjectScope): Promise<CompareSide> => {
-    const driver = await deps.manager.driverOf(connectionId);
-    const name = deps.store.get(connectionId)?.name ?? connectionId;
-    return {
-      connectionId,
-      label: scopeLabel(name, scope),
-      scope,
-      read: async (options) =>
-        await readSchemaSnapshot(
-          deps.cache.wrap(
-            connectionId,
-            (await browseSession(deps.manager, connectionId, scope.database)).metadata,
-          ),
-          scope,
-          {
-            kinds: driver.capabilities.objectKinds,
-            ...(driver.dialect.dump.portable === undefined
-              ? {}
-              : { portable: driver.dialect.dump.portable }),
-            ...options,
-          },
-        ),
-    };
-  };
+  const side = async (connectionId: string, scope: ObjectScope): Promise<CompareSide> =>
+    await compareSideOf(deps, connectionId, scope);
 
   const compareSchemas = async (target?: unknown): Promise<void> => {
     const start = isTreeNode(target)

@@ -59,6 +59,11 @@ export function schemaTexts(): SchemaTexts {
       direction === 'up'
         ? vscode.l10n.t('"{0}" is the first column already', name)
         : vscode.l10n.t('"{0}" is the last column already', name),
+    columnRebuildOpened: (name) =>
+      vscode.l10n.t(
+        'The database cannot move "{0}" in place: a script that rebuilds the table is open. Read it, then run it.',
+        name,
+      ),
     dropRelation: (name) => vscode.l10n.t('Drop "{0}"?', name),
     rename: (from, to) => vscode.l10n.t('Rename "{0}" to "{1}"?', from, to),
     truncate: (name) => vscode.l10n.t('Delete every row of "{0}"?', name),

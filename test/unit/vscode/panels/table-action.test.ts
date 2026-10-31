@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { tableActionCall, tableNodeOf } from '../../../../src/vscode/panels/table-action';
+import {
+  MANAGER_COMMAND,
+  tableActionCall,
+  tableNodeOf,
+} from '../../../../src/vscode/panels/table-action';
 import { COMMAND_IDS } from '../../../../src/vscode/command-ids';
 import { isTreeNode } from '../../../../src/vscode/tree/nodes';
 import { TABLE_ACTIONS } from '../../../../src/shared/table-actions';
@@ -36,19 +40,18 @@ describe('tableNodeOf', () => {
 describe('tableActionCall', () => {
   it('maps every action of the bar to a registered command', () => {
     const known = new Set<string>(Object.values(COMMAND_IDS));
-    for (const action of TABLE_ACTIONS) {
+    // The Manager page registers its own command.
+    for (const action of TABLE_ACTIONS.filter((candidate) => candidate !== 'manager')) {
       expect(known.has(tableActionCall(action, view).command), action).toBe(true);
     }
   });
 
   it.each([
     ['properties', COMMAND_IDS.designTable],
-    ['ddl', COMMAND_IDS.showDefinition],
+    ['data', COMMAND_IDS.openTable],
     ['er', COMMAND_IDS.showErDiagram],
     ['generate', COMMAND_IDS.generateData],
     ['compare', COMMAND_IDS.compareData],
-    ['dump', COMMAND_IDS.dumpSql],
-    ['transfer', COMMAND_IDS.transferTables],
   ] as const)('runs %s on the table node', (action, command) => {
     const call = tableActionCall(action, view);
     expect(call.command).toBe(command);
@@ -61,6 +64,19 @@ describe('tableActionCall', () => {
     expect(call.command).toBe(COMMAND_IDS.editObject);
     expect(call.args).toEqual([expect.objectContaining({ kind: 'table', tableKind: 'view' })]);
     expect(tableNodeOf(asView)).toMatchObject({ tableKind: 'view' });
+  });
+
+  it("opens the manager of the table's database with the table named", () => {
+    expect(tableActionCall('manager', view)).toEqual({
+      command: MANAGER_COMMAND,
+      args: [
+        {
+          connectionId: 'c1',
+          scope: { database: 'shop', schema: 'public' },
+          table: { name: 'orders', kind: 'table' },
+        },
+      ],
+    });
   });
 
   it('opens the history narrowed to the table, not the tree command', () => {

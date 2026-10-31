@@ -7,6 +7,8 @@ import type { Logger } from '../../core/logging/logger';
 import { RpcPeer } from '../../shared/rpc';
 import { dataCompareProtocol, type DataCompareProtocol } from '../../shared/protocols/data-compare';
 import type { DataCompareModel } from './data-compare-model';
+import type { TablePageView } from './table-action';
+import { onTableNav } from './table-nav';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface DataComparePanelDeps {
@@ -17,6 +19,8 @@ export interface DataComparePanelDeps {
   readonly title: string;
   /** Opens the sync script in an editor on the target table's connection. */
   readonly openScript: (text: string) => Promise<void>;
+  /** The source table, which the bar of the page works on. */
+  readonly barView?: TablePageView;
 }
 
 const PROGRESS_INTERVAL_MS = 200;
@@ -86,6 +90,9 @@ export class DataComparePanel implements vscode.Disposable {
     this.rpc.on('cancel', () => {
       this.abort?.abort();
     });
+    this.rpc.on('tableNav', (event) => {
+      onTableNav(this.panel, 'compare', deps.barView, event);
+    });
     this.panel.onDidDispose(() => {
       this.dispose();
     });
@@ -120,7 +127,10 @@ export class DataComparePanel implements vscode.Disposable {
 
   private send(): void {
     if (!this.disposed) {
-      this.rpc.emit('state', this.deps.model.state());
+      this.rpc.emit('state', {
+        ...this.deps.model.state(),
+        ...(this.deps.barView === undefined ? {} : { tableBar: { isView: false } }),
+      });
     }
   }
 

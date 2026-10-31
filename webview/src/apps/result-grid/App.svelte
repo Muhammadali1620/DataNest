@@ -72,7 +72,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import RecordPanel from './RecordPanel.svelte';
   import SqlBar from './SqlBar.svelte';
   import type { TableAction } from '../../../../src/shared/table-actions';
-  import TableBar from './TableBar.svelte';
+  import TableBar from '../../components/TableBar.svelte';
   import TextContextMenu from '../../components/TextContextMenu.svelte';
   import ValueDialog from './ValueDialog.svelte';
   import ViewSettings from './ViewSettings.svelte';
@@ -1028,9 +1028,14 @@ import type { RowAction } from '../../../../src/shared/row-action';
     {#if activeTab?.page !== undefined}
       <TableBar
         {t}
+        active="data"
         isView={gridState.tableKind === 'view'}
         onAction={(action: TableAction) => {
-          rpc.emit('tableAction', { resultId: activeTab.id, action });
+          rpc.emit('tableAction', {
+            resultId: activeTab.id,
+            action,
+            dirty: pendingCount(activeTab) > 0,
+          });
         }}
       />
     {/if}

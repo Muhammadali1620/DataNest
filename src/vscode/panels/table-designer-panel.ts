@@ -7,6 +7,7 @@ import {
   type TableDesignerProtocol,
 } from '../../shared/protocols/table-designer';
 import { TableDesignerModel, type TableDesignerModelDeps } from './table-designer-model';
+import { onTableNav } from './table-nav';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface TableDesignerPanelDeps extends TableDesignerModelDeps {
@@ -86,6 +87,10 @@ export class TableDesignerPanel implements vscode.Disposable {
       async ({ action, name, expression }) =>
         await this.model.checkAction(action, name, expression),
     );
+    this.rpc.handle(
+      'moveColumn',
+      async ({ column, direction }) => await this.model.moveColumn(column, direction),
+    );
     this.rpc.handle('textAction', async ({ action, text }) => {
       await this.model.textAction(action, text);
       return {};
@@ -103,6 +108,9 @@ export class TableDesignerPanel implements vscode.Disposable {
     });
     this.rpc.on('ready', () => {
       void this.sendState();
+    });
+    this.rpc.on('tableNav', (event) => {
+      onTableNav(this.panel, 'properties', this.model.barView(), event);
     });
     this.rpc.on('close', () => {
       this.dispose();

@@ -3,13 +3,13 @@
 
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
-import type { ServerProcess, StopKind } from '../../services/monitor/processes';
 import { RpcPeer } from '../../shared/rpc';
 import {
   serverMonitorProtocol,
   type ServerMonitorProtocol,
 } from '../../shared/protocols/server-monitor';
 import type { ServerMonitorModel } from './server-monitor-model';
+import { confirmStop } from './stop-confirm';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface ServerMonitorPanelDeps {
@@ -22,9 +22,6 @@ export interface ServerMonitorPanelDeps {
   /** Closes the monitor's session. */
   readonly release: () => Promise<void>;
 }
-
-/** How much of a statement the question before stopping it quotes. */
-const QUOTED_QUERY = 300;
 
 export class ServerMonitorPanel implements vscode.Disposable {
   static readonly viewType = 'datanest.serverMonitor';
@@ -75,7 +72,13 @@ export class ServerMonitorPanel implements vscode.Disposable {
     this.rpc.handle('status', async () => await model.status());
     this.rpc.handle('stop', async ({ id, kind }) => {
       const process = model.process(id);
-      if (process !== undefined && !(await this.confirm(process, kind))) {
+      if (
+        process !== undefined &&
+        !(await confirmStop(process, kind, {
+          name: this.deps.connectionName,
+          production: this.deps.production,
+        }))
+      ) {
         return { stopped: false };
       }
       const stopped = await model.stop(id, kind);
@@ -102,37 +105,6 @@ export class ServerMonitorPanel implements vscode.Disposable {
     if (!this.disposed) {
       this.rpc.emit('state', this.deps.model.state());
     }
-  }
-
-  private async confirm(process: ServerProcess, kind: StopKind): Promise<boolean> {
-    const who = [process.user, process.host, process.database]
-      .filter((part) => part !== undefined)
-      .join(' · ');
-    const query =
-      process.query === undefined
-        ? ''
-        : process.query.length > QUOTED_QUERY
-          ? `${process.query.slice(0, QUOTED_QUERY)}…`
-          : process.query;
-    const action =
-      kind === 'cancel' ? vscode.l10n.t('Cancel Statement') : vscode.l10n.t('End Session');
-    const detail = [
-      who,
-      query,
-      this.deps.production
-        ? vscode.l10n.t('"{0}" is a production connection.', this.deps.connectionName)
-        : '',
-    ]
-      .filter((part) => part !== '')
-      .join('\n\n');
-    const answer = await vscode.window.showWarningMessage(
-      kind === 'cancel'
-        ? vscode.l10n.t('Cancel the statement of process {0}?', process.id)
-        : vscode.l10n.t('End the session of process {0}?', process.id),
-      { modal: true, detail },
-      action,
-    );
-    return answer === action;
   }
 
   dispose(): void {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TableAction } from '../../../../src/shared/table-actions';
   import { onMount } from 'svelte';
   import {
     GENERATOR_IDS,
@@ -11,6 +12,7 @@
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Field from '../../components/Field.svelte';
   import Icon from '../../components/Icon.svelte';
+  import TableBar from '../../components/TableBar.svelte';
   import type { Translate } from '../../lib/i18n';
   import { generatorLabel, problemLabel, reportLabel } from './generator-view';
 
@@ -134,8 +136,19 @@
   </div>
 {:else}
   <main class="page">
+    {#if page.tableBar !== undefined}
+      <TableBar
+        {t}
+        active="generate"
+        isView={page.tableBar.isView}
+        onAction={(action: TableAction) => {
+          // Leaving while rows are going in would stop the run.
+          rpc.emit('tableNav', { action, dirty: running });
+        }}
+      />
+    {/if}
     <header class="page-header">
-      <span class="header-icon"><Icon name="beaker" size={20} /></span>
+      <span class="header-icon tile tone-yellow"><Icon name="beaker" size={20} /></span>
       <div class="header-text">
         <h1>{t('testData.title', page.table)}</h1>
         <p class="subtitle">{t('testData.subtitle')}</p>
@@ -397,13 +410,6 @@
     padding: 18px var(--dn-gap-xl) 14px;
   }
 
-  .header-icon {
-    display: inline-flex;
-    padding: 9px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border-radius: 10px;
-  }
 
   .header-text {
     min-width: 0;

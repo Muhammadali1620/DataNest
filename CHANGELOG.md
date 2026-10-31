@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.5.0] - 2026-10-31
+
+### Added
+
+- Manager page: log, dashboard, process list, dump and structure sync.
+- Own drawn marks of every database in the connection form and the tree; colourful tab and header icons.
+- Red asterisk on required fields.
+- Move column up/down for every SQL database (a rebuild script for review where the engine cannot reorder).
+
+### Changed
+
+- The table bar is on every table page and switches pages in the same tab; no overflow menu.
+- ER diagram from a table shows the whole schema with the camera on that table.
+- Dump moved into the Manager.
+
+### Fixed
+
+- Double click on a table no longer flashes its folders.
+
 ## [1.4.0] - 2026-10-31
 
 ### Added

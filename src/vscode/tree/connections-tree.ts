@@ -7,12 +7,14 @@ import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import { PROJECT_FILE_PATH } from '../../services/project-connections';
 import {
   type ConnectionConfig,
+  type DriverId,
   describeTarget,
   describeTunnel,
   driverFamily,
 } from '../../shared/connection';
 import { COMMAND_IDS } from '../command-ids';
 import { affectsDataNest } from '../settings';
+import { dbMarkFile } from '../../shared/db-marks';
 import { connectionUri, tagText } from './connection-decorations';
 import { tagsOf } from './connection-look';
 import { elasticFieldItem, elasticIndexItem } from './elastic-items';
@@ -435,8 +437,20 @@ export class ConnectionsTreeProvider
     }
   }
 
+  /**
+   * Holds the children of a table back while a click on its label may be the first of a
+   * double click (set by the commands, which own the click bookkeeping).
+   */
+  holdChildren: ((node: TreeNode) => Promise<void>) | undefined;
+
   async getChildren(node?: TreeNode): Promise<TreeNode[]> {
-    return node === undefined ? this.model.roots() : await this.model.children(node);
+    if (node === undefined) {
+      return this.model.roots();
+    }
+    if (node.kind === 'table') {
+      await this.holdChildren?.(node);
+    }
+    return await this.model.children(node);
   }
 
   /** Lets a found Redis key be revealed (V7.2). */
@@ -485,7 +499,7 @@ export class ConnectionsTreeProvider
         state.error === undefined ? '' : `\n\n${state.error}`,
       ].join(''),
     );
-    item.iconPath = connectionIcon(state.status);
+    item.iconPath = connectionIcon(this.deps.extensionUri, config?.driver, state.status);
     return item;
   }
 }
@@ -524,9 +538,24 @@ function statusText(status: ReturnType<ConnectionManager['getState']>['status'])
   }
 }
 
+/**
+ * The database's own mark (D113): dimmed while not connected, with a green dot when
+ * connected and a red one after a failure; a spinner while connecting. Without the
+ * extension folder or a known driver the status is a plain database icon.
+ */
 function connectionIcon(
+  extensionUri: vscode.Uri | undefined,
+  driver: DriverId | undefined,
   status: ReturnType<ConnectionManager['getState']>['status'],
-): vscode.ThemeIcon {
+): vscode.Uri | vscode.ThemeIcon {
+  if (status === 'connecting' || extensionUri === undefined || driver === undefined) {
+    return statusIcon(status);
+  }
+  const state = status === 'connected' ? 'on' : status === 'error' ? 'error' : 'off';
+  return vscode.Uri.joinPath(extensionUri, 'resources', 'icons', 'db', dbMarkFile(driver, state));
+}
+
+function statusIcon(status: ReturnType<ConnectionManager['getState']>['status']): vscode.ThemeIcon {
   switch (status) {
     case 'connected':
       return new vscode.ThemeIcon('database', new vscode.ThemeColor('charts.green'));

@@ -27,7 +27,7 @@ import {
   elasticSubfields,
   type ElasticTreeDeps,
 } from './elastic-tree';
-import { canReorderColumns } from '../../shared/table-design';
+import { canMoveColumns } from '../../services/column-reorder';
 import { hasAccounts } from '../../services/users/account-list';
 import {
   type AccountInfo,
@@ -863,7 +863,7 @@ export class TreeModel {
     if (columns.length === 0) {
       return [{ kind: 'message', text: this.deps.texts.noColumns, connectionId }];
     }
-    const movable = kind === 'table' && canReorderColumns(this.driverIdOf(connectionId));
+    const movable = kind === 'table' && canMoveColumns(this.driverIdOf(connectionId));
     return columns.map((column) => ({
       kind: 'column',
       connectionId,

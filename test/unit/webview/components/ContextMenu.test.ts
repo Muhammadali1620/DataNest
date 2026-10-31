@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ContextMenu from '../../../../webview/src/components/ContextMenu.svelte';
 import type { ContextEntry } from '../../../../webview/src/components/menu';
 import {
+  copyableOf,
   isEditable,
   isTextBox,
+  runCopyAction,
   runTextAction,
+  selectedIn,
   selectedText,
 } from '../../../../webview/src/components/text-menu';
 
@@ -245,5 +248,51 @@ describe('text-menu', () => {
     runTextAction(element, 'paste', { copy: vi.fn(), clipboard: '' });
     runTextAction(element, 'paste', { copy: vi.fn() });
     expect(element.value).toBe('a');
+  });
+
+  describe('read-only text blocks', () => {
+    function block(text: string): HTMLElement {
+      const element = document.createElement('pre');
+      element.setAttribute('data-copy-menu', '');
+      element.innerHTML = `<span>${text}</span>`;
+      document.body.append(element);
+      return element;
+    }
+
+    it('finds the block a right click landed in, from any child', () => {
+      const element = block('abc');
+      expect(copyableOf(element.firstElementChild)).toBe(element);
+      expect(copyableOf(document.createElement('div'))).toBeUndefined();
+      expect(copyableOf(null)).toBeUndefined();
+    });
+
+    it('copies the whole text when nothing is selected, the selection when there is one', () => {
+      const element = block('hello world');
+      const copy = vi.fn();
+      document.getSelection()?.removeAllRanges();
+      runCopyAction(element, 'copy', { copy });
+      expect(copy).toHaveBeenLastCalledWith('hello world');
+      const range = document.createRange();
+      const text = element.firstElementChild?.firstChild;
+      range.setStart(text as Text, 0);
+      range.setEnd(text as Text, 5);
+      document.getSelection()?.removeAllRanges();
+      document.getSelection()?.addRange(range);
+      expect(selectedIn(element)).toBe('hello');
+      runCopyAction(element, 'copy', { copy });
+      expect(copy).toHaveBeenLastCalledWith('hello');
+    });
+
+    it('ignores a selection made somewhere else, and selects all of the block', () => {
+      const element = block('one two');
+      const other = block('elsewhere');
+      const range = document.createRange();
+      range.selectNodeContents(other);
+      document.getSelection()?.removeAllRanges();
+      document.getSelection()?.addRange(range);
+      expect(selectedIn(element)).toBe('');
+      runCopyAction(element, 'selectAll', { copy: vi.fn() });
+      expect(selectedIn(element)).toBe('one two');
+    });
   });
 });

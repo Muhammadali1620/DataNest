@@ -8,6 +8,7 @@ import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
 import {
   addCheckSql,
   checkExpressionProblem,
+  checkPlanFor,
   checksSupported,
   dropCheckSql,
   triggerRef,
@@ -17,8 +18,8 @@ import {
 
 describe('checks and triggers of the table page', () => {
   it('knows which databases have checks and triggers', () => {
-    expect(['postgres', 'mysql', 'mssql'].every(checksSupported)).toBe(true);
-    expect(['sqlite', 'oracle', 'clickhouse'].some(checksSupported)).toBe(false);
+    expect(['postgres', 'mysql', 'mssql', 'oracle', 'sqlite'].every(checksSupported)).toBe(true);
+    expect(checksSupported('clickhouse')).toBe(false);
     expect(triggersSupported('clickhouse')).toBe(false);
     expect(['postgres', 'mysql', 'mssql', 'sqlite', 'oracle'].every(triggersSupported)).toBe(true);
   });
@@ -107,5 +108,71 @@ describe('checks and triggers of the table page', () => {
     ['clickhouse', clickhouseDialect, 'CREATE TRIGGER'],
   ])('starts a %s trigger from a template', (driver, dialect, start) => {
     expect(triggerTemplate(driver, dialect, { name: 'o' })).toContain(start);
+  });
+});
+
+describe('checkPlanFor', () => {
+  const table = { name: 'products' };
+  const structure = {
+    columns: [
+      { name: 'id', dataType: 'INTEGER', nullable: false, autoIncrement: false, generated: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [],
+    foreignKeys: [],
+    createSql: 'CREATE TABLE products (id INTEGER PRIMARY KEY)',
+  };
+
+  it('is one ALTER TABLE where the database has the statement', () => {
+    expect(
+      checkPlanFor(oracleDialect, { schema: 'APP', name: 'T' }, undefined, {
+        action: 'add',
+        name: 'ck',
+        expression: 'a > 0',
+      }),
+    ).toEqual({
+      statements: ['ALTER TABLE "APP"."T" ADD CONSTRAINT "ck" CHECK (a > 0)'],
+      recovery: [],
+    });
+    expect(
+      checkPlanFor(oracleDialect, { schema: 'APP', name: 'T' }, undefined, {
+        action: 'drop',
+        name: 'CK',
+      }).statements,
+    ).toEqual(['ALTER TABLE "APP"."T" DROP CONSTRAINT "CK"']);
+  });
+
+  it('is a rebuild of the table in SQLite, with a recovery for a failed one', () => {
+    const plan = checkPlanFor(sqliteDialect, table, structure, {
+      action: 'add',
+      name: 'id_pos',
+      expression: 'id > 0',
+    });
+    expect(plan.statements[0]).toBe('PRAGMA foreign_keys = OFF');
+    expect(plan.statements[3]).toContain('CONSTRAINT "id_pos" CHECK (id > 0)');
+    expect(plan.statements.at(-1)).toBe('COMMIT');
+    expect(plan.recovery).toContain('ROLLBACK');
+    const dropped = checkPlanFor(
+      sqliteDialect,
+      table,
+      { ...structure, createSql: 'CREATE TABLE products (id INT, CONSTRAINT p CHECK (id > 0))' },
+      { action: 'drop', name: 'p' },
+    );
+    expect(dropped.statements[3]).not.toContain('CHECK');
+  });
+
+  it('checks the condition the same way for every database, first', () => {
+    expect(() =>
+      checkPlanFor(sqliteDialect, table, structure, { action: 'add', name: 'x', expression: ' ' }),
+    ).toThrow('Enter the condition of the check');
+    expect(() =>
+      checkPlanFor(sqliteDialect, table, structure, { action: 'add', name: '', expression: 'a' }),
+    ).toThrow('Enter a name for the check');
+  });
+
+  it('asks to open the table again when SQLite has no structure to rebuild from', () => {
+    expect(() =>
+      checkPlanFor(sqliteDialect, table, undefined, { action: 'drop', name: 'p' }),
+    ).toThrow(/Open the table again/);
   });
 });

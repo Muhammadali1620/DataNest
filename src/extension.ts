@@ -273,7 +273,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const documentUri = tableDocumentUri(target, table);
     // The panel opens first, so a slow table shows "Running…" instead of nothing.
     showResults(documentUri);
-    await tables.open({ target, table });
+    await tables.open({ target, table, kind: node.tableKind });
   };
 
   const diagnostics = new ErrorDiagnostics();

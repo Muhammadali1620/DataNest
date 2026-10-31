@@ -184,3 +184,52 @@ describe('renameColumnsIn', () => {
     );
   });
 });
+
+describe('sqlite rebuild keeps what the design does not describe', () => {
+  const checks = [
+    { name: 'unnamed_check_1', expression: '(customer_id > 0)' },
+    { name: 'note_short', expression: "(length(note) < 100 AND note <> 'a)b')" },
+  ];
+  const background: TableBackground = {
+    ...NO_BACKGROUND,
+    checks,
+    tableOptions: 'STRICT',
+  };
+  const create = (plan: { statements: readonly string[] }) =>
+    plan.statements.find((s) => s.includes('CREATE TABLE')) ?? '';
+
+  it('writes the checks and the table options into the new table', () => {
+    const plan = alter(withColumn(before, 'note', { type: 'blob' }), background);
+    expect(create(plan)).toBe(
+      'CREATE TABLE "orders__datanest_rebuild" (\n  "id" integer NOT NULL,\n  "customer_id" integer,\n  "note" blob,\n  PRIMARY KEY ("id"),\n' +
+        '  CONSTRAINT "fk_customer" FOREIGN KEY ("customer_id") REFERENCES "customers" ("id"),\n' +
+        '  CHECK (customer_id > 0),\n  CONSTRAINT "note_short" CHECK (length(note) < 100 AND note <> \'a)b\')\n) STRICT',
+    );
+  });
+
+  it('follows a renamed column inside the condition, but not inside strings', () => {
+    const rebuilt = alter(withColumn(before, 'note', { name: 'remark', type: 'blob' }), {
+      ...NO_BACKGROUND,
+      checks: [{ name: 'c', expression: '(note <> \'note\' AND length("note") > 0)' }],
+    });
+    expect(create(rebuilt)).toContain(
+      `CONSTRAINT "c" CHECK ("remark" <> 'note' AND length("remark") > 0)`,
+    );
+  });
+
+  it('leaves out a check that reads a dropped column and says so', () => {
+    const plan = alter({ ...before, columns: before.columns.slice(0, 2) }, background);
+    const text = create(plan);
+    expect(
+      text.startsWith('-- CHECK note_short is dropped with the column note\nCREATE TABLE'),
+    ).toBe(true);
+    expect(text).toContain('CHECK (customer_id > 0)');
+    expect(text).not.toContain('note_short" CHECK');
+  });
+
+  it('adds no comment and no options when there is nothing to carry', () => {
+    const text = create(alter(withColumn(before, 'note', { type: 'blob' })));
+    expect(text.startsWith('CREATE TABLE')).toBe(true);
+    expect(text.endsWith('\n)')).toBe(true);
+  });
+});

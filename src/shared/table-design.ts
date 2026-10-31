@@ -94,6 +94,10 @@ export interface TableBackground {
   readonly constraintIndexes: readonly string[];
   /** SQLite: SQL of the indexes and triggers a rebuild must create again. */
   readonly rebuildSql: readonly string[];
+  /** SQLite: CHECK constraints a rebuild must carry over (the designer does not edit them). */
+  readonly checks?: readonly { readonly name: string; readonly expression: string }[];
+  /** SQLite: what follows the column list (`WITHOUT ROWID`, `STRICT`), kept by a rebuild. */
+  readonly tableOptions?: string;
 }
 
 /** The background of a table that does not exist yet. */

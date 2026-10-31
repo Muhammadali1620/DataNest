@@ -1028,6 +1028,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
     {#if activeTab?.page !== undefined}
       <TableBar
         {t}
+        isView={gridState.tableKind === 'view'}
         onAction={(action: TableAction) => {
           rpc.emit('tableAction', { resultId: activeTab.id, action });
         }}
@@ -1186,7 +1187,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
               </select>
               {#if customSize}
                 <input
-                  class="control number plain-number"
+                  class="control number plain-number custom-size"
                   type="number"
                   min="1"
                   max={MAX_PAGE_ROWS}
@@ -2234,6 +2235,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
 
   .control.number {
     width: 4.5em;
+  }
+
+  /* Wide enough for its placeholder, "Rows per page". */
+  .control.number.custom-size {
+    width: 9.5em;
   }
 
   /* The browser's square spin arrows do not fit the rounded page; the pager has its own. */

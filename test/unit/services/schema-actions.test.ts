@@ -56,6 +56,16 @@ describe('actionSql', () => {
     expect(actionRecovery(action, mysqlDialect.ddl)).toEqual([]);
   });
 
+  it('puts back what a failed script of its own started, when it says how', () => {
+    const action: SchemaAction = {
+      kind: 'runStatements',
+      scope: {},
+      statements: ['BEGIN', 'COMMIT'],
+      recovery: ['ROLLBACK'],
+    };
+    expect(actionRecovery(action, mysqlDialect.ddl)).toEqual(['ROLLBACK']);
+  });
+
   it('creates a table from a design, with every statement the dialect needs', () => {
     const design = newTableDesign('postgres', 'invoices');
     const statements = actionSql(

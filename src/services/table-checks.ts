@@ -1,13 +1,19 @@
 // What the table properties page runs for the parts of a table the designer does not
 // edit as a form: CHECK constraints and triggers. Pure, so every dialect is tested.
 
-import type { ObjectRef, TableRef } from '../core/model/objects';
+import type { ObjectRef, TableRef, TableStructure } from '../core/model/objects';
 import { DbError } from '../core/errors';
 import { msg } from '../core/user-message';
 import type { Dialect } from '../drivers/driver';
 
 /** Databases whose readers list CHECK constraints and whose ALTER can change them. */
-const CHECK_DRIVERS: ReadonlySet<string> = new Set(['postgres', 'mysql', 'mssql']);
+const CHECK_DRIVERS: ReadonlySet<string> = new Set([
+  'postgres',
+  'mysql',
+  'mssql',
+  'oracle',
+  'sqlite',
+]);
 
 /** Databases without triggers of their own. */
 const NO_TRIGGER_DRIVERS: ReadonlySet<string> = new Set(['clickhouse']);
@@ -80,6 +86,37 @@ function wrapsWhole(text: string): boolean {
     }
   }
   return false;
+}
+
+/**
+ * What adding or dropping a check runs: one ALTER TABLE, or, where the database has
+ * none for it (SQLite), the statements its own plan gives.
+ */
+export function checkPlanFor(
+  dialect: Dialect,
+  table: TableRef,
+  structure: TableStructure | undefined,
+  change: { readonly action: 'add' | 'drop'; readonly name: string; readonly expression?: string },
+): { statements: string[]; recovery: string[] } {
+  if (change.action === 'add') {
+    // The same rules for every database, before any of them reads the text.
+    addCheckSql(dialect, table, change.name, change.expression ?? '');
+  }
+  if (dialect.ddl.changeCheck !== undefined) {
+    if (structure === undefined) {
+      throw new DbError('unsupported', msg('Open the table again to change its checks'));
+    }
+    const plan = dialect.ddl.changeCheck(table, structure, change);
+    return { statements: [...plan.statements], recovery: [...plan.recovery] };
+  }
+  return {
+    statements: [
+      change.action === 'add'
+        ? addCheckSql(dialect, table, change.name, change.expression ?? '')
+        : dropCheckSql(dialect, table, change.name),
+    ],
+    recovery: [],
+  };
 }
 
 export function dropCheckSql(dialect: Dialect, table: TableRef, name: string): string {

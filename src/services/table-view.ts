@@ -38,6 +38,8 @@ export interface TableViewerDeps {
 export interface OpenTableRequest {
   readonly target: SessionTarget;
   readonly table: TableRef;
+  /** A view has no table tools (compare, generate, ER); a table by default. */
+  readonly kind?: 'table' | 'view';
   /** Rows to skip; the first page by default. */
   readonly offset?: number;
   /** Known row count, so paging does not count again. */
@@ -121,6 +123,7 @@ export class TableViewer {
     await this.open({
       target: request.target,
       table: request.table,
+      ...(request.kind === undefined ? {} : { kind: request.kind }),
       offset:
         refiltered || resorted || change.pageSize !== undefined
           ? 0
@@ -140,9 +143,17 @@ export class TableViewer {
    * export writes every row (V5.4). `columns` narrows the select list; all by default.
    */
   /** What the open view of a document shows: its connection and table, or undefined. */
-  viewOf(documentUri: string): { target: SessionTarget; table: TableRef } | undefined {
+  viewOf(
+    documentUri: string,
+  ): { target: SessionTarget; table: TableRef; kind?: 'table' | 'view' } | undefined {
     const view = this.views.get(documentUri);
-    return view === undefined ? undefined : { target: view.target, table: view.table };
+    return view === undefined
+      ? undefined
+      : {
+          target: view.target,
+          table: view.table,
+          ...(view.kind === undefined ? {} : { kind: view.kind }),
+        };
   }
 
   async fullQuery(
@@ -175,6 +186,7 @@ export class TableViewer {
     this.views.set(documentUri, {
       target: request.target,
       table: request.table,
+      ...(request.kind === undefined ? {} : { kind: request.kind }),
       ...(filter === undefined ? {} : { filter }),
       ...(request.sort === undefined ? {} : { sort: request.sort }),
       ...(request.pageSize === undefined ? {} : { pageSize: request.pageSize }),

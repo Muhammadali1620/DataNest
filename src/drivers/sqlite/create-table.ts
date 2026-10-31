@@ -12,7 +12,21 @@ import {
 } from '../common/design-sql';
 import { quoteIdentifier, quoteTable } from './quote';
 
-export function sqliteCreateTable(table: TableRef, design: TableDesign): string[] {
+/** What a rebuild carries over that the design does not describe. */
+export interface CreateExtras {
+  /** Table constraints, as `CONSTRAINT "n" CHECK (…)` or `CHECK (…)`. */
+  readonly constraints?: readonly string[];
+  /** After the closing parenthesis: `WITHOUT ROWID`, `STRICT`. */
+  readonly options?: string;
+  /** Comment lines in front of the statement, for the preview. */
+  readonly comments?: readonly string[];
+}
+
+export function sqliteCreateTable(
+  table: TableRef,
+  design: TableDesign,
+  extras: CreateExtras = {},
+): string[] {
   // AUTOINCREMENT exists only as part of an inline INTEGER PRIMARY KEY.
   const inlineKey = design.columns.some((column) => column.autoIncrement);
   const columns = design.columns.map((column) =>
@@ -27,12 +41,20 @@ export function sqliteCreateTable(table: TableRef, design: TableDesign): string[
   const keys = design.foreignKeys.map((key) =>
     foreignKeySql(design, key, quoteIdentifier, quoteIdentifier(key.targetTable.trim())),
   );
-  return [
-    createTableSql(target, [
+  const options = extras.options === undefined || extras.options === '' ? '' : ` ${extras.options}`;
+  const create = createTableSql(
+    target,
+    [
       ...columns,
       ...(inlineKey ? [] : primaryKeySql(design, quoteIdentifier)),
       ...keys,
-    ]),
+      ...(extras.constraints ?? []),
+    ],
+    options,
+  );
+  const comments = (extras.comments ?? []).map((line) => `${line}\n`).join('');
+  return [
+    `${comments}${create}`,
     // An attached database names the index, not the table: "aux"."ix" ON "t".
     ...design.indexes.map((index) =>
       createIndexSql(

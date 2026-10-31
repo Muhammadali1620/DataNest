@@ -55,6 +55,14 @@ describe('tableActionCall', () => {
     expect(call.args).toEqual([tableNodeOf(view)]);
   });
 
+  it('opens the definition editor, not the designer, for a view', () => {
+    const asView = { ...view, kind: 'view' as const };
+    const call = tableActionCall('properties', asView);
+    expect(call.command).toBe(COMMAND_IDS.editObject);
+    expect(call.args).toEqual([expect.objectContaining({ kind: 'table', tableKind: 'view' })]);
+    expect(tableNodeOf(asView)).toMatchObject({ tableKind: 'view' });
+  });
+
   it('opens the history narrowed to the table, not the tree command', () => {
     expect(tableActionCall('history', view)).toEqual({
       command: COMMAND_IDS.showHistory,

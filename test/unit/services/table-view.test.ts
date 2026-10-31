@@ -534,6 +534,13 @@ describe('TableViewer', () => {
       });
     });
 
+    it('remembers that a view is a view, through paging', async () => {
+      const table = { name: 'orders_v' };
+      const first = await viewer.open({ target: target(), table, kind: 'view' });
+      await viewer.reload(first.id, { offset: 0 });
+      expect(viewer.viewOf(tableDocumentUri(target(), table))).toMatchObject({ kind: 'view' });
+    });
+
     it('knows nothing of a document that is no table view', () => {
       expect(viewer.viewOf('file:///query.sql')).toBeUndefined();
     });

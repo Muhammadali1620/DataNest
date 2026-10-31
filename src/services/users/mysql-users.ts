@@ -119,6 +119,14 @@ export function mysqlUserAdmin(server: MonitorServer, dialect: AdminDialect): Us
         )
       ).map((row) => (textOf(row, 'column_name') ?? '').toLowerCase());
       const columns = USER_COLUMNS.filter((name) => present.includes(name));
+      // information_schema shows only the columns the account may read, so none at all
+      // means mysql.user is off limits; a bare SELECT of nothing would be a syntax error.
+      if (columns.length === 0) {
+        throw new DbError(
+          'permission-denied',
+          msg('This account is not allowed to read the list of accounts (mysql.user)'),
+        );
+      }
       const rows = await namedRows(
         session,
         `SELECT ${columns.map((name) => dialect.quoteIdentifier(name)).join(', ')} FROM mysql.user`,

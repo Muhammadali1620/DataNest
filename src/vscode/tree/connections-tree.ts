@@ -237,12 +237,7 @@ export class ConnectionsTreeProvider
         return item;
       }
       case 'queryFolder': {
-        const item = expandable(
-          node,
-          vscode.l10n.t('Query'),
-          'database-query',
-          TREE_CONTEXT.queryFolder,
-        );
+        const item = expandable(node, vscode.l10n.t('Query'), 'notebook', TREE_CONTEXT.queryFolder);
         item.description = withCount(this.model.countOf(node));
         return item;
       }
@@ -594,6 +589,11 @@ const ICON_COLORS: Readonly<Record<string, string>> = {
   'symbol-method': 'terminal.ansiCyan',
   'symbol-number': 'charts.green',
   calendar: 'charts.red',
+  notebook: 'charts.yellow',
+  'file-code': 'charts.yellow',
+  shield: 'charts.red',
+  account: 'charts.blue',
+  organization: 'charts.purple',
 };
 
 function coloredIcon(icon: string): vscode.ThemeIcon {

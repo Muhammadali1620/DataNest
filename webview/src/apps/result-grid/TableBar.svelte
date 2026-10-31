@@ -10,9 +10,11 @@
   interface Props {
     onAction: (action: TableAction) => void;
     t: Translate;
+    /** A database view: the tools that only make sense for a table are left out. */
+    isView?: boolean;
   }
 
-  const { onAction, t }: Props = $props();
+  const { onAction, t, isView = false }: Props = $props();
 
   // Tabs that open another page for the same table, then the one that is this page.
   const TABS: readonly { id: TableAction | 'data'; icon: CodiconName; key: MessageKey; hint: MessageKey }[] = [
@@ -34,10 +36,14 @@
     dump: 'save',
     transfer: 'arrow-swap',
   };
+  /** What a view cannot do: its rows are not its own to compare, fill or move. */
+  const TABLE_ONLY = new Set<string>(['er', 'generate', 'compare', 'transfer']);
+  const tabs = $derived(TABS.filter((tab) => !isView || !TABLE_ONLY.has(tab.id)));
+  const more = $derived(MORE.filter((action) => !isView || !TABLE_ONLY.has(action)));
 </script>
 
 <div class="table-bar" role="toolbar" aria-label={t('tableBar.label')} data-testid="table-bar">
-  {#each TABS as tab (tab.id)}
+  {#each tabs as tab (tab.id)}
     {#if tab.id === 'data'}
       <span class="chip active" aria-current="page" data-testid="table-tab-data">
         <Icon name={tab.icon} size={14} />{t(tab.key)}
@@ -61,7 +67,7 @@
     label={t('tableBar.more')}
     testid="table-more"
     align="start"
-    items={MORE.map((action) => ({
+    items={more.map((action) => ({
       id: action,
       label: t(MORE_KEYS[action]),
       icon: MORE_ICONS[action],

@@ -50,7 +50,7 @@ function table(overrides: Partial<ResultTab> = {}): ResultTab {
   };
 }
 
-async function open(tab: ResultTab = table()) {
+async function open(tab: ResultTab = table(), tableKind?: 'view') {
   const transports = createLinkedTransports();
   const host: HostPeer = new RpcPeer({
     local: resultGridProtocol.host,
@@ -95,7 +95,12 @@ async function open(tab: ResultTab = table()) {
   host.on('copyText', copyText);
   render(App, { props: { rpc, t: createTranslator('en') } });
   await flush();
-  host.emit('state', { tabs: [tab], activeId: tab.id, running: false });
+  host.emit('state', {
+    tabs: [tab],
+    activeId: tab.id,
+    running: false,
+    ...(tableKind === undefined ? {} : { tableKind }),
+  });
   await waitFor(() => {
     expect(
       screen.queryAllByRole('gridcell').filter((item) => item.getAttribute('data-column') !== null)
@@ -163,6 +168,16 @@ describe('the table bar', () => {
     await waitFor(() => {
       expect(tableAction).toHaveBeenCalledWith({ resultId: 'result-1', action });
     });
+  });
+
+  it('leaves out the tools only a table has when the page shows a view', async () => {
+    await open(table(), 'view');
+    expect(screen.getByTestId('table-tab-properties')).toBeTruthy();
+    for (const id of ['er', 'generate', 'compare']) {
+      expect(screen.queryByTestId(`table-tab-${id}`), id).toBeNull();
+    }
+    await chooseFromMenu('table-more', 'Show DDL');
+    expect(screen.queryByText('Copy to another connection…')).toBeNull();
   });
 
   it('has no button that opens the page it is already on', async () => {
@@ -551,5 +566,27 @@ describe('menu of a text box', () => {
         'true',
       );
     }
+  });
+});
+
+describe('menu of a shown value', () => {
+  it('offers Copy and Select all on read-only value text, not the browser menu', async () => {
+    const { copyText } = await open();
+    await fireEvent.click(screen.getByRole('button', { name: 'Value' }));
+    await fireEvent.pointerDown(cell(0, 1), { button: 0 });
+    const text = await screen.findByTestId('value-text');
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    text.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    const menu = await screen.findByTestId('context-menu');
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent.trim().replace(/\s+/gu, ' ')),
+    ).toEqual(['Copy Ctrl+C', 'Select all Ctrl+A']);
+    await fireEvent.click(within(menu).getByText('Copy'));
+    await waitFor(() => {
+      expect(copyText).toHaveBeenCalledWith({ text: text.textContent });
+    });
   });
 });

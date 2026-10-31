@@ -37,6 +37,22 @@ function describe(index: IndexInfo): string {
   return `${kind === '' ? '' : `${kind} `}(${index.columns.join(', ')})${where}`;
 }
 
+/** SQLite keeps CHECKs and table options in the CREATE text; a rebuild writes them back. */
+function sqliteExtras(structure: TableStructure): Pick<TableBackground, 'checks' | 'tableOptions'> {
+  const options = structure.tableOptions ?? '';
+  return {
+    ...((structure.checks ?? []).length === 0
+      ? {}
+      : {
+          checks: (structure.checks ?? []).map((check) => ({
+            name: check.name,
+            expression: check.expression,
+          })),
+        }),
+    ...(options === '' ? {} : { tableOptions: options }),
+  };
+}
+
 /**
  * `table` is where the table lives; a foreign key into the same database or schema
  * leaves `targetSchema` out, so the design reads like one typed by hand.
@@ -144,6 +160,7 @@ export function designFromStructure(table: TableRef, structure: TableStructure):
       generatedColumns,
       constraintIndexes,
       rebuildSql,
+      ...(structure.createSql === undefined ? {} : sqliteExtras(structure)),
     },
   };
 }

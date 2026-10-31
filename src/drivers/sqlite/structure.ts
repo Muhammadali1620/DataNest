@@ -13,6 +13,7 @@ import type { CellValue } from '../../shared/cell-value';
 import type { MetadataReader } from '../driver';
 import type { SqliteQueryRunner } from './metadata';
 import { msg } from '../../core/user-message';
+import { parseSqliteChecks, sqliteTableOptions } from './checks';
 
 export async function readSqliteStructure(
   session: SqliteQueryRunner,
@@ -57,11 +58,15 @@ export async function readSqliteStructure(
      ORDER BY type, name`,
     [table.name],
   );
+  const options = sqliteTableOptions(text(own[0]));
   return {
     columns,
     primaryKey: keyed,
     indexes: await reader.listIndexes(table),
     foreignKeys: await reader.listForeignKeys(table),
+    checks: parseSqliteChecks(text(own[0])),
+    createSql: text(own[0]),
+    ...(options === '' ? {} : { tableOptions: options }),
     dependents: dependents.map((row): TableDependent => ({
       kind: text(row[0]) === 'trigger' ? 'trigger' : 'index',
       name: text(row[1]),

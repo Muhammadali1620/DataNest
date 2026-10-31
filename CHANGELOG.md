@@ -11,12 +11,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - Tree: Columns/Indexes/Foreign Keys/Triggers folders with counts, DDL on double click of a column, index, key or trigger, Query and Security nodes, column move up/down, per-kind icons.
 - Table properties: DDL, Triggers and Checks tabs with counts.
 
+- Checks tab for Oracle and SQLite.
+
 ### Changed
 
 - Double click on a table opens only its data. Defaults: text left, grid lines. The "indexes kept as they are" notice is gone.
 
 ### Fixed
 
+- SQLite table rebuild kept no CHECK constraints, STRICT or WITHOUT ROWID.
+- Properties and tools on a view result page failed.
 - Page arrows did not work on a single page.
 
 ## [1.3.0] - 2026-10-31

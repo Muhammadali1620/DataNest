@@ -148,8 +148,12 @@ export interface TableStructure {
   /** Every index, the primary key included. */
   readonly indexes: readonly IndexInfo[];
   readonly foreignKeys: readonly ForeignKey[];
-  /** CHECK constraints, where the reader knows them (PostgreSQL, MySQL, SQL Server). */
+  /** CHECK constraints, where the reader knows them (all but ClickHouse). */
   readonly checks?: readonly CheckConstraint[];
+  /** SQLite: the CREATE TABLE text as stored, from which a check is added or dropped. */
+  readonly createSql?: string;
+  /** SQLite: what follows the column list of the CREATE text (`WITHOUT ROWID`, `STRICT`). */
+  readonly tableOptions?: string;
   /** SQLite: what disappears with the table and must be recreated after a rebuild. */
   readonly dependents?: readonly TableDependent[];
 }

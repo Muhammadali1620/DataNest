@@ -3,8 +3,10 @@
   import ContextMenu from './ContextMenu.svelte';
   import type { ContextEntry } from './menu';
   import {
+    copyableOf,
     isEditable,
     isTextBox,
+    runCopyAction,
     runTextAction,
     selectedText,
     type TextAction,
@@ -21,21 +23,43 @@
 
   const { onCopy, readClipboard, t }: Props = $props();
 
-  let shown = $state<{ x: number; y: number; box: TextBox } | undefined>(undefined);
+  /** Where the menu is and what it works on: a text box, or a block of read-only text. */
+  let shown = $state<
+    { x: number; y: number; box: TextBox; node?: undefined } | { x: number; y: number; node: HTMLElement; box?: undefined } | undefined
+  >(undefined);
 
   function onContext(event: MouseEvent): void {
-    if (!isTextBox(event.target)) {
+    if (isTextBox(event.target)) {
+      event.preventDefault();
+      shown = { x: event.clientX, y: event.clientY, box: event.target };
       return;
     }
-    event.preventDefault();
-    shown = { x: event.clientX, y: event.clientY, box: event.target };
+    const node = copyableOf(event.target);
+    if (node !== undefined) {
+      event.preventDefault();
+      shown = { x: event.clientX, y: event.clientY, node };
+    }
   }
 
   const items = $derived.by((): ContextEntry<TextAction>[] => {
     if (shown === undefined) {
       return [];
     }
-    const { box } = shown;
+    const { box, node } = shown;
+    if (box === undefined) {
+      return [
+        { id: 'copy', label: t('menu.copy'), icon: 'copy', tone: 'blue', keys: 'Ctrl+C' },
+        {
+          id: 'selectAll',
+          label: t('menu.selectAll'),
+          icon: 'list-selection',
+          tone: 'purple',
+          keys: 'Ctrl+A',
+          separated: true,
+          disabled: node.textContent === '',
+        },
+      ];
+    }
     const editable = isEditable(box);
     const selection = selectedText(box) !== '';
     return [
@@ -49,6 +73,13 @@
   });
 
   async function choose(action: TextAction): Promise<void> {
+    const node = shown?.node;
+    if (node !== undefined) {
+      if (action === 'copy' || action === 'selectAll') {
+        runCopyAction(node, action, { copy: onCopy });
+      }
+      return;
+    }
     const box = shown?.box;
     if (box === undefined) {
       return;

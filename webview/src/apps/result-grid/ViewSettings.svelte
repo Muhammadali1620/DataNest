@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '../../components/Icon.svelte';
+  import { anchorBelow } from '../../lib/anchor';
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import {
@@ -35,7 +36,7 @@
   }
 </script>
 
-<div class="popover fade-in" role="dialog" aria-label={t('view.title')} data-testid="view-settings" tabindex="-1">
+<div use:anchorBelow class="popover fade-in" role="dialog" aria-label={t('view.title')} data-testid="view-settings" tabindex="-1">
   <div class="head">
     <Icon name="eye" size={16} />
     <h2>{t('view.title')}</h2>

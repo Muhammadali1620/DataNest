@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import Icon from '../../components/Icon.svelte';
   import {
     FILTER_OPERATORS,
     MAX_FILTER_CONDITIONS,
@@ -144,21 +145,21 @@
       {/if}
       <button
         type="button"
-        class="icon"
+        class="icon-button"
         aria-label={t('filter.removeCondition')}
         title={t('filter.removeCondition')}
         onclick={() => {
           draft = removeCondition(draft, condition.id);
         }}
       >
-        ×
+        <Icon name="close" size={14} />
       </button>
     </div>
   {/each}
   <div class="row">
     <button
       type="button"
-      class="action"
+      class="button secondary"
       data-testid="filter-add"
       disabled={draft.conditions.length >= MAX_FILTER_CONDITIONS}
       onclick={() => {
@@ -180,7 +181,7 @@
     />
     <button
       type="button"
-      class="primary"
+      class="button"
       data-testid="filter-apply"
       disabled={!canApply}
       onclick={apply}
@@ -189,7 +190,7 @@
     </button>
     <button
       type="button"
-      class="action"
+      class="button secondary"
       data-testid="filter-clear"
       disabled={busy || (!hasAnything && applied === undefined)}
       onclick={clear}
@@ -204,27 +205,15 @@
     display: flex;
     flex: none;
     flex-direction: column;
-    gap: 4px;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--vscode-panel-border);
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--dn-divider);
   }
 
   .row {
     display: flex;
     gap: 6px;
     align-items: center;
-  }
-
-  .control {
-    padding: 2px 4px;
-    color: var(--vscode-input-foreground);
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, transparent);
-    font: inherit;
-  }
-
-  .control:focus {
-    outline: 1px solid var(--vscode-focusBorder);
   }
 
   .control.incomplete {
@@ -240,18 +229,29 @@
   .join {
     flex: none;
     width: 52px;
-    padding: 2px 0;
-    color: var(--dn-muted);
-    background: transparent;
-    border: 1px solid var(--dn-border);
-    border-radius: 12px;
+    padding: 4px 0;
+    color: var(--vscode-foreground);
+    background: color-mix(in srgb, var(--dn-accent) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dn-accent) 45%, transparent);
+    border-radius: 14px;
     font: inherit;
     font-size: var(--dn-font-small);
     text-align: center;
     cursor: pointer;
   }
 
+  .join:hover:not(.first) {
+    background: color-mix(in srgb, var(--dn-accent) 28%, transparent);
+  }
+
+  .join:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 1px;
+  }
+
   .join.first {
+    color: var(--dn-muted);
+    background: transparent;
     border-color: transparent;
     cursor: default;
   }
@@ -268,27 +268,4 @@
     font-family: var(--vscode-editor-font-family, monospace);
   }
 
-  .icon,
-  .action {
-    padding: 2px 10px;
-    color: var(--vscode-button-secondaryForeground);
-    background: var(--vscode-button-secondaryBackground);
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-  }
-
-  .primary {
-    padding: 2px 10px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
 </style>

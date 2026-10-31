@@ -3,7 +3,13 @@
 // The panel only wires this to a webview.
 
 import { errorMessage } from '../../core/errors';
-import type { CheckConstraint, ObjectRef, ObjectScope, TableRef } from '../../core/model/objects';
+import type {
+  CheckConstraint,
+  ObjectRef,
+  ObjectScope,
+  TableRef,
+  TableStructure,
+} from '../../core/model/objects';
 import type { AlterNote, Driver, MetadataReader } from '../../drivers/driver';
 import type {
   DesignPreview,
@@ -14,9 +20,8 @@ import type {
 import { designProblems, newTableDesign, type TableDesign } from '../../shared/table-design';
 import { actionScript, actionSql, type SchemaAction } from '../../services/schema-actions';
 import {
-  addCheckSql,
+  checkPlanFor,
   checksSupported,
-  dropCheckSql,
   triggerRef,
   triggersSupported,
   triggerTemplate,
@@ -69,6 +74,8 @@ export class TableDesignerModel {
   private table: string | undefined;
   private loaded: LoadedTable | undefined;
   private checkList: readonly CheckConstraint[] = [];
+  /** As last read: SQLite changes a check from the table's own CREATE text. */
+  private structure: TableStructure | undefined;
 
   constructor(private readonly deps: TableDesignerModelDeps) {
     this.table = deps.table;
@@ -188,18 +195,28 @@ export class TableDesignerModel {
   ): Promise<{ outcome: ActionOutcome; error?: string }> {
     const { driver, texts } = this.deps;
     const table = this.ref();
-    let statement: string;
+    if (this.table !== undefined && driver.dialect.ddl.changeCheck !== undefined) {
+      // A rebuild starts from the stored CREATE text: it must be what is there now.
+      await this.load(this.table);
+    }
+    let plan: { statements: string[]; recovery: string[] };
     try {
-      statement =
-        action === 'add'
-          ? addCheckSql(driver.dialect, table, name, expression ?? '')
-          : dropCheckSql(driver.dialect, table, name);
+      plan = checkPlanFor(driver.dialect, table, this.structure, {
+        action,
+        name,
+        ...(expression === undefined ? {} : { expression }),
+      });
     } catch (error) {
       return { outcome: 'unsupported', error: errorMessage(error) };
     }
     const outcome = await this.deps.perform(
       this.deps.connectionId,
-      { kind: 'runStatements', scope: this.deps.scope, statements: [statement] },
+      {
+        kind: 'runStatements',
+        scope: this.deps.scope,
+        statements: plan.statements,
+        ...(plan.recovery.length === 0 ? {} : { recovery: plan.recovery }),
+      },
       texts.alterTable(table.name),
       texts.apply,
     );
@@ -316,6 +333,7 @@ export class TableDesignerModel {
     const ref = { ...this.deps.scope, name: table };
     const structure = await metadata.describeTable(ref);
     this.checkList = structure.checks ?? [];
+    this.structure = structure;
     this.loaded = designFromStructure(ref, structure);
     return this.loaded;
   }

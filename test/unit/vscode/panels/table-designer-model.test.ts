@@ -53,9 +53,10 @@ function harness(
     table?: string;
     outcome?: PerformOutcome;
     tab?: TableTab;
+    structure?: TableStructure;
   } = {},
 ) {
-  let structure: TableStructure | undefined = ORDERS;
+  let structure: TableStructure | undefined = options.structure ?? ORDERS;
   const metadata = {
     listTables: vi.fn((scope: ObjectScope) =>
       Promise.resolve(
@@ -362,7 +363,7 @@ describe('TableDesignerModel: the table properties page', () => {
     ).toMatchObject({ triggers: true, checks: true });
     expect((await harness('sqlite', { table: 'orders' }).instance.state()).features).toMatchObject({
       triggers: true,
-      checks: false,
+      checks: true,
     });
     expect(
       (await harness('clickhouse', { table: 'orders' }).instance.state()).features,
@@ -467,6 +468,35 @@ describe('TableDesignerModel: the table properties page', () => {
       },
       'alter orders?',
       'Apply',
+    );
+  });
+
+  it('changes a check of a SQLite table by rebuilding it from its own CREATE text', async () => {
+    const { instance, perform } = harness('sqlite', { table: 'orders' });
+    await instance.checks();
+    // The structure of the fake table has no CREATE text: SQLite reads it from there.
+    expect(await instance.checkAction('drop', 'ck_note', undefined)).toMatchObject({
+      outcome: 'unsupported',
+    });
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('runs the rebuild of a SQLite check with the recovery that undoes a failed one', async () => {
+    const { instance, perform } = harness('sqlite', {
+      table: 'orders',
+      structure: {
+        ...ORDERS,
+        checks: [{ name: 'pos', expression: '(id > 0)' }],
+        createSql:
+          'CREATE TABLE orders (id INTEGER PRIMARY KEY, note TEXT, CONSTRAINT pos CHECK (id > 0))',
+      },
+    });
+    expect(await instance.checkAction('drop', 'pos', undefined)).toEqual({ outcome: 'ran' });
+    const action = perform.mock.calls.at(-1)?.[1];
+    expect(action).toMatchObject({ kind: 'runStatements' });
+    expect(action?.kind === 'runStatements' ? action.recovery : []).toContain('ROLLBACK');
+    expect(action?.kind === 'runStatements' ? action.statements : []).toContain(
+      'DROP TABLE "orders"',
     );
   });
 

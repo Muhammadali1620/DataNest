@@ -1076,5 +1076,10 @@
   "A file cannot have this name: it has a character that file names cannot hold, or it is \".\" or \"..\"": "Файл не может так называться: в имени есть недопустимый символ, либо это «.» или «..»",
   "A saved query named \"{0}\" already exists": "Сохранённый запрос «{0}» уже есть",
   "The column \"{0}\" cannot be moved from here": "Столбец «{0}» отсюда переместить нельзя",
-  "This connection has no accounts": "У этого подключения нет учётных записей"
+  "This connection has no accounts": "У этого подключения нет учётных записей",
+  "The check {0} does not exist": "Проверки {0} нет",
+  "The check {0} exists already": "Проверка {0} уже есть",
+  "Cannot read the definition of this table": "Не удаётся прочитать определение этой таблицы",
+  "Open the table again to change its checks": "Откройте таблицу заново, чтобы изменить её проверки",
+  "This account is not allowed to read the list of accounts (mysql.user)": "Этой учётной записи нельзя читать список учётных записей (mysql.user)"
 }

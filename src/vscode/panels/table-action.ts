@@ -19,7 +19,11 @@ const COMMANDS: Readonly<Record<TableAction, string>> = {
 };
 
 /** The tree node of the table a table view shows, as the tree commands expect it. */
-export function tableNodeOf(view: { target: SessionTarget; table: TableRef }): TreeNode {
+export function tableNodeOf(view: {
+  target: SessionTarget;
+  table: TableRef;
+  kind?: 'table' | 'view';
+}): TreeNode {
   const database = view.table.database ?? view.target.database;
   return {
     kind: 'table',
@@ -29,7 +33,7 @@ export function tableNodeOf(view: { target: SessionTarget; table: TableRef }): T
       ...(view.table.schema === undefined ? {} : { schema: view.table.schema }),
     },
     name: view.table.name,
-    tableKind: 'table',
+    tableKind: view.kind ?? 'table',
   };
 }
 
@@ -41,7 +45,7 @@ export interface TableActionCall {
 /** The command to run for a bar action; the history is filtered to the table instead. */
 export function tableActionCall(
   action: TableAction,
-  view: { target: SessionTarget; table: TableRef },
+  view: { target: SessionTarget; table: TableRef; kind?: 'table' | 'view' },
 ): TableActionCall {
   if (action === 'history') {
     return {
@@ -49,5 +53,8 @@ export function tableActionCall(
       args: [{ connectionId: view.target.connectionId, table: view.table.name }],
     };
   }
-  return { command: COMMANDS[action], args: [tableNodeOf(view)] };
+  // A view's "Properties" is its definition editor; the designer is for tables.
+  const command =
+    action === 'properties' && view.kind === 'view' ? COMMAND_IDS.editObject : COMMANDS[action];
+  return { command, args: [tableNodeOf(view)] };
 }

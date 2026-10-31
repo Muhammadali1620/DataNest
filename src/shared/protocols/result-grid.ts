@@ -143,6 +143,8 @@ const stateSchema = object({
   activeId: optional(resultId),
   /** True while a statement of this document is still running. */
   running: boolean(),
+  /** `view` when the page shows a database view: it has no table-only tools. */
+  tableKind: optional(literal('view')),
 });
 
 const windowSchema = object({

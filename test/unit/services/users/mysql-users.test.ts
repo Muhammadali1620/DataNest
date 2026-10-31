@@ -38,6 +38,17 @@ describe('mysqlUserAdmin: reading', () => {
     ]);
   });
 
+  it('says the account may not read mysql.user instead of sending an empty column list', async () => {
+    const { session, executed } = scriptedSession((sql) => {
+      if (sql.includes('information_schema.COLUMNS')) {
+        return records([]);
+      }
+      throw new Error(`unexpected statement: ${sql}`);
+    });
+    await expect(admin.listUsers(session)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(executed).toHaveLength(1);
+  });
+
   it('reads MariaDB roles by their empty host and locks from global_priv', async () => {
     const { session, executed } = scriptedSession((sql) => {
       if (sql.includes('information_schema.COLUMNS')) {

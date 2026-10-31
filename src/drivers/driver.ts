@@ -104,6 +104,19 @@ export interface SchemaDdl {
     after: TableDesign,
     background: TableBackground,
   ): AlterPlan;
+  /**
+   * Adds or drops one CHECK where the database cannot do it with a plain ALTER TABLE
+   * (SQLite rebuilds the table). Absent: `ADD/DROP CONSTRAINT` is used.
+   */
+  changeCheck?(
+    table: TableRef,
+    structure: TableStructure,
+    change: {
+      readonly action: 'add' | 'drop';
+      readonly name: string;
+      readonly expression?: string;
+    },
+  ): AlterPlan;
   dropRelation(table: TableRef, kind: RelationKind): string;
   /** Renames within the same database or schema; `newName` is a bare name. */
   renameRelation(table: TableRef, kind: RelationKind, newName: string): string;

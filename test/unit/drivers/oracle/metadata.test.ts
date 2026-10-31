@@ -340,6 +340,24 @@ describe('OracleMetadata.describeTable', () => {
     expect(structure.primaryKeyName).toBe('PK_CUSTOMERS');
   });
 
+  it('lists the checks of the table, without the NOT NULL of its columns', async () => {
+    const { reader, asked } = byPhrase({
+      ...dictionary,
+      "constraint_type = 'C'": [
+        ['SYS_C0011', '"ID" IS NOT NULL'],
+        ['CK_TOTAL', 'TOTAL > 0'],
+      ],
+    });
+    const structure = await reader.describeTable(customers);
+    expect(structure.checks).toEqual([{ name: 'CK_TOTAL', expression: '(TOTAL > 0)' }]);
+    expect(asked.some((call) => call.sql.includes("constraint_type = 'C'"))).toBe(true);
+  });
+
+  it('has no checks when the dictionary lists none', async () => {
+    const { reader } = byPhrase(dictionary);
+    expect((await reader.describeTable(customers)).checks).toEqual([]);
+  });
+
   it('leaves out a missing comment, key name and primary key', async () => {
     const { reader } = byPhrase({
       ...dictionary,

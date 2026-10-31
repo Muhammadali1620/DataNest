@@ -33,6 +33,15 @@ into `CREATE TABLE` or `ALTER TABLE` statements for the connection's dialect and
 before anything runs. Where a database cannot alter something in place (SQLite), the
 designer rebuilds the table and keeps its rows.
 
+The **Checks** tab of a stored table lists its `CHECK` constraints with their conditions
+(PostgreSQL, MySQL and MariaDB, SQL Server, Oracle and SQLite) and adds or drops one.
+Oracle leaves out the `NOT NULL` of columns, which it counts as checks. SQLite has no
+`ALTER` for a constraint: a check is read from the table's own `CREATE TABLE` text, one
+without a name is called `unnamed_check_1`, `unnamed_check_2`… in order, and adding or
+dropping one rebuilds the table (a copy, the rows copied over, the old table dropped, the
+copy renamed, indexes and triggers created again). The whole script is shown first and
+rolled back if a row breaks the new condition.
+
 ## Other actions
 
 - **Duplicate Table…** makes a copy beside the table under a new name — structure and rows,

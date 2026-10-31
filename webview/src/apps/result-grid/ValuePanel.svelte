@@ -296,7 +296,7 @@
         onclick={copy}
       />
     </div>
-    <pre class="text" class:nowrap={!wrap} data-testid="value-text">{#if tokens !== undefined}{#each tokens as token, index (index)}<span class={token.type}>{token.text}</span>{/each}{:else if markupTokens !== undefined}{#each markupTokens as token, index (index)}<span class={`x-${token.type}`}>{token.text}</span>{/each}{:else}{shownText}{/if}</pre>
+    <pre class="text" class:nowrap={!wrap} data-testid="value-text" data-copy-menu>{#if tokens !== undefined}{#each tokens as token, index (index)}<span class={token.type}>{token.text}</span>{/each}{:else if markupTokens !== undefined}{#each markupTokens as token, index (index)}<span class={`x-${token.type}`}>{token.text}</span>{/each}{:else}{shownText}{/if}</pre>
   {:else}
     <div class="bar">
       <span class="meta" data-testid="value-meta">
@@ -336,7 +336,7 @@
         <img src={imageSource} alt={t('value.imageAlt')} data-testid="value-image" />
       </div>
     {:else}
-      <pre class="hex" data-testid="value-hex">{#each dump as row (row.offset)}<span class="offset">{row.offset}</span>  {row.hex}  <span class="ascii">{row.ascii}</span>
+      <pre class="hex" data-testid="value-hex" data-copy-menu>{#each dump as row (row.offset)}<span class="offset">{row.offset}</span>  {row.hex}  <span class="ascii">{row.ascii}</span>
 {/each}</pre>
       {#if pages > 1}
         <div class="bar">

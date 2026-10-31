@@ -11,6 +11,7 @@ import type { ColumnDesign, TableBackground, TableDesign } from '../../shared/ta
 import { diffTables, isEmptyDiff, type TableDiff } from '../../shared/table-diff';
 import { type AlterPlan, EMPTY_PLAN } from '../driver';
 import { columnSql, createIndexSql } from '../common/design-sql';
+import { isUnnamedSqliteCheck } from './checks';
 import { sqliteCreateTable } from './create-table';
 import { quoteIdentifier, quoteTable } from './quote';
 import { msg } from '../../core/user-message';
@@ -54,6 +55,46 @@ export function renameColumnsIn(sql: string, renames: ReadonlyMap<string, string
     }
   }
   return out + sql.slice(from);
+}
+
+/** Lower-cased names of the identifiers an expression mentions. */
+function wordsIn(sql: string): Set<string> {
+  const found = new Set<string>();
+  for (const token of tokenize(sql, syntaxOf('sqlite'))) {
+    if (token.kind === 'word' || token.kind === 'quoted-identifier') {
+      found.add(unquote(textOf(sql, token)).toLowerCase());
+    }
+  }
+  return found;
+}
+
+/**
+ * The CHECKs a rebuild writes back: each one with its new column names, or left out
+ * (with a comment for the preview) when it reads a column the change drops.
+ */
+function carriedChecks(
+  background: TableBackground,
+  dropped: ReadonlySet<string>,
+  renames: ReadonlyMap<string, string>,
+): { constraints: string[]; comments: string[] } {
+  const constraints: string[] = [];
+  const comments: string[] = [];
+  for (const check of background.checks ?? []) {
+    const used = wordsIn(check.expression);
+    const gone = [...dropped].find((name) => used.has(name));
+    if (gone !== undefined) {
+      const label = check.name.replace(/\s+/g, ' ');
+      comments.push(`-- CHECK ${label} is dropped with the column ${gone}`);
+      continue;
+    }
+    const expression = renameColumnsIn(check.expression, renames);
+    constraints.push(
+      isUnnamedSqliteCheck(check.name)
+        ? `CHECK ${expression}`
+        : `CONSTRAINT ${quoteIdentifier(check.name)} CHECK ${expression}`,
+    );
+  }
+  return { constraints, comments };
 }
 
 function needsRebuild(diff: TableDiff): boolean {
@@ -145,13 +186,29 @@ function rebuild(
   const temporary = `${after.name.trim()}__datanest_rebuild`;
   const scope = table.database === undefined ? {} : { database: table.database };
   const target = quoteTable({ ...scope, name: old });
-  const [create] = sqliteCreateTable(
-    { ...scope, name: temporary },
-    { ...after, name: temporary, indexes: [] },
-  );
   const keptIds = new Set(before.columns.map((column) => column.id));
   const kept = after.columns.filter((column) => keptIds.has(column.id));
   const renamed = diff.changed.filter((change) => change.renamed);
+  // What the designer does not edit comes back as it was written, with new column names.
+  const names = new Map(
+    renamed.map((change) => [
+      (change.before.original ?? change.before.name).toLowerCase(),
+      change.after.name.trim(),
+    ]),
+  );
+  const dropped = new Set(
+    diff.dropped.map((column) => (column.original ?? column.name).trim().toLowerCase()),
+  );
+  const carried = carriedChecks(background, dropped, names);
+  const [create] = sqliteCreateTable(
+    { ...scope, name: temporary },
+    { ...after, name: temporary, indexes: [] },
+    {
+      constraints: carried.constraints,
+      comments: carried.comments,
+      ...(background.tableOptions === undefined ? {} : { options: background.tableOptions }),
+    },
+  );
   const statements = [
     // Without this, dropping the old table would cascade into other tables' rows.
     'PRAGMA foreign_keys = OFF',
@@ -187,13 +244,6 @@ function rebuild(
       ),
     );
   }
-  // What the designer does not edit comes back as it was written, with new column names.
-  const names = new Map(
-    renamed.map((change) => [
-      (change.before.original ?? change.before.name).toLowerCase(),
-      change.after.name.trim(),
-    ]),
-  );
   statements.push(...background.rebuildSql.map((sql) => renameColumnsIn(sql, names)));
   if (diff.renamed) {
     statements.push(`ALTER TABLE ${target} RENAME TO ${quoteIdentifier(after.name.trim())}`);

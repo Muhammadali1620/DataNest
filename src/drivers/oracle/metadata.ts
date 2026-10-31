@@ -22,6 +22,7 @@ import { splitStatements } from '../../core/sql/split';
 import type { MetadataReader, TableDump, TypeDump } from '../driver';
 import { groupForeignKeys, groupIndexes, groupKeys } from '../common/keys';
 import { msg } from '../../core/user-message';
+import { oracleChecks } from './checks';
 
 /** Runs one dictionary query with `:name` binds and returns its rows. */
 export type OracleRowReader = (sql: string, binds?: Record<string, string>) => Promise<unknown[][]>;
@@ -351,6 +352,14 @@ export class OracleMetadata implements MetadataReader {
       primaryKey: indexes.find((index) => index.primary)?.columns ?? [],
       indexes,
       foreignKeys: await this.listForeignKeys(table),
+      checks: oracleChecks(
+        await this.read(
+          `SELECT constraint_name, search_condition FROM all_constraints
+           WHERE owner = ${OWNER} AND table_name = :name AND constraint_type = 'C'
+           ORDER BY constraint_name`,
+          { owner: owner(table), name: table.name },
+        ),
+      ),
       ...(comment === undefined ? {} : { comment }),
       ...(primaryKeyName === undefined ? {} : { primaryKeyName }),
     };

@@ -5,6 +5,7 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { SchemaDdl } from '../driver';
 import { sqliteAlterTable } from './alter';
+import { sqliteChangeCheck } from './checks';
 import { sqliteCreateTable } from './create-table';
 import { sqliteReplaceObject } from './replace';
 import { quoteIdentifier, quoteTable } from './quote';
@@ -25,6 +26,7 @@ export const sqliteDdl: SchemaDdl = {
   alterTable: (table, before, after, background) =>
     sqliteAlterTable(table, before, after, background),
   createTable: sqliteCreateTable,
+  changeCheck: sqliteChangeCheck,
 
   dropRelation: (table, kind) => `DROP ${kind === 'table' ? 'TABLE' : 'VIEW'} ${quoteTable(table)}`,
   renameRelation: (table, kind, newName) => {

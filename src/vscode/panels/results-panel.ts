@@ -74,7 +74,7 @@ export interface ResultsPanelDeps {
   /** The table a document's table view shows, if it is one. */
   readonly tableOf?: (
     documentUri: string,
-  ) => { target: SessionTarget; table: TableRef } | undefined;
+  ) => { target: SessionTarget; table: TableRef; kind?: 'table' | 'view' } | undefined;
   /** Opens a chart of a result (V8.7). */
   readonly chartResult?: (resultId: string) => void;
   /** Production and read-only flags of a connection, checked before saving edits. */
@@ -480,6 +480,15 @@ export class ResultsPanel implements vscode.Disposable {
       this.deps.results.successorOf(id),
     );
     const state = buildState(summaries, followed, this.deps.runner.isRunning(this.documentUri));
+    const shown = this.deps.tableOf?.(this.documentUri);
+    if (shown?.kind === 'view') {
+      state.tableKind = 'view';
+    }
+    // Several tables side by side must not all be "Results".
+    const title = shown === undefined ? vscode.l10n.t('Results') : shown.table.name;
+    if (this.panel.title !== title) {
+      this.panel.title = title;
+    }
     this.activeId = state.activeId;
     this.rpc.emit('state', state);
   }

@@ -52,6 +52,8 @@ export type SchemaAction =
       readonly kind: 'runStatements';
       readonly scope: ObjectScope;
       readonly statements: readonly string[];
+      /** Run, ignoring failures, when one of the statements fails. */
+      readonly recovery?: readonly string[];
     };
 
 /** The statements of an action; `unsupported` when this database has no such thing. */
@@ -90,6 +92,9 @@ function alterPlan(action: Extract<SchemaAction, { kind: 'alterTable' }>, ddl: S
 export function actionRecovery(action: SchemaAction, ddl: SchemaDdl): readonly string[] {
   if (action.kind === 'alterTable') {
     return alterPlan(action, ddl).recovery;
+  }
+  if (action.kind === 'runStatements') {
+    return action.recovery ?? [];
   }
   return action.kind === 'replaceObject' ? replacePlan(action, ddl).recovery : [];
 }

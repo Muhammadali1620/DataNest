@@ -281,3 +281,35 @@ describe('designFromStructure: B-trees of YugabyteDB and CockroachDB (V6.5)', ()
     expect(background.fixedIndexes.map((index) => index.name)).toEqual(['ix_inv']);
   });
 });
+
+describe('designFromStructure: what a SQLite rebuild carries', () => {
+  const base: TableStructure = {
+    columns: [
+      { name: 'id', dataType: 'integer', nullable: false, autoIncrement: false, generated: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [],
+    foreignKeys: [],
+    checks: [{ name: 'unnamed_check_1', expression: '(id > 0)' }],
+  };
+
+  it('keeps the checks and the table options of a SQLite table', () => {
+    const { background } = designFromStructure(
+      { name: 't' },
+      {
+        ...base,
+        createSql: 'CREATE TABLE t (id INTEGER PRIMARY KEY CHECK (id > 0)) STRICT',
+        tableOptions: 'STRICT',
+      },
+    );
+    expect(background.checks).toEqual([{ name: 'unnamed_check_1', expression: '(id > 0)' }]);
+    expect(background.tableOptions).toBe('STRICT');
+  });
+
+  it('leaves them out for other databases and for a table without any', () => {
+    expect(designFromStructure({ name: 't' }, base).background.checks).toBeUndefined();
+    const plain = designFromStructure({ name: 't' }, { ...base, checks: [], createSql: 'x' });
+    expect(plain.background.checks).toBeUndefined();
+    expect(plain.background.tableOptions).toBeUndefined();
+  });
+});

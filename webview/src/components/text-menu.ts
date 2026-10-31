@@ -85,3 +85,42 @@ export function runTextAction(
       break;
   }
 }
+
+/** Attribute that marks read-only text (a value shown in a `<pre>`) as having the copy menu. */
+export const COPY_MENU_ATTRIBUTE = 'data-copy-menu';
+
+/** The read-only text block a right click landed in, if it is one that has the copy menu. */
+export function copyableOf(target: EventTarget | null): HTMLElement | undefined {
+  if (!(target instanceof Element)) {
+    return undefined;
+  }
+  const found = target.closest(`[${COPY_MENU_ATTRIBUTE}]`);
+  return found instanceof HTMLElement ? found : undefined;
+}
+
+/** The part of a text block the person selected; empty when the selection is elsewhere. */
+export function selectedIn(node: HTMLElement): string {
+  const selection = document.getSelection();
+  if (selection === null || selection.isCollapsed || !node.contains(selection.anchorNode)) {
+    return '';
+  }
+  return selection.toString();
+}
+
+/** Copy takes the selection, or the whole text when nothing is selected; select-all marks it. */
+export function runCopyAction(
+  node: HTMLElement,
+  action: 'copy' | 'selectAll',
+  io: { copy: (text: string) => void },
+): void {
+  if (action === 'copy') {
+    const selected = selectedIn(node);
+    io.copy(selected === '' ? node.textContent : selected);
+    return;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  const selection = document.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}

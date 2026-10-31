@@ -3,7 +3,14 @@
 // above a request sends it; its answer opens beside the editor.
 
 import * as vscode from 'vscode';
-import { requestAt, splitRequests } from '../../core/elastic/requests';
+import {
+  type ParsedRequest,
+  parseRequest,
+  requestAt,
+  RequestSyntaxError,
+  splitRequests,
+} from '../../core/elastic/requests';
+import { curlCommand } from '../../services/elasticsearch/curl';
 import { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
 import { resultState } from '../../services/elasticsearch/result-view';
@@ -173,6 +180,46 @@ export class ElasticEditors implements vscode.Disposable, vscode.CodeLensProvide
       { placeHolder: vscode.l10n.t('Pick an Elasticsearch connection') },
     );
     return chosen?.id;
+  }
+
+  /** "Copy as cURL" (V10.2.7): the request under the cursor, for a shell. */
+  async copyAsCurl(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.languageId !== ELASTIC_LANGUAGE_ID) {
+      return;
+    }
+    const text = editor.document.getText();
+    const found = requestAt(text, editor.document.offsetAt(editor.selection.active));
+    if (found === undefined) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'There is no request here: a request starts with GET, POST, PUT or DELETE and a path',
+        ),
+      );
+      return;
+    }
+    const uri = editor.document.uri.toString();
+    const connectionId = this.bindings.get(uri)?.connectionId ?? (await this.pickConnectionId());
+    const config = connectionId === undefined ? undefined : this.deps.store.get(connectionId);
+    if (config === undefined) {
+      return;
+    }
+    let request: ParsedRequest;
+    try {
+      request = parseRequest(found, text);
+    } catch (error) {
+      if (error instanceof RequestSyntaxError) {
+        void vscode.window.showErrorMessage(error.message);
+        return;
+      }
+      throw error;
+    }
+    await vscode.env.clipboard.writeText(curlCommand(request, config));
+    void vscode.window.showInformationMessage(
+      config.elastic?.auth === 'apiKey'
+        ? vscode.l10n.t('Copied as cURL. Put the API key in ELASTIC_API_KEY before running it.')
+        : vscode.l10n.t('Copied as cURL. curl asks for the password when it runs.'),
+    );
   }
 
   private async run(document: vscode.TextDocument, offset: number): Promise<void> {

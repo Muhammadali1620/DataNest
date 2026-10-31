@@ -597,6 +597,16 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "datanest.mongo.exportCollection",
+        "title": "%commands.mongo.exportCollection.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.mongo.importCollection",
+        "title": "%commands.mongo.importCollection.title%",
+        "category": "DataNest"
+      },
+      {
         "command": "datanest.mongo.newQuery",
         "title": "%commands.mongo.newQuery.title%",
         "category": "DataNest",
@@ -653,6 +663,16 @@
         "title": "%commands.elastic.pickConnection.title%",
         "category": "DataNest",
         "icon": "$(plug)"
+      },
+      {
+        "command": "datanest.elastic.copyAsCurl",
+        "title": "%commands.elastic.copyAsCurl.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.elastic.showSettings",
+        "title": "%commands.elastic.showSettings.title%",
+        "category": "DataNest"
       }
     ],
     "menus": {
@@ -839,6 +859,22 @@
         },
         {
           "command": "datanest.tree.filterTables",
+          "when": "false"
+        },
+        {
+          "command": "datanest.elastic.copyAsCurl",
+          "when": "editorLangId == datanest-es"
+        },
+        {
+          "command": "datanest.elastic.showSettings",
+          "when": "false"
+        },
+        {
+          "command": "datanest.mongo.exportCollection",
+          "when": "false"
+        },
+        {
+          "command": "datanest.mongo.importCollection",
           "when": "false"
         }
       ],
@@ -1354,6 +1390,21 @@
           "command": "datanest.connections.openTerminal",
           "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.redisConnection || viewItem == datanest.redisConnection.connected || viewItem == datanest.projectRedisConnection || viewItem == datanest.projectRedisConnection.connected || viewItem == datanest.mongoConnection || viewItem == datanest.mongoConnection.connected || viewItem == datanest.projectMongoConnection || viewItem == datanest.projectMongoConnection.connected)",
           "group": "0_query@5"
+        },
+        {
+          "command": "datanest.elastic.showSettings",
+          "when": "view == datanest.connections && viewItem == datanest.elasticIndex",
+          "group": "4_structure@2"
+        },
+        {
+          "command": "datanest.mongo.exportCollection",
+          "when": "view == datanest.connections && (viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
+          "group": "7_export@1"
+        },
+        {
+          "command": "datanest.mongo.importCollection",
+          "when": "view == datanest.connections && viewItem == datanest.mongoCollection",
+          "group": "7_export@2"
         }
       ],
       "editor/title": [
@@ -1428,6 +1479,11 @@
           "command": "datanest.query.explainAnalyze",
           "when": "editorLangId == sql",
           "group": "0_datanest@5"
+        },
+        {
+          "command": "datanest.elastic.copyAsCurl",
+          "when": "editorLangId == datanest-es",
+          "group": "datanest@2"
         }
       ],
       "explorer/context": [

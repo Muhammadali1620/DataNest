@@ -171,6 +171,10 @@ export const COMMAND_IDS = {
   elasticRunRequest: 'datanest.elastic.runRequest',
   /** Points an Elasticsearch query at another connection. */
   elasticPickConnection: 'datanest.elastic.pickConnection',
+  elasticCopyAsCurl: 'datanest.elastic.copyAsCurl',
+  elasticShowSettings: 'datanest.elastic.showSettings',
+  mongoExportCollection: 'datanest.mongo.exportCollection',
+  mongoImportCollection: 'datanest.mongo.importCollection',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
 } as const;

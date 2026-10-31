@@ -46,6 +46,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   `sqlcmd`, `redis-cli`, `mongosh`, …), through the tunnel or proxy, the password in its
   environment variable.
 
+- MongoDB **Export Documents…** and **Import Documents…**: canonical Extended JSON, one
+  document per line; files of `mongoexport` load too.
+- Elasticsearch: **Copy as cURL** without secrets, **Show Settings** of an index, and
+  templates of the usual requests in a new query to an index.
+
 ### Changed
 
 - Copying tables between schemas of one database now runs on one session and lets the

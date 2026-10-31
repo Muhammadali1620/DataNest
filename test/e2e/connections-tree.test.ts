@@ -31,6 +31,10 @@ describe('connections view', () => {
       'datanest.data.search',
       'datanest.schema.document',
       'datanest.connections.openTerminal',
+      'datanest.mongo.exportCollection',
+      'datanest.mongo.importCollection',
+      'datanest.elastic.copyAsCurl',
+      'datanest.elastic.showSettings',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }

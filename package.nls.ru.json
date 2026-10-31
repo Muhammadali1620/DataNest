@@ -150,5 +150,9 @@
   "configuration.connections.sync.description": "Передавать список подключений (с папками и настройками) между вашими компьютерами через **Settings Sync** редактора. Пароли не передаются: каждый компьютер хранит свои в защищённом хранилище, введите их один раз на каждом. Пути к файлам SQLite и ключам SSH должны существовать на каждом компьютере.",
   "commands.data.search.title": "Найти данные…",
   "commands.schema.document.title": "Документировать базу…",
-  "commands.connections.openTerminal.title": "Открыть в терминале"
+  "commands.connections.openTerminal.title": "Открыть в терминале",
+  "commands.elastic.copyAsCurl.title": "Копировать как cURL",
+  "commands.elastic.showSettings.title": "Показать настройки",
+  "commands.mongo.exportCollection.title": "Выгрузить документы…",
+  "commands.mongo.importCollection.title": "Загрузить документы…"
 }

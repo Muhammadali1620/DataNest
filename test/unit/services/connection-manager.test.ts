@@ -339,6 +339,50 @@ describe('ConnectionManager', () => {
       });
     });
 
+    it('reaches the server through a proxy with its stored password (V10.2.5)', async () => {
+      const config = await store.add(
+        { ...viaSsh, ssh: undefined, proxy: { kind: 'socks5', host: 'proxy', user: 'me' } },
+        'dbpw',
+        {},
+        { proxyPassword: 'proxypw' },
+      );
+      await manager.acquire('editor:a', { connectionId: config.id });
+      expect(tunnels.acquired[0]?.spec).toMatchObject({
+        hops: [],
+        proxy: { kind: 'socks5', host: 'proxy', port: 1080, user: 'me', password: 'proxypw' },
+      });
+      expect(drivers.driver('mysql').opened[0]).toMatchObject({ host: '127.0.0.1', port: 40_000 });
+    });
+
+    it('tests through a proxy with the password the form typed', async () => {
+      await manager.test(
+        { ...viaSsh, ssh: undefined, proxy: { kind: 'http', host: 'proxy' } },
+        'dbpw',
+        {},
+        undefined,
+        'typed',
+      );
+      expect(tunnels.privates[0]?.spec.proxy).toMatchObject({
+        kind: 'http',
+        port: 8080,
+        password: 'typed',
+      });
+    });
+
+    it('lends the tunnel to a program outside, until it lets go (V10.2.6)', async () => {
+      const config = await store.add(viaSsh);
+      const lease = await manager.leaseEndpoint(config.id);
+      expect(lease.endpoint).toEqual({ host: '127.0.0.1', port: 40_000 });
+      expect(tunnels.acquired).toHaveLength(1);
+      await lease.release();
+      expect(tunnels.released).toHaveLength(1);
+      const direct = await store.add({ ...viaSsh, ssh: undefined, name: 'direct' });
+      const none = await manager.leaseEndpoint(direct.id);
+      expect(none.endpoint).toBeUndefined();
+      await none.release();
+      expect(tunnels.acquired).toHaveLength(1);
+    });
+
     it('asks for one lease per session and gives it back when the session closes', async () => {
       const config = await store.add(viaSsh);
       await manager.acquire('editor:a', { connectionId: config.id });

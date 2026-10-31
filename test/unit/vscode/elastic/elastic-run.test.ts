@@ -1,3 +1,4 @@
+import { parseRequest } from '../../../../src/core/elastic/requests';
 import { describe, expect, it } from 'vitest';
 import { splitRequests } from '../../../../src/core/elastic/requests';
 import type { SafeMode } from '../../../../src/services/safe-mode';
@@ -116,9 +117,27 @@ describe('runElasticRequest (V7.8)', () => {
 
 describe('requestTemplate (V7.8)', () => {
   it('searches the index a query was opened from, or looks at the cluster', () => {
-    expect(requestTemplate('logs 1')).toBe(
-      'GET /logs%201/_search\n{\n  "query": { "match_all": {} },\n  "size": 20\n}\n\nGET /logs%201/_mapping\n',
-    );
+    const template = requestTemplate('logs 1');
+    expect(
+      template.startsWith(
+        '# Search\nGET /logs%201/_search\n{\n  "query": { "match_all": {} },\n  "size": 20\n}\n',
+      ),
+    ).toBe(true);
+    // Templates of the usual requests (V10.2.7), each one a request the editor can send.
+    const requests = splitRequests(template);
+    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+      'GET /logs%201/_search',
+      'GET /logs%201/_count',
+      'GET /logs%201/_search',
+      'POST /logs%201/_doc',
+      'POST /logs%201/_update/ID',
+      'POST /logs%201/_analyze',
+      'GET /logs%201/_mapping',
+      'GET /logs%201/_settings',
+    ]);
+    for (const request of requests) {
+      expect(() => parseRequest(request, template)).not.toThrow();
+    }
     expect(requestTemplate(undefined)).toBe('GET /_cat/indices?v\n\nGET /_cluster/health\n');
   });
 });

@@ -150,5 +150,9 @@
   "configuration.connections.sync.description": "Share your connection list (with its folders and settings) between your computers through the editor's **Settings Sync**. Passwords never travel: each computer keeps its own in its secret storage, so type them once on each. Paths to SQLite files and SSH keys must exist on each computer.",
   "commands.data.search.title": "Find Data…",
   "commands.schema.document.title": "Document Database…",
-  "commands.connections.openTerminal.title": "Open in Terminal"
+  "commands.connections.openTerminal.title": "Open in Terminal",
+  "commands.elastic.copyAsCurl.title": "Copy as cURL",
+  "commands.elastic.showSettings.title": "Show Settings",
+  "commands.mongo.exportCollection.title": "Export Documents…",
+  "commands.mongo.importCollection.title": "Import Documents…"
 }

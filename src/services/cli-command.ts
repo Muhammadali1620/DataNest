@@ -5,7 +5,7 @@
 // or the client asks for it itself.
 
 import { existsSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { posix, win32 } from 'node:path';
 import {
   type ConnectionConfig,
   DEFAULT_PORTS,
@@ -55,12 +55,14 @@ export function findOnPath(
     platform === 'win32'
       ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter((ext) => ext !== '')
       : [''];
-  for (const dir of path.split(platform === 'win32' ? ';' : delimiter)) {
+  // The platform's own rules, not the host's: tests check Windows lookups on Linux.
+  const paths = platform === 'win32' ? win32 : posix;
+  for (const dir of path.split(paths.delimiter)) {
     if (dir === '') {
       continue;
     }
     for (const extension of extensions) {
-      const candidate = join(dir, `${program}${extension}`);
+      const candidate = paths.join(dir, `${program}${extension}`);
       if (exists(candidate)) {
         return candidate;
       }

@@ -10,6 +10,10 @@ import { askText } from '../mongodb/mongo-questions';
 import type { CommandTarget, RefreshableTree } from '../tree/tree-commands';
 import type { ElasticEditors } from './elastic-editors';
 import { elasticTreeCommandHandlers } from './elastic-tree-commands';
+import { formatJson } from '../../core/json/json-tree';
+import { callJson } from '../../services/elasticsearch/catalog';
+import { isTreeNode } from '../tree/nodes';
+import { elasticTreeSession } from '../tree/elastic-tree';
 
 export interface ElasticCommandDeps {
   readonly manager: ConnectionManager;
@@ -24,7 +28,9 @@ type ElasticCommandId = (typeof COMMAND_IDS)[
   | 'elasticNewQuery'
   | 'elasticRunQuery'
   | 'elasticRunRequest'
-  | 'elasticPickConnection'];
+  | 'elasticPickConnection'
+  | 'elasticCopyAsCurl'
+  | 'elasticShowSettings'];
 
 export function elasticCommands(
   deps: ElasticCommandDeps,
@@ -83,6 +89,25 @@ export function elasticCommands(
     },
     [COMMAND_IDS.elasticPickConnection]: async () => {
       await deps.editors.pickConnection();
+    },
+    [COMMAND_IDS.elasticCopyAsCurl]: async () => {
+      await deps.editors.copyAsCurl();
+    },
+    /** The settings of an index (V10.2.7), laid out as JSON in an editor to read. */
+    [COMMAND_IDS.elasticShowSettings]: async (target) => {
+      if (!isTreeNode(target) || target.kind !== 'elasticIndex') {
+        return;
+      }
+      const session = await elasticTreeSession(deps.manager, target.connectionId);
+      const settings = await callJson(session, {
+        method: 'GET',
+        path: `/${encodeURIComponent(target.index.name)}/_settings`,
+      });
+      const document = await vscode.workspace.openTextDocument({
+        language: 'json',
+        content: `${formatJson(settings)}\n`,
+      });
+      await vscode.window.showTextDocument(document, { preview: true });
     },
   };
 }

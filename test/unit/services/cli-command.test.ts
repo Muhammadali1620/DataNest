@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { posix, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CLI_PROGRAMS, cliCommand, findOnPath } from '../../../src/services/cli-command';
 import type { ConnectionConfig } from '../../../src/shared/connection';
@@ -266,22 +266,22 @@ describe('cliCommand', () => {
 
 describe('findOnPath', () => {
   it('finds the first directory that has the program', () => {
-    const present = new Set([join('/opt/bin', 'psql'), join('/usr/bin', 'psql')]);
+    const present = new Set([posix.join('/opt/bin', 'psql'), posix.join('/usr/bin', 'psql')]);
     expect(
       findOnPath('psql', { PATH: ['/bin', '/opt/bin', '/usr/bin'].join(':') }, 'linux', (path) =>
         present.has(path),
       ),
-    ).toBe(join('/opt/bin', 'psql'));
+    ).toBe(posix.join('/opt/bin', 'psql'));
     expect(findOnPath('mysql', { PATH: '/bin' }, 'linux', () => false)).toBeUndefined();
     expect(findOnPath('mysql', {}, 'linux', () => true)).toBeUndefined();
   });
 
   it('tries the extensions of PATHEXT on Windows, and reads Path too', () => {
-    const present = new Set([join('C:\\pg\\bin', 'psql.EXE')]);
+    const present = new Set([win32.join('C:\\pg\\bin', 'psql.EXE')]);
     expect(
       findOnPath('psql', { Path: 'C:\\x;C:\\pg\\bin', PATHEXT: '.COM;.EXE' }, 'win32', (path) =>
         present.has(path),
       ),
-    ).toBe(join('C:\\pg\\bin', 'psql.EXE'));
+    ).toBe(win32.join('C:\\pg\\bin', 'psql.EXE'));
   });
 });

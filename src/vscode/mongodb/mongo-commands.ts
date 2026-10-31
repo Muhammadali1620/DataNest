@@ -16,6 +16,7 @@ import { mongoTreeSession } from '../tree/mongo-tree';
 import type { CommandTarget, RefreshableTree } from '../tree/tree-commands';
 import { askIndex, askNewCollection, askText } from './mongo-questions';
 import { mongoTreeCommandHandlers } from './mongo-tree-commands';
+import { collectionFileCommands } from './collection-file-commands';
 
 export interface MongoCommandDeps {
   readonly extensionUri: vscode.Uri;
@@ -33,7 +34,9 @@ type MongoCommandId = (typeof COMMAND_IDS)[
   | 'mongoDropCollection'
   | 'mongoNewIndex'
   | 'mongoDropIndex'
-  | 'mongoOpenCollection'];
+  | 'mongoOpenCollection'
+  | 'mongoExportCollection'
+  | 'mongoImportCollection'];
 
 export function mongoCommands(
   deps: MongoCommandDeps,
@@ -98,6 +101,11 @@ export function mongoCommands(
       renameView: vscode.l10n.t('A view cannot be renamed: drop it and create it again'),
     },
   });
+  const files = collectionFileCommands({
+    manager: deps.manager,
+    store: deps.store,
+    tree: deps.tree,
+  });
   return {
     [COMMAND_IDS.mongoNewDatabase]: handlers.newDatabase,
     [COMMAND_IDS.mongoDropDatabase]: handlers.dropDatabase,
@@ -112,6 +120,8 @@ export function mongoCommands(
       }
       return undefined;
     },
+    [COMMAND_IDS.mongoExportCollection]: files.exportDocuments,
+    [COMMAND_IDS.mongoImportCollection]: files.importDocuments,
   };
 }
 

@@ -99,5 +99,37 @@ export function requestTemplate(index: string | undefined): string {
     return 'GET /_cat/indices?v\n\nGET /_cluster/health\n';
   }
   const path = `/${encodeURIComponent(index)}`;
-  return `GET ${path}/_search\n{\n  "query": { "match_all": {} },\n  "size": 20\n}\n\nGET ${path}/_mapping\n`;
+  // Templates of what one usually asks an index (V10.2.7); Ctrl+Enter sends the one under
+  // the cursor, the lines starting with # are comments.
+  return [
+    '# Search',
+    `GET ${path}/_search`,
+    '{\n  "query": { "match_all": {} },\n  "size": 20\n}',
+    '',
+    '# How many documents match',
+    `GET ${path}/_count`,
+    '{\n  "query": { "match_all": {} }\n}',
+    '',
+    '# Group by a field (use a keyword field)',
+    `GET ${path}/_search`,
+    '{\n  "size": 0,\n  "aggs": {\n    "by_value": { "terms": { "field": "FIELD.keyword", "size": 10 } }\n  }\n}',
+    '',
+    '# Add a document',
+    `POST ${path}/_doc`,
+    '{\n  "name": "value"\n}',
+    '',
+    '# Change fields of a document',
+    `POST ${path}/_update/ID`,
+    '{\n  "doc": { "name": "new value" }\n}',
+    '',
+    '# How a text is split into words',
+    `POST ${path}/_analyze`,
+    '{\n  "text": "Quick brown fox"\n}',
+    '',
+    '# The mapping and the settings',
+    `GET ${path}/_mapping`,
+    '',
+    `GET ${path}/_settings`,
+    '',
+  ].join('\n');
 }

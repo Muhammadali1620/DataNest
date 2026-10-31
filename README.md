@@ -139,6 +139,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
   with a filter, a sort and a projection, as a table or as text, and editing that never
   overwrites someone else's change; queries in an editor (`find`, `aggregate`, counts,
   writes) run with Ctrl+Enter. Exact BSON types and field order are kept.
+- MongoDB collections export to and import from Extended JSON files; Elasticsearch requests
+  copy as cURL, and a new query to an index starts with templates.
 - Elasticsearch: indices and their mapping fields in the tree; requests written as in a
   console (`GET /products/_search` and a JSON body) sent with Ctrl+Enter, the hits as a
   table and the whole answer as text, 64-bit numbers exact.

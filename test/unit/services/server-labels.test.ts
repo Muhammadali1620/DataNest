@@ -23,6 +23,19 @@ describe('shortVersion', () => {
     ['16.00.1000', '16.00.1000'],
     ['3.45.1', '3.45.1'],
     ['24.3', '24.3'],
+    ['17.11', '17.11'],
+    ['17.11 (Debian 17.11-1.pgdg120+1)', '17.11'],
+    ['8.4.0', '8.4.0'],
+    ['16.0.4125.3', '16.0.4125.3'],
+    ['24.3.2.23', '24.3.2.23'],
+    ['19.0.0.0.0', '19.0.0.0'],
+    ['23.4.0.24.05', '23.4.0.24'],
+    ['7.2.4', '7.2.4'],
+    ['8.0.4', '8.0.4'],
+    ['8.13.0', '8.13.0'],
+    ['8.0.11-TiDB-v7.5.0', '8.0.11'],
+    ['CockroachDB CCL v23.2.0 (x86_64-pc-linux-gnu)', '23.2.0'],
+    ['PostgreSQL 15.19 on x86_64', '15.19'],
   ])('keeps the number of %s', (text, expected) => {
     expect(shortVersion(text)).toBe(expected);
   });
@@ -219,6 +232,25 @@ describe('LabelCache', () => {
     await settle();
     expect(read).toHaveBeenCalledTimes(1);
     expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells what went wrong and reads again after the cache is cleared', async () => {
+    const failed = vi.fn();
+    const cache = new LabelCache<string>(() => undefined, failed);
+    const error = new Error('no rights');
+    let attempts = 0;
+    const read = vi.fn(() =>
+      ++attempts === 1 ? Promise.reject<string>(error) : Promise.resolve('17.11'),
+    );
+    cache.ask('a', read);
+    await settle();
+    expect(failed).toHaveBeenCalledWith('a', error);
+    expect(cache.peek('a')).toBeUndefined();
+    cache.clear();
+    cache.ask('a', read);
+    await settle();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(cache.peek('a')).toBe('17.11');
   });
 
   it('forgets by prefix so only one connection is read again', async () => {

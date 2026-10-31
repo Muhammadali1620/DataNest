@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.2] - 2026-10-31
+
+### Changed
+
+- Store listing: a clearer name and description, more search keywords, a README with
+  screenshots and short summaries in ten languages. No change to the extension itself.
+
 ## [1.6.1] - 2026-10-31
 
 ### Changed

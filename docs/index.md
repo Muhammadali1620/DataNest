@@ -1,9 +1,10 @@
 # DataNest documentation
 
-DataNest is a free, open-source database client for VS Code and its forks (VSCodium,
-Cursor, Windsurf and others). It works with MySQL, MariaDB, PostgreSQL, SQLite, Microsoft
-SQL Server, ClickHouse, Oracle, Redis, MongoDB and Elasticsearch or OpenSearch — with no
-account, no limits and no telemetry.
+DataNest is a free, open-source database client and SQL editor for VS Code and its forks
+(VSCodium, Cursor, Windsurf and others). Browse and edit data, write SQL, design tables and
+see an ER diagram for MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server, Oracle,
+ClickHouse, MongoDB, Redis and Elasticsearch or OpenSearch — with no account, no limits and
+no telemetry.
 
 ## User guide
 

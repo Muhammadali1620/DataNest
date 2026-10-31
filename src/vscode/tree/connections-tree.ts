@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
@@ -82,9 +83,19 @@ export class ConnectionsTreeProvider
   readonly onDidChangeTreeData = this.changed.event;
 
   /** The server version of each connected connection (V11.14); key: the connection id. */
-  private readonly versions = new LabelCache<string>((connectionId) => {
-    this.changed.fire({ kind: 'connection', connectionId });
-  });
+  private readonly versions = new LabelCache<string>(
+    (connectionId) => {
+      // The editor finds the item to redraw by the very object `getChildren` returned.
+      const node = this.connectionNodes.get(connectionId);
+      if (node !== undefined) {
+        this.changed.fire(node);
+      }
+    },
+    (connectionId, error) => {
+      this.deps.logger.debug(`Server version of ${connectionId} not read: ${errorMessage(error)}`);
+    },
+  );
+  private readonly connectionNodes = new Map<string, TreeNode>();
   /** Sizes of databases and schemas; key: connection id, a NUL, the node id. */
   private readonly sizes = new LabelCache<number>((key) => {
     const node = this.sizeNodes.get(key);
@@ -230,6 +241,7 @@ export class ConnectionsTreeProvider
         return item;
       }
       case 'connection':
+        this.connectionNodes.set(node.connectionId, node);
         return this.connectionItem(node.connectionId);
       case 'database': {
         const item = expandable(node, node.database, 'database', TREE_CONTEXT.database);

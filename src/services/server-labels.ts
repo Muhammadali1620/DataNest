@@ -148,13 +148,17 @@ export async function readSizeBytes(
 /**
  * What the tree has learned so far, by key. `ask` starts one read per key and calls
  * `changed` when the answer lands, so the tree redraws just that item; a failed read is
- * remembered as "nothing to show" until the cache is cleared.
+ * passed to `failed` and remembered as "nothing to show" until the cache is cleared (every
+ * refresh and every connection state change clears it, so the next one asks again).
  */
 export class LabelCache<T> {
   private readonly values = new Map<string, T | null>();
   private readonly pending = new Set<string>();
 
-  constructor(private readonly changed: (key: string) => void) {}
+  constructor(
+    private readonly changed: (key: string) => void,
+    private readonly failed?: (key: string, error: unknown) => void,
+  ) {}
 
   /** The answer, undefined while unknown or when the server had none. */
   peek(key: string): T | undefined {
@@ -170,7 +174,10 @@ export class LabelCache<T> {
     void read()
       .then(
         (value) => this.values.set(key, value ?? null),
-        () => this.values.set(key, null),
+        (error: unknown) => {
+          this.failed?.(key, error);
+          this.values.set(key, null);
+        },
       )
       .finally(() => {
         this.pending.delete(key);

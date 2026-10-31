@@ -1,24 +1,89 @@
-# DataNest
+# DataNest — free database client and SQL editor for VS Code
 
+[![Open VSX version](https://img.shields.io/open-vsx/v/datanest/datanest?label=Open%20VSX)](https://open-vsx.org/extension/datanest/datanest)
+[![Open VSX downloads](https://img.shields.io/open-vsx/dt/datanest/datanest)](https://open-vsx.org/extension/datanest/datanest)
 [![CI](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammadali1620/DataNest/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A free, open-source database client for VS Code and its forks — MySQL, MariaDB,
-PostgreSQL, SQLite, Microsoft SQL Server, ClickHouse, Oracle, Redis, MongoDB and
-Elasticsearch, without accounts, limits or telemetry.
+**DataNest is a free, open-source database client for VS Code and its forks (VSCodium, Cursor,
+Windsurf, Antigravity).** Browse and edit data, write SQL, design tables and see an ER diagram
+for **MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server, Oracle, ClickHouse, MongoDB,
+Redis and Elasticsearch** — with no account, no limits and no telemetry.
 
-**Install:** [Open VSX](https://open-vsx.org/extension/datanest/datanest) —
-or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/DataNest/releases).
+![DataNest: database tree, data grid with filters, record panel](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/overview.png)
 
-> **1.0.** Everything planned is in, tested on every supported database and on Linux,
-> Windows and macOS. If something does not work, run **DataNest: Report a Problem…** (or
-> open an [issue](https://github.com/Muhammadali1620/DataNest/issues/new/choose)): the form
-> comes with the versions filled in.
+**Install:** search for **DataNest** in the Extensions view, or open it on
+[Open VSX](https://open-vsx.org/extension/datanest/datanest). A `.vsix` is attached to every
+[release](https://github.com/Muhammadali1620/DataNest/releases).
 
-<!--
-  Screenshots go here before the Marketplace release. They have to be captured by
-  hand in a real editor; see docs/test-plan.md for the walkthrough they come from.
-  Expected files: docs/images/tree.png, docs/images/query.png, docs/images/grid.gif
--->
+## Quick start
+
+1. Open the **DataNest** view in the activity bar and press **New Connection**.
+2. Pick your database (or paste a `postgres://…` / `mysql://…` URL), then **Test connection** and **Save**.
+3. Expand the connection and double-click a table to see its data — or press **New Query** and write SQL.
+
+## In your language
+
+The extension itself is in English and Russian and follows the editor's display language. This
+page is in English; the short summaries below are for everyone else.
+
+- **English** — Free, open-source database client and SQL editor for VS Code.
+- **Русский** — Бесплатный клиент баз данных и SQL-редактор для VS Code с открытым кодом.
+- **O‘zbekcha** — VS Code uchun bepul, ochiq kodli ma’lumotlar bazasi mijozi va SQL muharriri.
+- **中文** — 适用于 VS Code 的免费开源数据库客户端和 SQL 编辑器。
+- **Español** — Cliente de bases de datos y editor SQL gratuito y de código abierto para VS Code.
+- **Türkçe** — VS Code için ücretsiz, açık kaynaklı veritabanı istemcisi ve SQL düzenleyici.
+- **Deutsch** — Kostenloser Open-Source-Datenbankclient und SQL-Editor für VS Code.
+- **Français** — Client de base de données et éditeur SQL gratuits et open source pour VS Code.
+- **Português** — Cliente de banco de dados e editor SQL gratuito e de código aberto para VS Code.
+- **العربية** — عميل قواعد بيانات ومحرر SQL مجاني ومفتوح المصدر لـ VS Code.
+
+## Screenshots
+
+![Connect to any database: MySQL, PostgreSQL, SQLite, SQL Server, MongoDB, Redis](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/connection.png)
+
+**EN** Connect to any database · **RU** Подключение к любой базе данных · **UZ** Istalgan ma’lumotlar bazasiga ulanish · **ZH** 连接任意数据库 · **ES** Conéctate a cualquier base de datos · **TR** Herhangi bir veritabanına bağlanın · **DE** Mit jeder Datenbank verbinden · **FR** Connectez-vous à n’importe quelle base · **PT** Conecte-se a qualquer banco de dados · **AR** اتصل بأي قاعدة بيانات
+
+![Database tree, data grid with AND/OR filters, record panel](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/overview.png)
+
+**EN** Browse tables, filter, edit data · **RU** Таблицы, фильтры, правка данных · **UZ** Jadvallar, filtrlar, ma’lumotlarni tahrirlash · **ZH** 浏览表、筛选并编辑数据 · **ES** Explora tablas, filtra y edita datos · **TR** Tabloları gezin, filtreleyin, düzenleyin · **DE** Tabellen durchsuchen, filtern, bearbeiten · **FR** Parcourir, filtrer et modifier les données · **PT** Navegue, filtre e edite os dados · **AR** تصفح الجداول وصفِّ البيانات وعدّلها
+
+![SQL editor with query results](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/sql.png)
+
+**EN** SQL editor with results · **RU** SQL-редактор и результаты · **UZ** SQL muharriri va natijalar · **ZH** SQL 编辑器与结果 · **ES** Editor SQL con resultados · **TR** SQL düzenleyici ve sonuçlar · **DE** SQL-Editor mit Ergebnissen · **FR** Éditeur SQL et résultats · **PT** Editor SQL com resultados · **AR** محرر SQL مع النتائج
+
+![Table designer: columns, indexes, foreign keys, DDL](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/properties.png)
+
+**EN** Table designer: columns, indexes, keys · **RU** Конструктор таблиц: колонки, индексы, ключи · **UZ** Jadval dizayneri: ustunlar, indekslar, kalitlar · **ZH** 表设计器：列、索引、键 · **ES** Diseñador de tablas: columnas, índices, claves · **TR** Tablo tasarımcısı: sütun, dizin, anahtar · **DE** Tabellen-Designer: Spalten, Indizes, Schlüssel · **FR** Concepteur de tables : colonnes, index, clés · **PT** Designer de tabelas: colunas, índices, chaves · **AR** مصمم الجداول: الأعمدة والفهارس والمفاتيح
+
+![ER diagram of a schema](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/er.png)
+
+**EN** ER diagram of the database · **RU** ER-диаграмма базы данных · **UZ** Ma’lumotlar bazasi ER diagrammasi · **ZH** 数据库 ER 图 · **ES** Diagrama ER de la base de datos · **TR** Veritabanı ER diyagramı · **DE** ER-Diagramm der Datenbank · **FR** Diagramme ER de la base · **PT** Diagrama ER do banco de dados · **AR** مخطط ER لقاعدة البيانات
+
+![Manager: live server dashboard, processes, dump, structure sync](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/dashboard.png)
+
+**EN** Live server dashboard · **RU** Мониторинг сервера в реальном времени · **UZ** Server monitoringi real vaqtda · **ZH** 实时服务器监控 · **ES** Panel del servidor en tiempo real · **TR** Canlı sunucu panosu · **DE** Live-Serverüberwachung · **FR** Tableau de bord du serveur en direct · **PT** Painel do servidor em tempo real · **AR** لوحة مراقبة الخادم المباشرة
+
+![Built-in tools: colours, QR codes, images, network, processes](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/tools.png)
+
+**EN** Built-in tools: colors, QR, images · **RU** Встроенные инструменты: цвета, QR, изображения · **UZ** Ichki vositalar: ranglar, QR, rasmlar · **ZH** 内置工具：颜色、二维码、图片 · **ES** Herramientas: colores, QR, imágenes · **TR** Yerleşik araçlar: renk, QR, görsel · **DE** Werkzeuge: Farben, QR, Bilder · **FR** Outils : couleurs, QR, images · **PT** Ferramentas: cores, QR, imagens · **AR** أدوات مدمجة: الألوان ورمز QR والصور
+
+## Supported databases
+
+| Database | Notes |
+|---|---|
+| MySQL, MariaDB | Tables, designer, SQL, import and export, users and privileges |
+| PostgreSQL | Schemas, roles and privileges, visual query plans, sequences and triggers |
+| SQLite | Opens `.db` files from the Explorer; no server needed |
+| Microsoft SQL Server | 2016 and newer, Azure SQL |
+| Oracle | 12.2 and newer, no Instant Client needed |
+| ClickHouse | Over HTTP, streaming results |
+| MongoDB | Replica sets, `mongodb+srv://`, documents as a table or as text |
+| Redis | One server, Sentinel, cluster; Valkey too |
+| Elasticsearch, OpenSearch | Console-style requests, hits as a table |
+| TiDB, CockroachDB, YugabyteDB, Amazon Aurora | Through the MySQL and PostgreSQL drivers, with presets |
+
+All of them work through SSH tunnels, SOCKS5 and HTTP proxies and TLS where the server supports it.
 
 ## What it does
 
@@ -158,6 +223,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Users and privileges: accounts and roles, grant and revoke on the server, a database, a
   schema or a table, passwords and locking — every change previewed as SQL first.
 - Charts of a query result — lines, bars or a pie — saved as SVG or PNG.
+- A Manager page per connection: a log of your statements, a live server dashboard, the process list, dump to SQL and structure sync.
+- A Tools page: hashes and encodings, random values, network checks (ping, DNS, ports), colours, QR codes (read and create), image crop, resize and compress, an SVG editor and designer, a task manager.
 
 **Safety and history**
 
@@ -211,10 +278,11 @@ Every setting is described in [Settings](docs/guide/settings.md).
 
 ## Privacy
 
-DataNest sends nothing anywhere. There is no telemetry, no account and no cloud
-service: the extension talks only to the databases you configure. Passwords are
-kept in the editor's SecretStorage, and the log masks anything that looks like a
-password or a token.
+DataNest has no telemetry and no account: the extension talks only to the databases you
+configure. The one exception is a check you start yourself on the Tools page — your public
+address, DNS over HTTPS, or compressing an image with TinyPNG — and each of them says which
+server the request goes to before you press the button. Passwords are kept in the editor's
+SecretStorage, and the log masks anything that looks like a password or a token.
 
 ## Requirements
 
@@ -247,4 +315,4 @@ Plan and progress: [ROADMAP.md](ROADMAP.md).
 
 [MIT](LICENSE)
 
-Database names and logos shown next to connections are trademarks of their owners; DataNest is not affiliated with them (see `resources/licenses/brands.txt`).
+Database names and logos shown next to connections are trademarks of their owners, used only to identify the database; DataNest is not affiliated with them (see `resources/licenses/brands.txt`).

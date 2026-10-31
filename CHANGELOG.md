@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-31
+
+DataNest 1.0: everything the most used database extension of the editor offers for working
+with databases — and more — free, with no account and no telemetry. Measured against its
+public feature list ([the checklist](docs/research/v10.1-parity-checklist.md)), the gaps
+are closed: variables in queries, proxies and Unix sockets, editing tables without a key,
+finding data across a database, documenting it, and the database's own command-line client.
+
 ### Added
 
 - Query variables: write `:name` or `${name}` where a value goes, and DataNest asks for it

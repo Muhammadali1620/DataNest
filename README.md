@@ -9,11 +9,10 @@ Elasticsearch, without accounts, limits or telemetry.
 **Install:** [Open VSX](https://open-vsx.org/extension/datanest/datanest) —
 or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/DataNest/releases).
 
-> **Public beta (0.9).** Everything planned for 1.0 is in, and it is tested on every
-> supported database — now it needs real use. If something does not work, run
-> **DataNest: Report a Problem…** (or open an
-> [issue](https://github.com/Muhammadali1620/DataNest/issues/new/choose)): the form comes
-> with the versions filled in.
+> **1.0.** Everything planned is in, tested on every supported database and on Linux,
+> Windows and macOS. If something does not work, run **DataNest: Report a Problem…** (or
+> open an [issue](https://github.com/Muhammadali1620/DataNest/issues/new/choose)): the form
+> comes with the versions filled in.
 
 <!--
   Screenshots go here before the Marketplace release. They have to be captured by

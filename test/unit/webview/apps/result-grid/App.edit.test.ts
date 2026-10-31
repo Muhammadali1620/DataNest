@@ -112,9 +112,10 @@ function cell(row: number, column: number): HTMLElement {
   return found;
 }
 
-const TOOLBAR_MENUS = ['copy-as', 'export-more'];
+/** Lists of the page itself, not cell editors: the page size of a table view. */
+const TOOLBAR_MENUS = ['page-size'];
 
-/** The editor a cell opens; the toolbar's own menu is not it. */
+/** The editor a cell opens; the page's own lists are not it. */
 function queryEditor(): HTMLElement | null {
   return (
     screen

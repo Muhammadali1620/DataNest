@@ -48,10 +48,18 @@ describe('webview build', () => {
   it('puts the shared styles into every app, before its own', () => {
     for (const app of apps) {
       const css = readFileSync(join(tmp.path, `${app}.css`), 'utf8');
-      // base.css: the theme colours on body and the screen-reader-only class.
-      expect(css, app).toMatch(/^:root\{color-scheme:light dark\}body\{/);
+      // base.css: the design tokens, the screen-reader-only class, the icon font.
+      expect(css, app).toMatch(/^:root\{color-scheme:light dark;--dn-/);
       expect(css, app).toContain('.sr-only{');
+      expect(css, app).toMatch(/@font-face\{font-family:codicon;[^}]*url\(\.\/codicon\.ttf\)/);
     }
+  });
+
+  it('emits the icon font once, next to the pages that point at it', () => {
+    const fonts = readdirSync(tmp.path, { recursive: true })
+      .map(String)
+      .filter((file) => /\.(ttf|woff2?)$/.test(file));
+    expect(fonts).toEqual(['codicon.ttf']);
   });
 
   it('puts controls.css and shared components into the apps that import them', () => {

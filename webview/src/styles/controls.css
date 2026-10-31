@@ -1,33 +1,145 @@
-/* Form controls shared by the webview apps; every colour comes from the theme. */
+/*
+ * Controls shared by the webview apps (V11.2); every colour comes from the theme, sizes
+ * and corners from the tokens in base.css. They follow the editor's own widgets, so a
+ * page looks like part of the editor in any theme.
+ */
 
+/* Text fields and lists. */
 .control {
-  padding: 4px 6px;
+  min-height: var(--dn-control-height);
+  padding: 3px 8px;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 2px;
+  border: 1px solid var(--vscode-input-border, var(--dn-border));
+  border-radius: var(--dn-radius-s);
   font-family: inherit;
   font-size: inherit;
+  line-height: 18px;
+  transition: border-color var(--dn-duration) var(--dn-ease);
 }
 
+.control::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+  opacity: 1;
+}
+
+.control:focus,
 .control:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -1px;
+  border-color: var(--vscode-focusBorder);
+  outline: none;
+}
+
+.control:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .control[aria-invalid='true'] {
   border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
 }
 
+/* Lists keep the browser's arrow, which follows the theme's light or dark scheme. */
+select.control {
+  padding-right: 4px;
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  background-color: var(--vscode-dropdown-background, var(--vscode-input-background));
+  border-color: var(--vscode-dropdown-border, var(--vscode-input-border, var(--dn-border)));
+  cursor: pointer;
+}
+
+select.control option {
+  color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  background: var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background));
+}
+
+textarea.control {
+  line-height: 1.45;
+  resize: vertical;
+}
+
+/* Check boxes and radio buttons drawn like the editor's own. */
+input[type='checkbox'],
+input[type='radio'] {
+  display: inline-grid;
+  flex: none;
+  place-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  color: var(--vscode-checkbox-foreground, var(--vscode-foreground));
+  background: var(--vscode-checkbox-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-checkbox-border, var(--dn-border));
+  border-radius: 3px;
+  appearance: none;
+  vertical-align: middle;
+  cursor: pointer;
+  transition:
+    background-color var(--dn-duration) var(--dn-ease),
+    border-color var(--dn-duration) var(--dn-ease);
+}
+
+input[type='radio'] {
+  border-radius: 50%;
+}
+
+input[type='checkbox']::before {
+  /* The check mark of the icon font. */
+  content: '\eab2';
+  font: normal normal normal 16px/1 codicon;
+  transform: scale(0);
+  transition: transform var(--dn-duration) var(--dn-ease);
+}
+
+input[type='radio']::before {
+  width: 8px;
+  height: 8px;
+  content: '';
+  background: currentColor;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform var(--dn-duration) var(--dn-ease);
+}
+
+input[type='checkbox']:checked::before,
+input[type='radio']:checked::before {
+  transform: scale(1);
+}
+
+input[type='checkbox']:indeterminate::before {
+  content: '\ea71';
+  transform: scale(1);
+}
+
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+input[type='checkbox']:disabled,
+input[type='radio']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Buttons: primary, secondary and the icon button of toolbars. */
 .button {
-  padding: 5px 14px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--dn-control-height);
+  padding: 4px 12px;
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
+  border-radius: var(--dn-radius-s);
   font-family: inherit;
   font-size: inherit;
+  line-height: 16px;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--dn-duration) var(--dn-ease);
 }
 
 .button:hover:not(:disabled) {
@@ -43,6 +155,11 @@
   background: var(--vscode-button-secondaryHoverBackground);
 }
 
+.button.danger {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+}
+
 .button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -51,4 +168,260 @@
 .button:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
+}
+
+.icon-button {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dn-duration) var(--dn-ease);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--dn-hover);
+}
+
+.icon-button:active:not(:disabled) {
+  background: var(--dn-pressed);
+}
+
+.icon-button[aria-pressed='true'],
+.icon-button[aria-expanded='true'] {
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  background: var(--vscode-inputOption-activeBackground, var(--dn-pressed));
+  border-color: var(--vscode-inputOption-activeBorder, transparent);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.icon-button.labelled {
+  padding: 0 6px;
+}
+
+/* A row of icon buttons with optional separators. */
+.toolbar {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+}
+
+.toolbar-separator {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--dn-divider);
+}
+
+/* Small labels: counts, states, types. */
+.badge {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.badge.outline {
+  color: var(--dn-muted);
+  background: transparent;
+  border-color: var(--dn-border);
+}
+
+.badge.success {
+  color: var(--dn-success);
+  background: transparent;
+  border-color: currentColor;
+}
+
+.badge.warning {
+  color: var(--dn-warning);
+  background: transparent;
+  border-color: currentColor;
+}
+
+.badge.danger {
+  color: var(--dn-danger);
+  background: transparent;
+  border-color: currentColor;
+}
+
+/* A framed group: a section of a form, a panel of settings. */
+.card {
+  padding: var(--dn-gap-l);
+  background: var(--dn-surface);
+  border: 1px solid var(--dn-border);
+  border-radius: var(--dn-radius-l);
+}
+
+/* Messages in the page: a line with an icon and a tinted edge. */
+.notice {
+  display: flex;
+  gap: var(--dn-gap);
+  align-items: flex-start;
+  padding: 8px 12px;
+  color: var(--vscode-foreground);
+  background: var(--vscode-textBlockQuote-background, var(--dn-surface));
+  border: 1px solid var(--dn-border);
+  border-left: 3px solid var(--dn-info);
+  border-radius: var(--dn-radius);
+  line-height: 18px;
+}
+
+.notice.success {
+  border-left-color: var(--dn-success);
+}
+
+.notice.warning {
+  border-left-color: var(--dn-warning);
+}
+
+.notice.error {
+  background: var(--vscode-inputValidation-errorBackground, var(--dn-surface));
+  border-left-color: var(--dn-danger);
+}
+
+.notice > .codicon-glyph {
+  margin-top: 1px;
+}
+
+.notice.success > .codicon-glyph {
+  color: var(--dn-success);
+}
+
+.notice.warning > .codicon-glyph {
+  color: var(--dn-warning);
+}
+
+.notice.error > .codicon-glyph {
+  color: var(--dn-danger);
+}
+
+.notice.info > .codicon-glyph {
+  color: var(--dn-info);
+}
+
+/* Muted helper text under a control or beside a title. */
+.muted {
+  color: var(--dn-muted);
+}
+
+.small {
+  font-size: var(--dn-font-small);
+}
+
+/* A link-looking button. */
+.link-button {
+  padding: 0;
+  color: var(--vscode-textLink-foreground);
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+/* Keyboard keys in help texts. */
+kbd {
+  display: inline-block;
+  padding: 0 4px;
+  color: var(--vscode-keybindingLabel-foreground, var(--vscode-foreground));
+  background: var(--vscode-keybindingLabel-background, transparent);
+  border: 1px solid var(--vscode-keybindingLabel-border, var(--dn-border));
+  border-bottom-color: var(--vscode-keybindingLabel-bottomBorder, var(--dn-border));
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* The thin bar of work in progress, as the editor shows above a view. */
+.progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.progress-bar::before {
+  position: absolute;
+  width: 30%;
+  height: 100%;
+  content: '';
+  background: var(--vscode-progressBar-background, var(--dn-accent));
+  animation: dn-progress 1.4s var(--dn-ease) infinite;
+}
+
+@keyframes dn-progress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar::before {
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Gentle entrance for popups and panels; nothing moves when motion is reduced. */
+@keyframes dn-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fade-in {
+  animation: dn-fade-in var(--dn-duration) var(--dn-ease);
 }

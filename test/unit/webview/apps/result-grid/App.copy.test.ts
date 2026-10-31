@@ -9,6 +9,7 @@ import {
 import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/result-grid/App.svelte';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
+import { chooseFromMenu, menuItem, menuLabels } from '../../../../helpers/webview/menu';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
 type HostPeer = RpcPeer<ResultGridProtocol['host'], ResultGridProtocol['webview']>;
@@ -90,12 +91,10 @@ function cell(row: number, column: number): HTMLElement {
   return found;
 }
 
-const menu = (): HTMLSelectElement => screen.getByTestId('copy-as');
-
 describe('result grid "Copy as"', () => {
   it('copies the whole result when nothing is selected', async () => {
     const { copy } = await open();
-    await fireEvent.change(menu(), { target: { value: 'markdown' } });
+    await chooseFromMenu('copy-as', 'Markdown table');
     await waitFor(() => {
       expect(copy).toHaveBeenCalledWith({ resultId: 'result-1', format: 'markdown' });
     });
@@ -107,7 +106,7 @@ describe('result grid "Copy as"', () => {
     await fireEvent.pointerEnter(cell(1, 2), { buttons: 1 });
     await fireEvent.pointerMove(cell(1, 2), { buttons: 1 });
     await fireEvent.pointerUp(cell(1, 2));
-    await fireEvent.change(menu(), { target: { value: 'json' } });
+    await chooseFromMenu('copy-as', 'JSON');
     await waitFor(() => {
       expect(copy).toHaveBeenCalledOnce();
     });
@@ -117,13 +116,13 @@ describe('result grid "Copy as"', () => {
 
   it('says how many rows were copied', async () => {
     await open();
-    await fireEvent.change(menu(), { target: { value: 'csv' } });
+    await chooseFromMenu('copy-as', 'CSV');
     expect((await screen.findByTestId('copy-note')).textContent).toBe('Copied 2 rows');
   });
 
   it('forgets the note when the selection changes', async () => {
     await open();
-    await fireEvent.change(menu(), { target: { value: 'csv' } });
+    await chooseFromMenu('copy-as', 'CSV');
     await screen.findByTestId('copy-note');
     await fireEvent.pointerDown(cell(2, 0), { button: 0 });
     await waitFor(() => {
@@ -133,7 +132,7 @@ describe('result grid "Copy as"', () => {
 
   it('explains a refusal in words', async () => {
     await open(TAB, { ok: false, error: 'no-key' });
-    await fireEvent.change(menu(), { target: { value: 'insert' } });
+    await chooseFromMenu('copy-as', 'SQL INSERT');
     expect((await screen.findByRole('alert')).textContent).toBe(
       'UPDATE needs a result that is one table with a key',
     );
@@ -141,25 +140,22 @@ describe('result grid "Copy as"', () => {
 
   it('offers UPDATE only for an editable result', async () => {
     const closed = await open();
-    const update = (): HTMLOptionElement => screen.getByRole('option', { name: 'SQL UPDATE' });
-    expect(update().disabled).toBe(true);
+    const update = await menuItem('copy-as', 'SQL UPDATE');
+    expect(update.getAttribute('aria-disabled')).toBe('true');
+    // Picking it anyway does nothing.
+    await fireEvent.click(update);
+    await flush();
     expect(closed.copy).not.toHaveBeenCalled();
   });
 
   it('enables UPDATE when rows can be edited', async () => {
     await open(EDITABLE);
-    expect(screen.getByRole<HTMLOptionElement>('option', { name: 'SQL UPDATE' }).disabled).toBe(
-      false,
-    );
+    expect((await menuItem('copy-as', 'SQL UPDATE')).getAttribute('aria-disabled')).toBeNull();
   });
 
   it('lists every format', async () => {
     await open();
-    const labels = [...menu().querySelectorAll('option')].map((option) =>
-      option.textContent.trim(),
-    );
-    expect(labels).toEqual([
-      'Copy as…',
+    expect(await menuLabels('copy-as')).toEqual([
       'Text with headers',
       'CSV',
       'JSON',

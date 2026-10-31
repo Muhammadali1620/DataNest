@@ -27,6 +27,9 @@
   import TlsEditor from './TlsEditor.svelte';
   import OptionsEditor from './OptionsEditor.svelte';
   import MongoFields from './MongoFields.svelte';
+  import DriverPicker from './DriverPicker.svelte';
+  import { driverChoices } from './driver-choices';
+  import Icon from '../../components/Icon.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import { parseConnectionUrl } from '../../../../src/shared/connection-url';
@@ -138,10 +141,14 @@
     'aurora-postgres': 'form.preset.auroraPostgres',
   };
 
-  /** Compatible servers whose driver the host offers. */
-  const presets = $derived(
-    SERVER_PRESETS.filter((preset) =>
-      (formState?.drivers ?? []).some((driver) => driver.id === preset.driver),
+  /** The cards of the database picker: the drivers, then the compatible servers. */
+  const choices = $derived(
+    driverChoices(
+      (formState?.drivers ?? []).map((driver) => driver.id),
+      SERVER_PRESETS,
+      (driver) => t(DRIVER_LABELS[driver]),
+      (preset) => t(PRESET_LABELS[preset]),
+      (driverLabel) => t('form.presetHint', driverLabel),
     ),
   );
   const chosenPreset = $derived(
@@ -282,667 +289,677 @@
   {#if fields === undefined}
     <p class="loading">{t('form.loading')}</p>
   {:else}
-    <h1>{formState?.connectionId === undefined ? t('form.titleNew') : t('form.titleEdit')}</h1>
-
     <form
+      class="page"
       onsubmit={(event) => {
         event.preventDefault();
         void run('save');
       }}
     >
-      <Field label={t('form.url')} error={urlError} hint={t('form.url.hint')}>
-        <span class="row">
-          <input
-            class="control grow"
-            bind:value={urlText}
-            aria-invalid={urlError !== undefined}
-            aria-label={t('form.url')}
-            placeholder="postgres://user@host:5432/db"
-            autocomplete="off"
-            spellcheck="false"
-            onkeydown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                fillFromUrl();
-              }
-            }}
-          />
-          <button type="button" class="button secondary" onclick={fillFromUrl}>
-            {t('form.url.fill')}
-          </button>
-        </span>
-      </Field>
-
-      {#if formState?.project !== undefined}
-        <p class="place" data-testid="project-note">
-          {t('form.place.inProject', formState.project.name)}
-        </p>
-      {:else if formState?.connectionId === undefined && (formState?.projects ?? []).length > 0}
-        <Field label={t('form.place')} hint={t('form.place.hint')}>
-          <select class="control" bind:value={fields.project} aria-label={t('form.place')}>
-            <option value="">{t('form.place.mine')}</option>
-            {#each formState?.projects ?? [] as project (project.key)}
-              <option value={project.key}>{t('form.place.project', project.name)}</option>
-            {/each}
-          </select>
-        </Field>
-      {/if}
-
-      <Field label={t('form.name')} error={errorFor('name-empty')}>
-        <input
-          class="control"
-          bind:value={fields.name}
-          maxlength={CONNECTION_LIMITS.name}
-          aria-invalid={errorFor('name-empty') !== undefined}
-          aria-label={t('form.name')}
-          autocomplete="off"
-        />
-      </Field>
-
-      <div class="pair">
-        {#if fields.project === ''}
-          <Field label={t('form.folder')} hint={t('form.folderHint')}>
-            <input
-              class="control"
-              bind:value={fields.folder}
-              list="datanest-folders"
-              maxlength={CONNECTION_LIMITS.folder}
-              aria-label={t('form.folder')}
-              autocomplete="off"
-            />
-            <datalist id="datanest-folders">
-              {#each formState?.folders ?? [] as folder (folder)}
-                <option value={folder}></option>
-              {/each}
-            </datalist>
-          </Field>
-        {:else}
-          <span></span>
-        {/if}
-        <Field label={t('form.color')}>
-          <select class="control" bind:value={fields.color} aria-label={t('form.color')}>
-            <option value="">{t('form.color.none')}</option>
-            {#each CONNECTION_COLORS as color (color)}
-              <option value={color}>{t(`form.color.${color}`)}</option>
-            {/each}
-          </select>
-        </Field>
-      </div>
-
-      <div class="flags">
-        <div>
-          <label class="check">
-            <input
-              type="checkbox"
-              bind:checked={fields.production}
-              aria-describedby="production-hint"
-            />
-            {t('form.production')}
-          </label>
-          <span class="hint" id="production-hint">{t('form.productionHint')}</span>
+      <header class="page-header">
+        <span class="header-icon"><Icon name="database" size={20} /></span>
+        <div class="header-text">
+          <h1>{formState?.connectionId === undefined ? t('form.titleNew') : t('form.titleEdit')}</h1>
+          <p class="subtitle">{t('form.subtitle')}</p>
         </div>
-        <div>
-          <label class="check">
-            <input type="checkbox" bind:checked={fields.readOnly} aria-describedby="read-only-hint" />
-            {t('form.readOnly')}
-          </label>
-          <span class="hint" id="read-only-hint">{t('form.readOnlyHint')}</span>
-        </div>
-      </div>
+      </header>
 
-      <Field
-        label={t('form.driver')}
-        hint={chosenPreset === undefined
-          ? undefined
-          : t('form.presetHint', t(DRIVER_LABELS[chosenPreset.driver]))}
-      >
-        <select
-          class="control"
-          bind:value={choice}
-          onchange={choiceChanged}
-          aria-label={t('form.driver')}
-        >
-          {#each formState?.drivers ?? [] as driver (driver.id)}
-            <option value={driver.id}>{t(DRIVER_LABELS[driver.id])}</option>
-          {/each}
-          {#if presets.length > 0}
-            <optgroup label={t('form.compatible')}>
-              {#each presets as preset (preset.id)}
-                <option value={`preset:${preset.id}`}>{t(PRESET_LABELS[preset.id])}</option>
-              {/each}
-            </optgroup>
-          {/if}
-        </select>
-      </Field>
-
-      {#if isFile}
-        <Field label={t('form.file')} error={errorFor('file-empty')}>
-          <span class="row">
-            <input
-              class="control grow"
-              bind:value={fields.file}
-              maxlength={CONNECTION_LIMITS.file}
-              aria-invalid={errorFor('file-empty') !== undefined}
-              aria-label={t('form.file')}
-              autocomplete="off"
-            />
-            <button type="button" class="button secondary" onclick={() => void browse(false)}>
-              {t('form.browse')}
-            </button>
-            <button type="button" class="button secondary" onclick={() => void browse(true)}>
-              {t('form.createFile')}
-            </button>
-          </span>
-        </Field>
-      {:else}
-        <div class="pair">
-          <Field
-            label={t('form.host')}
-            error={errorFor('host-empty')}
-            hint={isMongo
-              ? fields.mongoMode === 'srv'
-                ? t('form.mongo.hostSrv')
-                : fields.mongoMode === 'replicaSet'
-                  ? t('form.mongo.hostReplicaSet')
-                  : undefined
-              : !isRedis
-                ? undefined
-                : fields.redisMode === 'sentinel'
-                  ? t('form.redis.hostSentinel')
-                  : fields.redisMode === 'cluster'
-                    ? t('form.redis.hostCluster')
-                    : undefined}
-          >
-            <input
-              class="control"
-              bind:value={fields.host}
-              maxlength={CONNECTION_LIMITS.field}
-              aria-invalid={errorFor('host-empty') !== undefined}
-              aria-label={t('form.host')}
-              autocomplete="off"
-            />
-          </Field>
-          <Field
-            label={t('form.port')}
-            error={errorFor('port-invalid')}
-            hint={defaultPort === undefined ? undefined : t('form.portHint', defaultPort)}
-          >
-            <input
-              class="control"
-              bind:value={fields.port}
-              inputmode="numeric"
-              maxlength={5}
-              aria-invalid={errorFor('port-invalid') !== undefined}
-              aria-label={t('form.port')}
-              autocomplete="off"
-            />
-          </Field>
-        </div>
-
-        {#if supportsSocket(fields.driver) && !(isRedis && fields.redisMode !== 'standalone')}
-          <Field
-            label={t('form.socket')}
-            error={errorFor('socket-with-tunnel')}
-            hint={t(isRedis ? 'form.socket.hintRedis' : fields.driver === 'postgres' ? 'form.socket.hintPostgres' : 'form.socket.hintMysql')}
-          >
-            <input
-              class="control"
-              bind:value={fields.socket}
-              maxlength={CONNECTION_LIMITS.file}
-              aria-label={t('form.socket')}
-              data-testid="socket"
-              autocomplete="off"
-            />
-          </Field>
-        {/if}
-
-        {#if isRedis}
-          <Field label={t('form.redis.mode')}>
-            <select
-              class="control"
-              value={fields.redisMode}
-              onchange={(event) => {
-                if (fields) {
-                  changeRedisMode(fields, event.currentTarget.value as RedisMode);
-                }
-              }}
-              aria-label={t('form.redis.mode')}
-            >
-              {#each REDIS_MODES as mode (mode)}
-                <option value={mode}>{t(REDIS_MODE_LABELS[mode])}</option>
-              {/each}
-            </select>
-          </Field>
-          {#if fields.redisMode === 'sentinel'}
-            <Field
-              label={t('form.redis.masterName')}
-              error={errorFor('redis-master-empty')}
-              hint={t('form.redis.masterNameHint')}
-            >
+      <div class="content">
+        <section class="card url-card">
+          <Field label={t('form.url')} error={urlError} hint={t('form.url.hint')}>
+            <span class="row">
               <input
-                class="control"
-                bind:value={fields.masterName}
-                maxlength={CONNECTION_LIMITS.field}
-                aria-invalid={errorFor('redis-master-empty') !== undefined}
-                aria-label={t('form.redis.masterName')}
+                class="control grow"
+                bind:value={urlText}
+                aria-invalid={urlError !== undefined}
+                aria-label={t('form.url')}
+                placeholder="postgres://user@host:5432/db"
                 autocomplete="off"
                 spellcheck="false"
-              />
-            </Field>
-          {/if}
-          {#if fields.redisMode !== 'standalone'}
-            <Field
-              label={fields.redisMode === 'sentinel'
-                ? t('form.redis.nodesSentinel')
-                : t('form.redis.nodesCluster')}
-              error={errorFor('redis-node-invalid') ?? errorFor('redis-too-many-nodes')}
-              hint={t('form.redis.nodesHint')}
-            >
-              <input
-                class="control"
-                bind:value={fields.redisNodes}
-                aria-invalid={errorFor('redis-node-invalid') !== undefined}
-                aria-label={fields.redisMode === 'sentinel'
-                  ? t('form.redis.nodesSentinel')
-                  : t('form.redis.nodesCluster')}
-                placeholder="10.0.0.2:26379, 10.0.0.3"
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </Field>
-          {/if}
-        {/if}
-
-        {#if isMongo}
-          <MongoFields {fields} {t} {errorFor} />
-        {/if}
-        {#if isElastic}
-          <div class="pair">
-            <Field label={t('form.elastic.auth')}>
-              <select class="control" bind:value={fields.elasticAuth} aria-label={t('form.elastic.auth')}>
-                <option value="basic">{t('form.elastic.auth.basic')}</option>
-                <option value="apiKey">{t('form.elastic.auth.apiKey')}</option>
-              </select>
-            </Field>
-            <Field
-              label={t('form.elastic.pathPrefix')}
-              hint={t('form.elastic.pathPrefixHint')}
-              error={errorFor('elastic-prefix-invalid')}
-            >
-              <input
-                class="control"
-                bind:value={fields.elasticPrefix}
-                maxlength={CONNECTION_LIMITS.field}
-                placeholder="/es"
-                aria-invalid={errorFor('elastic-prefix-invalid') !== undefined}
-                aria-label={t('form.elastic.pathPrefix')}
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </Field>
-          </div>
-        {/if}
-
-        <div class="pair">
-          {#if !withApiKey}
-          <Field label={t('form.user')} hint={isRedis ? t('form.redis.userHint') : undefined}>
-            <input
-              class="control"
-              bind:value={fields.user}
-              maxlength={CONNECTION_LIMITS.field}
-              aria-label={t('form.user')}
-              autocomplete="off"
-            />
-          </Field>
-          {/if}
-          <Field
-            label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
-            hint={fields.passwordTouched
-              ? withApiKey
-                ? t('form.elastic.apiKeyHint')
-                : undefined
-              : formState?.hasStoredPassword
-                ? t('form.passwordStored')
-                : formState?.importedPassword === true
-                  ? t('form.passwordImported')
-                  : undefined}
-          >
-            <SecretInput
-              bind:value={fields.password}
-              oninput={() => {
-                if (fields) {
-                  fields.passwordTouched = true;
-                }
-              }}
-              maxlength={PASSWORD_MAX_LENGTH}
-              disabled={fields.erasePassword}
-              label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
-              showLabel={t('form.showSecret')}
-              hideLabel={t('form.hideSecret')}
-              testid="password"
-            />
-          </Field>
-        </div>
-
-        {#if formState?.hasStoredPassword}
-          <label class="check">
-            <input type="checkbox" bind:checked={fields.erasePassword} />
-            {t('form.erasePassword')}
-          </label>
-        {/if}
-
-        {#if isRedis && fields.redisMode === 'sentinel'}
-          <div class="pair">
-            <Field label={t('form.redis.sentinelUser')}>
-              <input
-                class="control"
-                bind:value={fields.sentinelUser}
-                maxlength={CONNECTION_LIMITS.field}
-                aria-label={t('form.redis.sentinelUser')}
-                autocomplete="off"
-              />
-            </Field>
-            <Field
-              label={t('form.redis.sentinelPassword')}
-              hint={fields.sentinelPassword.touched
-                ? undefined
-                : formState?.hasStoredSentinelPassword
-                  ? t('form.redis.sentinelPasswordStored')
-                  : t('form.redis.sentinelPasswordHint')}
-            >
-              <SecretInput
-                bind:value={fields.sentinelPassword.value}
-                oninput={() => {
-                  if (fields) {
-                    fields.sentinelPassword.touched = true;
+                onkeydown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    fillFromUrl();
                   }
                 }}
-                maxlength={PASSWORD_MAX_LENGTH}
-                disabled={fields.sentinelPassword.erase}
-                label={t('form.redis.sentinelPassword')}
-                showLabel={t('form.showSecret')}
-                hideLabel={t('form.hideSecret')}
               />
-            </Field>
-          </div>
-          {#if formState?.hasStoredSentinelPassword}
-            <label class="check">
-              <input type="checkbox" bind:checked={fields.sentinelPassword.erase} />
-              {t('form.redis.eraseSentinelPassword')}
-            </label>
-          {/if}
-        {/if}
+              <button type="button" class="button secondary" onclick={fillFromUrl}>
+                {t('form.url.fill')}
+              </button>
+            </span>
+          </Field>
+        </section>
 
-        {#if !isElastic}
-        <Field
-          label={isRedis ? t('form.redis.database') : t('form.database')}
-          hint={isRedis
-            ? t('form.redis.databaseHint')
-            : isMongo
-              ? t('form.mongo.databaseHint')
-              : t('form.databaseHint')}
-          error={isRedis
-            ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
-            : undefined}
-        >
-          <input
-            class="control"
-            bind:value={fields.database}
-            maxlength={CONNECTION_LIMITS.field}
-            inputmode={isRedis ? 'numeric' : undefined}
-            placeholder={isRedis ? '0' : undefined}
-            aria-label={isRedis ? t('form.redis.database') : t('form.database')}
-            autocomplete="off"
+        <section class="card">
+          <h2 class="section-title"><Icon name="server" />{t('form.section.type')}</h2>
+          <DriverPicker
+            choices={choices}
+            value={choice}
+            label={t('form.driver')}
+            compatibleLabel={t('form.compatible')}
+            onChange={(next: string) => {
+              choice = next;
+              choiceChanged();
+            }}
           />
-        </Field>
-        {/if}
-
-        {#if optionSupport(fields.driver).tls}
-        <fieldset class="section">
-          <TlsEditor
-            {fields}
-            {t}
-            certError={errorFor('ssl-key-without-cert')}
-            keyError={errorFor('ssl-cert-without-key')}
-            onBrowse={(field: TlsFile) => void browseTls(field)}
-          />
-        </fieldset>
-        {/if}
-
-        {#if !sshAllowed(fields)}
-          <p class="hint" data-testid="redis-ssh-note">
-            {isMongo ? t('form.mongo.sshNote') : t('form.redis.sshNote')}
-          </p>
-        {:else}
-        <fieldset class="section">
-          <legend>
-            <label class="check">
-              <input type="checkbox" bind:checked={fields.useSsh} />
-              {t('form.ssh.use')}
-            </label>
-          </legend>
-          {#if fields.useSsh}
-            <SshHopEditor
-              hop={fields.ssh}
-              stored={storedFor(fields.ssh.id)}
-              {showProblems}
-              {t}
-              onBrowseKey={() => {
-                if (fields) {
-                  void browseKey(fields.ssh);
-                }
-              }}
-            />
-
-            <div class="jumps">
-              <span class="label">{t('form.ssh.jumps')}</span>
-              <span class="hint">{t('form.ssh.jumpsHint')}</span>
-              {#each fields.jumps as jump, index (jump.id)}
-                {@const name = t('form.ssh.jump', index + 1)}
-                <fieldset class="section jump">
-                  <legend>{name}</legend>
-                  <SshHopEditor
-                    hop={jump}
-                    stored={storedFor(jump.id)}
-                    {showProblems}
-                    label={name}
-                    {t}
-                    onBrowseKey={() => void browseKey(jump)}
-                  />
-                  <div class="row">
-                    <button
-                      type="button"
-                      class="button secondary"
-                      disabled={index === 0}
-                      aria-label={`${name}: ${t('form.ssh.moveUp')}`}
-                      onclick={() => {
-                        move(index, -1);
-                      }}
-                    >
-                      {t('form.ssh.moveUp')}
-                    </button>
-                    <button
-                      type="button"
-                      class="button secondary"
-                      disabled={index === fields.jumps.length - 1}
-                      aria-label={`${name}: ${t('form.ssh.moveDown')}`}
-                      onclick={() => {
-                        move(index, 1);
-                      }}
-                    >
-                      {t('form.ssh.moveDown')}
-                    </button>
-                    <button
-                      type="button"
-                      class="button secondary"
-                      aria-label={`${name}: ${t('form.ssh.removeJump')}`}
-                      onclick={() => {
-                        removeJump(index);
-                      }}
-                    >
-                      {t('form.ssh.removeJump')}
-                    </button>
-                  </div>
-                </fieldset>
-              {/each}
-              {#if fields.jumps.length < MAX_SSH_JUMPS}
-                <span>
-                  <button type="button" class="button secondary" onclick={addJump}>
-                    {t('form.ssh.addJump')}
-                  </button>
-                </span>
-              {/if}
-            </div>
+          {#if chosenPreset !== undefined}
+            <p class="hint" data-testid="preset-hint">
+              {t('form.presetHint', t(DRIVER_LABELS[chosenPreset.driver]))}
+            </p>
           {/if}
-        </fieldset>
+        </section>
 
-        <fieldset class="section">
-          <legend>
-            <label class="check">
-              <input type="checkbox" bind:checked={fields.useProxy} data-testid="use-proxy" />
-              {t('form.proxy.use')}
-            </label>
-          </legend>
-          {#if fields.useProxy}
-            <p class="hint">{t('form.proxy.hint')}</p>
-            <Field label={t('form.proxy.kind')}>
-              <select class="control" bind:value={fields.proxyKind} aria-label={t('form.proxy.kind')}>
-                <option value="socks5">SOCKS5</option>
-                <option value="http">HTTP (CONNECT)</option>
-              </select>
+        <section class="card">
+          <h2 class="section-title"><Icon name="plug" />{t('form.section.connection')}</h2>
+          {#if isFile}
+            <Field label={t('form.file')} error={errorFor('file-empty')}>
+              <span class="row">
+                <input
+                  class="control grow"
+                  bind:value={fields.file}
+                  maxlength={CONNECTION_LIMITS.file}
+                  aria-invalid={errorFor('file-empty') !== undefined}
+                  aria-label={t('form.file')}
+                  autocomplete="off"
+                />
+                <button type="button" class="button secondary" onclick={() => void browse(false)}>
+                  {t('form.browse')}
+                </button>
+                <button type="button" class="button secondary" onclick={() => void browse(true)}>
+                  {t('form.createFile')}
+                </button>
+              </span>
             </Field>
+          {:else}
             <div class="pair">
-              <Field label={t('form.proxy.host')} error={errorFor('proxy-host-empty')}>
+              <Field
+                label={t('form.host')}
+                error={errorFor('host-empty')}
+                hint={isMongo
+                  ? fields.mongoMode === 'srv'
+                    ? t('form.mongo.hostSrv')
+                    : fields.mongoMode === 'replicaSet'
+                      ? t('form.mongo.hostReplicaSet')
+                      : undefined
+                  : !isRedis
+                    ? undefined
+                    : fields.redisMode === 'sentinel'
+                      ? t('form.redis.hostSentinel')
+                      : fields.redisMode === 'cluster'
+                        ? t('form.redis.hostCluster')
+                        : undefined}
+              >
                 <input
                   class="control"
-                  bind:value={fields.proxyHost}
+                  bind:value={fields.host}
                   maxlength={CONNECTION_LIMITS.field}
-                  aria-invalid={errorFor('proxy-host-empty') !== undefined}
-                  aria-label={t('form.proxy.host')}
-                  data-testid="proxy-host"
+                  aria-invalid={errorFor('host-empty') !== undefined}
+                  aria-label={t('form.host')}
                   autocomplete="off"
                 />
               </Field>
               <Field
-                label={t('form.proxy.port')}
-                error={errorFor('proxy-port-invalid')}
-                hint={t('form.portHint', DEFAULT_PROXY_PORTS[fields.proxyKind])}
+                label={t('form.port')}
+                error={errorFor('port-invalid')}
+                hint={defaultPort === undefined ? undefined : t('form.portHint', defaultPort)}
               >
                 <input
                   class="control"
-                  bind:value={fields.proxyPort}
+                  bind:value={fields.port}
                   inputmode="numeric"
                   maxlength={5}
-                  aria-invalid={errorFor('proxy-port-invalid') !== undefined}
-                  aria-label={t('form.proxy.port')}
+                  aria-invalid={errorFor('port-invalid') !== undefined}
+                  aria-label={t('form.port')}
                   autocomplete="off"
                 />
               </Field>
             </div>
-            <div class="pair">
-              <Field label={t('form.proxy.user')}>
+
+            {#if supportsSocket(fields.driver) && !(isRedis && fields.redisMode !== 'standalone')}
+              <Field
+                label={t('form.socket')}
+                error={errorFor('socket-with-tunnel')}
+                hint={t(isRedis ? 'form.socket.hintRedis' : fields.driver === 'postgres' ? 'form.socket.hintPostgres' : 'form.socket.hintMysql')}
+              >
                 <input
                   class="control"
-                  bind:value={fields.proxyUser}
-                  maxlength={CONNECTION_LIMITS.field}
-                  aria-label={t('form.proxy.user')}
+                  bind:value={fields.socket}
+                  maxlength={CONNECTION_LIMITS.file}
+                  aria-label={t('form.socket')}
+                  data-testid="socket"
                   autocomplete="off"
                 />
               </Field>
+            {/if}
+
+            {#if isRedis}
+              <Field label={t('form.redis.mode')}>
+                <select
+                  class="control"
+                  value={fields.redisMode}
+                  onchange={(event) => {
+                    if (fields) {
+                      changeRedisMode(fields, event.currentTarget.value as RedisMode);
+                    }
+                  }}
+                  aria-label={t('form.redis.mode')}
+                >
+                  {#each REDIS_MODES as mode (mode)}
+                    <option value={mode}>{t(REDIS_MODE_LABELS[mode])}</option>
+                  {/each}
+                </select>
+              </Field>
+              {#if fields.redisMode === 'sentinel'}
+                <Field
+                  label={t('form.redis.masterName')}
+                  error={errorFor('redis-master-empty')}
+                  hint={t('form.redis.masterNameHint')}
+                >
+                  <input
+                    class="control"
+                    bind:value={fields.masterName}
+                    maxlength={CONNECTION_LIMITS.field}
+                    aria-invalid={errorFor('redis-master-empty') !== undefined}
+                    aria-label={t('form.redis.masterName')}
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </Field>
+              {/if}
+              {#if fields.redisMode !== 'standalone'}
+                <Field
+                  label={fields.redisMode === 'sentinel'
+                    ? t('form.redis.nodesSentinel')
+                    : t('form.redis.nodesCluster')}
+                  error={errorFor('redis-node-invalid') ?? errorFor('redis-too-many-nodes')}
+                  hint={t('form.redis.nodesHint')}
+                >
+                  <input
+                    class="control"
+                    bind:value={fields.redisNodes}
+                    aria-invalid={errorFor('redis-node-invalid') !== undefined}
+                    aria-label={fields.redisMode === 'sentinel'
+                      ? t('form.redis.nodesSentinel')
+                      : t('form.redis.nodesCluster')}
+                    placeholder="10.0.0.2:26379, 10.0.0.3"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </Field>
+              {/if}
+            {/if}
+
+            {#if isMongo}
+              <MongoFields {fields} {t} {errorFor} />
+            {/if}
+            {#if isElastic}
+              <div class="pair">
+                <Field label={t('form.elastic.auth')}>
+                  <select class="control" bind:value={fields.elasticAuth} aria-label={t('form.elastic.auth')}>
+                    <option value="basic">{t('form.elastic.auth.basic')}</option>
+                    <option value="apiKey">{t('form.elastic.auth.apiKey')}</option>
+                  </select>
+                </Field>
+                <Field
+                  label={t('form.elastic.pathPrefix')}
+                  hint={t('form.elastic.pathPrefixHint')}
+                  error={errorFor('elastic-prefix-invalid')}
+                >
+                  <input
+                    class="control"
+                    bind:value={fields.elasticPrefix}
+                    maxlength={CONNECTION_LIMITS.field}
+                    placeholder="/es"
+                    aria-invalid={errorFor('elastic-prefix-invalid') !== undefined}
+                    aria-label={t('form.elastic.pathPrefix')}
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </Field>
+              </div>
+            {/if}
+
+            <div class="pair">
+              {#if !withApiKey}
+              <Field label={t('form.user')} hint={isRedis ? t('form.redis.userHint') : undefined}>
+                <input
+                  class="control"
+                  bind:value={fields.user}
+                  maxlength={CONNECTION_LIMITS.field}
+                  aria-label={t('form.user')}
+                  autocomplete="off"
+                />
+              </Field>
+              {/if}
               <Field
-                label={t('form.proxy.password')}
-                hint={formState?.hasStoredProxyPassword && !fields.proxyPassword.touched
-                  ? t('form.passwordStored')
-                  : undefined}
+                label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
+                hint={fields.passwordTouched
+                  ? withApiKey
+                    ? t('form.elastic.apiKeyHint')
+                    : undefined
+                  : formState?.hasStoredPassword
+                    ? t('form.passwordStored')
+                    : formState?.importedPassword === true
+                      ? t('form.passwordImported')
+                      : undefined}
               >
                 <SecretInput
-                  bind:value={fields.proxyPassword.value}
+                  bind:value={fields.password}
                   oninput={() => {
                     if (fields) {
-                      fields.proxyPassword.touched = true;
+                      fields.passwordTouched = true;
                     }
                   }}
                   maxlength={PASSWORD_MAX_LENGTH}
-                  disabled={fields.proxyPassword.erase}
-                  label={t('form.proxy.password')}
+                  disabled={fields.erasePassword}
+                  label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
                   showLabel={t('form.showSecret')}
                   hideLabel={t('form.hideSecret')}
+                  testid="password"
                 />
               </Field>
             </div>
-            {#if formState?.hasStoredProxyPassword}
+
+            {#if formState?.hasStoredPassword}
               <label class="check">
-                <input type="checkbox" bind:checked={fields.proxyPassword.erase} />
+                <input type="checkbox" bind:checked={fields.erasePassword} />
                 {t('form.erasePassword')}
               </label>
             {/if}
+
+            {#if isRedis && fields.redisMode === 'sentinel'}
+              <div class="pair">
+                <Field label={t('form.redis.sentinelUser')}>
+                  <input
+                    class="control"
+                    bind:value={fields.sentinelUser}
+                    maxlength={CONNECTION_LIMITS.field}
+                    aria-label={t('form.redis.sentinelUser')}
+                    autocomplete="off"
+                  />
+                </Field>
+                <Field
+                  label={t('form.redis.sentinelPassword')}
+                  hint={fields.sentinelPassword.touched
+                    ? undefined
+                    : formState?.hasStoredSentinelPassword
+                      ? t('form.redis.sentinelPasswordStored')
+                      : t('form.redis.sentinelPasswordHint')}
+                >
+                  <SecretInput
+                    bind:value={fields.sentinelPassword.value}
+                    oninput={() => {
+                      if (fields) {
+                        fields.sentinelPassword.touched = true;
+                      }
+                    }}
+                    maxlength={PASSWORD_MAX_LENGTH}
+                    disabled={fields.sentinelPassword.erase}
+                    label={t('form.redis.sentinelPassword')}
+                    showLabel={t('form.showSecret')}
+                    hideLabel={t('form.hideSecret')}
+                  />
+                </Field>
+              </div>
+              {#if formState?.hasStoredSentinelPassword}
+                <label class="check">
+                  <input type="checkbox" bind:checked={fields.sentinelPassword.erase} />
+                  {t('form.redis.eraseSentinelPassword')}
+                </label>
+              {/if}
+            {/if}
+
+            {#if !isElastic}
+            <Field
+              label={isRedis ? t('form.redis.database') : t('form.database')}
+              hint={isRedis
+                ? t('form.redis.databaseHint')
+                : isMongo
+                  ? t('form.mongo.databaseHint')
+                  : t('form.databaseHint')}
+              error={isRedis
+                ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
+                : undefined}
+            >
+              <input
+                class="control"
+                bind:value={fields.database}
+                maxlength={CONNECTION_LIMITS.field}
+                inputmode={isRedis ? 'numeric' : undefined}
+                placeholder={isRedis ? '0' : undefined}
+                aria-label={isRedis ? t('form.redis.database') : t('form.database')}
+                autocomplete="off"
+              />
+            </Field>
+            {/if}
+      {/if}
+        </section>
+
+        <section class="card">
+          <h2 class="section-title"><Icon name="tag" />{t('form.section.general')}</h2>
+          {#if formState?.project !== undefined}
+            <p class="place" data-testid="project-note">
+              {t('form.place.inProject', formState.project.name)}
+            </p>
+          {:else if formState?.connectionId === undefined && (formState?.projects ?? []).length > 0}
+            <Field label={t('form.place')} hint={t('form.place.hint')}>
+              <select class="control" bind:value={fields.project} aria-label={t('form.place')}>
+                <option value="">{t('form.place.mine')}</option>
+                {#each formState?.projects ?? [] as project (project.key)}
+                  <option value={project.key}>{t('form.place.project', project.name)}</option>
+                {/each}
+              </select>
+            </Field>
           {/if}
-        </fieldset>
+
+          <Field label={t('form.name')} error={errorFor('name-empty')}>
+            <input
+              class="control"
+              bind:value={fields.name}
+              maxlength={CONNECTION_LIMITS.name}
+              aria-invalid={errorFor('name-empty') !== undefined}
+              aria-label={t('form.name')}
+              autocomplete="off"
+            />
+          </Field>
+
+          <div class="pair">
+            {#if fields.project === ''}
+              <Field label={t('form.folder')} hint={t('form.folderHint')}>
+                <input
+                  class="control"
+                  bind:value={fields.folder}
+                  list="datanest-folders"
+                  maxlength={CONNECTION_LIMITS.folder}
+                  aria-label={t('form.folder')}
+                  autocomplete="off"
+                />
+                <datalist id="datanest-folders">
+                  {#each formState?.folders ?? [] as folder (folder)}
+                    <option value={folder}></option>
+                  {/each}
+                </datalist>
+              </Field>
+            {:else}
+              <span></span>
+            {/if}
+            <Field label={t('form.color')}>
+              <select class="control" bind:value={fields.color} aria-label={t('form.color')}>
+                <option value="">{t('form.color.none')}</option>
+                {#each CONNECTION_COLORS as color (color)}
+                  <option value={color}>{t(`form.color.${color}`)}</option>
+                {/each}
+              </select>
+            </Field>
+          </div>
+
+          <div class="flags">
+            <div>
+              <label class="check">
+                <input
+                  type="checkbox"
+                  bind:checked={fields.production}
+                  aria-describedby="production-hint"
+                />
+                {t('form.production')}
+              </label>
+              <span class="hint" id="production-hint">{t('form.productionHint')}</span>
+            </div>
+            <div>
+              <label class="check">
+                <input type="checkbox" bind:checked={fields.readOnly} aria-describedby="read-only-hint" />
+                {t('form.readOnly')}
+              </label>
+              <span class="hint" id="read-only-hint">{t('form.readOnlyHint')}</span>
+            </div>
+          </div>
+        </section>
+
+        {#if !isFile}
+          <h2 class="group-title"><Icon name="shield" />{t('form.section.security')}</h2>
+            {#if optionSupport(fields.driver).tls}
+            <fieldset class="section">
+              <TlsEditor
+                {fields}
+                {t}
+                certError={errorFor('ssl-key-without-cert')}
+                keyError={errorFor('ssl-cert-without-key')}
+                onBrowse={(field: TlsFile) => void browseTls(field)}
+              />
+            </fieldset>
+            {/if}
+
+            {#if !sshAllowed(fields)}
+              <p class="hint" data-testid="redis-ssh-note">
+                {isMongo ? t('form.mongo.sshNote') : t('form.redis.sshNote')}
+              </p>
+            {:else}
+            <fieldset class="section">
+              <legend>
+                <label class="check">
+                  <input type="checkbox" bind:checked={fields.useSsh} />
+                  {t('form.ssh.use')}
+                </label>
+              </legend>
+              {#if fields.useSsh}
+                <SshHopEditor
+                  hop={fields.ssh}
+                  stored={storedFor(fields.ssh.id)}
+                  {showProblems}
+                  {t}
+                  onBrowseKey={() => {
+                    if (fields) {
+                      void browseKey(fields.ssh);
+                    }
+                  }}
+                />
+
+                <div class="jumps">
+                  <span class="label">{t('form.ssh.jumps')}</span>
+                  <span class="hint">{t('form.ssh.jumpsHint')}</span>
+                  {#each fields.jumps as jump, index (jump.id)}
+                    {@const name = t('form.ssh.jump', index + 1)}
+                    <fieldset class="section jump">
+                      <legend>{name}</legend>
+                      <SshHopEditor
+                        hop={jump}
+                        stored={storedFor(jump.id)}
+                        {showProblems}
+                        label={name}
+                        {t}
+                        onBrowseKey={() => void browseKey(jump)}
+                      />
+                      <div class="row">
+                        <button
+                          type="button"
+                          class="button secondary"
+                          disabled={index === 0}
+                          aria-label={`${name}: ${t('form.ssh.moveUp')}`}
+                          onclick={() => {
+                            move(index, -1);
+                          }}
+                        >
+                          {t('form.ssh.moveUp')}
+                        </button>
+                        <button
+                          type="button"
+                          class="button secondary"
+                          disabled={index === fields.jumps.length - 1}
+                          aria-label={`${name}: ${t('form.ssh.moveDown')}`}
+                          onclick={() => {
+                            move(index, 1);
+                          }}
+                        >
+                          {t('form.ssh.moveDown')}
+                        </button>
+                        <button
+                          type="button"
+                          class="button secondary"
+                          aria-label={`${name}: ${t('form.ssh.removeJump')}`}
+                          onclick={() => {
+                            removeJump(index);
+                          }}
+                        >
+                          {t('form.ssh.removeJump')}
+                        </button>
+                      </div>
+                    </fieldset>
+                  {/each}
+                  {#if fields.jumps.length < MAX_SSH_JUMPS}
+                    <span>
+                      <button type="button" class="button secondary" onclick={addJump}>
+                        {t('form.ssh.addJump')}
+                      </button>
+                    </span>
+                  {/if}
+                </div>
+              {/if}
+            </fieldset>
+
+            <fieldset class="section">
+              <legend>
+                <label class="check">
+                  <input type="checkbox" bind:checked={fields.useProxy} data-testid="use-proxy" />
+                  {t('form.proxy.use')}
+                </label>
+              </legend>
+              {#if fields.useProxy}
+                <p class="hint">{t('form.proxy.hint')}</p>
+                <Field label={t('form.proxy.kind')}>
+                  <select class="control" bind:value={fields.proxyKind} aria-label={t('form.proxy.kind')}>
+                    <option value="socks5">SOCKS5</option>
+                    <option value="http">HTTP (CONNECT)</option>
+                  </select>
+                </Field>
+                <div class="pair">
+                  <Field label={t('form.proxy.host')} error={errorFor('proxy-host-empty')}>
+                    <input
+                      class="control"
+                      bind:value={fields.proxyHost}
+                      maxlength={CONNECTION_LIMITS.field}
+                      aria-invalid={errorFor('proxy-host-empty') !== undefined}
+                      aria-label={t('form.proxy.host')}
+                      data-testid="proxy-host"
+                      autocomplete="off"
+                    />
+                  </Field>
+                  <Field
+                    label={t('form.proxy.port')}
+                    error={errorFor('proxy-port-invalid')}
+                    hint={t('form.portHint', DEFAULT_PROXY_PORTS[fields.proxyKind])}
+                  >
+                    <input
+                      class="control"
+                      bind:value={fields.proxyPort}
+                      inputmode="numeric"
+                      maxlength={5}
+                      aria-invalid={errorFor('proxy-port-invalid') !== undefined}
+                      aria-label={t('form.proxy.port')}
+                      autocomplete="off"
+                    />
+                  </Field>
+                </div>
+                <div class="pair">
+                  <Field label={t('form.proxy.user')}>
+                    <input
+                      class="control"
+                      bind:value={fields.proxyUser}
+                      maxlength={CONNECTION_LIMITS.field}
+                      aria-label={t('form.proxy.user')}
+                      autocomplete="off"
+                    />
+                  </Field>
+                  <Field
+                    label={t('form.proxy.password')}
+                    hint={formState?.hasStoredProxyPassword && !fields.proxyPassword.touched
+                      ? t('form.passwordStored')
+                      : undefined}
+                  >
+                    <SecretInput
+                      bind:value={fields.proxyPassword.value}
+                      oninput={() => {
+                        if (fields) {
+                          fields.proxyPassword.touched = true;
+                        }
+                      }}
+                      maxlength={PASSWORD_MAX_LENGTH}
+                      disabled={fields.proxyPassword.erase}
+                      label={t('form.proxy.password')}
+                      showLabel={t('form.showSecret')}
+                      hideLabel={t('form.hideSecret')}
+                    />
+                  </Field>
+                </div>
+                {#if formState?.hasStoredProxyPassword}
+                  <label class="check">
+                    <input type="checkbox" bind:checked={fields.proxyPassword.erase} />
+                    {t('form.erasePassword')}
+                  </label>
+                {/if}
+              {/if}
+            </fieldset>
+            {/if}
         {/if}
-      {/if}
 
-      <details class="section options" open={hasOptions}>
-        <summary>{t('form.options')}</summary>
-        <OptionsEditor {fields} {t} {errorFor} />
-      </details>
+        <h2 class="group-title"><Icon name="settings-gear" />{t('form.section.advanced')}</h2>
+          <details class="section options" open={hasOptions}>
+            <summary>{t('form.options')}</summary>
+            <OptionsEditor {fields} {t} {errorFor} />
+          </details>
 
-      <!-- Oracle filters only schemas: its database is the one service the connection names. -->
-      {#if filters.databases || filters.schemas}
-        <details class="section options" open={formState?.input.filter !== undefined}>
-          <summary>{t('form.filter')}</summary>
-          {#if filters.databases}
-            <Field
-              label={t('form.filter.databases')}
-              error={errorFor('filter-too-long')}
-              hint={t('form.filter.hint')}
-            >
-              <input
-                class="control"
-                bind:value={fields.filterDatabases}
-                placeholder="app_*, !app_test"
-                aria-label={t('form.filter.databases')}
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </Field>
+          <!-- Oracle filters only schemas: its database is the one service the connection names. -->
+          {#if filters.databases || filters.schemas}
+            <details class="section options" open={formState?.input.filter !== undefined}>
+              <summary>{t('form.filter')}</summary>
+              {#if filters.databases}
+                <Field
+                  label={t('form.filter.databases')}
+                  error={errorFor('filter-too-long')}
+                  hint={t('form.filter.hint')}
+                >
+                  <input
+                    class="control"
+                    bind:value={fields.filterDatabases}
+                    placeholder="app_*, !app_test"
+                    aria-label={t('form.filter.databases')}
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </Field>
+              {/if}
+              {#if filters.schemas}
+                <Field
+                  label={t('form.filter.schemas')}
+                  error={filters.databases ? undefined : errorFor('filter-too-long')}
+                  hint={filters.databases ? t('form.filter.schemasHint') : t('form.filter.hint')}
+                >
+                  <input
+                    class="control"
+                    bind:value={fields.filterSchemas}
+                    placeholder="public, app_*"
+                    aria-label={t('form.filter.schemas')}
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </Field>
+              {/if}
+            </details>
           {/if}
-          {#if filters.schemas}
-            <Field
-              label={t('form.filter.schemas')}
-              error={filters.databases ? undefined : errorFor('filter-too-long')}
-              hint={filters.databases ? t('form.filter.schemasHint') : t('form.filter.hint')}
-            >
-              <input
-                class="control"
-                bind:value={fields.filterSchemas}
-                placeholder="public, app_*"
-                aria-label={t('form.filter.schemas')}
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </Field>
-          {/if}
-        </details>
-      {/if}
+      </div>
 
-      {#if notice}
-        <p class="notice" class:error={notice.kind === 'error'} role="status" data-testid="notice">
-          {notice.text}
-        </p>
-      {/if}
-
-      <div class="actions">
-        <button type="submit" class="button" disabled={busy !== undefined}>
-          {busy === 'save' ? t('form.saving') : t('form.save')}
-        </button>
-        <button
-          type="button"
-          class="button secondary"
-          disabled={busy !== undefined}
-          onclick={() => void run('test')}
-        >
-          {busy === 'test' ? t('form.testing') : t('form.test')}
-        </button>
+      <footer class="actions-bar">
+        {#if notice}
+          <p
+            class="notice fade-in"
+            class:error={notice.kind === 'error'}
+            class:success={notice.kind === 'ok'}
+            role="status"
+            data-testid="notice"
+          >
+            <Icon name={notice.kind === 'error' ? 'error' : 'pass'} /><span>{notice.text}</span>
+          </p>
+        {/if}
+        <span class="spacer"></span>
         <button
           type="button"
           class="button secondary"
@@ -952,27 +969,109 @@
         >
           {t('form.cancel')}
         </button>
-      </div>
+        <button
+          type="button"
+          class="button secondary"
+          disabled={busy !== undefined}
+          onclick={() => void run('test')}
+        >
+          <Icon name={busy === 'test' ? 'loading' : 'plug'} spin={busy === 'test'} />
+          {busy === 'test' ? t('form.testing') : t('form.test')}
+        </button>
+        <button type="submit" class="button" disabled={busy !== undefined}>
+          <Icon name={busy === 'save' ? 'loading' : 'save'} spin={busy === 'save'} />
+          {busy === 'save' ? t('form.saving') : t('form.save')}
+        </button>
+      </footer>
     </form>
   {/if}
 </main>
 
 <style>
   main {
-    max-width: 640px;
+    height: 100vh;
+  }
+
+  .loading {
     padding: 16px;
+    color: var(--dn-muted);
   }
 
-  h1 {
-    margin: 0 0 16px;
-    font-size: 1.3em;
-    font-weight: 600;
+  /* The page scrolls; the bar of actions stays at the bottom. */
+  .page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
 
-  form {
+  .page-header {
+    display: flex;
+    flex: none;
+    gap: 12px;
+    align-items: center;
+    padding: 18px 24px 14px;
+  }
+
+  .header-icon {
+    display: inline-flex;
+    padding: 9px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: 10px;
+  }
+
+  .subtitle {
+    margin: 2px 0 0;
+    color: var(--dn-muted);
+  }
+
+  .content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    padding: 4px 24px 24px;
+    overflow-y: auto;
+  }
+
+  .content > :global(*) {
+    width: 100%;
+    max-width: 760px;
+  }
+
+  .card {
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  .url-card {
+    padding: 12px 16px;
+  }
+
+  .section-title {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 2px;
+  }
+
+  .section-title :global(.codicon-glyph),
+  .group-title :global(.codicon-glyph) {
+    color: var(--dn-muted);
+  }
+
+  .group-title {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 8px 0 -4px;
+    color: var(--dn-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .pair {
@@ -993,50 +1092,97 @@
 
   .check {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
+    cursor: pointer;
   }
 
+  /* SSL, SSH and proxy: framed groups whose title is a switch. */
   .section {
     display: flex;
     flex-direction: column;
     gap: 12px;
     margin: 0;
-    padding: 8px 12px 12px;
-    border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
-    border-radius: 2px;
+    padding: 12px 16px;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius-l);
   }
 
   .section legend {
-    padding: 0 4px;
+    float: left;
+    width: 100%;
+    padding: 0;
+    font-weight: 600;
+  }
+
+  .section legend + :global(*) {
+    clear: both;
   }
 
   .place {
     margin: 0;
-    padding: 6px 8px;
+    padding: 6px 10px;
     border-left: 2px solid var(--vscode-focusBorder);
     background: var(--vscode-textBlockQuote-background, transparent);
+    border-radius: 0 var(--dn-radius) var(--dn-radius) 0;
   }
 
   .flags {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .options summary {
-    cursor: pointer;
-  }
-
-  .options[open] summary {
-    margin-bottom: 4px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 8px 16px;
   }
 
   .flags .hint {
     display: block;
-    margin-left: 22px;
-    color: var(--vscode-descriptionForeground);
-    font-size: 0.9em;
+    margin: 2px 0 0 26px;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+  }
+
+  /* Session options and filters: folded sections with a chevron. */
+  .options {
+    padding: 0;
+  }
+
+  .options summary {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 10px 14px;
+    font-weight: 600;
+    list-style: none;
+    cursor: pointer;
+    border-radius: var(--dn-radius-l);
+  }
+
+  .options summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .options summary::before {
+    /* The icon font's chevron-right, turned when open. */
+    content: '\eab6';
+    font: normal normal normal 16px/1 codicon;
+    color: var(--dn-muted);
+    transition: transform var(--dn-duration) var(--dn-ease);
+  }
+
+  .options[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .options summary:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+
+  .options[open] {
+    padding-bottom: 14px;
+  }
+
+  .options[open] > :global(:not(summary)) {
+    margin: 0 16px;
   }
 
   .jumps {
@@ -1045,30 +1191,47 @@
     gap: 8px;
   }
 
-  .jumps .hint {
-    color: var(--vscode-descriptionForeground);
-    font-size: 0.9em;
+  .jumps .hint,
+  .hint {
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
   }
 
-  .actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  .notice {
+  .hint {
     margin: 0;
-    padding: 6px 8px;
-    border-radius: 2px;
-    background: var(--vscode-editorWidget-background);
   }
 
-  .notice.error {
-    color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground));
-    background: var(--vscode-inputValidation-errorBackground, transparent);
+  /* The bar of actions: what happened on the left, what to do on the right. */
+  .actions-bar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 24px;
+    background: var(--vscode-editor-background);
+    border-top: 1px solid var(--dn-divider);
   }
 
-  .loading {
-    color: var(--vscode-descriptionForeground);
+  .actions-bar .notice {
+    margin: 0;
+    padding: 4px 10px;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  @media (max-width: 520px) {
+    .pair {
+      grid-template-columns: 1fr;
+    }
+
+    .page-header,
+    .content,
+    .actions-bar {
+      padding-right: 12px;
+      padding-left: 12px;
+    }
   }
 </style>

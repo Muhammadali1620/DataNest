@@ -10,6 +10,7 @@ import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/result-grid/App.svelte';
 import { MIN_COLUMN_WIDTH } from '../../../../../webview/src/apps/result-grid/columns';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
+import { chooseFromMenu, menuLabels } from '../../../../helpers/webview/menu';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
 type HostPeer = RpcPeer<ResultGridProtocol['host'], ResultGridProtocol['webview']>;
@@ -174,8 +175,9 @@ describe('result grid App', () => {
     const header = screen.getAllByRole('row')[0];
     const data = screen.getAllByRole('row').slice(1);
     expect(header?.querySelector('[role="columnheader"]')).not.toBeNull();
-    expect(data.map((row) => row.style.top)).toEqual(['22px', '44px']);
-    expect(header?.parentElement?.style.height).toBe('66px');
+    expect(data.map((row) => row.style.top)).toEqual(['26px', '48px']);
+    expect(header?.style.height).toBe('26px');
+    expect(header?.parentElement?.style.height).toBe('70px');
   });
 
   it('summarizes the row count and the time', async () => {
@@ -417,7 +419,7 @@ describe('result grid App', () => {
       });
       const canvas = screen.getByTestId('grid').querySelector('.canvas');
       // 1000 rows at 22px each plus the header; the scrollbar must match the result, not the DOM.
-      expect(canvas?.getAttribute('style')).toContain('height: 22022px');
+      expect(canvas?.getAttribute('style')).toContain('height: 22026px');
     });
 
     it('exposes the row and column counts for assistive technology', async () => {
@@ -1157,57 +1159,45 @@ describe('result grid App', () => {
   });
 
   describe('export', () => {
-    it('offers CSV and JSON for a result that has rows', async () => {
+    it('offers every format in one Export menu, everyday ones first', async () => {
       await withState({ tabs: [tab()], activeId: 'result-1', running: false });
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
-      });
-      expect(screen.getByRole('button', { name: 'JSON' })).toBeTruthy();
-    });
-
-    it('asks the host to write the shown result', async () => {
-      const { exported } = await withState({
-        tabs: [tab()],
-        activeId: 'result-1',
-        running: false,
-      });
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
-      });
-      await fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
-      await waitFor(() => {
-        expect(exported).toHaveBeenCalledWith({ resultId: 'result-1', format: 'csv' });
-      });
-      await fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
-      await waitFor(() => {
-        expect(exported).toHaveBeenLastCalledWith({ resultId: 'result-1', format: 'json' });
-      });
-    });
-
-    it('offers SQL, Markdown and Excel in a menu and sends the chosen one', async () => {
-      const { exported } = await withState({
-        tabs: [tab()],
-        activeId: 'result-1',
-        running: false,
-      });
-      const menu = await screen.findByTestId('export-more');
-      const labels = [...menu.querySelectorAll('option')].map((option) =>
-        option.textContent.trim(),
-      );
-      expect(labels).toEqual([
-        'Export as…',
+      await screen.findByTestId('export');
+      expect(await menuLabels('export')).toEqual([
+        'CSV (.csv)',
+        'JSON (.json)',
         'SQL INSERT (.sql)',
         'Markdown (.md)',
         'Excel (.xlsx)',
       ]);
-      await fireEvent.change(menu, { target: { value: 'xlsx' } });
-      await waitFor(() => {
-        expect(exported).toHaveBeenCalledWith({ resultId: 'result-1', format: 'xlsx' });
+    });
+
+    it('asks the host to write the shown result in the chosen format', async () => {
+      const { exported } = await withState({
+        tabs: [tab()],
+        activeId: 'result-1',
+        running: false,
       });
-      await fireEvent.change(menu, { target: { value: 'sql' } });
+      await screen.findByTestId('export');
+      await chooseFromMenu('export', 'CSV (.csv)');
+      await waitFor(() => {
+        expect(exported).toHaveBeenCalledWith({ resultId: 'result-1', format: 'csv' });
+      });
+      await chooseFromMenu('export', 'Excel (.xlsx)');
+      await waitFor(() => {
+        expect(exported).toHaveBeenLastCalledWith({ resultId: 'result-1', format: 'xlsx' });
+      });
+      await chooseFromMenu('export', 'SQL INSERT (.sql)');
       await waitFor(() => {
         expect(exported).toHaveBeenLastCalledWith({ resultId: 'result-1', format: 'sql' });
       });
+    });
+
+    it('closes the menu after a choice and gives the focus back to its button', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      await screen.findByTestId('export');
+      await chooseFromMenu('export', 'JSON (.json)');
+      expect(screen.queryByRole('menu')).toBeNull();
+      expect(document.activeElement).toBe(screen.getByTestId('export'));
     });
 
     it('exports the tab the user is looking at', async () => {
@@ -1216,10 +1206,8 @@ describe('result grid App', () => {
         activeId: 'result-2',
         running: false,
       });
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
-      });
-      await fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
+      await screen.findByTestId('export');
+      await chooseFromMenu('export', 'CSV (.csv)');
       await waitFor(() => {
         expect(exported).toHaveBeenCalledWith({ resultId: 'result-2', format: 'csv' });
       });
@@ -1243,9 +1231,7 @@ describe('result grid App', () => {
         activeId: 'result-1',
         running: false,
       });
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'CSV' })).toBeTruthy();
-      });
+      await screen.findByTestId('export');
       expect(screen.queryByRole('button', { name: 'Chart' })).toBeNull();
     });
 
@@ -1258,7 +1244,7 @@ describe('result grid App', () => {
       await waitFor(() => {
         expect(screen.getByTestId('error')).toBeTruthy();
       });
-      expect(screen.queryByRole('button', { name: 'CSV' })).toBeNull();
+      expect(screen.queryByTestId('export')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Chart' })).toBeNull();
     });
 
@@ -1267,7 +1253,7 @@ describe('result grid App', () => {
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
       });
-      expect(screen.queryByRole('button', { name: 'CSV' })).toBeNull();
+      expect(screen.queryByTestId('export')).toBeNull();
     });
   });
 });
@@ -1307,6 +1293,6 @@ describe('result grid App with a million rows', () => {
     }
     // The scrollbar still spans every row.
     const canvas = document.querySelector<HTMLElement>('.canvas');
-    expect(canvas?.style.height).toBe(`${MILLION * 22 + 22}px`);
+    expect(canvas?.style.height).toBe(`${MILLION * 22 + 26}px`);
   });
 });

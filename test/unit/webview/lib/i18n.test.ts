@@ -76,6 +76,8 @@ describe('the Russian dictionary', () => {
     'form.mongo.mode.replicaSet',
     'form.options.initSql',
     'console.production',
+    'grid.exportFormat.csv',
+    'grid.exportFormat.json',
     'grid.exportFormat.sql',
     'grid.exportFormat.markdown',
     'grid.exportFormat.xlsx',

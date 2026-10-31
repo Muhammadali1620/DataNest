@@ -23,6 +23,9 @@ const CHAR_WIDTH = 7.2;
 /** Padding and the cell border. */
 const CELL_PADDING = 18;
 
+/** The header's type icon, and room for the sort arrow, beside the column name. */
+export const HEADER_ICONS_WIDTH = 36;
+
 /** How many rows are measured for the first guess. */
 export const SAMPLE_ROWS = 50;
 
@@ -40,7 +43,7 @@ function measure(
   maxChars: number,
   maxWidth: number,
 ): number {
-  let longest = name.length;
+  let longest = 0;
   for (const row of rows) {
     const value = row?.[index];
     if (value !== undefined) {
@@ -50,7 +53,9 @@ function measure(
       longest = Math.max(longest, Math.min(firstLine.length, maxChars));
     }
   }
-  return clamp(Math.round(longest * CHAR_WIDTH + CELL_PADDING), MIN_COLUMN_WIDTH, maxWidth);
+  const header = name.length * CHAR_WIDTH + CELL_PADDING + HEADER_ICONS_WIDTH;
+  const content = longest * CHAR_WIDTH + CELL_PADDING;
+  return clamp(Math.round(Math.max(header, content)), MIN_COLUMN_WIDTH, maxWidth);
 }
 
 /**

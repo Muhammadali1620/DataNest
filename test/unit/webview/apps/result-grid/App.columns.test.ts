@@ -8,6 +8,7 @@ import {
 import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/result-grid/App.svelte';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
+import { chooseFromMenu } from '../../../../helpers/webview/menu';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
 type HostPeer = RpcPeer<ResultGridProtocol['host'], ResultGridProtocol['webview']>;
@@ -135,7 +136,10 @@ describe('result grid column menu', () => {
       expect(headerOrder()).toEqual([1, 3, 4]);
     });
     expect(dataCells().filter((c) => c.getAttribute('data-column') === '1')).toHaveLength(0);
-    expect(screen.getByTestId('columns-toggle').textContent).toContain('1 hidden');
+    expect(screen.getByTestId('columns-toggle').getAttribute('aria-label')).toBe(
+      'Columns (1 hidden)',
+    );
+    expect(screen.getByTestId('columns-toggle').textContent.trim()).toBe('1');
     await fireEvent.click(checkbox('name'));
     await waitFor(() => {
       expect(headerOrder()).toEqual([1, 2, 3, 4]);
@@ -255,7 +259,7 @@ describe('result grid column menu', () => {
     await waitFor(() => {
       expect(headerOrder()).toEqual([4, 1, 3]);
     });
-    await fireEvent.change(screen.getByTestId('copy-as'), { target: { value: 'csv' } });
+    await chooseFromMenu('copy-as', 'CSV');
     await waitFor(() => {
       expect(copyAs).toHaveBeenCalledWith({
         resultId: 'result-1',

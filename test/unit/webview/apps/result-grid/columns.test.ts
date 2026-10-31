@@ -4,6 +4,7 @@ import {
   clamp,
   DEFAULT_COLUMN_WIDTH,
   FIT_ROWS,
+  HEADER_ICONS_WIDTH,
   fitColumnWidth,
   initialWidths,
   keepWidths,
@@ -42,9 +43,17 @@ describe('initialWidths', () => {
     expect(wide[0]).toBeLessThanOrEqual(MAX_AUTO_WIDTH);
   });
 
-  it('keeps a column of only NULLs at the minimum width', () => {
+  it('keeps a column of only NULLs as narrow as its header', () => {
     // The NULL label is short, so such a column never steals room from the rest.
-    expect(initialWidths([{ name: 'x' }], [[null], [null]])).toEqual([MIN_COLUMN_WIDTH]);
+    expect(initialWidths([{ name: 'x' }], [[null], [null]])).toEqual(
+      initialWidths([{ name: 'x' }]),
+    );
+  });
+
+  it('leaves room in the header for the type icon and the sort arrow', () => {
+    // 'id' and its values need little, but the header shows two icons besides the name.
+    const [width] = initialWidths([{ name: 'id' }], [[1], [2]]);
+    expect(width).toBeGreaterThanOrEqual(Math.round(2 * 7.2 + 18 + HEADER_ICONS_WIDTH));
   });
 
   it('measures only the first line of a multi-line value', () => {
@@ -146,7 +155,7 @@ describe('fitColumnWidth', () => {
     expect(fitColumnWidth({ name: 'a_rather_long_header' }, 0, [['x']])).toBeGreaterThan(
       MIN_COLUMN_WIDTH,
     );
-    expect(fitColumnWidth({ name: '' }, 0, [])).toBe(MIN_COLUMN_WIDTH);
+    expect(fitColumnWidth({ name: '' }, 0, [])).toBe(18 + HEADER_ICONS_WIDTH);
   });
 
   it('measures the column it is asked about and only its first line', () => {
@@ -155,7 +164,7 @@ describe('fitColumnWidth', () => {
   });
 
   it('copes with rows that have not arrived and with short rows', () => {
-    expect(fitColumnWidth(column, 3, [undefined, ['a']])).toBe(MIN_COLUMN_WIDTH);
+    expect(fitColumnWidth(column, 3, [undefined, ['a']])).toBe(fitColumnWidth(column, 3, []));
   });
 
   it('looks at no more rows than a fit is allowed to', () => {

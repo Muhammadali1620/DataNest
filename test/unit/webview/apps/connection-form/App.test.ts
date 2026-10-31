@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
   connectionFormProtocol,
@@ -19,11 +19,33 @@ const DRIVERS: ConnectionFormState['drivers'] = [
   { id: 'sqlite', file: true },
 ];
 
-/** The drivers the Database list offers, without the compatible servers after them. */
-function driverOptions(select: HTMLSelectElement): string[] {
-  return [...select.options]
-    .filter((option) => option.parentElement === select)
-    .map((option) => option.textContent);
+/** The cards of the Database picker, in order. */
+function choiceCards(): HTMLElement[] {
+  const group = screen.getByRole('radiogroup', { name: 'Database' });
+  return within(group).getAllByRole('radio');
+}
+
+/** The drivers the Database picker offers, without the compatible servers after them. */
+function driverOptions(): string[] {
+  return choiceCards()
+    .filter((card) => !(card.getAttribute('data-value') ?? '').startsWith('preset:'))
+    .map((card) => card.textContent.trim());
+}
+
+/** The compatible servers the picker offers after the drivers. */
+function compatibleOptions(): string[] {
+  return choiceCards()
+    .filter((card) => (card.getAttribute('data-value') ?? '').startsWith('preset:'))
+    .map((card) => card.textContent.trim());
+}
+
+/** Picks a driver id or `preset:<id>` in the Database picker. */
+async function chooseDatabase(value: string): Promise<void> {
+  const card = choiceCards().find((item) => item.getAttribute('data-value') === value);
+  if (card === undefined) {
+    throw new Error(`No database card ${value}`);
+  }
+  await fireEvent.click(card);
 }
 
 function newState(overrides: Partial<ConnectionFormState> = {}): ConnectionFormState {
@@ -112,7 +134,7 @@ describe('connection form App', () => {
 
   it('swaps the fields when a file driver is chosen', async () => {
     await withState();
-    await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'sqlite' } });
+    await chooseDatabase('sqlite');
     await waitFor(() => {
       expect(screen.queryByLabelText('Database file')).not.toBeNull();
     });
@@ -122,7 +144,7 @@ describe('connection form App', () => {
 
   it('offers the default port of the newly chosen driver', async () => {
     await withState();
-    await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'postgres' } });
+    await chooseDatabase('postgres');
     await waitFor(() => {
       expect(field('Port').value).toBe('5432');
     });
@@ -333,7 +355,7 @@ describe('connection form App', () => {
 
     it('offers no tunnel for file databases', async () => {
       await withState();
-      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'sqlite' } });
+      await chooseDatabase('sqlite');
       await waitFor(() => {
         expect(screen.queryByLabelText('Database file')).not.toBeNull();
       });
@@ -943,7 +965,7 @@ describe('connection form App', () => {
       await withState();
       expect(screen.queryByLabelText('Databases')).not.toBeNull();
       expect(screen.queryByLabelText('Schemas')).toBeNull();
-      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'sqlite' } });
+      await chooseDatabase('sqlite');
       await waitFor(() => {
         expect(screen.queryByText('Visible databases and schemas')).toBeNull();
       });
@@ -962,16 +984,14 @@ describe('connection form App: more databases (V6.3)', () => {
         ],
       }),
     );
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    expect(driverOptions(select)).toEqual([
+    expect(driverOptions()).toEqual([
       'MySQL / MariaDB',
       'PostgreSQL',
       'SQLite',
       'Microsoft SQL Server',
       'ClickHouse',
     ]);
-    select.value = 'clickhouse';
-    await fireEvent.change(select);
+    await chooseDatabase('clickhouse');
     expect(screen.getByLabelText<HTMLInputElement>('Port').value).toBe('8123');
   });
 });
@@ -990,10 +1010,8 @@ describe('connection form App: Oracle (V6.4)', () => {
 
   it('lists Oracle by its name and offers port 1521', async () => {
     await withState(newState({ drivers }));
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    expect(driverOptions(select).at(-1)).toBe('Oracle');
-    select.value = 'oracle';
-    await fireEvent.change(select);
+    expect(driverOptions().at(-1)).toBe('Oracle');
+    await chooseDatabase('oracle');
     await waitFor(() => {
       expect(field('Port').value).toBe('1521');
     });
@@ -1018,14 +1036,11 @@ describe('connection form App: Oracle (V6.4)', () => {
   it('has no TLS section for Oracle and brings it back for other drivers', async () => {
     await withState(newState({ drivers }));
     expect(screen.queryByLabelText('SSL / TLS')).not.toBeNull();
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    select.value = 'oracle';
-    await fireEvent.change(select);
+    await chooseDatabase('oracle');
     await waitFor(() => {
       expect(screen.queryByLabelText('SSL / TLS')).toBeNull();
     });
-    select.value = 'postgres';
-    await fireEvent.change(select);
+    await chooseDatabase('postgres');
     await waitFor(() => {
       expect(screen.queryByLabelText('SSL / TLS')).not.toBeNull();
     });
@@ -1069,10 +1084,8 @@ describe('connection form App: Oracle (V6.4)', () => {
 describe('connection form App: compatible servers (V6.5)', () => {
   it('lists the compatible servers of the drivers it has, after the drivers', async () => {
     await withState(newState());
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    const group = select.querySelector('optgroup');
-    expect(group?.label).toBe('Compatible servers');
-    expect([...(group?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([
+    expect(screen.getByText('Compatible servers')).toBeTruthy();
+    expect(compatibleOptions()).toEqual([
       'TiDB',
       'Amazon Aurora MySQL',
       'CockroachDB',
@@ -1085,9 +1098,8 @@ describe('connection form App: compatible servers (V6.5)', () => {
     await withState(
       newState({ drivers: [{ id: 'sqlite', file: true }], input: { name: '', driver: 'sqlite' } }),
     );
-    expect(
-      screen.getByLabelText<HTMLSelectElement>('Database').querySelector('optgroup'),
-    ).toBeNull();
+    expect(compatibleOptions()).toEqual([]);
+    expect(screen.queryByText('Compatible servers')).toBeNull();
   });
 
   it('starts CockroachDB on the PostgreSQL driver with its port, account and database', async () => {
@@ -1099,9 +1111,7 @@ describe('connection form App: compatible servers (V6.5)', () => {
       drafts.push(draft);
       return { connectionId: 'c1' };
     });
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    select.value = 'preset:cockroachdb';
-    await fireEvent.change(select);
+    await chooseDatabase('preset:cockroachdb');
     await waitFor(() => {
       expect(field('Port').value).toBe('26257');
     });
@@ -1132,9 +1142,7 @@ describe('connection form App: compatible servers (V6.5)', () => {
       drafts.push(draft);
       return { connectionId: 'c1' };
     });
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    select.value = 'preset:aurora-mysql';
-    await fireEvent.change(select);
+    await chooseDatabase('preset:aurora-mysql');
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       expect(drafts).toHaveLength(1);
@@ -1150,14 +1158,11 @@ describe('connection form App: compatible servers (V6.5)', () => {
 
   it('goes back to a plain driver with its own default port', async () => {
     await withState(newState());
-    const select = screen.getByLabelText<HTMLSelectElement>('Database');
-    select.value = 'preset:tidb';
-    await fireEvent.change(select);
+    await chooseDatabase('preset:tidb');
     await waitFor(() => {
       expect(field('Port').value).toBe('4000');
     });
-    select.value = 'mysql';
-    await fireEvent.change(select);
+    await chooseDatabase('mysql');
     await waitFor(() => {
       expect(field('Port').value).toBe('3306');
     });
@@ -1183,10 +1188,8 @@ describe('connection form App: compatible servers (V6.5)', () => {
 
     it('offers Redis with its default port and a database number', async () => {
       await withState(newState({ drivers: REDIS }));
-      expect(driverOptions(screen.getByLabelText<HTMLSelectElement>('Database'))).toContain(
-        'Redis',
-      );
-      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'redis' } });
+      expect(driverOptions()).toContain('Redis');
+      await chooseDatabase('redis');
       await waitFor(() => {
         expect(field('Port').value).toBe('6379');
       });
@@ -1287,7 +1290,7 @@ describe('connection form App: compatible servers (V6.5)', () => {
 
     it('offers MongoDB with its default port, its sign-in fields and no init commands', async () => {
       await withState(newState({ drivers: MONGO }));
-      await fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'mongodb' } });
+      await chooseDatabase('mongodb');
       await waitFor(() => {
         expect(field('Port').value).toBe('27017');
       });

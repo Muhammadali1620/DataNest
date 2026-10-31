@@ -37,6 +37,7 @@
     "coverage",
     "test/fixtures",
     "test/unit/webview",
+    "test/helpers/webview",
     "test/e2e",
     "scripts/research/**/*.cjs"
   ]

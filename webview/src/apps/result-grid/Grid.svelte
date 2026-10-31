@@ -5,7 +5,10 @@
   import type { CellValue } from '../../../../src/shared/cell-value';
   import type { ResultColumnInfo } from '../../../../src/shared/protocols/result-grid';
   import type { Translate } from '../../lib/i18n';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import { displayOf } from './cells';
+  import { typeIcon } from './column-type';
   import { controlFor, type EditColumn, type EditorControl, initialText, isEditableColumn } from './edit-model';
   import {
     MIN_COLUMN_WIDTH,
@@ -126,8 +129,8 @@
   /** One row is exactly this tall, which is what makes the arithmetic simple. */
   const ROW_HEIGHT = 22;
 
-  /** The header row is as tall as a data row; rows are placed below it. */
-  const HEADER_HEIGHT = ROW_HEIGHT;
+  /** The header row is a little taller than a data row; rows are placed below it. */
+  const HEADER_HEIGHT = 26;
 
   /**
    * Until the browser reports a size, one screenful is assumed: the first rows
@@ -558,9 +561,9 @@
     const bottom = top + ROW_HEIGHT;
     if (top < viewport.scrollTop) {
       viewport.scrollTop = top;
-    } else if (bottom > viewport.scrollTop + height - ROW_HEIGHT) {
-      // The header covers one row's worth at the top of the viewport.
-      viewport.scrollTop = bottom - height + ROW_HEIGHT;
+    } else if (bottom > viewport.scrollTop + height - HEADER_HEIGHT) {
+      // The header covers the top of the viewport.
+      viewport.scrollTop = bottom - height + HEADER_HEIGHT;
     }
     if (focus.column < pinned) {
       // Pinned columns never scroll out of sight.
@@ -640,7 +643,7 @@
 >
   <p class="sr-only" id={`${uid}-keys`}>{t('grid.keys')}</p>
   <div class="canvas" style="height: {rows.totalHeight + HEADER_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
-    <div class="header" role="row" aria-rowindex={1} style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
+    <div class="header" role="row" aria-rowindex={1} style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px; height: {HEADER_HEIGHT}px;">
       <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader" aria-colindex={1}>#</div>
       {#each pinnedPositions as position (position)}
         {@render headCell(position)}
@@ -655,6 +658,7 @@
       {@const cells = rowAt(index)}
       <div
         class="row"
+        class:odd={index % 2 === 1}
         class:inserted={stateAt(index) === 'inserted'}
         class:deleted={stateAt(index) === 'deleted'}
         role="row"
@@ -710,10 +714,11 @@
         onSort(index);
       }}
     >
-      {#if position < pinned}<span class="pin" aria-hidden="true">📌</span>{/if}
-      {columns[index]?.name ?? ''}
+      {#if position < pinned}<span class="pin"><Icon name="pinned" size={12} /></span>{/if}
+      <span class="type"><Icon name={typeIcon(columns[index]?.dataType)} size={14} /></span>
+      <span class="label">{columns[index]?.name ?? ''}</span>
       {#if sort?.column === index}
-        <span class="arrow" aria-hidden="true">{sort.direction === 'asc' ? '▲' : '▼'}</span>
+        <span class="arrow"><Icon name={sort.direction === 'asc' ? 'arrow-up' : 'arrow-down'} size={14} /></span>
       {/if}
     </button>
     <span
@@ -816,64 +821,84 @@
 {/snippet}
 
 {#if editColumns !== undefined}
-  <div class="editbar" data-testid="editbar">
-    <button
-      type="button"
-      class="action"
+  <div class="editbar" data-testid="editbar" role="toolbar" aria-label={t('grid.editToolbar')}>
+    <IconButton
+      icon="circle-slash"
+      label={t('grid.setNull')}
+      text={t('grid.setNull')}
       disabled={!canSetNull}
       onclick={() => {
         void setFocused({ kind: 'null' });
       }}
-    >
-      {t('grid.setNull')}
-    </button>
-    <button
-      type="button"
-      class="action"
+    />
+    <IconButton
+      icon="symbol-constant"
+      label={t('grid.setDefault')}
+      text={t('grid.setDefault')}
       disabled={!canSetDefault}
       onclick={() => {
         void setFocused({ kind: 'default' });
       }}
-    >
-      {t('grid.setDefault')}
-    </button>
-    <span class="divider"></span>
-    <button type="button" class="action" onclick={() => { rowAction('add'); }}>
-      {t('grid.addRow')}
-    </button>
-    <button
-      type="button"
-      class="action"
+    />
+    <span class="toolbar-separator"></span>
+    <IconButton
+      icon="add"
+      label={t('grid.addRow')}
+      text={t('grid.addRow')}
+      onclick={() => {
+        rowAction('add');
+      }}
+    />
+    <IconButton
+      icon="copy"
+      label={t('grid.duplicateRows')}
+      text={t('grid.duplicateRows')}
       disabled={selectedRows.length === 0}
-      onclick={() => { rowAction('duplicate'); }}
-    >
-      {t('grid.duplicateRows')}
-    </button>
-    <button type="button" class="action" disabled={!canDelete} onclick={() => { rowAction('delete'); }}>
-      {t('grid.deleteRows')}
-    </button>
-    <button type="button" class="action" disabled={!canRestore} onclick={() => { rowAction('restore'); }}>
-      {t('grid.restoreRows')}
-    </button>
-    <button
-      type="button"
-      class="action"
+      onclick={() => {
+        rowAction('duplicate');
+      }}
+    />
+    <IconButton
+      icon="trash"
+      label={t('grid.deleteRows')}
+      text={t('grid.deleteRows')}
+      disabled={!canDelete}
+      onclick={() => {
+        rowAction('delete');
+      }}
+    />
+    <IconButton
+      icon="history"
+      label={t('grid.restoreRows')}
+      text={t('grid.restoreRows')}
+      disabled={!canRestore}
+      onclick={() => {
+        rowAction('restore');
+      }}
+    />
+    <IconButton
+      icon="discard"
+      label={t('grid.revertRows')}
+      text={t('grid.revertRows')}
       disabled={selectedRows.length === 0}
       onclick={() => {
         rowAction('revert');
       }}
-    >
-      {t('grid.revertRows')}
-    </button>
-    <span class="hint">{t('grid.editHint')}</span>
+    />
     {#if actionError !== undefined}
       <span class="problem" role="alert" data-testid="action-error">{actionError}</span>
     {/if}
+    <span class="hint" title={t('grid.editHint')}>
+      <Icon name="question" size={14} /><span class="sr-only">{t('grid.editHint')}</span>
+    </span>
   </div>
 {/if}
 
 <style>
   .viewport {
+    /* Opaque, so rows scrolling under the sticky header do not show through. */
+    --dn-header-background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+    --dn-grid-line: var(--vscode-editorGroup-border, var(--dn-divider));
     position: relative;
     flex: 1;
     overflow: auto;
@@ -893,8 +918,8 @@
     top: 0;
     z-index: 3;
     display: flex;
-    height: 22px;
-    background: var(--vscode-editorGroupHeader-tabsBackground);
+    background: var(--dn-header-background);
+    box-shadow: 0 1px 0 var(--dn-divider);
   }
 
   .row {
@@ -902,6 +927,10 @@
     left: 0;
     display: flex;
     height: 22px;
+  }
+
+  .row.odd {
+    background: var(--vscode-keybindingTable-rowsBackground, transparent);
   }
 
   .row:hover {
@@ -915,14 +944,16 @@
     line-height: 18px;
     white-space: nowrap;
     text-overflow: ellipsis;
-    border-right: 1px solid var(--vscode-panel-border);
+    border-right: 1px solid var(--dn-grid-line);
     box-sizing: border-box;
   }
 
   .head {
     position: relative;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
     font-weight: 600;
-    border-bottom: 1px solid var(--vscode-panel-border);
   }
 
   .name {
@@ -943,10 +974,28 @@
     cursor: pointer;
   }
 
-  .arrow {
+  .name .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .name .type {
+    display: inline-flex;
     flex: none;
-    font-size: 0.8em;
-    opacity: 0.8;
+    color: var(--dn-muted);
+    font-weight: normal;
+  }
+
+  .arrow {
+    display: inline-flex;
+    flex: none;
+    color: var(--dn-accent);
+  }
+
+  .pin {
+    display: inline-flex;
+    flex: none;
+    color: var(--dn-muted);
   }
 
   .grip {
@@ -959,8 +1008,23 @@
     touch-action: none;
   }
 
-  .grip:hover {
-    background: var(--vscode-focusBorder);
+  .grip::after {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 3px;
+    width: 1px;
+    content: '';
+    background: transparent;
+    transition: background-color var(--dn-duration) var(--dn-ease);
+  }
+
+  .grip:hover::after {
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 3px;
+    background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
   }
 
   .rownum {
@@ -995,7 +1059,7 @@
 
   .head.pinned {
     z-index: 2;
-    background: var(--vscode-editorGroupHeader-tabsBackground);
+    background: var(--dn-header-background);
   }
 
   .row:hover .cell.pinned {
@@ -1006,13 +1070,12 @@
     background: var(--vscode-diffEditor-insertedLineBackground, rgba(80, 160, 80, 0.12));
   }
 
-  .pin {
-    font-size: 0.75em;
-  }
-
   .head.rownum {
     z-index: 2;
-    background: var(--vscode-editorGroupHeader-tabsBackground);
+    justify-content: flex-end;
+    color: var(--dn-muted);
+    font-weight: normal;
+    background: var(--dn-header-background);
   }
 
   .spacer {
@@ -1024,8 +1087,9 @@
   }
 
   .null {
-    color: var(--vscode-descriptionForeground);
+    color: var(--dn-muted);
     font-style: italic;
+    opacity: 0.8;
   }
 
   .selected {
@@ -1052,11 +1116,6 @@
     background: var(--vscode-diffEditor-removedLineBackground, rgba(200, 80, 80, 0.15));
   }
 
-  .divider {
-    align-self: stretch;
-    border-left: 1px solid var(--vscode-panel-border);
-  }
-
   .changed {
     background: var(--vscode-diffEditor-insertedTextBackground, rgba(80, 160, 80, 0.25));
   }
@@ -1068,7 +1127,9 @@
   .cell.link::after {
     float: right;
     margin-left: 4px;
-    content: '↗';
+    /* The icon font's link-external glyph. */
+    content: '\eb14';
+    font: normal normal normal 12px/18px codicon;
     opacity: 0.5;
   }
 
@@ -1090,8 +1151,10 @@
     color: var(--vscode-input-foreground);
     background: var(--vscode-input-background);
     border: 1px solid var(--vscode-focusBorder);
+    border-radius: 0;
     box-sizing: border-box;
     font: inherit;
+    outline: none;
   }
 
   .tip {
@@ -1109,28 +1172,20 @@
   .editbar {
     display: flex;
     flex: none;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 2px;
     align-items: center;
-    padding: 3px 8px;
-    border-top: 1px solid var(--vscode-panel-border);
-  }
-
-  .action {
-    padding: 1px 8px;
-    color: var(--vscode-button-secondaryForeground);
-    background: var(--vscode-button-secondaryBackground);
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-  }
-
-  .action:disabled {
-    opacity: 0.5;
-    cursor: default;
+    padding: 3px 6px;
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
   }
 
   .hint {
-    color: var(--vscode-descriptionForeground);
+    display: inline-flex;
+    margin-left: auto;
+    padding: 0 4px;
+    color: var(--dn-muted);
+    cursor: help;
   }
 
   .problem {

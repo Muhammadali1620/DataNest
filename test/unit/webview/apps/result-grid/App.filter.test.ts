@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
   resultGridProtocol,
@@ -95,7 +95,9 @@ describe('result grid filter', () => {
     expect(screen.queryByTestId('filter-bar')).toBeNull();
     await fireEvent.click(screen.getByTestId('filter-toggle'));
     await fireEvent.click(screen.getByTestId('filter-add'));
-    await fireEvent.input(screen.getByLabelText('Value'), { target: { value: 'new' } });
+    await fireEvent.input(within(screen.getByTestId('filter-bar')).getByLabelText('Value'), {
+      target: { value: 'new' },
+    });
     await fireEvent.click(screen.getByTestId('filter-apply'));
     await waitFor(() => {
       expect(filters).toHaveBeenCalledWith({
@@ -110,7 +112,8 @@ describe('result grid filter', () => {
       ...TABLE,
       filter: { conditions: [{ column: 'id', operator: 'isNull' }] },
     });
-    expect(screen.getByTestId('filter-toggle').textContent).toContain('(1)');
+    expect(screen.getByTestId('filter-toggle').getAttribute('aria-label')).toBe('Filter (1)');
+    expect(screen.getByTestId('filter-toggle').textContent.trim()).toBe('1');
     await fireEvent.click(screen.getByTestId('filter-toggle'));
     await fireEvent.click(screen.getByTestId('filter-clear'));
     await waitFor(() => {

@@ -31,6 +31,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
     viewKey,
   } from './column-view';
   import Grid from './Grid.svelte';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
+  import MenuButton from '../../components/MenuButton.svelte';
+  import type { CodiconName } from '../../lib/codicons';
   import { COPY_FORMATS, type CopyFormat } from '../../../../src/shared/copy-format';
   import type { MessageKey } from '../../l10n/en';
   import FilterBar from './FilterBar.svelte';
@@ -48,8 +52,23 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import { RowCache, windowFor } from './rows';
   import { type CellRef, type SelectionInfo } from './selection';
 
-  /** Export formats beyond the CSV and JSON buttons. */
-  const MORE_EXPORTS = ['sql', 'markdown', 'xlsx'] as const;
+  /** What the Export menu offers, in its order: the everyday formats first. */
+  const EXPORTS = ['csv', 'json', 'sql', 'markdown', 'xlsx'] as const;
+  type ExportFormat = (typeof EXPORTS)[number];
+  const EXPORT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
+    csv: 'grid.exportFormat.csv',
+    json: 'grid.exportFormat.json',
+    sql: 'grid.exportFormat.sql',
+    markdown: 'grid.exportFormat.markdown',
+    xlsx: 'grid.exportFormat.xlsx',
+  };
+  const EXPORT_ICONS: Readonly<Record<ExportFormat, CodiconName>> = {
+    csv: 'table',
+    json: 'json',
+    sql: 'database',
+    markdown: 'markdown',
+    xlsx: 'file',
+  };
 
   interface Props {
     rpc: RpcPeer<ResultGridProtocol['webview'], ResultGridProtocol['host']>;
@@ -57,6 +76,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   const { rpc, t }: Props = $props();
+
+  /** The modifier of the Run key binding as the user's keyboard labels it. */
+  const RUN_MODIFIER = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
 
   let gridState = $state<ResultGridState | undefined>(undefined);
   let failure = $state<string | undefined>(undefined);
@@ -719,10 +741,33 @@ import type { RowAction } from '../../../../src/shared/row-action';
 </script>
 
 <main>
+  {#if gridState?.running === true}
+    <div class="progress-bar" role="progressbar" aria-label={t('grid.running')}></div>
+  {/if}
   {#if gridState === undefined}
-    <p class="hint">{t('grid.loading')}</p>
+    <div class="empty" role="status">
+      <Icon name="loading" size={20} spin />
+      <p class="empty-title">{t('grid.loading')}</p>
+    </div>
   {:else if gridState.tabs.length === 0}
-    <p class="hint" role="status">{gridState.running ? t('grid.running') : t('grid.empty')}</p>
+    <div class="empty" role="status">
+      <span class="empty-icon"><Icon name={gridState.running ? 'loading' : 'table'} size={28} spin={gridState.running} /></span>
+      <p class="empty-title">{gridState.running ? t('grid.running') : t('grid.empty')}</p>
+      {#if !gridState.running}
+        <p class="empty-hint">{t('grid.emptyHint')} <kbd>{RUN_MODIFIER}</kbd>+<kbd>Enter</kbd></p>
+      {/if}
+      {#if gridState.running}
+        <button
+          type="button"
+          class="button secondary"
+          onclick={() => {
+            rpc.emit('cancel', {});
+          }}
+        >
+          <Icon name="debug-stop" />{t('grid.cancel')}
+        </button>
+      {/if}
+    </div>
   {:else}
     <div class="tabs" role="tablist">
       {#each gridState.tabs as tab (tab.id)}
@@ -738,185 +783,190 @@ import type { RowAction } from '../../../../src/shared/row-action';
             selectTab(tab.id);
           }}
         >
-          {tab.title}
+          <Icon
+            name={tab.error !== undefined ? 'error' : tab.affectedRows !== undefined ? 'check' : 'table'}
+            size={14}
+          /><span class="tab-title">{tab.title}</span>
         </button>
       {/each}
-      <span class="spacer"></span>
-      {#if activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
-        <button
-          type="button"
-          class="cancel"
-          aria-pressed={columnsOpen}
-          title={t('columns.hint')}
-          data-testid="columns-toggle"
-          onclick={() => {
-            columnsOpen = !columnsOpen;
-          }}
-        >
-          {columnView.hidden.length > 0
-            ? t('columns.titleHidden', columnView.hidden.length)
-            : t('columns.title')}
-        </button>
-        <select
-          class="cancel"
-          aria-label={t('grid.copyAs')}
-          title={t('grid.copyAsHint')}
-          data-testid="copy-as"
-          value=""
-          onchange={(event) => {
-            const format = COPY_FORMATS.find((item) => item === event.currentTarget.value);
-            event.currentTarget.value = '';
-            if (format !== undefined) {
-              void copyAs(format);
-            }
-          }}
-        >
-          <option value="" disabled>{t('grid.copyAs')}</option>
-          {#each COPY_FORMATS as format (format)}
-            <option value={format} disabled={format === 'update' && editColumns === undefined}>
-              {t(`grid.copyFormat.${format}` as MessageKey)}
-            </option>
-          {/each}
-        </select>
-        {#if copyNote !== undefined}
-          <span class="note" data-testid="copy-note">{copyNote}</span>
-        {/if}
-      {/if}
-      {#if activeTab?.page !== undefined}
-        <button
-          type="button"
-          class="cancel"
-          aria-pressed={filterOpen}
-          data-testid="filter-toggle"
-          onclick={() => {
-            filterOpen = !filterOpen;
-          }}
-        >
-          {activeCount(activeTab.filter) > 0
-            ? t('filter.titleWithCount', activeCount(activeTab.filter))
-            : t('filter.title')}
-        </button>
-      {/if}
-      {#if activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
-        <button
-          type="button"
-          class="cancel"
-          aria-pressed={valueOpen}
-          title={t('value.toggleHint')}
-          data-testid="value-toggle"
-          onclick={toggleValue}
-        >
-          {t('value.title')}
-        </button>
-        <button
-          type="button"
-          class="cancel"
-          aria-pressed={recordOpen}
-          title={t('record.toggleHint')}
-          data-testid="record-toggle"
-          onclick={toggleRecord}
-        >
-          {t('record.title')}
-        </button>
-      {/if}
-      {#if gridState.running}
-        <button
-          type="button"
-          class="cancel"
-          onclick={() => {
-            rpc.emit('cancel', {});
-          }}
-        >
-          {t('grid.cancel')}
-        </button>
-      {:else if activeTab !== undefined && activeTab.error === undefined}
-        {#if activeTab.columns.length > 0}
-          <button
-            type="button"
-            class="cancel"
-            title={t('grid.chartHint')}
-            data-testid="chart"
-            onclick={() => {
-              rpc.emit('chartResult', { resultId: activeTab.id });
-            }}
-          >
-            {t('grid.chart')}
-          </button>
-        {/if}
-        <button
-          type="button"
-          class="cancel"
-          title={t('grid.exportHint')}
-          onclick={() => {
-            rpc.emit('exportResult', { resultId: activeTab.id, format: 'csv' });
-          }}
-        >
-          {t('grid.exportCsv')}
-        </button>
-        <button
-          type="button"
-          class="cancel"
-          title={t('grid.exportHint')}
-          onclick={() => {
-            rpc.emit('exportResult', { resultId: activeTab.id, format: 'json' });
-          }}
-        >
-          {t('grid.exportJson')}
-        </button>
-        <select
-          class="cancel"
-          aria-label={t('grid.exportMore')}
-          title={t('grid.exportHint')}
-          data-testid="export-more"
-          value=""
-          onchange={(event) => {
-            const format = MORE_EXPORTS.find((item) => item === event.currentTarget.value);
-            event.currentTarget.value = '';
-            if (format !== undefined) {
-              rpc.emit('exportResult', { resultId: activeTab.id, format });
-            }
-          }}
-        >
-          <option value="" disabled>{t('grid.exportMore')}</option>
-          {#each MORE_EXPORTS as format (format)}
-            <option value={format}>{t(`grid.exportFormat.${format}` as MessageKey)}</option>
-          {/each}
-        </select>
-      {/if}
     </div>
 
+    {#if activeTab !== undefined && activeTab.error === undefined}
+      {@const hasColumns = activeTab.columns.length > 0}
+      <div class="toolbar-row">
+        {#if hasColumns}
+          <div class="find">
+            <span class="find-icon"><Icon name="search" size={14} /></span>
+            <input
+              class="control find-input"
+              type="search"
+              placeholder={t('grid.searchPlaceholder')}
+              aria-label={t('grid.searchPlaceholder')}
+              value={search}
+              oninput={(event) => {
+                void runSearch(event.currentTarget.value);
+              }}
+              onkeydown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  stepHit(event.shiftKey ? -1 : 1);
+                }
+              }}
+            />
+            {#if search.trim() !== ''}
+              <span class="hits" class:none={hitTotal === 0} role="status" data-testid="hits">
+                {hitTotal === 0 ? t('grid.noMatches') : t('grid.matchOf', hitIndex + 1, hitTotal)}
+              </span>
+              <IconButton
+                icon="arrow-up"
+                label={t('grid.previousMatch')}
+                disabled={hits.length === 0}
+                onclick={() => {
+                  stepHit(-1);
+                }}
+              />
+              <IconButton
+                icon="arrow-down"
+                label={t('grid.nextMatch')}
+                disabled={hits.length === 0}
+                onclick={() => {
+                  stepHit(1);
+                }}
+              />
+            {/if}
+          </div>
+        {/if}
+        <span class="spacer"></span>
+        {#if copyNote !== undefined}
+          <span class="note fade-in" data-testid="copy-note"><Icon name="check" size={14} />{copyNote}</span>
+        {/if}
+        <div class="toolbar" role="toolbar" aria-label={t('grid.toolbar')}>
+          {#if activeTab.page !== undefined}
+            {@const count = activeCount(activeTab.filter)}
+            <IconButton
+              icon={count > 0 ? 'filter-filled' : 'filter'}
+              label={count > 0 ? t('filter.titleWithCount', count) : t('filter.title')}
+              pressed={filterOpen}
+              {count}
+              data-testid="filter-toggle"
+              onclick={() => {
+                filterOpen = !filterOpen;
+              }}
+            />
+          {/if}
+          {#if hasColumns}
+            <IconButton
+              icon="list-selection"
+              label={columnView.hidden.length > 0
+                ? t('columns.titleHidden', columnView.hidden.length)
+                : t('columns.title')}
+              hint={t('columns.hint')}
+              count={columnView.hidden.length}
+              pressed={columnsOpen}
+              data-testid="columns-toggle"
+              onclick={() => {
+                columnsOpen = !columnsOpen;
+              }}
+            />
+            <IconButton
+              icon="open-preview"
+              label={t('value.title')}
+              hint={t('value.toggleHint')}
+              pressed={valueOpen}
+              data-testid="value-toggle"
+              onclick={toggleValue}
+            />
+            <IconButton
+              icon="layout-sidebar-right"
+              label={t('record.title')}
+              hint={t('record.toggleHint')}
+              pressed={recordOpen}
+              data-testid="record-toggle"
+              onclick={toggleRecord}
+            />
+            <span class="toolbar-separator"></span>
+          {/if}
+          {#if gridState.running}
+            <IconButton
+              icon="debug-stop"
+              label={t('grid.cancel')}
+              onclick={() => {
+                rpc.emit('cancel', {});
+              }}
+            />
+          {:else}
+            {#if hasColumns}
+              <IconButton
+                icon="graph"
+                label={t('grid.chart')}
+                hint={t('grid.chartHint')}
+                data-testid="chart"
+                onclick={() => {
+                  rpc.emit('chartResult', { resultId: activeTab.id });
+                }}
+              />
+              <MenuButton
+                icon="copy"
+                label={t('grid.copyAs')}
+                hint={t('grid.copyAsHint')}
+                testid="copy-as"
+                items={COPY_FORMATS.map((format) => ({
+                  id: format,
+                  label: t(`grid.copyFormat.${format}` as MessageKey),
+                  disabled: format === 'update' && editColumns === undefined,
+                }))}
+                onSelect={(format: CopyFormat) => {
+                  void copyAs(format);
+                }}
+              />
+            {/if}
+            <MenuButton
+              icon="export"
+              label={t('grid.export')}
+              hint={t('grid.exportHint')}
+              testid="export"
+              items={EXPORTS.map((format, index) => ({
+                id: format,
+                label: t(EXPORT_LABELS[format]),
+                icon: EXPORT_ICONS[format],
+                separated: index === 2,
+              }))}
+              onSelect={(format: ExportFormat) => {
+                rpc.emit('exportResult', { resultId: activeTab.id, format });
+              }}
+            />
+          {/if}
+        </div>
+      </div>
+    {/if}
+
     {#if columnsOpen && activeTab !== undefined && activeTab.error === undefined && activeTab.columns.length > 0}
-      <div class="columns-menu" data-testid="columns-menu" role="group" aria-label={t('columns.title')}>
+      <div class="columns-menu fade-in" data-testid="columns-menu" role="group" aria-label={t('columns.title')}>
         <div class="columns-actions">
           <button
             type="button"
-            class="cancel"
+            class="button secondary"
             data-testid="columns-show-all"
             disabled={columnView.hidden.length === 0}
             onclick={() => {
               changeView(showAll(columnView));
             }}
           >
-            {t('columns.showAll')}
+            <Icon name="eye" />{t('columns.showAll')}
+          </button>
+          <button type="button" class="button secondary" data-testid="columns-fit-all" onclick={fitAll}>
+            <Icon name="word-wrap" />{t('columns.fitAll')}
           </button>
           <button
             type="button"
-            class="cancel"
-            data-testid="columns-fit-all"
-            onclick={fitAll}
-          >
-            {t('columns.fitAll')}
-          </button>
-          <button
-            type="button"
-            class="cancel"
+            class="button secondary"
             data-testid="columns-reset"
             disabled={!isCustomized(columnView)}
             onclick={() => {
               changeView(NO_VIEW);
             }}
           >
-            {t('columns.reset')}
+            <Icon name="discard" />{t('columns.reset')}
           </button>
         </div>
         <ul class="columns-list">
@@ -930,21 +980,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
                     changeView(toggleHidden(columnView, index, activeTab.columns.length));
                   }}
                 />
-                {column.name === '' ? `#${index + 1}` : column.name}
+                <span class="column-name">{column.name === '' ? `#${index + 1}` : column.name}</span>
+                {#if column.dataType !== undefined}<span class="column-type">{column.dataType}</span>{/if}
               </label>
-              <button
-                type="button"
+              <IconButton
                 class="pin-toggle"
-                aria-pressed={isPinned(columnView, index)}
-                aria-label={t('columns.pin', column.name)}
-                title={t('columns.pinHint')}
+                icon={isPinned(columnView, index) ? 'pinned' : 'pin'}
+                label={t('columns.pin', column.name)}
+                hint={t('columns.pinHint')}
+                pressed={isPinned(columnView, index)}
                 disabled={isHidden(columnView, index)}
                 onclick={() => {
                   changeView(togglePinned(columnView, index));
                 }}
-              >
-                📌
-              </button>
+              />
             </li>
           {/each}
         </ul>
@@ -966,199 +1015,123 @@ import type { RowAction } from '../../../../src/shared/row-action';
     {/if}
 
     {#if activeTab === undefined}
-      <p class="hint">{t('grid.empty')}</p>
+      <div class="empty"><p class="empty-title">{t('grid.empty')}</p></div>
     {:else if activeTab.error !== undefined}
-      <div class="failed" role="alert" data-testid="error">
-        <p class="error">{activeTab.error.message}</p>
-        <p class="where">
-          {#if activeTab.error.position !== undefined}
-            {t('grid.errorAt', activeTab.error.position + 1)}
-          {/if}
-          <button
-            type="button"
-            class="link"
-            onclick={() => {
-              rpc.emit('revealError', { resultId: activeTab.id });
-            }}
-          >
-            {t('grid.goToError')}
-          </button>
-        </p>
+      <div class="failed-wrap">
+        <div class="notice error failed" role="alert" data-testid="error">
+          <Icon name="error" />
+          <div class="failed-body">
+            <p class="error">{activeTab.error.message}</p>
+            <p class="where">
+              {#if activeTab.error.position !== undefined}
+                <span>{t('grid.errorAt', activeTab.error.position + 1)}</span>
+              {/if}
+              <button
+                type="button"
+                class="link-button"
+                onclick={() => {
+                  rpc.emit('revealError', { resultId: activeTab.id });
+                }}
+              >
+                {t('grid.goToError')}
+              </button>
+            </p>
+          </div>
+        </div>
       </div>
     {:else}
-      <p class="summary" role="status" data-testid="summary">
-        {#if activeTab.affectedRows !== undefined}
-          {t('grid.affected', activeTab.affectedRows, activeTab.durationMs)}
-        {:else}
-          {t('grid.rows', activeTab.rowCount, activeTab.durationMs)}
-        {/if}
-        {#if activeTab.truncated}
-          <span class="warn">{t('grid.truncated')}</span>
-        {/if}
-        {#if activeTab.changedCells + activeTab.insertedRows + activeTab.deletedRows > 0}
-          <span class="warn" data-testid="changed-count">
-            {t(
-              'grid.changedCells',
-              activeTab.changedCells + activeTab.insertedRows + activeTab.deletedRows,
-            )}
-          </span>
-        {/if}
-        {#if totals !== undefined && (totals.cells ?? 0) > 1}
-          <span class="totals" data-testid="selection-totals">{totalsText(totals)}</span>
-        {/if}
-        {#if activeTab.edit !== undefined}
-          {#if activeTab.edit.editable}
-            <span
-              class="badge"
-              data-testid="edit-badge"
-              title={activeTab.edit.keyless === true ? t('grid.editableKeyless') : ''}
-            >
-              {activeTab.edit.keyless === true ? t('grid.editableByValues') : t('grid.editable')}
-            </span>
-          {:else}
-            <span
-              class="badge readonly"
-              data-testid="edit-badge"
-              title={activeTab.edit.reason === undefined
-                ? ''
-                : t(`grid.readOnly.${activeTab.edit.reason}`)}
-            >
-              {t('grid.readOnly')}
-            </span>
-          {/if}
-        {/if}
-      </p>
       {#if activeTab.columns.length > 0}
-        <div class="find">
-          <input
-            class="control"
-            type="search"
-            placeholder={t('grid.searchPlaceholder')}
-            aria-label={t('grid.searchPlaceholder')}
-            value={search}
-            oninput={(event) => {
-              void runSearch(event.currentTarget.value);
-            }}
-            onkeydown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                stepHit(event.shiftKey ? -1 : 1);
-              }
-            }}
-          />
-          {#if search.trim() !== ''}
-            <span class="hits" role="status" data-testid="hits">
-              {hitTotal === 0
-                ? t('grid.noMatches')
-                : t('grid.matchOf', hitIndex + 1, hitTotal)}
-            </span>
-            <button
-              type="button"
-              class="step"
-              aria-label={t('grid.previousMatch')}
-              disabled={hits.length === 0}
-              onclick={() => {
-                stepHit(-1);
-              }}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              class="step"
-              aria-label={t('grid.nextMatch')}
-              disabled={hits.length === 0}
-              onclick={() => {
-                stepHit(1);
-              }}
-            >
-              ↓
-            </button>
-          {/if}
-        </div>
         {#if pendingCount(activeTab) > 0}
-          <div class="changes" data-testid="changes-bar">
+          <div class="changes fade-in" data-testid="changes-bar">
+            <Icon name="edit" />
+            <span class="changes-text">{t('grid.pending', pendingCount(activeTab))}</span>
+            <span class="spacer"></span>
             <button
               type="button"
-              class="primary"
-              disabled={saving}
-              onclick={() => {
-                void onSave();
-              }}
-            >
-              {saving ? t('grid.saving') : t('grid.save', pendingCount(activeTab))}
-            </button>
-            <button
-              type="button"
-              class="cancel"
-              disabled={saving}
-              onclick={() => {
-                void onPreview();
-              }}
-            >
-              {t('grid.previewSql')}
-            </button>
-            <button
-              type="button"
-              class="cancel"
+              class="button secondary"
               disabled={saving}
               onclick={() => {
                 void onDiscard();
               }}
             >
-              {t('grid.discard')}
+              <Icon name="discard" />{t('grid.discard')}
+            </button>
+            <button
+              type="button"
+              class="button secondary"
+              disabled={saving}
+              onclick={() => {
+                void onPreview();
+              }}
+            >
+              <Icon name="code" />{t('grid.previewSql')}
+            </button>
+            <button
+              type="button"
+              class="button"
+              disabled={saving}
+              onclick={() => {
+                void onSave();
+              }}
+            >
+              <Icon name={saving ? 'loading' : 'save'} spin={saving} />{saving
+                ? t('grid.saving')
+                : t('grid.save', pendingCount(activeTab))}
             </button>
           </div>
         {/if}
         {#if saveProblem !== undefined}
-          <div class="save-problem" role="alert" data-testid="save-error">
-            <p>{saveProblem.message}</p>
-            {#if saveProblem.statement !== undefined}
-              <p class="statement"><code>{saveProblem.statement}</code></p>
-            {/if}
+          <div class="notice error save-problem" role="alert" data-testid="save-error">
+            <Icon name="error" />
+            <div>
+              <p>{saveProblem.message}</p>
+              {#if saveProblem.statement !== undefined}
+                <p class="statement"><code>{saveProblem.statement}</code></p>
+              {/if}
+            </div>
           </div>
         {/if}
         <div class="body">
           <div class="grid-area">
-        <Grid
-          resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}:${display.order.join(',')}`}
-          order={display.order}
-          pinnedCount={display.pinnedCount}
-          onFit={fit}
-          sort={activeTab.sort}
-          {onSort}
-          {revealRow}
-          label={activeTab.title}
-          columns={activeTab.columns}
-          rowCount={displayCount(activeTab)}
-          {widths}
-          {rowAt}
-          {onVisible}
-          {onResize}
-          {onCopy}
-          {editColumns}
-          {changeAt}
-          {stateAt}
-          {onEdit}
-          {onRowAction}
-          {onSave}
-          onSelectionChange={(next: SelectionInfo | undefined) => {
-            selected = next;
-            copyNote = undefined;
-            scheduleTotals(activeTab, next);
-          }}
-          onFocusChange={(cell: CellRef | undefined) => {
-            focused = cell;
-          }}
-          onToggleValue={toggleValue}
-          onToggleRecord={toggleRecord}
-          {revealColumn}
-          {linkTarget}
-          onFollow={(row: number, column: number) => {
-            void follow(row, column);
-          }}
-          {t}
-        />
+            <Grid
+              resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}:${display.order.join(',')}`}
+              order={display.order}
+              pinnedCount={display.pinnedCount}
+              onFit={fit}
+              sort={activeTab.sort}
+              {onSort}
+              {revealRow}
+              label={activeTab.title}
+              columns={activeTab.columns}
+              rowCount={displayCount(activeTab)}
+              {widths}
+              {rowAt}
+              {onVisible}
+              {onResize}
+              {onCopy}
+              {editColumns}
+              {changeAt}
+              {stateAt}
+              {onEdit}
+              {onRowAction}
+              {onSave}
+              onSelectionChange={(next: SelectionInfo | undefined) => {
+                selected = next;
+                copyNote = undefined;
+                scheduleTotals(activeTab, next);
+              }}
+              onFocusChange={(cell: CellRef | undefined) => {
+                focused = cell;
+              }}
+              onToggleValue={toggleValue}
+              onToggleRecord={toggleRecord}
+              {revealColumn}
+              {linkTarget}
+              onFollow={(row: number, column: number) => {
+                void follow(row, column);
+              }}
+              {t}
+            />
           </div>
           {#if recordOpen}
             <RecordPanel
@@ -1203,120 +1176,166 @@ import type { RowAction } from '../../../../src/shared/row-action';
             />
           {/if}
         </div>
-      {/if}
-      {#if activeTab.page !== undefined}
-        {@const page = activeTab.page}
-        {@const from = activeTab.rowCount === 0 ? 0 : page.offset + 1}
-        {@const to = page.offset + activeTab.rowCount}
-        {@const pages = pageCount(page)}
-        <div class="pager" data-testid="pager">
-          <button
-            type="button"
-            class="button secondary"
-            disabled={page.offset === 0}
-            onclick={() => {
-              void goToPage(Math.max(0, page.offset - page.pageSize));
-            }}
-          >
-            {t('grid.previousPage')}
-          </button>
-          <span class="range" data-testid="range">
-            {page.totalRows === undefined
-              ? t('grid.rangeUnknown', from, to)
-              : page.approximate === true
-                ? t('grid.rangeApproximate', from, to, page.totalRows)
-                : t('grid.range', from, to, page.totalRows)}
-          </span>
-          {#if page.approximate === true}
-            <button
-              type="button"
-              class="button secondary"
-              title={t('grid.countExactlyHint')}
-              data-testid="count-exactly"
-              disabled={paging}
-              onclick={() => {
-                void runPaging(() => rpc.request('countRows', { resultId: activeTab.id }));
-              }}
-            >
-              {t('grid.countExactly')}
-            </button>
-          {/if}
-          <button
-            type="button"
-            class="button secondary"
-            disabled={!hasNextPage(page, activeTab.rowCount)}
-            onclick={() => {
-              void goToPage(page.offset + page.pageSize);
-            }}
-          >
-            {t('grid.nextPage')}
-          </button>
-          <span class="spacer"></span>
-          <label class="field">
-            {t('grid.pageNumber')}
-            <input
-              class="control number"
-              type="number"
-              min="1"
-              max={pages}
-              data-testid="page-number"
-              value={currentPage(page.offset, page.pageSize)}
-              onkeydown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  const offset = offsetOfPage(event.currentTarget.valueAsNumber, page);
-                  if (offset !== undefined) {
-                    void goToPage(offset);
-                  }
-                }
-              }}
-            />
-            {#if pages !== undefined}
-              {t('grid.ofPages', pages)}
-            {/if}
-          </label>
-          <label class="field">
-            {t('grid.pageSize')}
-            <select
-              class="control"
-              data-testid="page-size"
-              disabled={paging}
-              value={page.pageSize}
-              onchange={(event) => {
-                const size = Number(event.currentTarget.value);
-                void runPaging(() =>
-                  rpc.request('pageSize', { resultId: activeTab.id, pageSize: size }),
-                );
-              }}
-            >
-              {#each pageSizeChoices(page.pageSize) as size (size)}
-                <option value={size}>{size}</option>
-              {/each}
-            </select>
-          </label>
-          <button
-            type="button"
-            class="button secondary"
-            title={t('grid.loadAllHint')}
-            data-testid="load-all"
-            disabled={paging || isWholeTable(page, activeTab.rowCount)}
-            onclick={() => {
-              void runPaging(() => rpc.request('loadAll', { resultId: activeTab.id }));
-            }}
-          >
-            {t('grid.loadAll')}
-          </button>
+      {:else}
+        <div class="empty">
+          <span class="empty-icon"><Icon name={activeTab.affectedRows !== undefined ? 'pass' : 'table'} size={28} /></span>
+          <p class="empty-title">
+            {activeTab.affectedRows !== undefined
+              ? t('grid.affected', activeTab.affectedRows, activeTab.durationMs)
+              : t('grid.rows', activeTab.rowCount, activeTab.durationMs)}
+          </p>
         </div>
       {/if}
       {#if failure !== undefined}
-        <p class="error" role="alert">{failure}</p>
+        <div class="notice error failure" role="alert"><Icon name="error" /><span>{failure}</span></div>
       {/if}
+      <footer class="status">
+        <p class="summary" role="status" data-testid="summary">
+          {#if activeTab.edit !== undefined}
+            {#if activeTab.edit.editable}
+              <span
+                class="badge success"
+                data-testid="edit-badge"
+                title={activeTab.edit.keyless === true ? t('grid.editableKeyless') : ''}
+              >
+                <Icon name="edit" size={12} />{activeTab.edit.keyless === true
+                  ? t('grid.editableByValues')
+                  : t('grid.editable')}
+              </span>
+            {:else}
+              <span
+                class="badge outline"
+                data-testid="edit-badge"
+                title={activeTab.edit.reason === undefined ? '' : t(`grid.readOnly.${activeTab.edit.reason}`)}
+              >
+                <Icon name="lock" size={12} />{t('grid.readOnly')}
+              </span>
+            {/if}
+          {/if}
+          <span class="stat">
+            {#if activeTab.affectedRows !== undefined}
+              {t('grid.affected', activeTab.affectedRows, activeTab.durationMs)}
+            {:else}
+              {t('grid.rows', activeTab.rowCount, activeTab.durationMs)}
+            {/if}
+          </span>
+          {#if activeTab.truncated}
+            <span class="warn"><Icon name="warning" size={14} />{t('grid.truncated')}</span>
+          {/if}
+          {#if activeTab.changedCells + activeTab.insertedRows + activeTab.deletedRows > 0}
+            <span class="warn" data-testid="changed-count">
+              {t('grid.changedCells', activeTab.changedCells + activeTab.insertedRows + activeTab.deletedRows)}
+            </span>
+          {/if}
+          {#if totals !== undefined && (totals.cells ?? 0) > 1}
+            <span class="totals" data-testid="selection-totals">{totalsText(totals)}</span>
+          {/if}
+        </p>
+        {#if activeTab.page !== undefined}
+          {@const page = activeTab.page}
+          {@const from = activeTab.rowCount === 0 ? 0 : page.offset + 1}
+          {@const to = page.offset + activeTab.rowCount}
+          {@const pages = pageCount(page)}
+          <div class="pager" data-testid="pager">
+            <IconButton
+              icon="chevron-left"
+              label={t('grid.previousPage')}
+              disabled={page.offset === 0}
+              onclick={() => {
+                void goToPage(Math.max(0, page.offset - page.pageSize));
+              }}
+            />
+            <span class="range" data-testid="range">
+              {page.totalRows === undefined
+                ? t('grid.rangeUnknown', from, to)
+                : page.approximate === true
+                  ? t('grid.rangeApproximate', from, to, page.totalRows)
+                  : t('grid.range', from, to, page.totalRows)}
+            </span>
+            <IconButton
+              icon="chevron-right"
+              label={t('grid.nextPage')}
+              disabled={!hasNextPage(page, activeTab.rowCount)}
+              onclick={() => {
+                void goToPage(page.offset + page.pageSize);
+              }}
+            />
+            {#if page.approximate === true}
+              <button
+                type="button"
+                class="link-button"
+                title={t('grid.countExactlyHint')}
+                data-testid="count-exactly"
+                disabled={paging}
+                onclick={() => {
+                  void runPaging(() => rpc.request('countRows', { resultId: activeTab.id }));
+                }}
+              >
+                {t('grid.countExactly')}
+              </button>
+            {/if}
+            <span class="toolbar-separator"></span>
+            <label class="field">
+              {t('grid.pageNumber')}
+              <input
+                class="control number"
+                type="number"
+                min="1"
+                max={pages}
+                data-testid="page-number"
+                value={currentPage(page.offset, page.pageSize)}
+                onkeydown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const offset = offsetOfPage(event.currentTarget.valueAsNumber, page);
+                    if (offset !== undefined) {
+                      void goToPage(offset);
+                    }
+                  }
+                }}
+              />
+              {#if pages !== undefined}
+                {t('grid.ofPages', pages)}
+              {/if}
+            </label>
+            <label class="field">
+              <span class="sr-only">{t('grid.pageSize')}</span>
+              <select
+                class="control"
+                title={t('grid.pageSize')}
+                data-testid="page-size"
+                disabled={paging}
+                value={page.pageSize}
+                onchange={(event) => {
+                  const size = Number(event.currentTarget.value);
+                  void runPaging(() => rpc.request('pageSize', { resultId: activeTab.id, pageSize: size }));
+                }}
+              >
+                {#each pageSizeChoices(page.pageSize) as size (size)}
+                  <option value={size}>{t('grid.perPage', size)}</option>
+                {/each}
+              </select>
+            </label>
+            <IconButton
+              icon="unfold"
+              label={t('grid.loadAll')}
+              hint={t('grid.loadAllHint')}
+              data-testid="load-all"
+              disabled={paging || isWholeTable(page, activeTab.rowCount)}
+              onclick={() => {
+                void runPaging(() => rpc.request('loadAll', { resultId: activeTab.id }));
+              }}
+            />
+          </div>
+        {/if}
+      </footer>
     {/if}
   {/if}
 </main>
 
 <style>
   main {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -1337,148 +1356,139 @@ import type { RowAction } from '../../../../src/shared/row-action';
     min-height: 0;
   }
 
+  .spacer {
+    flex: 1;
+  }
+
+  /* Result tabs, drawn like the editor's panel titles. */
   .tabs {
     display: flex;
     flex: none;
     gap: 2px;
-    align-items: center;
-    padding: 4px 8px 0;
+    align-items: stretch;
+    height: 32px;
+    padding: 0 8px;
     overflow-x: auto;
+    border-bottom: 1px solid var(--dn-divider);
+    scrollbar-width: thin;
   }
 
   .tab {
-    padding: 4px 10px;
-    color: var(--vscode-foreground);
+    display: inline-flex;
+    flex: none;
+    gap: 6px;
+    align-items: center;
+    max-width: 280px;
+    padding: 0 10px;
+    color: var(--vscode-panelTitle-inactiveForeground, var(--dn-muted));
     background: transparent;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-bottom: 1px solid transparent;
+    margin-bottom: -1px;
     font-family: inherit;
     font-size: inherit;
     white-space: nowrap;
     cursor: pointer;
+    transition: color var(--dn-duration) var(--dn-ease);
+  }
+
+  .tab:hover {
+    color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
   }
 
   .tab.active {
-    border-bottom-color: var(--vscode-focusBorder);
+    color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
+    border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--dn-accent));
   }
 
   .tab.failed {
     color: var(--vscode-errorForeground);
   }
 
-  .spacer {
-    flex: 1;
+  .tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .cancel {
-    padding: 2px 10px;
-    color: var(--vscode-button-secondaryForeground);
-    background: var(--vscode-button-secondaryBackground);
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-  }
-
-  .changes {
+  .toolbar-row {
     display: flex;
     flex: none;
-    gap: 6px;
+    gap: var(--dn-gap);
     align-items: center;
-    padding: 2px 8px;
-  }
-
-  .primary {
-    padding: 2px 10px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-  }
-
-  .primary:disabled,
-  .cancel:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  .save-problem {
-    flex: none;
-    margin: 2px 8px;
+    min-height: 34px;
     padding: 4px 8px;
-    color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
-    background: var(--vscode-inputValidation-errorBackground);
-    border: 1px solid var(--vscode-inputValidation-errorBorder);
-  }
-
-  .save-problem p {
-    margin: 0;
-  }
-
-  .statement {
-    margin-top: 2px;
-    overflow-wrap: anywhere;
-    font-family: var(--vscode-editor-font-family);
   }
 
   .find {
+    position: relative;
     display: flex;
-    flex: none;
-    gap: 6px;
+    gap: 2px;
     align-items: center;
-    padding: 0 8px;
+    min-width: 0;
   }
 
-  .find .control {
-    width: 220px;
+  .find-icon {
+    position: absolute;
+    left: 7px;
+    display: inline-flex;
+    color: var(--dn-muted);
+    pointer-events: none;
   }
 
-  .hits {
-    color: var(--vscode-descriptionForeground);
-    font-size: 0.9em;
+  .find-input {
+    width: 240px;
+    min-width: 120px;
+    padding-left: 26px;
   }
 
-  .step {
-    padding: 0 6px;
-    color: var(--vscode-foreground);
-    background: none;
-    border: none;
+  .find-input::-webkit-search-cancel-button {
     cursor: pointer;
   }
 
-  .step:disabled {
-    opacity: 0.4;
-    cursor: default;
+  .hits {
+    margin: 0 4px 0 6px;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    white-space: nowrap;
   }
 
-  .pager {
-    display: flex;
-    flex: none;
-    gap: 8px;
+  .hits.none {
+    color: var(--vscode-errorForeground);
+  }
+
+  .note {
+    display: inline-flex;
+    gap: 4px;
     align-items: center;
-    padding: 4px 8px;
-    border-top: 1px solid var(--vscode-panel-border);
+    color: var(--dn-success);
+    font-size: var(--dn-font-small);
+    white-space: nowrap;
   }
 
+  /* The columns popover: hide, pin and fit. */
   .columns-menu {
     display: flex;
     flex: none;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     max-height: 40vh;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--vscode-panel-border);
+    margin: 0 8px 6px;
+    padding: 10px 12px;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius-l);
   }
 
   .columns-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
   }
 
   .columns-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 2px 12px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 2px 16px;
     margin: 0;
     padding: 0;
     overflow: auto;
@@ -1490,126 +1500,194 @@ import type { RowAction } from '../../../../src/shared/row-action';
     gap: 4px;
     align-items: center;
     justify-content: space-between;
+    min-width: 0;
   }
 
   .columns-item label {
     display: flex;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
+    min-width: 0;
+    cursor: pointer;
+  }
+
+  .column-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .pin-toggle {
-    padding: 0 4px;
-    background: none;
-    border: none;
-    opacity: 0.4;
-    cursor: pointer;
+  .column-type {
+    flex: none;
+    color: var(--dn-muted);
+    font-size: 11px;
   }
 
-  .pin-toggle[aria-pressed='true'] {
-    opacity: 1;
+  .columns-item :global(.pin-toggle:not([aria-pressed='true'])) {
+    opacity: 0.55;
   }
 
-  .pin-toggle:disabled {
-    opacity: 0.2;
-    cursor: default;
+  /* Pending edits: a bar that says what is waiting and offers to save it. */
+  .changes {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin: 0 8px 6px;
+    padding: 4px 4px 4px 10px;
+    background: var(--vscode-editorWidget-background, var(--dn-surface));
+    border: 1px solid var(--vscode-inputOption-activeBorder, var(--dn-border));
+    border-radius: var(--dn-radius-l);
   }
 
-  .note {
-    color: var(--vscode-descriptionForeground);
-    font-size: 0.9em;
+  .changes-text {
+    font-weight: 500;
+  }
+
+  .save-problem,
+  .failure {
+    flex: none;
+    margin: 0 8px 6px;
+  }
+
+  .save-problem p {
+    margin: 0;
+  }
+
+  .statement {
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+
+  .failed-wrap {
+    flex: 1;
+    padding: 12px;
+    overflow: auto;
+  }
+
+  .failed {
+    max-width: 900px;
+  }
+
+  .failed-body {
+    min-width: 0;
+  }
+
+  .failed .error {
+    margin: 0 0 4px;
+    font-family: var(--dn-mono);
+    white-space: pre-wrap;
+  }
+
+  .where {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 0;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+  }
+
+  /* Empty and waiting states, centred in the page. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    color: var(--dn-muted);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
+  }
+
+  .empty-hint {
+    margin: 0;
+    font-size: var(--dn-font-small);
+  }
+
+  /* The status bar: what the result is, and where in the table this page is. */
+  .status {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 30px;
+    padding: 2px 8px;
+    color: var(--dn-muted);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .stat {
+    white-space: nowrap;
+  }
+
+  .warn {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    color: var(--dn-warning);
+  }
+
+  .totals {
+    color: var(--vscode-foreground);
+    white-space: nowrap;
+  }
+
+  .pager {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 4px;
+    align-items: center;
+  }
+
+  .range {
+    margin: 0 2px;
+    white-space: nowrap;
   }
 
   .field {
     display: flex;
     gap: 4px;
     align-items: center;
-    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
   }
 
-  .control {
+  .field .control {
+    min-height: 22px;
     padding: 1px 4px;
-    color: var(--vscode-input-foreground);
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, transparent);
-    font: inherit;
+    font-size: var(--dn-font-small);
   }
 
   .control.number {
-    width: 5em;
-  }
-
-  .range {
-    color: var(--vscode-descriptionForeground);
-    font-size: 0.9em;
-  }
-
-  .summary,
-  .hint,
-  .error {
-    flex: none;
-    margin: 4px 8px;
-    font-size: 0.95em;
-  }
-
-  .summary,
-  .hint {
-    color: var(--vscode-descriptionForeground);
-  }
-
-  .badge {
-    margin-left: 8px;
-    padding: 0 6px;
-    border-radius: 3px;
-    background: var(--vscode-badge-background);
-    color: var(--vscode-badge-foreground);
-    font-size: 0.9em;
-  }
-
-  .badge.readonly {
-    background: transparent;
-    border: 1px solid var(--vscode-widget-border, var(--vscode-contrastBorder, currentColor));
-    color: var(--vscode-descriptionForeground);
-  }
-
-  .warn {
-    margin-left: 6px;
-    color: var(--vscode-editorWarning-foreground);
-  }
-
-  .error {
-    color: var(--vscode-errorForeground);
-  }
-
-  .failed {
-    flex: none;
-    margin: 4px 8px;
-  }
-
-  .failed .error {
-    margin: 0 0 2px;
-    white-space: pre-wrap;
-  }
-
-  .where {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin: 0;
-    color: var(--vscode-descriptionForeground);
-    font-size: 0.9em;
-  }
-
-  .link {
-    padding: 0;
-    color: var(--vscode-textLink-foreground);
-    background: none;
-    border: none;
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
+    width: 4.5em;
   }
 </style>

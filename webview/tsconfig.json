@@ -22,6 +22,7 @@
     "src/**/*.ts",
     "src/**/*.svelte",
     "../src/shared/**/*.ts",
-    "../test/unit/webview/**/*.ts"
+    "../test/unit/webview/**/*.ts",
+    "../test/helpers/webview/**/*.ts"
   ]
 }

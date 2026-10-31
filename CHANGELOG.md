@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Changed
+
+- A new look for every page, made to feel like part of the editor in any theme: the
+  editor's icons, toolbars of icon buttons with tooltips, menus you can work with the
+  keyboard, cards, badges and notices, check boxes like the editor's own, and short
+  animations that stop when the system asks for reduced motion.
+- Results: tabs like the editor's panels, one toolbar with search, filter, columns,
+  value, record, chart, Copy as and a single Export menu, a status bar with the row
+  count, edit state and paging, a type icon in every column header, striped rows, and
+  clear empty, error and unsaved-changes states.
+- Connection form: pick the database from cards, with compatible servers grouped below;
+  the fields are grouped into sections, and Test and Save stay at the bottom of the page.
+
 ### Fixed
 
 - The `datanest.format.*` settings are read for the document being formatted, so a folder of

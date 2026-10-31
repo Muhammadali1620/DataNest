@@ -28,6 +28,9 @@ import {
   MAX_MONGO_NODES,
   mongoModeOf,
   mongoProblems,
+  supportsSocket,
+  effectiveProxyPort,
+  type ConnectionInput,
 } from '../../../src/shared/connection';
 
 describe('isDriverId', () => {
@@ -678,5 +681,88 @@ describe('Elasticsearch connections (V7.8)', () => {
         elastic: { auth: 'basic', pathPrefix: 'x' },
       }),
     ).toEqual([]);
+  });
+});
+
+describe('sockets and proxies (V10.2.5)', () => {
+  const mysql: ConnectionInput = { name: 'm', driver: 'mysql', host: 'db' };
+
+  it('lets a socket stand in for the host on MySQL, PostgreSQL and Redis', () => {
+    for (const driver of ['mysql', 'postgres', 'redis'] as const) {
+      expect(connectionProblems({ name: 'x', driver, socket: '/run/x.sock' })).toEqual([]);
+      expect(supportsSocket(driver)).toBe(true);
+    }
+    expect(connectionProblems({ name: 'x', driver: 'mssql', socket: '/run/x.sock' })).toEqual([
+      'host-empty',
+      'socket-unsupported',
+    ]);
+    expect(supportsSocket('oracle')).toBe(false);
+    expect(connectionProblems({ name: 'x', driver: 'mysql', socket: '  ' })).toContain(
+      'host-empty',
+    );
+  });
+
+  it('refuses a socket together with SSH or a proxy', () => {
+    const ssh = { id: 'h', host: 'b', user: 'u', auth: 'agent' } as const;
+    expect(connectionProblems({ ...mysql, socket: '/s', ssh })).toContain('socket-with-tunnel');
+    expect(
+      connectionProblems({ ...mysql, socket: '/s', proxy: { kind: 'http', host: 'p' } }),
+    ).toContain('socket-with-tunnel');
+  });
+
+  it('checks the proxy host and port', () => {
+    expect(connectionProblems({ ...mysql, proxy: { kind: 'socks5', host: ' ' } })).toEqual([
+      'proxy-host-empty',
+    ]);
+    expect(
+      connectionProblems({ ...mysql, proxy: { kind: 'socks5', host: 'p', port: 70_000 } }),
+    ).toEqual(['proxy-port-invalid']);
+    expect(
+      connectionProblems({ ...mysql, proxy: { kind: 'http', host: 'p', port: 3128 } }),
+    ).toEqual([]);
+  });
+
+  it('refuses a proxy where the server hands out other servers, as with SSH', () => {
+    expect(
+      connectionProblems({
+        name: 'r',
+        driver: 'redis',
+        host: 'h',
+        redis: { mode: 'cluster' },
+        proxy: { kind: 'socks5', host: 'p' },
+      }),
+    ).toContain('redis-ssh-topology');
+    expect(
+      connectionProblems({
+        name: 'm',
+        driver: 'mongodb',
+        host: 'h',
+        mongo: { mode: 'srv' },
+        proxy: { kind: 'socks5', host: 'p' },
+      }),
+    ).toContain('mongo-ssh-topology');
+  });
+
+  it('has default proxy ports', () => {
+    expect(effectiveProxyPort({ kind: 'socks5', host: 'p' })).toBe(1080);
+    expect(effectiveProxyPort({ kind: 'http', host: 'p' })).toBe(8080);
+    expect(effectiveProxyPort({ kind: 'http', host: 'p', port: 3128 })).toBe(3128);
+  });
+
+  it('describes a socket and a proxy for tooltips', () => {
+    expect(describeTarget({ ...mysql, user: 'me', socket: '/run/my.sock' })).toBe(
+      'me@/run/my.sock',
+    );
+    expect(describeTarget({ ...mysql, socket: '/run/my.sock' })).toBe('/run/my.sock');
+    expect(describeTunnel({ ...mysql, proxy: { kind: 'socks5', host: 'p' } })).toBe(
+      'socks5 p:1080',
+    );
+    expect(
+      describeTunnel({
+        ...mysql,
+        proxy: { kind: 'http', host: 'p', port: 3128 },
+        ssh: { id: 'h', host: 'b', user: 'u', auth: 'agent' },
+      }),
+    ).toBe('http p:3128 → u@b:22');
   });
 });

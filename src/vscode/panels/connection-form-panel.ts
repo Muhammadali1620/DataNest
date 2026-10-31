@@ -14,10 +14,12 @@ import {
   driverOptions,
   NEW_CONNECTION,
   storedSshFlags,
+  testProxyPassword,
   testSentinelPassword,
   testSshSecrets,
   toInput,
   toPasswordChange,
+  toProxyChange,
   toSentinelChange,
   toSshChanges,
 } from './connection-form-state';
@@ -151,11 +153,16 @@ export class ConnectionFormPanel implements vscode.Disposable {
       this.connectionId === undefined
         ? undefined
         : await this.deps.store.getSentinelPassword(this.connectionId);
+    const proxy =
+      this.connectionId === undefined
+        ? undefined
+        : await this.deps.store.getProxyPassword(this.connectionId);
     await this.deps.manager.test(
       draft.input,
       password,
       testSshSecrets(draft, stored),
       testSentinelPassword(draft, sentinel),
+      testProxyPassword(draft, proxy),
     );
   }
 
@@ -187,6 +194,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
         {
           ...(draft.project === undefined ? {} : { project: draft.project }),
           ...(sentinelValue(draft) === undefined ? {} : { sentinelPassword: sentinelValue(draft) }),
+          ...(proxyValue(draft) === undefined ? {} : { proxyPassword: proxyValue(draft) }),
         },
       );
       this.connectionId = created.id;
@@ -201,6 +209,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       change,
       toSshChanges(draft),
       toSentinelChange(draft),
+      toProxyChange(draft),
     );
     this.retitle(updated.name);
     this.sendState();
@@ -228,6 +237,10 @@ export class ConnectionFormPanel implements vscode.Disposable {
       connectionId === undefined
         ? false
         : (await this.deps.store.getSentinelPassword(connectionId)) !== undefined;
+    const hasStoredProxyPassword =
+      connectionId === undefined
+        ? false
+        : (await this.deps.store.getProxyPassword(connectionId)) !== undefined;
     const project =
       connectionId === undefined ? undefined : this.deps.store.projectOf(connectionId);
     // The panel may have been closed while the secret was read; stay silent then.
@@ -239,6 +252,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       input: config === undefined ? (this.prefill?.input ?? NEW_CONNECTION) : toInput(config),
       hasStoredPassword,
       ...(hasStoredSentinelPassword ? { hasStoredSentinelPassword } : {}),
+      ...(hasStoredProxyPassword ? { hasStoredProxyPassword } : {}),
       ...(this.prefill?.password === undefined ? {} : { importedPassword: true }),
       storedSsh: storedSshFlags(storedSsh),
       projects: this.deps.store.projectFolders().map(({ key, name }) => ({ key, name })),
@@ -247,6 +261,11 @@ export class ConnectionFormPanel implements vscode.Disposable {
       drivers: driverOptions(),
     });
   }
+}
+
+/** The proxy password a new connection is saved with (V10.2.5). */
+function proxyValue(draft: ConnectionDraft): string | undefined {
+  return testProxyPassword(draft, undefined);
 }
 
 /** The Sentinel password a new connection is saved with. */

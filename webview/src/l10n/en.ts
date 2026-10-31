@@ -274,6 +274,26 @@ export const en = {
   'form.port': 'Port',
   'form.portHint': 'Default: {0}',
   'form.user': 'User',
+  'form.socket': 'Unix socket',
+  'form.socket.hintMysql':
+    'Instead of host and port, the socket file on this machine, e.g. /var/run/mysqld/mysqld.sock',
+  'form.socket.hintPostgres':
+    'Instead of host and port, the socket directory on this machine, e.g. /var/run/postgresql',
+  'form.socket.hintRedis':
+    'Instead of host and port, the socket file on this machine, e.g. /var/run/redis/redis.sock',
+  'form.socket.error.unsupported': 'This kind of database does not connect through a socket',
+  'form.socket.error.tunnel':
+    'A socket is on this machine: turn off SSH and the proxy, or clear the socket',
+  'form.proxy.use': 'Connect through a proxy',
+  'form.proxy.hint':
+    'The proxy reaches the database server, or the first SSH server when SSH is on.',
+  'form.proxy.kind': 'Proxy type',
+  'form.proxy.host': 'Proxy host',
+  'form.proxy.port': 'Proxy port',
+  'form.proxy.user': 'Proxy user',
+  'form.proxy.password': 'Proxy password',
+  'form.showSecret': 'Show',
+  'form.hideSecret': 'Hide',
   'form.password': 'Password',
   'form.passwordStored': 'A password is saved; leave empty to keep it',
   'form.erasePassword': 'Remove the saved password',

@@ -157,6 +157,32 @@
           },
           "description": "Reach the database through an SSH tunnel."
         },
+        "socket": {
+          "type": "string",
+          "description": "A Unix socket on this machine instead of host and port: the socket file of MySQL, MariaDB or Redis, the socket directory of PostgreSQL."
+        },
+        "proxy": {
+          "type": "object",
+          "required": ["kind", "host"],
+          "additionalProperties": false,
+          "description": "Reach the server, or the first SSH server, through a proxy. Its password is asked for once and kept on each computer.",
+          "properties": {
+            "kind": {
+              "enum": ["socks5", "http"]
+            },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "user": {
+              "type": "string"
+            }
+          }
+        },
         "ssl": {
           "type": "object",
           "required": ["mode"],

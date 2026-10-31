@@ -9,12 +9,15 @@ import type { Logger } from '../core/logging/logger';
 import {
   type ConnectionInput,
   effectivePort,
+  effectiveProxyPort,
   effectiveSshPort,
   type SshAuthMethod,
   type SshHopSecrets,
   sshHopsOf,
 } from '../shared/connection';
 import { msg } from '../core/user-message';
+import type { ProxySpec } from './proxy/proxy-client';
+import { openProxyTunnel } from './proxy/proxy-tunnel';
 
 /** How long each SSH server may take to answer and log us in. */
 export const SSH_TIMEOUT_MS = 10_000;
@@ -45,8 +48,13 @@ export interface HostKeyInfo {
 export type HostKeyCheck = (key: HostKeyInfo) => Promise<boolean>;
 
 export interface TunnelSpec {
-  /** Connected in order: each later hop is reached through the one before it. */
+  /**
+   * Connected in order: each later hop is reached through the one before it. Empty when
+   * only a proxy stands in front of the server.
+   */
   readonly hops: readonly TunnelHop[];
+  /** Reaches the first hop, or the server when there are none, through a proxy (V10.2.5). */
+  readonly proxy?: ProxySpec;
   /** The database server, as the last hop sees it. */
   readonly target: { readonly host: string; readonly port: number };
   readonly checkHostKey: HostKeyCheck;
@@ -72,13 +80,32 @@ export function tunnelSpecOf(
   config: ConnectionInput,
   secrets: Readonly<Record<string, SshHopSecrets>>,
   checkHostKey: HostKeyCheck,
+  proxyPassword?: string,
 ): TunnelSpec | undefined {
   const hops = sshHopsOf(config);
   const port = effectivePort(config);
-  if (hops.length === 0 || config.host === undefined || port === undefined) {
+  const proxy = config.proxy;
+  if (
+    (hops.length === 0 && proxy === undefined) ||
+    config.host === undefined ||
+    port === undefined
+  ) {
     return undefined;
   }
   return {
+    ...(proxy === undefined
+      ? {}
+      : {
+          proxy: {
+            kind: proxy.kind,
+            host: proxy.host,
+            port: effectiveProxyPort(proxy),
+            ...(proxy.user === undefined ? {} : { user: proxy.user }),
+            ...(proxyPassword === undefined || proxyPassword === ''
+              ? {}
+              : { password: proxyPassword }),
+          },
+        }),
     hops: hops.map((hop) => {
       const secret = secrets[hop.id] ?? {};
       return {
@@ -109,7 +136,13 @@ export function tunnelSpecOf(
  * where the tunnel leads, so editing the settings never reuses an old tunnel.
  */
 export function tunnelKeyOf(connectionId: string, config: ConnectionInput): string {
-  return JSON.stringify([connectionId, config.host, effectivePort(config), sshHopsOf(config)]);
+  return JSON.stringify([
+    connectionId,
+    config.host,
+    effectivePort(config),
+    sshHopsOf(config),
+    config.proxy ?? null,
+  ]);
 }
 
 /** The shape of dist/ssh.js. */
@@ -223,6 +256,13 @@ export class TunnelPool {
   }
 
   private async open(spec: TunnelSpec): Promise<Tunnel> {
+    // A proxy alone needs no SSH module: a local port forwards through it (V10.2.5).
+    if (spec.hops.length === 0 && spec.proxy !== undefined) {
+      return await openProxyTunnel(
+        { proxy: spec.proxy, target: spec.target, timeoutMs: spec.timeoutMs },
+        this.logger.child('proxy'),
+      );
+    }
     let module: SshModule;
     try {
       this.module ??= this.load();

@@ -2,6 +2,8 @@
 // connection form protocol (what the page sends), so the two never disagree.
 
 import {
+  PROXY_KINDS,
+  type ProxySettings,
   CONNECTION_COLORS,
   CONNECTION_LIMITS,
   DRIVER_IDS,
@@ -110,6 +112,13 @@ export const elasticSchema: Schema<ElasticSettings> = object({
   pathPrefix: optional(string({ maxLength: CONNECTION_LIMITS.field })),
 });
 
+export const proxySchema: Schema<ProxySettings> = object({
+  kind: literal(...PROXY_KINDS),
+  host: string({ maxLength: CONNECTION_LIMITS.field }),
+  port: optional(port()),
+  user: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+});
+
 /** The fields of `ConnectionInput`, to be reused by shapes that add their own. */
 export const connectionInputShape = {
   name: string({ maxLength: CONNECTION_LIMITS.name }),
@@ -120,6 +129,8 @@ export const connectionInputShape = {
   database: optional(string({ maxLength: CONNECTION_LIMITS.field })),
   file: optional(string({ maxLength: CONNECTION_LIMITS.file })),
   ssh: optional(sshTunnelSchema),
+  socket: optional(string({ maxLength: CONNECTION_LIMITS.file })),
+  proxy: optional(proxySchema),
   ssl: optional(sslSchema),
   folder: optional(string({ maxLength: CONNECTION_LIMITS.folder })),
   color: optional(literal(...CONNECTION_COLORS)),

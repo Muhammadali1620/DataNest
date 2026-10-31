@@ -2,6 +2,9 @@
 // problems block saving. Kept apart from the component so it is tested directly.
 
 import {
+  type ProxyKind,
+  type ProxySettings,
+  supportsSocket,
   type ConnectionColor,
   type ConnectionInput,
   type ConnectionProblem,
@@ -153,6 +156,15 @@ export interface FormFields {
   /** Elasticsearch (V7.8): a user and password, or an API key in the password box. */
   elasticAuth: ElasticAuthMethod;
   elasticPrefix: string;
+  /** A Unix socket instead of host and port (V10.2.5); MySQL, PostgreSQL, Redis. */
+  socket: string;
+  /** Connect through a proxy (V10.2.5); its fields are kept while it is off. */
+  useProxy: boolean;
+  proxyKind: ProxyKind;
+  proxyHost: string;
+  proxyPort: string;
+  proxyUser: string;
+  proxyPassword: SecretField;
 }
 
 /** The option fields that hold seconds, with the problem a bad number gives. */
@@ -206,6 +218,28 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     ...mongoFieldsFrom(input),
     elasticAuth: input.elastic?.auth ?? 'basic',
     elasticPrefix: input.elastic?.pathPrefix ?? '',
+    socket: input.socket ?? '',
+    useProxy: input.proxy !== undefined,
+    proxyKind: input.proxy?.kind ?? 'socks5',
+    proxyHost: input.proxy?.host ?? '',
+    proxyPort: input.proxy?.port === undefined ? '' : String(input.proxy.port),
+    proxyUser: input.proxy?.user ?? '',
+    proxyPassword: emptySecret(),
+  };
+}
+
+/** The proxy to send, when one is on (V10.2.5). */
+export function toProxy(fields: FormFields): ProxySettings | undefined {
+  if (!fields.useProxy || isFileDriver(fields.driver)) {
+    return undefined;
+  }
+  const port = parsePort(fields.proxyPort);
+  const user = trim(fields.proxyUser);
+  return {
+    kind: fields.proxyKind,
+    host: fields.proxyHost.trim(),
+    ...(port === undefined ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
   };
 }
 
@@ -492,6 +526,8 @@ export function toInput(fields: FormFields): ConnectionInput {
   const redis = toRedis(fields);
   const mongo = toMongo(fields);
   const elastic = toElastic(fields);
+  const socket = supportsSocket(fields.driver) ? trim(fields.socket) : undefined;
+  const proxy = toProxy(fields);
   // An API key signs in alone: a user name would only confuse the server.
   const signsWithKey = elastic?.auth === 'apiKey';
   return {
@@ -509,6 +545,8 @@ export function toInput(fields: FormFields): ConnectionInput {
           },
         }
       : {}),
+    ...(socket === undefined ? {} : { socket }),
+    ...(proxy === undefined ? {} : { proxy }),
     ...(ssl === undefined ? {} : { ssl }),
     ...arrangement(fields),
     ...(options === undefined ? {} : { options }),
@@ -565,6 +603,8 @@ export function toDraft(fields: FormFields): ConnectionDraft {
     ...(input.ssh === undefined
       ? {}
       : { ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)) }),
+    // Without a proxy the store drops its password by itself.
+    ...(input.proxy === undefined ? {} : { proxyPassword: secretChange(fields.proxyPassword) }),
   };
 }
 
@@ -614,6 +654,15 @@ export function problemsOf(fields: FormFields): ConnectionProblem[] {
   ) {
     problems.push('mongo-node-invalid');
   }
+  const proxyPort = fields.proxyPort.trim();
+  if (
+    fields.useProxy &&
+    proxyPort !== '' &&
+    parsePort(proxyPort) === undefined &&
+    !problems.includes('proxy-port-invalid')
+  ) {
+    problems.push('proxy-port-invalid');
+  }
   if (!isFileDriver(fields.driver) && fields.useSsh && sshAllowed(fields)) {
     for (const hop of [...fields.jumps, fields.ssh]) {
       for (const problem of hopProblemsOf(hop)) {
@@ -659,6 +708,10 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'mongo-name-invalid': 'form.mongo.error.name',
   'mongo-ssh-topology': 'form.mongo.error.ssh',
   'elastic-prefix-invalid': 'form.elastic.error.prefix',
+  'socket-unsupported': 'form.socket.error.unsupported',
+  'socket-with-tunnel': 'form.socket.error.tunnel',
+  'proxy-host-empty': 'form.error.hostEmpty',
+  'proxy-port-invalid': 'form.error.portInvalid',
 };
 
 export { DEFAULT_SSH_PORT };

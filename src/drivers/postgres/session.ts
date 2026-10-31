@@ -51,14 +51,37 @@ export function postgresSsl(tls: TlsMaterial): pg.ClientConfig['ssl'] {
   };
 }
 
+/** The PostgreSQL socket file name: the directory holds `.s.PGSQL.<port>`. */
+const SOCKET_FILE = /^\.s\.PGSQL\.(\d{1,5})$/u;
+
+/**
+ * Where pg connects: host and port, or a Unix socket (V10.2.5) — pg takes the socket's
+ * directory as the host and finds the file by the port, so a path to the file itself
+ * is split into the two.
+ */
+export function postgresAddress(config: ResolvedConnectionConfig): {
+  host?: string;
+  port?: number;
+} {
+  const socket = config.socket?.trim().replace(/[\\/]+$/u, '') ?? '';
+  if (socket === '') {
+    return { host: config.host, port: effectivePort(config) };
+  }
+  const slash = Math.max(socket.lastIndexOf('/'), socket.lastIndexOf('\\'));
+  const file = SOCKET_FILE.exec(socket.slice(slash + 1));
+  if (file !== null && slash > 0) {
+    return { host: socket.slice(0, slash), port: Number(file[1]) };
+  }
+  return { host: socket, port: effectivePort(config) };
+}
+
 export function clientConfig(
   config: ResolvedConnectionConfig,
   tls: TlsMaterial | undefined,
 ): pg.ClientConfig {
   return {
     ...(tls === undefined ? {} : { ssl: postgresSsl(tls) }),
-    host: config.host,
-    port: effectivePort(config),
+    ...postgresAddress(config),
     user: config.user,
     password: config.password,
     // Unlike MySQL, a PostgreSQL session always needs a database; `postgres`

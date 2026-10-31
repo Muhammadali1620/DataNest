@@ -3,6 +3,7 @@
 // file (and the bundle entry next to it) imports ssh2.
 
 import { createHash } from 'node:crypto';
+import { connectThroughProxy } from '../proxy/proxy-client';
 import { createServer, type Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { Client, type ConnectConfig } from 'ssh2';
@@ -233,7 +234,10 @@ export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<T
     for (const [index, hop] of spec.hops.entries()) {
       const previous = clients.at(-1);
       let sock: Duplex | undefined;
-      if (previous !== undefined) {
+      if (previous === undefined && spec.proxy !== undefined) {
+        // The first SSH server is reached through the proxy (V10.2.5).
+        sock = await connectThroughProxy(spec.proxy, hop.host, hop.port, spec.timeoutMs);
+      } else if (previous !== undefined) {
         try {
           sock = await forward(previous, hop.host, hop.port, { address: '127.0.0.1', port: 0 });
         } catch (error) {

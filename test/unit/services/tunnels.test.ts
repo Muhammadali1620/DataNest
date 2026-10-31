@@ -1,3 +1,4 @@
+import { connect } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import type { ConnectionInput } from '../../../src/shared/connection';
@@ -12,6 +13,7 @@ import {
 } from '../../../src/services/tunnels';
 import { RecordingLogger } from '../../helpers/fakes';
 import { FakeTunnel } from '../../helpers/fake-tunnels';
+import { startEchoServer, startSocksProxy } from '../../helpers/proxy-servers';
 
 const check: HostKeyCheck = () => Promise.resolve(true);
 
@@ -239,5 +241,71 @@ describe('TunnelPool', () => {
       expect(module.opened[0]?.closeCount).toBe(1);
     });
     await expect(pool.acquire('b', spec())).rejects.toMatchObject({ code: 'internal' });
+  });
+});
+
+describe('tunnels through a proxy (V10.2.5)', () => {
+  const direct: ConnectionInput = { ...base, ssh: undefined };
+  const proxied: ConnectionInput = {
+    ...direct,
+    proxy: { kind: 'socks5', host: 'proxy.corp', user: 'me' },
+  };
+
+  it('makes a spec for a proxy alone, with the default port and the password', () => {
+    expect(tunnelSpecOf(proxied, {}, check, 'secret')).toEqual({
+      proxy: { kind: 'socks5', host: 'proxy.corp', port: 1080, user: 'me', password: 'secret' },
+      hops: [],
+      target: { host: 'db.internal', port: 5432 },
+      checkHostKey: check,
+      timeoutMs: SSH_TIMEOUT_MS,
+    });
+    expect(
+      tunnelSpecOf({ ...direct, proxy: { kind: 'http', host: 'p', port: 3128 } }, {}, check)?.proxy,
+    ).toEqual({ kind: 'http', host: 'p', port: 3128 });
+  });
+
+  it('puts the proxy in front of the SSH servers when both are set', () => {
+    const spec = tunnelSpecOf({ ...proxied, ssh: base.ssh }, {}, check, '');
+    expect(spec?.hops).toHaveLength(1);
+    expect(spec?.proxy).toEqual({ kind: 'socks5', host: 'proxy.corp', port: 1080, user: 'me' });
+  });
+
+  it('changes the key of the shared tunnel with the proxy', () => {
+    expect(tunnelKeyOf('c1', proxied)).not.toBe(tunnelKeyOf('c1', direct));
+    expect(
+      tunnelKeyOf('c1', { ...proxied, proxy: { kind: 'socks5', host: 'other.corp' } }),
+    ).not.toBe(tunnelKeyOf('c1', proxied));
+  });
+
+  it('opens a proxy alone without loading the SSH module, and the port leads on', async () => {
+    const echo = await startEchoServer();
+    const proxy = await startSocksProxy();
+    const load = vi.fn(() => Promise.reject(new Error('the SSH module is not needed')));
+    const pool = new TunnelPool({ load, logger: new RecordingLogger() });
+    try {
+      const lease = await pool.acquire('k', {
+        proxy: { kind: 'socks5', host: '127.0.0.1', port: proxy.port },
+        hops: [],
+        target: { host: '127.0.0.1', port: echo.port },
+        checkHostKey: check,
+        timeoutMs: 5000,
+      });
+      const socket = connect({ host: '127.0.0.1', port: lease.port });
+      const reply = await new Promise<string>((resolve) => {
+        socket.on('data', (chunk: Buffer) => {
+          resolve(chunk.toString());
+        });
+        socket.write('through');
+      });
+      socket.destroy();
+      expect(reply).toBe('through');
+      expect(load).not.toHaveBeenCalled();
+      await lease.release();
+      expect(pool.size).toBe(0);
+    } finally {
+      pool.dispose();
+      await proxy.close();
+      await echo.close();
+    }
   });
 });

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
 import { ConnectionManager, type SessionTarget } from './services/connection-manager';
-import { ConnectionStore } from './services/connection-store';
+import { CONNECTIONS_STATE_KEY, ConnectionStore } from './services/connection-store';
 import { ProjectConnections } from './services/project-connections';
 import { ProjectFileWatcher, workspaceProjectFiles } from './vscode/project-files';
 import { KnownHosts } from './services/known-hosts';
@@ -49,6 +49,7 @@ import {
   readPageSize,
   readQueryTimeoutMs,
   readEditorSwitch,
+  readSyncConnections,
   readQueryVariablesMode,
   readRowLimit,
   readTransactionMode,
@@ -79,6 +80,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     projects,
   });
+  // Settings Sync carries the list — never the passwords, which stay in SecretStorage —
+  // only when the user asks for it (V10.2.5).
+  const applySync = (): void => {
+    context.globalState.setKeysForSync(readSyncConnections() ? [CONNECTIONS_STATE_KEY] : []);
+  };
+  applySync();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(`${CONFIG_SECTION}.${CONFIG_KEYS.syncConnections}`)) {
+        applySync();
+      }
+    }),
+    // A synced list arrives without an event: look again when the window comes back.
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused && readSyncConnections()) {
+        store.reload();
+      }
+    }),
+  );
   // Read before the tree is drawn, so its first picture already has the project.
   await projectFiles.start();
   const drivers = new DriverRegistry({

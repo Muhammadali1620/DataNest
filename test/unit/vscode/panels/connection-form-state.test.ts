@@ -7,7 +7,9 @@ import {
   toInput,
   toPasswordChange,
   toSshChanges,
+  testProxyPassword,
   testSentinelPassword,
+  toProxyChange,
   toSentinelChange,
 } from '../../../../src/vscode/panels/connection-form-state';
 import type { ConnectionDraft } from '../../../../src/shared/protocols/connection-form';
@@ -117,6 +119,8 @@ describe('toInput', () => {
       database: 'shop',
       file: '/tmp/x.db',
       ssh: { id: 'main', host: 'b', user: 'u', auth: 'agent' },
+      socket: '/run/postgresql',
+      proxy: { kind: 'http', host: 'p', port: 3128, user: 'me' },
       ssl: { mode: 'verify-full', ca: '/ca.pem' },
       folder: 'Work',
       color: 'red',
@@ -304,5 +308,29 @@ describe('Sentinel password (V7.1)', () => {
       draft({ kind: 'set', value: 'spw' }),
     );
     expect(parsed.sentinelPassword).toEqual({ kind: 'set', value: 'spw' });
+  });
+});
+
+describe('proxy password (V10.2.5)', () => {
+  const draft = (proxyPassword?: ConnectionDraft['proxyPassword']): ConnectionDraft => ({
+    input: { name: 'p', driver: 'mysql', host: 'h', proxy: { kind: 'socks5', host: 'p' } },
+    password: { kind: 'keep' },
+    ...(proxyPassword === undefined ? {} : { proxyPassword }),
+  });
+
+  it('keeps the stored one when the form says nothing or keep', () => {
+    expect(toProxyChange(draft())).toEqual({ kind: 'keep' });
+    expect(testProxyPassword(draft(), 'stored')).toBe('stored');
+    expect(testProxyPassword(draft({ kind: 'keep' }), undefined)).toBeUndefined();
+  });
+
+  it('uses a typed one and forgets an erased one', () => {
+    expect(toProxyChange(draft({ kind: 'set', value: 'new' }))).toEqual({
+      kind: 'set',
+      value: 'new',
+    });
+    expect(testProxyPassword(draft({ kind: 'set', value: 'new' }), 'stored')).toBe('new');
+    expect(testProxyPassword(draft({ kind: 'set', value: '' }), 'stored')).toBeUndefined();
+    expect(testProxyPassword(draft({ kind: 'clear' }), 'stored')).toBeUndefined();
   });
 });

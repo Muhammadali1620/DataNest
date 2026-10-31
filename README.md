@@ -36,6 +36,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
   `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://`, `oracle://`, `redis://`,
   `mongodb://` or `elasticsearch://` URL (or a JDBC `oracle:thin:@…` one), or import
   connections from the workspace's `.env` files.
+- SOCKS5 and HTTP proxies, Unix sockets for MySQL, PostgreSQL and Redis on this machine.
+- The connection list can travel with the editor's Settings Sync — never the passwords.
 - SSH tunnels with a password, a key or an SSH agent, through up to five jump hosts,
   with the server key checked like OpenSSH does.
 - SSL/TLS with a choice of checks, your own CA and client certificates (not yet for

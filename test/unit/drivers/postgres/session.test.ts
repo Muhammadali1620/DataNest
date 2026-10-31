@@ -1,7 +1,11 @@
 import type { PeerCertificate } from 'node:tls';
 import { describe, expect, it } from 'vitest';
 import type { TlsMaterial } from '../../../../src/drivers/common/tls';
-import { clientConfig, postgresSsl } from '../../../../src/drivers/postgres/session';
+import {
+  clientConfig,
+  postgresAddress,
+  postgresSsl,
+} from '../../../../src/drivers/postgres/session';
 import type { ResolvedConnectionConfig } from '../../../../src/shared/connection';
 
 const config: ResolvedConnectionConfig = {
@@ -75,5 +79,29 @@ describe('clientConfig: session options (V4.9)', () => {
       clientConfig({ ...config, options: { connectTimeout: 45 } }, undefined)
         .connectionTimeoutMillis,
     ).toBe(45_000);
+  });
+});
+
+describe('postgresAddress (V10.2.5)', () => {
+  it('uses host and port without a socket', () => {
+    expect(postgresAddress(config)).toEqual({ host: config.host, port: config.port ?? 5432 });
+  });
+
+  it('passes a socket directory as the host, keeping the port that names the file', () => {
+    expect(postgresAddress({ ...config, port: 6543, socket: '/var/run/postgresql/' })).toEqual({
+      host: '/var/run/postgresql',
+      port: 6543,
+    });
+  });
+
+  it('splits a path to the socket file into its directory and port', () => {
+    expect(postgresAddress({ ...config, socket: '/tmp/.s.PGSQL.5433' })).toEqual({
+      host: '/tmp',
+      port: 5433,
+    });
+  });
+
+  it('reaches clientConfig', () => {
+    expect(clientConfig({ ...config, socket: '/tmp' }, undefined)).toMatchObject({ host: '/tmp' });
   });
 });

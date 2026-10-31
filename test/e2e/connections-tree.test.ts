@@ -46,6 +46,11 @@ describe('connections view', () => {
       true,
       'table statistics are on by default',
     );
+    assert.equal(
+      vscode.workspace.getConfiguration('datanest').get('connections.sync'),
+      false,
+      'the connection list does not travel unless asked (V10.2.5)',
+    );
   });
 
   it('hides system objects by default and can be switched at runtime', async () => {

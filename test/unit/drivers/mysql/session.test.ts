@@ -87,3 +87,34 @@ describe('connectionOptions: session options (V4.9)', () => {
     ).toMatchObject({ connectTimeout: 3000, charset: 'latin1' });
   });
 });
+
+describe('connectionOptions with a Unix socket (V10.2.5)', () => {
+  it('connects to the socket instead of host and port', () => {
+    const options = connectionOptions(
+      { ...config, socket: ' /run/mysqld/mysqld.sock ' },
+      undefined,
+    );
+    expect(options.socketPath).toBe('/run/mysqld/mysqld.sock');
+    expect(options.host).toBeUndefined();
+    expect(options.port).toBeUndefined();
+    expect(options.stream).toBeUndefined();
+  });
+
+  it('uses host and port without one', () => {
+    const options = connectionOptions({ ...config, socket: '  ' }, undefined);
+    expect(options.socketPath).toBeUndefined();
+    expect(options).toMatchObject({ host: 'db.example', port: 3306 });
+  });
+
+  it('keeps geometry as bytes for the driver to read as WKT (V10.2.4)', () => {
+    const { typeCast } = connectionOptions(config, undefined);
+    expect(typeof typeCast).toBe('function');
+    const cast = typeCast as (field: unknown, next: () => unknown) => unknown;
+    expect(cast({ type: 'GEOMETRY', buffer: () => Buffer.from([1]) }, () => 'parsed')).toEqual(
+      Buffer.from([1]),
+    );
+    expect(cast({ type: 'VAR_STRING', buffer: () => Buffer.from([1]) }, () => 'parsed')).toBe(
+      'parsed',
+    );
+  });
+});

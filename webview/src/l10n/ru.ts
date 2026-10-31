@@ -278,6 +278,25 @@ export const ru: Record<MessageKey, string> = {
   'form.port': 'Порт',
   'form.portHint': 'По умолчанию: {0}',
   'form.user': 'Пользователь',
+  'form.socket': 'Unix-сокет',
+  'form.socket.hintMysql':
+    'Вместо хоста и порта — файл сокета на этом компьютере, например /var/run/mysqld/mysqld.sock',
+  'form.socket.hintPostgres':
+    'Вместо хоста и порта — каталог сокета на этом компьютере, например /var/run/postgresql',
+  'form.socket.hintRedis':
+    'Вместо хоста и порта — файл сокета на этом компьютере, например /var/run/redis/redis.sock',
+  'form.socket.error.unsupported': 'Этот вид базы не подключается через сокет',
+  'form.socket.error.tunnel':
+    'Сокет — на этом компьютере: выключите SSH и прокси или очистите сокет',
+  'form.proxy.use': 'Подключаться через прокси',
+  'form.proxy.hint': 'Прокси ведёт к серверу базы, а при включённом SSH — к первому SSH-серверу.',
+  'form.proxy.kind': 'Тип прокси',
+  'form.proxy.host': 'Хост прокси',
+  'form.proxy.port': 'Порт прокси',
+  'form.proxy.user': 'Пользователь прокси',
+  'form.proxy.password': 'Пароль прокси',
+  'form.showSecret': 'Показать',
+  'form.hideSecret': 'Скрыть',
   'form.password': 'Пароль',
   'form.passwordStored': 'Пароль сохранён; оставьте пустым, чтобы не менять',
   'form.erasePassword': 'Удалить сохранённый пароль',

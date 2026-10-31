@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import SecretInput from '../../components/SecretInput.svelte';
   import {
     CONNECTION_COLORS,
     CONNECTION_LIMITS,
@@ -9,7 +10,12 @@
     optionSupport,
     REDIS_MODES,
   } from '../../../../src/shared/connection';
-  import type { DriverId, RedisMode } from '../../../../src/shared/connection';
+  import {
+    DEFAULT_PROXY_PORTS,
+    type DriverId,
+    type RedisMode,
+    supportsSocket,
+  } from '../../../../src/shared/connection';
   import type {
     ConnectionFormProtocol,
     ConnectionFormState,
@@ -473,6 +479,23 @@
           </Field>
         </div>
 
+        {#if supportsSocket(fields.driver) && !(isRedis && fields.redisMode !== 'standalone')}
+          <Field
+            label={t('form.socket')}
+            error={errorFor('socket-with-tunnel')}
+            hint={t(isRedis ? 'form.socket.hintRedis' : fields.driver === 'postgres' ? 'form.socket.hintPostgres' : 'form.socket.hintMysql')}
+          >
+            <input
+              class="control"
+              bind:value={fields.socket}
+              maxlength={CONNECTION_LIMITS.file}
+              aria-label={t('form.socket')}
+              data-testid="socket"
+              autocomplete="off"
+            />
+          </Field>
+        {/if}
+
         {#if isRedis}
           <Field label={t('form.redis.mode')}>
             <select
@@ -584,9 +607,7 @@
                   ? t('form.passwordImported')
                   : undefined}
           >
-            <input
-              class="control"
-              type="password"
+            <SecretInput
               bind:value={fields.password}
               oninput={() => {
                 if (fields) {
@@ -595,8 +616,10 @@
               }}
               maxlength={PASSWORD_MAX_LENGTH}
               disabled={fields.erasePassword}
-              aria-label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
-              autocomplete="off"
+              label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
+              showLabel={t('form.showSecret')}
+              hideLabel={t('form.hideSecret')}
+              testid="password"
             />
           </Field>
         </div>
@@ -627,9 +650,7 @@
                   ? t('form.redis.sentinelPasswordStored')
                   : t('form.redis.sentinelPasswordHint')}
             >
-              <input
-                class="control"
-                type="password"
+              <SecretInput
                 bind:value={fields.sentinelPassword.value}
                 oninput={() => {
                   if (fields) {
@@ -638,8 +659,9 @@
                 }}
                 maxlength={PASSWORD_MAX_LENGTH}
                 disabled={fields.sentinelPassword.erase}
-                aria-label={t('form.redis.sentinelPassword')}
-                autocomplete="off"
+                label={t('form.redis.sentinelPassword')}
+                showLabel={t('form.showSecret')}
+                hideLabel={t('form.hideSecret')}
               />
             </Field>
           </div>
@@ -771,6 +793,89 @@
                 </span>
               {/if}
             </div>
+          {/if}
+        </fieldset>
+
+        <fieldset class="section">
+          <legend>
+            <label class="check">
+              <input type="checkbox" bind:checked={fields.useProxy} data-testid="use-proxy" />
+              {t('form.proxy.use')}
+            </label>
+          </legend>
+          {#if fields.useProxy}
+            <p class="hint">{t('form.proxy.hint')}</p>
+            <Field label={t('form.proxy.kind')}>
+              <select class="control" bind:value={fields.proxyKind} aria-label={t('form.proxy.kind')}>
+                <option value="socks5">SOCKS5</option>
+                <option value="http">HTTP (CONNECT)</option>
+              </select>
+            </Field>
+            <div class="pair">
+              <Field label={t('form.proxy.host')} error={errorFor('proxy-host-empty')}>
+                <input
+                  class="control"
+                  bind:value={fields.proxyHost}
+                  maxlength={CONNECTION_LIMITS.field}
+                  aria-invalid={errorFor('proxy-host-empty') !== undefined}
+                  aria-label={t('form.proxy.host')}
+                  data-testid="proxy-host"
+                  autocomplete="off"
+                />
+              </Field>
+              <Field
+                label={t('form.proxy.port')}
+                error={errorFor('proxy-port-invalid')}
+                hint={t('form.portHint', DEFAULT_PROXY_PORTS[fields.proxyKind])}
+              >
+                <input
+                  class="control"
+                  bind:value={fields.proxyPort}
+                  inputmode="numeric"
+                  maxlength={5}
+                  aria-invalid={errorFor('proxy-port-invalid') !== undefined}
+                  aria-label={t('form.proxy.port')}
+                  autocomplete="off"
+                />
+              </Field>
+            </div>
+            <div class="pair">
+              <Field label={t('form.proxy.user')}>
+                <input
+                  class="control"
+                  bind:value={fields.proxyUser}
+                  maxlength={CONNECTION_LIMITS.field}
+                  aria-label={t('form.proxy.user')}
+                  autocomplete="off"
+                />
+              </Field>
+              <Field
+                label={t('form.proxy.password')}
+                hint={formState?.hasStoredProxyPassword && !fields.proxyPassword.touched
+                  ? t('form.passwordStored')
+                  : undefined}
+              >
+                <SecretInput
+                  bind:value={fields.proxyPassword.value}
+                  oninput={() => {
+                    if (fields) {
+                      fields.proxyPassword.touched = true;
+                    }
+                  }}
+                  maxlength={PASSWORD_MAX_LENGTH}
+                  disabled={fields.proxyPassword.erase}
+                  label={t('form.proxy.password')}
+                  showLabel={t('form.showSecret')}
+                  hideLabel={t('form.hideSecret')}
+                />
+              </Field>
+            </div>
+            {#if formState?.hasStoredProxyPassword}
+              <label class="check">
+                <input type="checkbox" bind:checked={fields.proxyPassword.erase} />
+                {t('form.erasePassword')}
+              </label>
+            {/if}
           {/if}
         </fieldset>
         {/if}

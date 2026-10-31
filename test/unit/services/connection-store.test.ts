@@ -5,6 +5,7 @@ import {
   CONNECTIONS_STATE_KEY,
   ConnectionStore,
   passwordSecretKey,
+  proxySecretKey,
   sentinelSecretKey,
   sshSecretKey,
 } from '../../../src/services/connection-store';
@@ -1136,5 +1137,112 @@ describe('ConnectionStore Elasticsearch (V7.8)', () => {
       elastic: { auth: 'apiKey' },
     });
     expect(sql.elastic).toBeUndefined();
+  });
+});
+
+describe('ConnectionStore: sockets and proxies (V10.2.5)', () => {
+  let state: FakeMemento;
+  let secrets: FakeSecretStorage;
+  let store: ConnectionStore;
+
+  beforeEach(() => {
+    state = new FakeMemento();
+    secrets = new FakeSecretStorage();
+    store = new ConnectionStore({ state, secrets, logger: new RecordingLogger() });
+  });
+
+  const proxied: ConnectionInput = {
+    ...mysqlInput,
+    proxy: { kind: 'socks5', host: ' proxy.corp ', user: ' me ' },
+  };
+
+  it('keeps a trimmed socket and drops it where the driver has none', async () => {
+    const mysql = await store.add({ ...mysqlInput, host: undefined, socket: ' /run/my.sock ' });
+    expect(mysql.socket).toBe('/run/my.sock');
+    const mssql = await store.add({
+      name: 'ms',
+      driver: 'mssql',
+      host: 'h',
+      socket: '/run/x.sock',
+    });
+    expect(mssql.socket).toBeUndefined();
+    const sqlite = await store.add({ name: 'f', driver: 'sqlite', file: '/a.db', socket: '/s' });
+    expect(sqlite.socket).toBeUndefined();
+  });
+
+  it('refuses a socket with a proxy', async () => {
+    await expect(store.add({ ...proxied, socket: '/run/my.sock' })).rejects.toMatchObject({
+      message: expect.stringContaining('socket-with-tunnel') as unknown,
+    });
+  });
+
+  it('keeps the proxy trimmed and its password in the secrets', async () => {
+    const config = await store.add(proxied, 'db-pw', {}, { proxyPassword: 'proxy-pw' });
+    expect(config.proxy).toEqual({ kind: 'socks5', host: 'proxy.corp', user: 'me' });
+    expect(await store.getProxyPassword(config.id)).toBe('proxy-pw');
+    expect(JSON.stringify(state.data.get(CONNECTIONS_STATE_KEY))).not.toContain('proxy-pw');
+    expect(secrets.data.get(proxySecretKey(config.id))).toBe('proxy-pw');
+  });
+
+  it('changes, keeps and clears the proxy password, and drops it with the proxy', async () => {
+    const config = await store.add(proxied, undefined, {}, { proxyPassword: 'one' });
+    await store.update(
+      config.id,
+      proxied,
+      { kind: 'keep' },
+      {},
+      { kind: 'keep' },
+      { kind: 'set', value: 'two' },
+    );
+    expect(await store.getProxyPassword(config.id)).toBe('two');
+    await store.update(config.id, proxied);
+    expect(await store.getProxyPassword(config.id)).toBe('two');
+    await store.update(
+      config.id,
+      proxied,
+      { kind: 'keep' },
+      {},
+      { kind: 'keep' },
+      { kind: 'clear' },
+    );
+    expect(await store.getProxyPassword(config.id)).toBeUndefined();
+    await store.update(
+      config.id,
+      proxied,
+      { kind: 'keep' },
+      {},
+      { kind: 'keep' },
+      { kind: 'set', value: 'three' },
+    );
+    await store.update(config.id, mysqlInput);
+    expect(await store.getProxyPassword(config.id)).toBeUndefined();
+  });
+
+  it('copies the proxy password with a duplicate and deletes it with the connection', async () => {
+    const config = await store.add(proxied, undefined, {}, { proxyPassword: 'pw' });
+    const copy = await store.duplicate(config.id);
+    expect(await store.getProxyPassword(copy.id)).toBe('pw');
+    await store.remove(config.id);
+    expect(await store.getProxyPassword(config.id)).toBeUndefined();
+    expect(await store.getProxyPassword(copy.id)).toBe('pw');
+  });
+
+  it('reloads a list that changed underneath, as Settings Sync does, and says so', async () => {
+    await store.add(mysqlInput);
+    let changes = 0;
+    store.onDidChange(() => {
+      changes++;
+    });
+    expect(store.reload()).toBe(false);
+    expect(changes).toBe(0);
+    const other = new ConnectionStore({ state, secrets, logger: new RecordingLogger() });
+    await other.add({ ...mysqlInput, name: 'From the other machine' });
+    expect(store.list()).toHaveLength(1);
+    expect(store.reload()).toBe(true);
+    expect(store.list().map((config) => config.name)).toEqual([
+      'Local MySQL',
+      'From the other machine',
+    ]);
+    expect(changes).toBe(1);
   });
 });

@@ -38,6 +38,21 @@ and the database. The server's host key is checked the way OpenSSH does: the fir
 are asked to trust it, and a changed key is connected to only after a warning and your
 choice.
 
+## Proxies
+
+**Connect through a proxy** sends the connection through a SOCKS5 proxy or an HTTP proxy
+that allows `CONNECT`, with a user and password if it wants them. The proxy is given the
+server's name and looks it up itself, so names of a private network work. With SSH turned
+on as well, the proxy leads to the first SSH server. The proxy password is kept in the
+editor's secret storage, like the others.
+
+## Unix sockets
+
+MySQL, MariaDB, PostgreSQL and Redis on this machine can be reached through their Unix
+socket instead of a host and port: the socket file (`/var/run/mysqld/mysqld.sock`) or, for
+PostgreSQL, the socket directory (`/var/run/postgresql`) — the port then picks the file in
+it. On Windows a MySQL named pipe (`\\.\pipe\MySQL`) goes in the same field.
+
 ## TLS
 
 Pick how strictly the server certificate is checked: verify it fully, encrypt only, or
@@ -76,3 +91,10 @@ connections are not used until you trust it.
 
 **Export Connections…** writes the list (folders, colours, options) to a JSON file —
 never with passwords. **Import Connections…** reads it back.
+
+Or let the editor carry it: with `datanest.connections.sync` on, the list travels with
+**Settings Sync** between your computers. Passwords never do — each computer keeps its own,
+so type them once on each — and paths to SQLite files and SSH keys must exist on each.
+
+Every password box of the form has a **Show** button for what you typed; a stored password
+is never sent back to the form.

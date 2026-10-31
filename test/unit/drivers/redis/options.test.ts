@@ -133,3 +133,16 @@ describe('tlsOptions', () => {
     expect(options).toMatchObject({ ca, cert: ca, key: ca });
   });
 });
+
+describe('redisTarget with a Unix socket (V10.2.5)', () => {
+  it('connects one server through the socket instead of host and port', () => {
+    const chosen = options({ socket: ' /run/redis/redis.sock ' });
+    expect(chosen.path).toBe('/run/redis/redis.sock');
+    expect(chosen.host).toBeUndefined();
+    expect(chosen.port).toBeUndefined();
+  });
+
+  it('uses host and port without one', () => {
+    expect(options({ socket: '' })).toMatchObject({ host: 'cache', port: 6379 });
+  });
+});

@@ -24,7 +24,9 @@ import {
   optionSupport,
   type VisibilityFilter,
   type SshTunnelConfig,
+  type ProxySettings,
   type SslSettings,
+  supportsSocket,
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
 import { array, literal, object, type Schema, string, union } from '../shared/schema';
@@ -58,6 +60,11 @@ export function sshSecretKey(
   kind: keyof SshHopSecrets,
 ): string {
   return `connection.${connectionId}.ssh.${hopId}.${kind}`;
+}
+
+/** Key of the password of a connection's proxy (V10.2.5). */
+export function proxySecretKey(connectionId: string): string {
+  return `connection.${connectionId}.proxy.password`;
 }
 
 /** Key of the password of a Redis connection's Sentinels (V7.1). */
@@ -123,6 +130,8 @@ export interface AddOptions {
   readonly project?: string;
   /** The password of the Sentinels of a Redis connection, when they have one. */
   readonly sentinelPassword?: string;
+  /** The password of the connection's proxy (V10.2.5). */
+  readonly proxyPassword?: string;
 }
 
 /**
@@ -151,6 +160,26 @@ export class ConnectionStore {
     this.projects?.onDidChange(() => {
       this.notify();
     });
+  }
+
+  /**
+   * Reads the saved list again, e.g. after the editor's Settings Sync brought another
+   * machine's (V10.2.5). True, and listeners told, when something changed.
+   */
+  reload(): boolean {
+    const loaded = this.load();
+    const folders = withReferenced(loaded.folders, loaded.items);
+    if (
+      JSON.stringify(loaded.items) === JSON.stringify(this.items) &&
+      JSON.stringify(folders) === JSON.stringify(this.folderList)
+    ) {
+      return false;
+    }
+    this.items = loaded.items;
+    this.folderList = folders;
+    this.logger.info('The saved connections changed outside this window; reloaded them');
+    this.notify();
+    return true;
   }
 
   /** Workspace folders whose project file may take a connection (V4.7). */
@@ -319,6 +348,9 @@ export class ConnectionStore {
     if (usesSentinels(config) && (options.sentinelPassword ?? '') !== '') {
       await this.secrets.store(sentinelSecretKey(config.id), options.sentinelPassword ?? '');
     }
+    if (config.proxy !== undefined && (options.proxyPassword ?? '') !== '') {
+      await this.secrets.store(proxySecretKey(config.id), options.proxyPassword ?? '');
+    }
     for (const hop of sshHopsOf(config)) {
       for (const kind of SSH_SECRET_KINDS) {
         const value = ssh[hop.id]?.[kind];
@@ -337,6 +369,7 @@ export class ConnectionStore {
     password: PasswordChange = { kind: 'keep' },
     ssh: SshSecretChanges = {},
     sentinelPassword: PasswordChange = { kind: 'keep' },
+    proxyPassword: PasswordChange = { kind: 'keep' },
   ): Promise<ConnectionConfig> {
     const index = this.items.findIndex((item) => item.id === id);
     const before = this.items[index] ?? this.projects?.get(id);
@@ -357,6 +390,11 @@ export class ConnectionStore {
     await this.applySecret(
       sentinelSecretKey(id),
       usesSentinels(config) ? sentinelPassword : { kind: 'clear' },
+    );
+    // Without a proxy its password goes too.
+    await this.applySecret(
+      proxySecretKey(id),
+      config.proxy === undefined ? { kind: 'clear' } : proxyPassword,
     );
     const kept = new Set(sshHopsOf(config).map((hop) => hop.id));
     for (const hop of sshHopsOf(config)) {
@@ -438,6 +476,10 @@ export class ConnectionStore {
     if (sentinel !== undefined) {
       await this.secrets.store(sentinelSecretKey(targetId), sentinel);
     }
+    const proxy = await this.secrets.get(proxySecretKey(source.id));
+    if (proxy !== undefined) {
+      await this.secrets.store(proxySecretKey(targetId), proxy);
+    }
     for (const hop of sshHopsOf(source)) {
       for (const kind of SSH_SECRET_KINDS) {
         const value = await this.secrets.get(sshSecretKey(source.id, hop.id, kind));
@@ -451,6 +493,7 @@ export class ConnectionStore {
   private async deleteSecrets(config: ConnectionConfig): Promise<void> {
     await this.secrets.delete(passwordSecretKey(config.id));
     await this.secrets.delete(sentinelSecretKey(config.id));
+    await this.secrets.delete(proxySecretKey(config.id));
     for (const hop of sshHopsOf(config)) {
       await this.deleteHopSecrets(config.id, hop);
     }
@@ -483,6 +526,11 @@ export class ConnectionStore {
   /** The password of a Redis connection's Sentinels, if one is stored. */
   async getSentinelPassword(id: string): Promise<string | undefined> {
     return await this.secrets.get(sentinelSecretKey(id));
+  }
+
+  /** The password of a connection's proxy, if one is stored (V10.2.5). */
+  async getProxyPassword(id: string): Promise<string | undefined> {
+    return await this.secrets.get(proxySecretKey(id));
   }
 
   /** The stored password and passphrase of every SSH hop of a connection, by hop id. */
@@ -605,6 +653,8 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     database: file ? undefined : trim(input.database),
     file: file ? trim(input.file) : undefined,
     ssh: file || input.ssh === undefined ? undefined : normalizeTunnel(input.ssh),
+    socket: file || !supportsSocket(input.driver) ? undefined : trim(input.socket),
+    proxy: file || input.proxy === undefined ? undefined : normalizeProxy(input.proxy),
     ssl: file || input.ssl === undefined ? undefined : normalizeSsl(input.ssl),
     folder: trim(input.folder),
     color: input.color,
@@ -757,6 +807,16 @@ function normalizeElastic(elastic: ElasticSettings | undefined): ElasticSettings
 /** True for a Redis connection that finds its master through Sentinels. */
 function usesSentinels(config: ConnectionInput): boolean {
   return config.driver === 'redis' && config.redis?.mode === 'sentinel';
+}
+
+function normalizeProxy(proxy: ProxySettings): ProxySettings {
+  const user = proxy.user?.trim();
+  return {
+    kind: proxy.kind,
+    host: proxy.host.trim(),
+    ...(proxy.port === undefined ? {} : { port: proxy.port }),
+    ...(user === undefined || user === '' ? {} : { user }),
+  };
 }
 
 function normalizeSsl(ssl: SslSettings): SslSettings {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SecretInput from '../../components/SecretInput.svelte';
   import { CONNECTION_LIMITS, DEFAULT_SSH_PORT } from '../../../../src/shared/connection';
   import { PASSWORD_MAX_LENGTH } from '../../../../src/shared/protocols/connection-form';
   import Field from '../../components/Field.svelte';
@@ -85,17 +86,16 @@
       label={name('form.ssh.password')}
       hint={stored.password && !hop.password.touched ? t('form.passwordStored') : undefined}
     >
-      <input
-        class="control"
-        type="password"
+      <SecretInput
         bind:value={hop.password.value}
         oninput={() => {
           hop.password.touched = true;
         }}
         maxlength={PASSWORD_MAX_LENGTH}
         disabled={hop.password.erase}
-        aria-label={name('form.ssh.password')}
-        autocomplete="off"
+        label={name('form.ssh.password')}
+        showLabel={t('form.showSecret')}
+        hideLabel={t('form.hideSecret')}
       />
     </Field>
     {#if stored.password}
@@ -127,17 +127,16 @@
         ? t('form.ssh.passphraseStored')
         : t('form.ssh.passphraseHint')}
     >
-      <input
-        class="control"
-        type="password"
+      <SecretInput
         bind:value={hop.passphrase.value}
         oninput={() => {
           hop.passphrase.touched = true;
         }}
         maxlength={PASSWORD_MAX_LENGTH}
         disabled={hop.passphrase.erase}
-        aria-label={name('form.ssh.passphrase')}
-        autocomplete="off"
+        label={name('form.ssh.passphrase')}
+        showLabel={t('form.showSecret')}
+        hideLabel={t('form.hideSecret')}
       />
     </Field>
     {#if stored.passphrase}

@@ -190,6 +190,8 @@ export const CONFIG_KEYS = {
   logLevel: 'logLevel',
   /** Show the server's own databases and schemas in the tree. */
   showSystemObjects: 'showSystemObjects',
+  /** Share the connection list through the editor's Settings Sync (V10.2.5). */
+  syncConnections: 'connections.sync',
   /** Rows, size and comment of tables in the tree (V10.2.3). */
   treeTableStats: 'tree.tableStats',
   /** Largest number of rows one statement brings back. */

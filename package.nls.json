@@ -146,5 +146,6 @@
   "configuration.tree.tableStats.description": "Show the estimated rows of each table in the tree, and its size and comment in the tooltip — from the server's own statistics, never a `COUNT(*)`. SQLite keeps no such statistics.",
   "commands.table.duplicate.title": "Duplicate Table…",
   "commands.connections.openSqliteFile.title": "Open SQLite Database…",
-  "commands.tree.filterTables.title": "Filter…"
+  "commands.tree.filterTables.title": "Filter…",
+  "configuration.connections.sync.description": "Share your connection list (with its folders and settings) between your computers through the editor's **Settings Sync**. Passwords never travel: each computer keeps its own in its secret storage, so type them once on each. Paths to SQLite files and SSH keys must exist on each computer."
 }

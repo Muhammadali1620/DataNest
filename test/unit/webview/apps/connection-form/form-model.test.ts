@@ -31,6 +31,7 @@ import {
   toMongo,
   changeMongoMode,
   toElastic,
+  toProxy,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
 import { parseConnectionUrl } from '../../../../../src/shared/connection-url';
@@ -80,6 +81,13 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     authMechanism: '',
     elasticAuth: 'basic',
     elasticPrefix: '',
+    socket: '',
+    useProxy: false,
+    proxyKind: 'socks5',
+    proxyHost: '',
+    proxyPort: '',
+    proxyUser: '',
+    proxyPassword: { value: '', touched: false, erase: false },
     ...overrides,
   };
 }
@@ -143,6 +151,13 @@ describe('fieldsFrom', () => {
       authMechanism: '',
       elasticAuth: 'basic',
       elasticPrefix: '',
+      socket: '',
+      useProxy: false,
+      proxyKind: 'socks5',
+      proxyHost: '',
+      proxyPort: '',
+      proxyUser: '',
+      proxyPassword: { value: '', touched: false, erase: false },
     });
   });
 
@@ -1165,6 +1180,93 @@ describe('Elasticsearch fields (V7.8)', () => {
       elasticPrefix: '/es',
       sslMode: 'verify-full',
       port: '443',
+    });
+  });
+});
+
+describe('socket and proxy fields (V10.2.5)', () => {
+  it('sends a socket for MySQL, PostgreSQL and Redis only', () => {
+    expect(toInput(fields({ socket: ' /run/mysqld.sock ' })).socket).toBe('/run/mysqld.sock');
+    expect(toInput(fields({ driver: 'postgres', socket: '/run/postgresql' })).socket).toBe(
+      '/run/postgresql',
+    );
+    expect(toInput(fields({ driver: 'redis', socket: '/run/redis.sock' })).socket).toBe(
+      '/run/redis.sock',
+    );
+    expect(toInput(fields({ driver: 'mssql', socket: '/run/x.sock' })).socket).toBeUndefined();
+    expect(toInput(fields({ socket: '  ' })).socket).toBeUndefined();
+  });
+
+  it('lets a socket stand in for the host', () => {
+    expect(problemsOf(fields({ host: '', socket: '/run/mysqld.sock' }))).toEqual([]);
+    expect(problemsOf(fields({ host: '' }))).toContain('host-empty');
+  });
+
+  it('refuses a socket together with SSH or a proxy', () => {
+    expect(
+      problemsOf(fields({ socket: '/run/mysqld.sock', useProxy: true, proxyHost: 'p' })),
+    ).toContain('socket-with-tunnel');
+  });
+
+  it('sends the proxy only while it is on, with its port and user when given', () => {
+    expect(toInput(fields({ proxyHost: 'p' })).proxy).toBeUndefined();
+    expect(
+      toInput(fields({ useProxy: true, proxyKind: 'http', proxyHost: ' p ', proxyPort: '3128' }))
+        .proxy,
+    ).toEqual({ kind: 'http', host: 'p', port: 3128 });
+    expect(toInput(fields({ useProxy: true, proxyHost: 'p', proxyUser: ' me ' })).proxy).toEqual({
+      kind: 'socks5',
+      host: 'p',
+      user: 'me',
+    });
+    expect(toProxy(fields({ driver: 'sqlite', useProxy: true, proxyHost: 'p' }))).toBeUndefined();
+  });
+
+  it('checks the proxy host and the port text', () => {
+    expect(problemsOf(fields({ useProxy: true }))).toContain('proxy-host-empty');
+    expect(problemsOf(fields({ useProxy: true, proxyHost: 'p', proxyPort: 'abc' }))).toContain(
+      'proxy-port-invalid',
+    );
+    expect(problemsOf(fields({ useProxy: true, proxyHost: 'p', proxyPort: '99999' }))).toContain(
+      'proxy-port-invalid',
+    );
+    expect(problemsOf(fields({ useProxy: false, proxyPort: 'abc' }))).toEqual([]);
+  });
+
+  it('sends what to do with the proxy password only when there is a proxy', () => {
+    const typed = fields({
+      useProxy: true,
+      proxyHost: 'p',
+      proxyPassword: { value: 'secret', touched: true, erase: false },
+    });
+    expect(toDraft(typed).proxyPassword).toEqual({ kind: 'set', value: 'secret' });
+    expect(toDraft(fields({ useProxy: true, proxyHost: 'p' })).proxyPassword).toEqual({
+      kind: 'keep',
+    });
+    expect(toDraft(fields()).proxyPassword).toBeUndefined();
+  });
+
+  it('reads socket and proxy back from a stored connection', () => {
+    const read = fieldsFrom({
+      input: {
+        name: 'x',
+        driver: 'mysql',
+        socket: '/run/mysqld.sock',
+        proxy: { kind: 'http', host: 'p', port: 3128, user: 'me' },
+      },
+      hasStoredPassword: false,
+      storedSsh: [],
+      projects: [],
+      folders: [],
+      drivers: [],
+    });
+    expect(read).toMatchObject({
+      socket: '/run/mysqld.sock',
+      useProxy: true,
+      proxyKind: 'http',
+      proxyHost: 'p',
+      proxyPort: '3128',
+      proxyUser: 'me',
     });
   });
 });

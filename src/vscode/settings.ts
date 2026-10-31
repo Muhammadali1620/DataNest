@@ -94,6 +94,13 @@ export function readSafeMode(): SafeMode {
   return isSafeMode(value) ? value : DEFAULT_SAFE_MODE;
 }
 
+/** Whether the connection list travels with the editor's Settings Sync (V10.2.5). */
+export function readSyncConnections(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(CONFIG_KEYS.syncConnections, false);
+}
+
 /** What query variables do (V10.2.1). */
 export function readQueryVariablesMode(): QueryVariablesMode {
   const value = vscode.workspace

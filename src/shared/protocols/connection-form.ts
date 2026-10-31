@@ -40,6 +40,8 @@ const draftSchema = object({
   project: optional(projectKeySchema),
   /** The password of a Redis connection's Sentinels (V7.1); left out keeps the stored one. */
   sentinelPassword: optional(passwordChangeSchema),
+  /** The password of the connection's proxy (V10.2.5); left out keeps the stored one. */
+  proxyPassword: optional(passwordChangeSchema),
 });
 
 const projectSchema = object({ key: projectKeySchema, name: string({ maxLength: 500 }) });
@@ -58,6 +60,8 @@ const formStateSchema = object({
   importedPassword: optional(boolean()),
   /** True when a Sentinel password is stored for this Redis connection (V7.1). */
   hasStoredSentinelPassword: optional(boolean()),
+  /** True when a proxy password is stored for this connection (V10.2.5). */
+  hasStoredProxyPassword: optional(boolean()),
   /** Which SSH hops have a stored password or passphrase; values never travel. */
   storedSsh: array(
     object({

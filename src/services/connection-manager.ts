@@ -374,21 +374,22 @@ export class ConnectionManager implements Disposable {
     password?: string,
     ssh: Readonly<Record<string, SshHopSecrets>> = {},
     sentinelPassword?: string,
+    proxyPassword?: string,
   ): Promise<void> {
     if (input.driver === 'redis') {
-      await this.testRedis(input, password, ssh, sentinelPassword);
+      await this.testRedis(input, password, ssh, sentinelPassword, proxyPassword);
       return;
     }
     if (input.driver === 'mongodb') {
-      await this.testMongo(input, password, ssh);
+      await this.testMongo(input, password, ssh, proxyPassword);
       return;
     }
     if (input.driver === 'elasticsearch') {
-      await this.testElastic(input, password, ssh);
+      await this.testElastic(input, password, ssh, proxyPassword);
       return;
     }
     const driver = await this.drivers.get(input.driver);
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
       const resolved = resolve({ ...input, id: 'test' }, {}, password, tunnel);
@@ -416,9 +417,10 @@ export class ConnectionManager implements Disposable {
     password: string | undefined,
     ssh: Readonly<Record<string, SshHopSecrets>>,
     sentinelPassword: string | undefined,
+    proxyPassword: string | undefined,
   ): Promise<void> {
     const driver = await this.redisDriver();
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
       const resolved = {
@@ -447,9 +449,10 @@ export class ConnectionManager implements Disposable {
     input: ConnectionInput,
     password: string | undefined,
     ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
   ): Promise<void> {
     const driver = await this.mongoDriver();
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
       let session: MongoSession;
@@ -469,9 +472,10 @@ export class ConnectionManager implements Disposable {
     input: ConnectionInput,
     password: string | undefined,
     ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
   ): Promise<void> {
     const driver = await this.elasticDriver();
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey);
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
       let session: ElasticSession;
@@ -741,6 +745,7 @@ export class ConnectionManager implements Disposable {
       config,
       config.ssh === undefined ? {} : await this.store.getSshSecrets(config.id),
       this.checkHostKey,
+      config.proxy === undefined ? undefined : await this.store.getProxyPassword(config.id),
     );
     if (spec === undefined) {
       return undefined;

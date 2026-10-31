@@ -79,11 +79,17 @@ export function redisTarget(
   const mode = redisModeOf(config);
   const extra = config.redis?.nodes ?? [];
   switch (mode) {
-    case 'standalone':
+    case 'standalone': {
+      const socket = config.socket?.trim() ?? '';
       return {
         mode,
-        options: { ...base, host, port: effectivePort(config) ?? DEFAULT_PORTS.redis },
+        // A Unix socket on this machine replaces host and port (V10.2.5).
+        options:
+          socket === ''
+            ? { ...base, host, port: effectivePort(config) ?? DEFAULT_PORTS.redis }
+            : { ...base, path: socket },
       };
+    }
     case 'sentinel': {
       const sentinelUser = config.redis?.sentinelUser?.trim();
       return {

@@ -89,6 +89,27 @@ export function testSentinelPassword(
   }
 }
 
+/** The form's choice for the proxy password (V10.2.5); a form that says nothing keeps it. */
+export function toProxyChange(draft: ConnectionDraft): PasswordChange {
+  return draft.proxyPassword === undefined ? { kind: 'keep' } : toChange(draft.proxyPassword);
+}
+
+/** The proxy password "Test" should use: what the form typed, else what is stored. */
+export function testProxyPassword(
+  draft: ConnectionDraft,
+  stored: string | undefined,
+): string | undefined {
+  const change = toProxyChange(draft);
+  switch (change.kind) {
+    case 'set':
+      return change.value === '' ? undefined : change.value;
+    case 'clear':
+      return undefined;
+    case 'keep':
+      return stored;
+  }
+}
+
 /** The form's choices for SSH secrets, by hop id, as the store expects them. */
 export function toSshChanges(draft: ConnectionDraft): SshSecretChanges {
   const changes: Record<string, { password: PasswordChange; passphrase: PasswordChange }> = {};

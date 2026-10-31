@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { connect, createServer, type Server } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { driver } from '../../../src/drivers/redis';
 import type {
@@ -366,5 +370,44 @@ describe('redis driver: cluster', () => {
   it('fails when no node answers', async () => {
     const error = await failure(driver.openSession(cluster({ port: 7998 })));
     expect(error).toMatchObject({ code: 'connection-failed' });
+  });
+});
+
+describe.runIf(process.platform !== 'win32')('redis driver: Unix socket (V10.2.5)', () => {
+  let dir: string;
+  let relay: Server;
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'datanest-redis-socket-'));
+    // A local socket that relays to the server's TCP port: the driver speaks over a socket.
+    relay = createServer((local) => {
+      const remote = connect({ host: TEST_REDIS.host, port: TEST_REDIS.port });
+      local.pipe(remote).pipe(local);
+      remote.on('error', () => local.destroy());
+      local.on('error', () => remote.destroy());
+    });
+    await new Promise<void>((resolve) => {
+      relay.listen(join(dir, 'redis.sock'), resolve);
+    });
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) =>
+      relay.close(() => {
+        resolve();
+      }),
+    );
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('runs commands through the socket instead of host and port', async () => {
+    const session = await driver.openSession(
+      config({ host: undefined, port: undefined, socket: join(dir, 'redis.sock') }),
+    );
+    try {
+      expect(text(await session.call(['PING']))).toBe('PONG');
+    } finally {
+      await session.close();
+    }
   });
 });

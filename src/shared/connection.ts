@@ -200,6 +200,32 @@ export type SshAuthMethod = (typeof SSH_AUTH_METHODS)[number];
 
 export const DEFAULT_SSH_PORT = 22;
 
+/** How a connection may reach its server through a proxy (V10.2.5). */
+export const PROXY_KINDS = ['socks5', 'http'] as const;
+export type ProxyKind = (typeof PROXY_KINDS)[number];
+
+export const DEFAULT_PROXY_PORTS: Readonly<Record<ProxyKind, number>> = {
+  socks5: 1080,
+  http: 8080,
+};
+
+/** A SOCKS5 or HTTP proxy in front of the server; its password is in SecretStorage. */
+export interface ProxySettings {
+  readonly kind: ProxyKind;
+  readonly host: string;
+  readonly port?: number;
+  readonly user?: string;
+}
+
+export function effectiveProxyPort(proxy: ProxySettings): number {
+  return proxy.port ?? DEFAULT_PROXY_PORTS[proxy.kind];
+}
+
+/** Drivers that can reach a server on this machine through a Unix socket (V10.2.5). */
+export function supportsSocket(driver: DriverId): boolean {
+  return driver === 'mysql' || driver === 'postgres' || driver === 'redis';
+}
+
 /** Characters a hop id may contain, so it is safe inside a secret key. */
 export const HOP_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -434,6 +460,13 @@ export interface ConnectionInput {
   readonly file?: string;
   /** Reach the server through an SSH tunnel; network drivers only. */
   readonly ssh?: SshTunnelConfig;
+  /**
+   * A Unix socket on this machine instead of host and port (V10.2.5): the socket file of
+   * MySQL, MariaDB or Redis, the socket directory (or file) of PostgreSQL.
+   */
+  readonly socket?: string;
+  /** Reach the server, or the first SSH server, through a SOCKS5 or HTTP proxy (V10.2.5). */
+  readonly proxy?: ProxySettings;
   /** Encrypt the connection; absent means the driver's plain default. */
   readonly ssl?: SslSettings;
   /** The folder the tree shows it in; absent means the top level. */
@@ -522,6 +555,12 @@ export type ConnectionProblem =
   | RedisProblem
   | MongoProblem
   | 'elastic-prefix-invalid'
+  /** A Unix socket for a driver that has none (V10.2.5). */
+  | 'socket-unsupported'
+  /** A socket is on this machine: no tunnel or proxy leads to it. */
+  | 'socket-with-tunnel'
+  | 'proxy-host-empty'
+  | 'proxy-port-invalid'
   | SshProblem;
 
 /** What is wrong with the Redis settings. */
@@ -658,7 +697,7 @@ export function redisProblems(input: ConnectionInput): RedisProblem[] {
   if (nodes.length > MAX_REDIS_NODES) {
     problems.push('redis-too-many-nodes');
   }
-  if (mode !== 'standalone' && input.ssh !== undefined) {
+  if (mode !== 'standalone' && (input.ssh !== undefined || input.proxy !== undefined)) {
     problems.push('redis-ssh-topology');
   }
   return problems;
@@ -692,7 +731,7 @@ export function mongoProblems(input: ConnectionInput): MongoProblem[] {
   ) {
     problems.push('mongo-name-invalid');
   }
-  if (mode !== 'direct' && input.ssh !== undefined) {
+  if (mode !== 'direct' && (input.ssh !== undefined || input.proxy !== undefined)) {
     problems.push('mongo-ssh-topology');
   }
   return problems;
@@ -719,8 +758,25 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
       problems.push('file-empty');
     }
   } else {
-    if (input.host === undefined || input.host.trim() === '') {
+    const socket = (input.socket ?? '').trim() !== '';
+    // A socket stands in for the host only where the driver can use one.
+    const hostless = socket && supportsSocket(input.driver);
+    if (!hostless && (input.host === undefined || input.host.trim() === '')) {
       problems.push('host-empty');
+    }
+    if (socket && !supportsSocket(input.driver)) {
+      problems.push('socket-unsupported');
+    }
+    if (socket && (input.ssh !== undefined || input.proxy !== undefined)) {
+      problems.push('socket-with-tunnel');
+    }
+    if (input.proxy !== undefined) {
+      if (input.proxy.host.trim() === '') {
+        problems.push('proxy-host-empty');
+      }
+      if (!isPortValid(input.proxy.port)) {
+        problems.push('proxy-port-invalid');
+      }
     }
     if (!isPortValid(input.port)) {
       problems.push('port-invalid');
@@ -765,6 +821,10 @@ export function describeTarget(config: ConnectionInput): string {
   if (isFileDriver(config.driver)) {
     return config.file ?? '';
   }
+  const socket = config.socket?.trim() ?? '';
+  if (socket !== '') {
+    return config.user === undefined || config.user === '' ? socket : `${config.user}@${socket}`;
+  }
   const host = config.host ?? '';
   const port = effectivePort(config);
   const target = port === undefined ? host : `${host}:${port}`;
@@ -774,8 +834,12 @@ export function describeTarget(config: ConnectionInput): string {
 /** "via user@bastion:22" for tooltips, or undefined for a direct connection. */
 export function describeTunnel(config: ConnectionInput): string | undefined {
   const hops = sshHopsOf(config);
-  if (hops.length === 0 || isFileDriver(config.driver)) {
+  const proxy = config.proxy;
+  if ((hops.length === 0 && proxy === undefined) || isFileDriver(config.driver)) {
     return undefined;
   }
-  return hops.map((hop) => `${hop.user}@${hop.host}:${effectiveSshPort(hop)}`).join(' → ');
+  return [
+    ...(proxy === undefined ? [] : [`${proxy.kind} ${proxy.host}:${effectiveProxyPort(proxy)}`]),
+    ...hops.map((hop) => `${hop.user}@${hop.host}:${effectiveSshPort(hop)}`),
+  ].join(' → ');
 }

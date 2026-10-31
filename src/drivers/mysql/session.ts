@@ -59,12 +59,18 @@ export function connectionOptions(
   // Through a tunnel mysql2 must still know the server's real name, because it checks
   // the certificate against `host`; the socket itself goes to the local tunnel port.
   const tunnel = config.tlsServerName;
+  const socket = config.socket?.trim() ?? '';
   return {
-    host: tunnel ?? config.host,
-    port,
-    ...(tunnel === undefined
-      ? {}
-      : { stream: () => connect({ host: config.host ?? '127.0.0.1', port: port ?? 0 }) }),
+    // A Unix socket (or a Windows named pipe) on this machine replaces host and port.
+    ...(socket !== ''
+      ? { socketPath: socket }
+      : {
+          host: tunnel ?? config.host,
+          port,
+          ...(tunnel === undefined
+            ? {}
+            : { stream: () => connect({ host: config.host ?? '127.0.0.1', port: port ?? 0 }) }),
+        }),
     ...(tls === undefined ? {} : { ssl: mysqlSsl(tls) }),
     user: config.user,
     password: config.password,

@@ -31,6 +31,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   a JSON document.
 - MySQL and MariaDB spatial values show as WKT (`SRID=4326;POINT(1 2)`) instead of JSON.
 
+- Connections through a SOCKS5 or HTTP proxy, with a user and password; with SSH, the proxy
+  leads to the first SSH server.
+- Unix sockets for MySQL, MariaDB, PostgreSQL and Redis on this machine.
+- A **Show** button on every password box of the connection form.
+- `datanest.connections.sync` lets the connection list travel with Settings Sync; passwords
+  stay on each computer.
+
 ### Changed
 
 - Copying tables between schemas of one database now runs on one session and lets the

@@ -218,7 +218,9 @@ describe('data on SQL Server', () => {
       expect(first.summary.page).toMatchObject({ offset: 0, pageSize: 3 });
       const second = await names(undefined, undefined, 3);
       expect(second.names).toEqual(['50%_off', 'Ünï']);
-      expect(await viewer.reload(first.summary.id, { exactCount: true })).toBe(true);
+      // A table view keeps one result: opening the second page replaced the first, so the
+      // one to reload is the current one.
+      expect(await viewer.reload(second.summary.id, { exactCount: true })).toBe(true);
     });
 
     it('sorts on the server and pages through the sorted rows', async () => {

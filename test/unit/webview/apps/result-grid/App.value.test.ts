@@ -96,7 +96,7 @@ describe('result grid value panel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('value-text').textContent).toBe('{\n  "a": 1\n}');
     });
-    expect(screen.getByText('json')).toBeTruthy();
+    expect(screen.getAllByText('json').length).toBeGreaterThan(0);
     await fireEvent.pointerDown(cell(1, 1), { button: 0 });
     await waitFor(() => {
       expect(screen.getByTestId('value-null')).toBeTruthy();

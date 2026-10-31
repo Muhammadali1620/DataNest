@@ -10,11 +10,7 @@
   import { displayOf } from './cells';
   import { typeIcon } from './column-type';
   import { controlFor, type EditColumn, type EditorControl, initialText, isEditableColumn } from './edit-model';
-  import {
-    MIN_COLUMN_WIDTH,
-    ROW_NUMBER_WIDTH,
-    resizedWidths,
-  } from './columns';
+  import { MIN_COLUMN_WIDTH, resizedWidths } from './columns';
   import {
     type CellRef,
     extendTo,
@@ -29,6 +25,19 @@
     type SelectionInfo,
   } from './selection';
   import { columnGeometry, columnLayout, rangeOf, rowGeometry } from './virtual';
+  import {
+    DEFAULT_VIEW,
+    type GridView,
+    gutterWidth,
+    headerHeight,
+    isTicked,
+    NO_TICKS,
+    tickedCount,
+    tickedRows,
+    type Ticks,
+    toggleAllTicks,
+    toggleTick,
+  } from './grid-view';
 
   interface Props {
     columns: readonly ResultColumnInfo[];
@@ -85,6 +94,10 @@
     onToggleRecord?: (() => void) | undefined;
     /** What screen readers call the grid, e.g. the statement that produced it. */
     label?: string | undefined;
+    /** Row height, text size, lines and the gutter; the defaults when absent. */
+    view?: GridView | undefined;
+    /** Called to open a cell's value in the dialog (the magnifier on the cell). */
+    onOpenDialog?: ((row: number, column: number) => void) | undefined;
     t: Translate;
   }
 
@@ -117,6 +130,8 @@
     linkTarget,
     onFollow,
     label,
+    view: viewProp,
+    onOpenDialog,
     t,
   }: Props = $props();
 
@@ -126,17 +141,22 @@
   /** A step of a keyboard resize; Shift makes it bigger. */
   const RESIZE_STEP = 16;
 
-  /** One row is exactly this tall, which is what makes the arithmetic simple. */
-  const ROW_HEIGHT = 22;
+  const view = $derived(viewProp ?? DEFAULT_VIEW);
 
-  /** The header row is a little taller than a data row; rows are placed below it. */
-  const HEADER_HEIGHT = 26;
+  /** One row is exactly this tall, which is what makes the arithmetic simple. */
+  const ROW_HEIGHT = $derived(view.rowHeight);
+
+  /** The header row (name over type) is taller than a data row; rows are placed below it. */
+  const HEADER_HEIGHT = $derived(headerHeight(view));
+
+  /** The gutter holds the row's check box and number; its width follows the digits. */
+  const ROW_NUMBER_WIDTH = $derived(gutterWidth(view, String(rowCount).length));
 
   /**
    * Until the browser reports a size, one screenful is assumed: the first rows
    * then load right away instead of waiting for the first layout pass.
    */
-  const ASSUMED_HEIGHT = 20 * ROW_HEIGHT;
+  const ASSUMED_HEIGHT = $derived(20 * ROW_HEIGHT);
   const ASSUMED_WIDTH = 800;
 
   let viewport = $state<HTMLDivElement | undefined>(undefined);
@@ -339,20 +359,34 @@
     const box = selectionBox(selection);
     return Array.from({ length: box.bottom - box.top + 1 }, (_, offset) => box.top + offset);
   });
-  const canDelete = $derived(selectedRows.some((row) => stateAt(row) !== 'deleted'));
-  const canRestore = $derived(selectedRows.some((row) => stateAt(row) === 'deleted'));
+
+  /** Rows ticked in the gutter; they win over the selection when there are any. */
+  let ticks = $state<Ticks>(NO_TICKS);
+  const tickCount = $derived(tickedCount(ticks, rowCount));
+  const actionRows = $derived(tickCount > 0 ? tickedRows(ticks, rowCount) : selectedRows);
+  const canDelete = $derived(actionRows.some((row) => stateAt(row) !== 'deleted'));
+  const canRestore = $derived(actionRows.some((row) => stateAt(row) === 'deleted'));
+
+  function clearTicks(_key: string): void {
+    ticks = NO_TICKS;
+  }
+
+  // Reading only the key keeps this out of a write loop, like the selection's reset.
+  $effect(() => {
+    clearTicks(resetKey);
+  });
 
   function rowAction(action: RowAction): void {
     const rows =
       action === 'revert'
-        ? selectedRows
+        ? actionRows
         : action === 'restore'
-        ? selectedRows.filter((row) => stateAt(row) === 'deleted')
-        : action === 'delete'
-          ? selectedRows.filter((row) => stateAt(row) !== 'deleted')
-          : action === 'duplicate'
-            ? selectedRows
-            : [];
+          ? actionRows.filter((row) => stateAt(row) === 'deleted')
+          : action === 'delete'
+            ? actionRows.filter((row) => stateAt(row) !== 'deleted')
+            : action === 'duplicate'
+              ? actionRows
+              : [];
     if (action !== 'add' && rows.length === 0) {
       return;
     }
@@ -619,12 +653,90 @@
       return;
     }
     const name = columns[index]?.name ?? '';
-    onResize(index, Math.max(MIN_COLUMN_WIDTH, Math.round(name.length * 7.2 + 18)));
+    onResize(index, Math.max(MIN_COLUMN_WIDTH, Math.round(name.length * 8.4 + 26)));
   }
 </script>
 
+{#if editColumns !== undefined}
+  <div class="editbar" data-testid="editbar" role="toolbar" aria-label={t('grid.editToolbar')}>
+    <IconButton
+      icon="circle-slash"
+      tone="yellow"
+      label={t('grid.setNull')}
+      disabled={!canSetNull}
+      onclick={() => {
+        void setFocused({ kind: 'null' });
+      }}
+    />
+    <IconButton
+      icon="symbol-constant"
+      tone="purple"
+      label={t('grid.setDefault')}
+      disabled={!canSetDefault}
+      onclick={() => {
+        void setFocused({ kind: 'default' });
+      }}
+    />
+    <span class="toolbar-separator"></span>
+    <IconButton
+      icon="add"
+      tone="green"
+      label={t('grid.addRow')}
+      onclick={() => {
+        rowAction('add');
+      }}
+    />
+    <IconButton
+      icon="copy"
+      tone="blue"
+      label={t('grid.duplicateRows')}
+      disabled={actionRows.length === 0}
+      onclick={() => {
+        rowAction('duplicate');
+      }}
+    />
+    <IconButton
+      icon="trash"
+      tone="red"
+      label={t('grid.deleteRows')}
+      disabled={!canDelete}
+      onclick={() => {
+        rowAction('delete');
+      }}
+    />
+    <IconButton
+      icon="history"
+      tone="teal"
+      label={t('grid.restoreRows')}
+      disabled={!canRestore}
+      onclick={() => {
+        rowAction('restore');
+      }}
+    />
+    <IconButton
+      icon="discard"
+      tone="orange"
+      label={t('grid.revertRows')}
+      disabled={actionRows.length === 0}
+      onclick={() => {
+        rowAction('revert');
+      }}
+    />
+    {#if tickCount > 0}
+      <span class="badge" data-testid="tick-count">{t('grid.ticked', tickCount)}</span>
+    {/if}
+    {#if actionError !== undefined}
+      <span class="problem" role="alert" data-testid="action-error">{actionError}</span>
+    {/if}
+    <span class="hint" title={t('grid.editHint')}>
+      <Icon name="question" size={14} /><span class="sr-only">{t('grid.editHint')}</span>
+    </span>
+  </div>
+{/if}
+
 <div
-  class="viewport"
+  class="viewport lines-{view.lines} align-{view.align}"
+  style="--dn-row-height: {view.rowHeight}px; --dn-grid-font: {view.fontSize}px;"
   bind:this={viewport}
   onscroll={onScroll}
   onkeydown={onKeyDown}
@@ -644,7 +756,22 @@
   <p class="sr-only" id={`${uid}-keys`}>{t('grid.keys')}</p>
   <div class="canvas" style="height: {rows.totalHeight + HEADER_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
     <div class="header" role="row" aria-rowindex={1} style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px; height: {HEADER_HEIGHT}px;">
-      <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader" aria-colindex={1}>#</div>
+      <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader" aria-colindex={1}>
+        {#if view.checkboxes}
+          <input
+            type="checkbox"
+            class="tick"
+            title={t('grid.tickAll')}
+            aria-label={t('grid.tickAll')}
+            data-testid="tick-all"
+            checked={rowCount > 0 && tickCount === rowCount}
+            indeterminate={tickCount > 0 && tickCount < rowCount}
+            onchange={() => {
+              ticks = toggleAllTicks(ticks, rowCount);
+            }}
+          />
+        {:else if view.rowNumbers}#{/if}
+      </div>
       {#each pinnedPositions as position (position)}
         {@render headCell(position)}
       {/each}
@@ -659,6 +786,7 @@
       <div
         class="row"
         class:odd={index % 2 === 1}
+        class:ticked={isTicked(ticks, index)}
         class:inserted={stateAt(index) === 'inserted'}
         class:deleted={stateAt(index) === 'deleted'}
         role="row"
@@ -666,12 +794,25 @@
         style="top: {HEADER_HEIGHT + index * ROW_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
       >
         <div class="cell rownum" style="width: {ROW_NUMBER_WIDTH}px;" role="rowheader" aria-colindex={1}>
+          {#if view.checkboxes}
+            <input
+              type="checkbox"
+              class="tick"
+              title={t('grid.tickRow', index + 1)}
+              aria-label={t('grid.tickRow', index + 1)}
+              data-testid="tick-row"
+              checked={isTicked(ticks, index)}
+              onchange={() => {
+                ticks = toggleTick(ticks, index);
+              }}
+            />
+          {/if}
           {#if stateAt(index) === 'inserted'}
             <span class="mark" aria-hidden="true">+</span><span class="sr-only">{t('grid.rowNew')}</span>
           {:else if stateAt(index) === 'deleted'}
             <span class="mark" aria-hidden="true">−</span><span class="sr-only">{t('grid.rowDeleted')}</span>
           {/if}
-          {index + 1}
+          {#if view.rowNumbers}<span class="num">{index + 1}</span>{/if}
         </div>
         {#if cells === undefined}
           <div class="cell pending" style="width: {layout.totalWidth}px;" role="gridcell" aria-colindex={2}>
@@ -718,10 +859,13 @@
       <span class="type" data-kind={typeIcon(columns[index]?.dataType)}
         ><Icon name={typeIcon(columns[index]?.dataType)} size={14} /></span
       >
-      <span class="label">{columns[index]?.name ?? ''}</span>
-      {#if sort?.column === index}
-        <span class="arrow"><Icon name={sort.direction === 'asc' ? 'arrow-up' : 'arrow-down'} size={14} /></span>
-      {/if}
+      <span class="label-box">
+        <span class="label">{columns[index]?.name ?? ''}</span>
+        {#if columns[index]?.dataType !== undefined}<span class="dtype">{columns[index].dataType}</span>{/if}
+      </span>
+      <span class="arrow" class:idle={sort?.column !== index}
+        ><Icon name={sort?.column === index && sort.direction === 'desc' ? 'arrow-down' : 'arrow-up'} size={14} /></span
+      >
     </button>
     <span
       class="grip"
@@ -786,6 +930,28 @@
     {#if editor === undefined}
       {mark === 'default' ? t('grid.defaultLabel') : cell.text}
       {#if mark !== undefined}<span class="sr-only">{t('grid.cellChanged')}</span>{/if}
+      {#if onOpenDialog !== undefined && !cell.isNull && !cell.numeric}
+        <button
+          type="button"
+          class="zoom"
+          tabindex="-1"
+          title={t('grid.viewInDialog')}
+          aria-label={t('grid.viewInDialog')}
+          data-testid="cell-dialog"
+          onpointerdown={(event) => {
+            event.stopPropagation();
+          }}
+          ondblclick={(event) => {
+            event.stopPropagation();
+          }}
+          onclick={(event) => {
+            event.stopPropagation();
+            onOpenDialog(index, column);
+          }}
+        >
+          <Icon name="zoom-in" size={14} />
+        </button>
+      {/if}
     {:else if editor.control.type === 'select'}
       <select
         class="editor"
@@ -822,82 +988,9 @@
   </div>
 {/snippet}
 
-{#if editColumns !== undefined}
-  <div class="editbar" data-testid="editbar" role="toolbar" aria-label={t('grid.editToolbar')}>
-    <IconButton
-      icon="circle-slash"
-      label={t('grid.setNull')}
-      text={t('grid.setNull')}
-      disabled={!canSetNull}
-      onclick={() => {
-        void setFocused({ kind: 'null' });
-      }}
-    />
-    <IconButton
-      icon="symbol-constant"
-      label={t('grid.setDefault')}
-      text={t('grid.setDefault')}
-      disabled={!canSetDefault}
-      onclick={() => {
-        void setFocused({ kind: 'default' });
-      }}
-    />
-    <span class="toolbar-separator"></span>
-    <IconButton
-      icon="add"
-      label={t('grid.addRow')}
-      text={t('grid.addRow')}
-      onclick={() => {
-        rowAction('add');
-      }}
-    />
-    <IconButton
-      icon="copy"
-      label={t('grid.duplicateRows')}
-      text={t('grid.duplicateRows')}
-      disabled={selectedRows.length === 0}
-      onclick={() => {
-        rowAction('duplicate');
-      }}
-    />
-    <IconButton
-      icon="trash"
-      label={t('grid.deleteRows')}
-      text={t('grid.deleteRows')}
-      disabled={!canDelete}
-      onclick={() => {
-        rowAction('delete');
-      }}
-    />
-    <IconButton
-      icon="history"
-      label={t('grid.restoreRows')}
-      text={t('grid.restoreRows')}
-      disabled={!canRestore}
-      onclick={() => {
-        rowAction('restore');
-      }}
-    />
-    <IconButton
-      icon="discard"
-      label={t('grid.revertRows')}
-      text={t('grid.revertRows')}
-      disabled={selectedRows.length === 0}
-      onclick={() => {
-        rowAction('revert');
-      }}
-    />
-    {#if actionError !== undefined}
-      <span class="problem" role="alert" data-testid="action-error">{actionError}</span>
-    {/if}
-    <span class="hint" title={t('grid.editHint')}>
-      <Icon name="question" size={14} /><span class="sr-only">{t('grid.editHint')}</span>
-    </span>
-  </div>
-{/if}
-
 <style>
   .viewport {
+    font-size: var(--dn-grid-font, 14px);
     /* Opaque, so rows scrolling under the sticky header do not show through. */
     --dn-header-background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
     --dn-grid-line: var(--vscode-editorGroup-border, var(--dn-divider));
@@ -928,7 +1021,7 @@
     position: absolute;
     left: 0;
     display: flex;
-    height: 22px;
+    height: var(--dn-row-height, 32px);
   }
 
   .row.odd {
@@ -941,21 +1034,70 @@
 
   .cell {
     flex: none;
-    padding: 2px 8px;
+    padding: 0 12px;
     overflow: hidden;
-    line-height: 18px;
+    line-height: calc(var(--dn-row-height, 32px) - 1px);
     white-space: nowrap;
     text-overflow: ellipsis;
-    border-right: 1px solid var(--dn-grid-line);
+    border-bottom: 1px solid transparent;
     box-sizing: border-box;
+  }
+
+  .cell:not(.pinned):not(.rownum):not(.head) {
+    position: relative;
+  }
+
+  /* Lines are the user's choice: none, between rows (the default) or a full grid. */
+  .viewport.lines-rows .cell:not(.head),
+  .viewport.lines-all .cell:not(.head) {
+    border-bottom-color: var(--dn-grid-line);
+  }
+
+  .viewport.lines-all .cell {
+    border-right: 1px solid var(--dn-grid-line);
+  }
+
+  .viewport.align-left .cell:not(.rownum):not(.head),
+  .viewport.align-left .numeric {
+    text-align: left;
+  }
+
+  .viewport.align-center .cell:not(.rownum):not(.head) {
+    text-align: center;
+  }
+
+  .viewport.align-right .cell:not(.rownum):not(.head) {
+    text-align: right;
   }
 
   .head {
     position: relative;
     display: flex;
     align-items: center;
-    padding: 0 8px;
+    padding: 0 8px 0 12px;
     font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .label-box {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .label-box .label,
+  .label-box .dtype {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The type under the name, quieter and smaller, so a header reads at a glance. */
+  .dtype {
+    color: var(--dn-muted);
+    font-size: 0.82em;
+    font-weight: normal;
   }
 
   .name {
@@ -1023,6 +1165,16 @@
     color: var(--vscode-charts-red, var(--dn-muted));
   }
 
+  /* The arrow is always there, faint until the pointer is over the header. */
+  .arrow.idle {
+    opacity: 0;
+    transition: opacity var(--dn-duration) var(--dn-ease);
+  }
+
+  .head:hover .arrow.idle {
+    opacity: 0.45;
+  }
+
   .arrow {
     display: inline-flex;
     flex: none;
@@ -1068,8 +1220,13 @@
     position: sticky;
     left: 0;
     z-index: 1;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 8px;
     color: var(--vscode-descriptionForeground);
-    text-align: right;
+    font-size: 0.92em;
     background: var(--vscode-editor-background);
     user-select: none;
   }
@@ -1109,7 +1266,7 @@
 
   .head.rownum {
     z-index: 2;
-    justify-content: flex-end;
+    justify-content: flex-start;
     color: var(--dn-muted);
     font-weight: normal;
     background: var(--dn-header-background);
@@ -1210,11 +1367,65 @@
     display: flex;
     flex: none;
     flex-wrap: wrap;
-    gap: 2px;
+    gap: 4px;
     align-items: center;
-    padding: 3px 6px;
-    border-top: 1px solid var(--dn-divider);
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--dn-divider);
     font-size: var(--dn-font-small);
+  }
+
+  /* Row check boxes: round, in the accent colour; the editor's own box is a square. */
+  .tick {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--vscode-focusBorder);
+    border-radius: 50%;
+  }
+
+  .tick:checked,
+  .tick:indeterminate {
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-color: var(--vscode-button-background);
+  }
+
+  /* A ticked row is tinted across, so what an action will touch can be seen. */
+  .row.ticked,
+  .row.ticked .rownum,
+  .row.ticked .cell.pinned {
+    background: color-mix(in srgb, var(--vscode-focusBorder) 14%, var(--vscode-editor-background));
+  }
+
+  /* The magnifier that opens a value in the dialog, over the end of the cell. */
+  .zoom {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    color: var(--vscode-foreground);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 11px;
+    box-shadow: var(--dn-shadow);
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+
+  .cell:hover .zoom,
+  .cell.focused .zoom {
+    display: inline-flex;
+  }
+
+  .zoom:hover {
+    color: var(--vscode-focusBorder);
   }
 
   .hint {

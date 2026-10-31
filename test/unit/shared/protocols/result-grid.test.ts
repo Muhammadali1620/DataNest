@@ -178,6 +178,7 @@ describe('protocol shape', () => {
       'previewChanges',
       'rowAction',
       'rows',
+      'runSql',
       'saveChanges',
       'saveValue',
       'search',
@@ -189,6 +190,7 @@ describe('protocol shape', () => {
       'chartResult',
       'copyText',
       'exportResult',
+      'importInto',
       'ready',
       'revealError',
       'selectTab',
@@ -593,5 +595,51 @@ describe('exportResult event', () => {
   it('rejects a format the host cannot write', () => {
     expect(() => exportResult.parse({ resultId: 'r', format: 'pdf' })).toThrow('format');
     expect(() => exportResult.parse({ resultId: 'r' })).toThrow('format');
+  });
+});
+
+describe('exportResult scope and importInto (V12.1)', () => {
+  const exportResult = resultGridProtocol.host.events.exportResult;
+
+  it('takes an optional scope of result, table or database', () => {
+    for (const scope of ['result', 'table', 'database'] as const) {
+      expect(exportResult.parse({ resultId: 'r', format: 'csv', scope })).toEqual({
+        resultId: 'r',
+        format: 'csv',
+        scope,
+      });
+    }
+    expect(exportResult.parse({ resultId: 'r', format: 'csv' })).not.toHaveProperty('scope');
+  });
+
+  it('refuses an unknown scope', () => {
+    expect(() => exportResult.parse({ resultId: 'r', format: 'csv', scope: 'everything' })).toThrow(
+      'scope',
+    );
+  });
+
+  it('asks to import by the result id', () => {
+    const importInto = resultGridProtocol.host.events.importInto;
+    expect(importInto.parse({ resultId: 'r' })).toEqual({ resultId: 'r' });
+    expect(() => importInto.parse({})).toThrow();
+  });
+});
+
+describe('runSql request (V12.1)', () => {
+  const runSql = resultGridProtocol.host.requests.runSql;
+
+  it('takes the result and the statement text', () => {
+    expect(runSql.params.parse({ resultId: 'r', sql: 'SELECT 1' })).toEqual({
+      resultId: 'r',
+      sql: 'SELECT 1',
+    });
+    expect(() => runSql.params.parse({ resultId: 'r' })).toThrow('sql');
+    expect(() => runSql.params.parse({ sql: 'SELECT 1' })).toThrow();
+  });
+
+  it('answers ok, or the error message', () => {
+    expect(runSql.result.parse({ ok: true })).toEqual({ ok: true });
+    expect(runSql.result.parse({ ok: false, error: 'boom' })).toEqual({ ok: false, error: 'boom' });
+    expect(() => runSql.result.parse({})).toThrow('ok');
   });
 });

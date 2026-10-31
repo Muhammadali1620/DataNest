@@ -151,10 +151,10 @@ describe('result grid App', () => {
     });
   });
 
-  it('shows the column names in order, after the row-number column', async () => {
+  it('shows the column names with their types, in order, after the gutter', async () => {
     await withState({ tabs: [tab()], activeId: 'result-1', running: false });
     await waitFor(() => {
-      expect(headerTexts()).toEqual(['#', 'id', 'email']);
+      expect(headerTexts()).toEqual(['', 'id int', 'email']);
     });
   });
 
@@ -175,9 +175,9 @@ describe('result grid App', () => {
     const header = screen.getAllByRole('row')[0];
     const data = screen.getAllByRole('row').slice(1);
     expect(header?.querySelector('[role="columnheader"]')).not.toBeNull();
-    expect(data.map((row) => row.style.top)).toEqual(['26px', '48px']);
-    expect(header?.style.height).toBe('26px');
-    expect(header?.parentElement?.style.height).toBe('70px');
+    expect(data.map((row) => row.style.top)).toEqual(['46px', '78px']);
+    expect(header?.style.height).toBe('46px');
+    expect(header?.parentElement?.style.height).toBe('110px');
   });
 
   it('summarizes the row count and the time', async () => {
@@ -419,7 +419,7 @@ describe('result grid App', () => {
       });
       const canvas = screen.getByTestId('grid').querySelector('.canvas');
       // 1000 rows at 22px each plus the header; the scrollbar must match the result, not the DOM.
-      expect(canvas?.getAttribute('style')).toContain('height: 22026px');
+      expect(canvas?.getAttribute('style')).toContain('height: 32046px');
     });
 
     it('exposes the row and column counts for assistive technology', async () => {
@@ -1168,6 +1168,7 @@ describe('result grid App', () => {
         'SQL INSERT (.sql)',
         'Markdown (.md)',
         'Excel (.xlsx)',
+        'More options…',
       ]);
     });
 
@@ -1293,6 +1294,6 @@ describe('result grid App with a million rows', () => {
     }
     // The scrollbar still spans every row.
     const canvas = document.querySelector<HTMLElement>('.canvas');
-    expect(canvas?.style.height).toBe(`${MILLION * 22 + 26}px`);
+    expect(canvas?.style.height).toBe(`${MILLION * 32 + 46}px`);
   });
 });

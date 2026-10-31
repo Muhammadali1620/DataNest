@@ -29,6 +29,7 @@ import {
   type ResultGridProtocol,
 } from '../../shared/protocols/result-grid';
 import { RpcPeer } from '../../shared/rpc';
+import { revealColumn, type SqlTextOutcome } from '../../services/sql-text-outcome';
 import { buildState, errorOffsetOf } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 import { formatCount } from '../../core/number-format';
@@ -52,7 +53,25 @@ export interface ResultsPanelDeps {
   /** Renders cells in a format; the panel puts the text on the clipboard. */
   readonly copier: ResultCopier;
   /** Writes a result to a file the user picks. */
-  readonly exportResult?: (resultId: string, format: ExportFormat) => Promise<void>;
+  readonly exportResult?: (
+    resultId: string,
+    format: ExportFormat,
+    scope?: 'result' | 'table' | 'database',
+  ) => Promise<void>;
+  /** Opens the import page for a table (V12.1); absent until the commands exist. */
+  readonly importInto?: (connectionId: string, table: TableRef) => Promise<void>;
+  /** Runs SQL typed on the page in the document the result belongs to (V12.1). */
+  readonly runSql?: (request: {
+    documentUri: string;
+    target: SessionTarget;
+    sql: string;
+  }) => Promise<SqlTextOutcome>;
+  /** The connection a document runs on: its table view's, or its editor's binding. */
+  readonly targetOf?: (documentUri: string) => SessionTarget | undefined;
+  /** The table a document's table view shows, if it is one. */
+  readonly tableOf?: (
+    documentUri: string,
+  ) => { target: SessionTarget; table: TableRef } | undefined;
   /** Opens a chart of a result (V8.7). */
   readonly chartResult?: (resultId: string) => void;
   /** Production and read-only flags of a connection, checked before saving edits. */
@@ -268,6 +287,14 @@ export class ResultsPanel implements vscode.Disposable {
       const sorted = await this.deps.results.sort(resultId, column, direction);
       return { resultId, applied: sorted !== undefined };
     });
+    this.rpc.handle('runSql', async ({ resultId, sql }) => {
+      const summary = this.deps.results.get(resultId);
+      const target = summary?.origin?.target ?? this.deps.targetOf?.(this.documentUri);
+      if (summary === undefined || target === undefined || this.deps.runSql === undefined) {
+        return { ok: false, error: vscode.l10n.t('This result is no longer available') };
+      }
+      return await this.deps.runSql({ documentUri: this.documentUri, target, sql });
+    });
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
       return { resultId, applied };
@@ -360,8 +387,26 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.on('revealError', ({ resultId }) => {
       void this.revealError(resultId);
     });
-    this.rpc.on('exportResult', ({ resultId, format }) => {
-      void this.deps.exportResult?.(resultId, format);
+    this.rpc.on('exportResult', ({ resultId, format, scope }) => {
+      void this.deps.exportResult?.(resultId, format, scope);
+    });
+    this.rpc.on('importInto', ({ resultId }) => {
+      const view =
+        this.deps.results.get(resultId) === undefined
+          ? undefined
+          : this.deps.tableOf?.(this.documentUri);
+      if (view === undefined || this.deps.importInto === undefined) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Only a table opened from the tree can be imported into'),
+        );
+        return;
+      }
+      void this.deps.importInto(view.target.connectionId, {
+        ...view.table,
+        ...(view.table.database === undefined && view.target.database !== undefined
+          ? { database: view.target.database }
+          : {}),
+      });
     });
     this.rpc.on('chartResult', ({ resultId }) => {
       this.deps.chartResult?.(resultId);
@@ -394,7 +439,8 @@ export class ResultsPanel implements vscode.Disposable {
 
   /** Brings the panel forward without stealing focus from the editor. */
   reveal(): void {
-    this.panel.reveal(vscode.ViewColumn.Beside, true);
+    // Stay where the panel is: "beside" would split again when it sits in the active group.
+    this.panel.reveal(revealColumn(this.panel.viewColumn, vscode.ViewColumn.Beside), true);
   }
 
   update(): void {

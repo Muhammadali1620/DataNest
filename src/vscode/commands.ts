@@ -7,7 +7,7 @@ import type { TableFilter } from '../shared/table-filter';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
-import { runCommandHandlers } from './editor/run-query';
+import { runCommandHandlers, sqlTextRunner, type SqlTextRunner } from './editor/run-query';
 import { explainCommandHandlers } from './editor/explain-query';
 import { askVariableValue } from './editor/query-variables';
 import {
@@ -19,6 +19,7 @@ import type { SqlStatement } from '../core/sql/split';
 import { QueryPlanPanel } from './panels/query-plan-panel';
 import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
+import type { ExportScope } from './export-commands';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode, type TreeNode } from './tree/nodes';
 import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
 import type { ObjectRef, TableRef } from '../core/model/objects';
@@ -109,6 +110,8 @@ export interface CommandDeps {
   readonly runner: QueryRunner;
   readonly history: QueryHistory;
   readonly showResults: (documentUri: string) => void;
+  /** Filled here with what the result page asks the host for (V12.1). */
+  readonly pageActions?: PageActions;
   /** Opens a table from the tree as a paged result. */
   readonly openTable: (node: TableNode) => Promise<void>;
   /** Marks the errors of a run in its editor (V3.11). */
@@ -116,7 +119,11 @@ export interface CommandDeps {
   /** Which open editors edit the definition of an object. */
   readonly objectEdits: ObjectEditRegistry;
   /** Writes a result to a file the user picks. */
-  readonly exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
+  readonly exportResult: (
+    resultId: string,
+    format: ExportFormat,
+    scope?: ExportScope,
+  ) => Promise<void>;
   /** Opens a chart of a result (V8.7). */
   readonly chartResult: (resultId: string) => void;
   /** Writes every row of a tree table to a file (V5.4). */
@@ -147,6 +154,12 @@ function selectionOf(value: unknown): TreeNode[] | undefined {
 }
 
 /** Registers every command in one place; handlers are guarded against unhandled errors. */
+/** Actions of the result page that need what `registerCommands` builds. */
+export interface PageActions {
+  runSql?: SqlTextRunner;
+  importInto?: (connectionId: string, table: TableRef) => Promise<void>;
+}
+
 export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const runner = {
     logger: deps.logger,
@@ -261,18 +274,23 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       dialect: async () => (await deps.manager.driverOf(connectionId)).dialect,
       ask: askVariableValue,
     });
-  const runCommands = runCommandHandlers({
+  const runDeps = {
     runner: deps.runner,
     editors: deps.editors,
     store: deps.store,
     logger: deps.logger,
     showResults: deps.showResults,
     diagnostics: deps.diagnostics,
-    isManual: (documentUri) => deps.transactionModes.modeOf(documentUri) === 'manual',
-    transactionState: (documentUri) =>
+    isManual: (documentUri: string) => deps.transactionModes.modeOf(documentUri) === 'manual',
+    transactionState: (documentUri: string) =>
       deps.manager.transactionState(ConnectionManager.editorOwner(documentUri)),
     fillVariables: fillQueryVariables,
-  });
+  };
+  const runCommands = runCommandHandlers(runDeps);
+  if (deps.pageActions !== undefined) {
+    deps.pageActions.runSql = sqlTextRunner(runDeps);
+    deps.pageActions.importInto = imports.importInto;
+  }
   const explains = explainCommandHandlers({
     extensionUri: deps.extensionUri,
     runner: deps.runner,

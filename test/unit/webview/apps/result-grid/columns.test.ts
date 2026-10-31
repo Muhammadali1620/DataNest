@@ -155,7 +155,7 @@ describe('fitColumnWidth', () => {
     expect(fitColumnWidth({ name: 'a_rather_long_header' }, 0, [['x']])).toBeGreaterThan(
       MIN_COLUMN_WIDTH,
     );
-    expect(fitColumnWidth({ name: '' }, 0, [])).toBe(18 + HEADER_ICONS_WIDTH);
+    expect(fitColumnWidth({ name: '' }, 0, [])).toBe(26 + HEADER_ICONS_WIDTH);
   });
 
   it('measures the column it is asked about and only its first line', () => {

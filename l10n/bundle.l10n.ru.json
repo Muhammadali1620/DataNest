@@ -1032,5 +1032,12 @@
   "{0} needs an ObjectId": "{0} требует ObjectId",
   "A line must hold a document, not {0}": "Строка должна содержать документ, а не {0}",
   "The server refused the document": "Сервер отверг документ",
-  "A JSON array this large cannot be read whole: write one document per line": "Такой большой массив JSON нельзя прочитать целиком: запишите по документу на строку"
+  "A JSON array this large cannot be read whole: write one document per line": "Такой большой массив JSON нельзя прочитать целиком: запишите по документу на строку",
+  "Export All Tables to a Folder": "Выгрузить все таблицы в папку",
+  "Export Here": "Выгрузить сюда",
+  "Could not export {0}: {1}": "Не удалось выгрузить {0}: {1}",
+  "Exported {0} tables to {1}": "Выгружено таблиц: {0} в {1}",
+  "Only a table opened from the tree can be exported as a whole": "Целиком можно выгрузить только таблицу, открытую из дерева",
+  "Only a table opened from the tree can be imported into": "Импортировать можно только в таблицу, открытую из дерева",
+  "Try again in a moment": "Повторите через мгновение"
 }

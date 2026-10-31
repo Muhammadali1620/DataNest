@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
-  import type { EditInput } from '../../../../src/shared/cell-input';
+  import { type EditInput, isTextEditable } from '../../../../src/shared/cell-input';
 import type { RowAction } from '../../../../src/shared/row-action';
   import {
     MAX_WINDOW_ROWS,
@@ -47,7 +47,19 @@ import type { RowAction } from '../../../../src/shared/row-action';
     pageCount,
     pageSizeChoices,
   } from './pager-model';
+  import ExportDialog from './ExportDialog.svelte';
+  import {
+    type ExportFormatId,
+    type ExportScope,
+    isRefreshSeconds,
+    REFRESH_CHOICES,
+    type RefreshSeconds,
+  } from './export-options';
+  import { type GridView, loadView, saveView } from './grid-view';
   import RecordPanel from './RecordPanel.svelte';
+  import SqlBar from './SqlBar.svelte';
+  import ValueDialog from './ValueDialog.svelte';
+  import ViewSettings from './ViewSettings.svelte';
   import ValuePanel from './ValuePanel.svelte';
   import { RowCache, windowFor } from './rows';
   import { type CellRef, type SelectionInfo } from './selection';
@@ -79,6 +91,28 @@ import type { RowAction } from '../../../../src/shared/row-action';
 
   /** The modifier of the Run key binding as the user's keyboard labels it. */
   const RUN_MODIFIER = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
+
+  /** Row height, text size and the like; kept between sessions when the page can store it. */
+  let view = $state<GridView>(loadView(safeStorage()));
+  let viewOpen = $state(false);
+  let exportOpen = $state(false);
+  /** The cell whose value is open in the dialog. */
+  let dialog = $state<{ row: number; column: number } | undefined>(undefined);
+  /** Seconds between automatic refreshes of the result; 0 is off. */
+  let refreshSeconds = $state<RefreshSeconds>(0);
+
+  function safeStorage(): Storage | undefined {
+    try {
+      return window.localStorage;
+    } catch {
+      return undefined;
+    }
+  }
+
+  function changeGridView(next: GridView): void {
+    view = next;
+    saveView(safeStorage(), next);
+  }
 
   let gridState = $state<ResultGridState | undefined>(undefined);
   let failure = $state<string | undefined>(undefined);
@@ -571,9 +605,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
     return kind === 'binary' || kind === 'text' || kind === 'json';
   }
 
-  async function saveValueFile(): Promise<void> {
+  async function saveValueFile(target?: CellRef): Promise<void> {
     const tab = activeTab;
-    const cell = focused;
+    const cell = target ?? focused;
     if (tab === undefined || cell === undefined) {
       return;
     }
@@ -592,9 +626,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
     }
   }
 
-  async function loadValueFile(): Promise<void> {
+  async function loadValueFile(target?: CellRef): Promise<void> {
     const tab = activeTab;
-    const cell = focused;
+    const cell = target ?? focused;
     if (tab === undefined || cell === undefined) {
       return;
     }
@@ -638,6 +672,63 @@ import type { RowAction } from '../../../../src/shared/row-action';
       // rows and re-runs the search, because sorting moved every row index.
     } catch (error) {
       failure = error instanceof Error ? error.message : t('grid.sortFailed');
+    }
+  }
+
+  /** Runs the statement typed above the grid; resolves to the server's message when it fails. */
+  async function runSql(sql: string): Promise<string | undefined> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return undefined;
+    }
+    try {
+      const answer = await rpc.request('runSql', { resultId: tab.id, sql });
+      return answer.ok ? undefined : (answer.error ?? t('sql.failed'));
+    } catch (error) {
+      return error instanceof Error ? error.message : t('sql.failed');
+    }
+  }
+
+  function refreshNow(): void {
+    const tab = activeTab;
+    if (tab === undefined || tab.error !== undefined || pendingCount(tab) > 0 || saving) {
+      return;
+    }
+    if (tab.page !== undefined) {
+      void runPaging(() => rpc.request('pageTo', { resultId: tab.id, offset: tab.page?.offset ?? 0 }));
+    } else if (tab.statement.trim() !== '') {
+      void runSql(tab.statement);
+    }
+  }
+
+  // The timer only starts and stops with the choice; what it does is read untracked.
+  $effect(() => {
+    const seconds = refreshSeconds;
+    if (seconds === 0) {
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      untrack(refreshNow);
+    }, seconds * 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  });
+
+  const dialogValue = $derived<CellValue | undefined>(
+    dialog === undefined ? undefined : rowAt(dialog.row)?.[dialog.column],
+  );
+
+  function canEditInDialog(tab: ResultTab | undefined, column: number): boolean {
+    const kind = tab?.edit?.columns?.[column]?.kind;
+    return tab?.edit?.editable === true && kind !== undefined && isTextEditable(kind);
+  }
+
+  function exportWith(scope: ExportScope, format: ExportFormatId): void {
+    const tab = activeTab;
+    exportOpen = false;
+    if (tab !== undefined) {
+      rpc.emit('exportResult', { resultId: tab.id, format, scope });
     }
   }
 
@@ -797,6 +888,18 @@ import type { RowAction } from '../../../../src/shared/row-action';
       {/each}
     </div>
 
+    {#if activeTab !== undefined}
+      {#key `${activeTab.id}:${activeTab.statement}`}
+        <SqlBar
+          statement={activeTab.statement}
+          running={gridState.running}
+          onRun={runSql}
+          modifier={RUN_MODIFIER}
+          {t}
+        />
+      {/key}
+    {/if}
+
     {#if activeTab !== undefined && activeTab.error === undefined}
       {@const hasColumns = activeTab.columns.length > 0}
       <div class="toolbar-row">
@@ -840,6 +943,106 @@ import type { RowAction } from '../../../../src/shared/row-action';
                 }}
               />
             {/if}
+          </div>
+        {/if}
+        {#if activeTab.page !== undefined && hasColumns}
+          {@const page = activeTab.page}
+          {@const from = activeTab.rowCount === 0 ? 0 : page.offset + 1}
+          {@const to = page.offset + activeTab.rowCount}
+          {@const pages = pageCount(page)}
+          <div class="pager" data-testid="pager">
+            <IconButton
+              icon="chevron-left"
+              tone="teal"
+              label={t('grid.previousPage')}
+              disabled={page.offset === 0}
+              onclick={() => {
+                void goToPage(Math.max(0, page.offset - page.pageSize));
+              }}
+            />
+            <span class="range" data-testid="range">
+              {page.totalRows === undefined
+                ? t('grid.rangeUnknown', from, to)
+                : page.approximate === true
+                  ? t('grid.rangeApproximate', from, to, page.totalRows)
+                  : t('grid.range', from, to, page.totalRows)}
+            </span>
+            <IconButton
+              icon="chevron-right"
+              tone="teal"
+              label={t('grid.nextPage')}
+              disabled={!hasNextPage(page, activeTab.rowCount)}
+              onclick={() => {
+                void goToPage(page.offset + page.pageSize);
+              }}
+            />
+            {#if page.approximate === true}
+              <button
+                type="button"
+                class="link-button"
+                title={t('grid.countExactlyHint')}
+                data-testid="count-exactly"
+                disabled={paging}
+                onclick={() => {
+                  void runPaging(() => rpc.request('countRows', { resultId: activeTab.id }));
+                }}
+              >
+                {t('grid.countExactly')}
+              </button>
+            {/if}
+            <span class="toolbar-separator"></span>
+            <label class="field">
+              {t('grid.pageNumber')}
+              <input
+                class="control number"
+                type="number"
+                min="1"
+                max={pages}
+                data-testid="page-number"
+                value={currentPage(page.offset, page.pageSize)}
+                onkeydown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const offset = offsetOfPage(event.currentTarget.valueAsNumber, page);
+                    if (offset !== undefined) {
+                      void goToPage(offset);
+                    }
+                  }
+                }}
+              />
+              {#if pages !== undefined}
+                {t('grid.ofPages', pages)}
+              {/if}
+            </label>
+            <label class="field">
+              <span class="sr-only">{t('grid.pageSize')}</span>
+              <select
+                class="control"
+                title={t('grid.pageSize')}
+                data-testid="page-size"
+                disabled={paging}
+                value={page.pageSize}
+                onchange={(event) => {
+                  const size = Number(event.currentTarget.value);
+                  void runPaging(() => rpc.request('pageSize', { resultId: activeTab.id, pageSize: size }));
+                }}
+              >
+                {#each pageSizeChoices(page.pageSize) as size (size)}
+                  <option value={size}>{t('grid.perPage', size)}</option>
+                {/each}
+              </select>
+            </label>
+            <IconButton
+              icon="unfold"
+              tone="orange"
+              label={t('grid.loadAll')}
+              hint={t('grid.loadAllHint')}
+              data-testid="load-all"
+              disabled={paging || isWholeTable(page, activeTab.rowCount)}
+              onclick={() => {
+                void runPaging(() => rpc.request('loadAll', { resultId: activeTab.id }));
+              }}
+            />
           </div>
         {/if}
         <span class="spacer"></span>
@@ -939,16 +1142,87 @@ import type { RowAction } from '../../../../src/shared/row-action';
               label={t('grid.export')}
               hint={t('grid.exportHint')}
               testid="export"
-              items={EXPORTS.map((format, index) => ({
-                id: format,
-                label: t(EXPORT_LABELS[format]),
-                icon: EXPORT_ICONS[format],
-                separated: index === 2,
-              }))}
-              onSelect={(format: ExportFormat) => {
-                rpc.emit('exportResult', { resultId: activeTab.id, format });
+              items={[
+                ...EXPORTS.map((format, index) => ({
+                  id: format,
+                  label: t(EXPORT_LABELS[format]),
+                  icon: EXPORT_ICONS[format],
+                  separated: index === 2,
+                })),
+                {
+                  id: 'options' as const,
+                  label: t('export.options'),
+                  icon: 'gear' as const,
+                  separated: true,
+                },
+              ]}
+              onSelect={(format: ExportFormat | 'options') => {
+                if (format === 'options') {
+                  exportOpen = true;
+                } else {
+                  rpc.emit('exportResult', { resultId: activeTab.id, format });
+                }
               }}
             />
+          {/if}
+          {#if hasColumns}
+            {#if activeTab.page !== undefined}
+              <IconButton
+                icon="cloud-upload"
+                tone="purple"
+                label={t('grid.import')}
+                hint={t('grid.importHint')}
+                data-testid="import"
+                onclick={() => {
+                  rpc.emit('importInto', { resultId: activeTab.id });
+                }}
+              />
+            {/if}
+            <MenuButton
+              icon="sync"
+              tone={refreshSeconds === 0 ? 'blue' : 'green'}
+              label={t('grid.autoRefresh')}
+              hint={refreshSeconds === 0
+                ? t('grid.autoRefreshHint')
+                : t('grid.autoRefreshOn', refreshSeconds)}
+              testid="auto-refresh"
+              items={REFRESH_CHOICES.map((seconds) => ({
+                id: String(seconds),
+                label: seconds === 0 ? t('grid.refreshOff') : t('grid.refreshEvery', seconds),
+                ...(seconds === refreshSeconds ? { icon: 'check' as const } : {}),
+                separated: seconds === 1,
+              }))}
+              onSelect={(id: string) => {
+                const next = Number(id);
+                refreshSeconds = isRefreshSeconds(next) ? next : 0;
+                if (refreshSeconds !== 0) {
+                  refreshNow();
+                }
+              }}
+            />
+            <span class="view-anchor">
+              <IconButton
+                icon="settings-gear"
+                tone="yellow"
+                label={t('view.title')}
+                hint={t('view.hint')}
+                pressed={viewOpen}
+                data-testid="view-toggle"
+                onclick={() => {
+                  viewOpen = !viewOpen;
+                }}
+              />
+              {#if viewOpen}
+                <ViewSettings
+                  {view}
+                  onChange={changeGridView}
+                  onClose={() => {
+                    viewOpen = false;
+                  }}
+                  {t}
+                />
+              {/if}
+            </span>
           {/if}
         </div>
       </div>
@@ -1139,6 +1413,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
               }}
               onToggleValue={toggleValue}
               onToggleRecord={toggleRecord}
+              {view}
+              onOpenDialog={(row: number, column: number) => {
+                dialog = { row, column };
+              }}
               {revealColumn}
               {linkTarget}
               onFollow={(row: number, column: number) => {
@@ -1184,8 +1462,16 @@ import type { RowAction } from '../../../../src/shared/row-action';
               onClose={() => {
                 valueOpen = false;
               }}
-              onSaveFile={focused === undefined ? undefined : saveValueFile}
-              onLoadFile={canLoadFile(activeTab, focused) ? loadValueFile : undefined}
+              onSaveFile={focused === undefined
+                ? undefined
+                : () => {
+                    void saveValueFile();
+                  }}
+              onLoadFile={canLoadFile(activeTab, focused)
+                ? () => {
+                    void loadValueFile();
+                  }
+                : undefined}
               {t}
             />
           {/if}
@@ -1245,108 +1531,39 @@ import type { RowAction } from '../../../../src/shared/row-action';
             <span class="totals" data-testid="selection-totals">{totalsText(totals)}</span>
           {/if}
         </p>
-        {#if activeTab.page !== undefined}
-          {@const page = activeTab.page}
-          {@const from = activeTab.rowCount === 0 ? 0 : page.offset + 1}
-          {@const to = page.offset + activeTab.rowCount}
-          {@const pages = pageCount(page)}
-          <div class="pager" data-testid="pager">
-            <IconButton
-              icon="chevron-left"
-              tone="teal"
-              label={t('grid.previousPage')}
-              disabled={page.offset === 0}
-              onclick={() => {
-                void goToPage(Math.max(0, page.offset - page.pageSize));
-              }}
-            />
-            <span class="range" data-testid="range">
-              {page.totalRows === undefined
-                ? t('grid.rangeUnknown', from, to)
-                : page.approximate === true
-                  ? t('grid.rangeApproximate', from, to, page.totalRows)
-                  : t('grid.range', from, to, page.totalRows)}
-            </span>
-            <IconButton
-              icon="chevron-right"
-              tone="teal"
-              label={t('grid.nextPage')}
-              disabled={!hasNextPage(page, activeTab.rowCount)}
-              onclick={() => {
-                void goToPage(page.offset + page.pageSize);
-              }}
-            />
-            {#if page.approximate === true}
-              <button
-                type="button"
-                class="link-button"
-                title={t('grid.countExactlyHint')}
-                data-testid="count-exactly"
-                disabled={paging}
-                onclick={() => {
-                  void runPaging(() => rpc.request('countRows', { resultId: activeTab.id }));
-                }}
-              >
-                {t('grid.countExactly')}
-              </button>
-            {/if}
-            <span class="toolbar-separator"></span>
-            <label class="field">
-              {t('grid.pageNumber')}
-              <input
-                class="control number"
-                type="number"
-                min="1"
-                max={pages}
-                data-testid="page-number"
-                value={currentPage(page.offset, page.pageSize)}
-                onkeydown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    const offset = offsetOfPage(event.currentTarget.valueAsNumber, page);
-                    if (offset !== undefined) {
-                      void goToPage(offset);
-                    }
-                  }
-                }}
-              />
-              {#if pages !== undefined}
-                {t('grid.ofPages', pages)}
-              {/if}
-            </label>
-            <label class="field">
-              <span class="sr-only">{t('grid.pageSize')}</span>
-              <select
-                class="control"
-                title={t('grid.pageSize')}
-                data-testid="page-size"
-                disabled={paging}
-                value={page.pageSize}
-                onchange={(event) => {
-                  const size = Number(event.currentTarget.value);
-                  void runPaging(() => rpc.request('pageSize', { resultId: activeTab.id, pageSize: size }));
-                }}
-              >
-                {#each pageSizeChoices(page.pageSize) as size (size)}
-                  <option value={size}>{t('grid.perPage', size)}</option>
-                {/each}
-              </select>
-            </label>
-            <IconButton
-              icon="unfold"
-              tone="orange"
-              label={t('grid.loadAll')}
-              hint={t('grid.loadAllHint')}
-              data-testid="load-all"
-              disabled={paging || isWholeTable(page, activeTab.rowCount)}
-              onclick={() => {
-                void runPaging(() => rpc.request('loadAll', { resultId: activeTab.id }));
-              }}
-            />
-          </div>
-        {/if}
       </footer>
     {/if}
+  {/if}
+  {#if dialog !== undefined && dialogValue !== undefined && activeTab !== undefined}
+    {@const target = dialog}
+    <ValueDialog
+      columnName={activeTab.columns[target.column]?.name ?? ''}
+      dataType={activeTab.columns[target.column]?.dataType}
+      cell={dialogValue}
+      editable={canEditInDialog(activeTab, target.column)}
+      onSave={(text: string) => onEdit(target.row, target.column, { kind: 'text', text })}
+      onCopy={(text: string) => {
+        rpc.emit('copyText', { text });
+      }}
+      onClose={() => {
+        dialog = undefined;
+      }}
+      onSaveFile={() => {
+        void saveValueFile(target);
+      }}
+      onLoadFile={canLoadFile(activeTab, target) ? () => void loadValueFile(target) : undefined}
+      {t}
+    />
+  {/if}
+  {#if exportOpen && activeTab !== undefined}
+    <ExportDialog
+      wide={activeTab.page !== undefined}
+      onExport={exportWith}
+      onClose={() => {
+        exportOpen = false;
+      }}
+      {t}
+    />
   {/if}
 </main>
 
@@ -1444,6 +1661,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
     color: var(--dn-danger);
   }
 
+  .view-anchor {
+    position: relative;
+    display: inline-flex;
+  }
+
   .tab-title {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1452,9 +1674,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
   .toolbar-row {
     display: flex;
     flex: none;
-    gap: var(--dn-gap);
+    flex-wrap: wrap;
+    gap: 6px var(--dn-gap);
     align-items: center;
-    min-height: 42px;
+    min-height: 44px;
     padding: 6px 10px;
   }
 
@@ -1703,11 +1926,15 @@ import type { RowAction } from '../../../../src/shared/row-action';
     white-space: nowrap;
   }
 
+  /* Paging sits in the toolbar now, in its own rounded capsule. */
   .pager {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 4px;
+    gap: 2px 6px;
     align-items: center;
+    padding: 2px 8px;
+    background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+    border-radius: 16px;
   }
 
   .range {

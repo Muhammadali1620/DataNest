@@ -4,7 +4,8 @@
 
 import { join } from 'node:path';
 import * as vscode from 'vscode';
-import { isDbError } from '../core/errors';
+import { errorMessage, isDbError } from '../core/errors';
+import { planDatabaseExport } from '../services/export-plan';
 import type { Logger } from '../core/logging/logger';
 import type { TableRef } from '../core/model/objects';
 import { changingStatements } from '../core/sql/read-only';
@@ -34,7 +35,7 @@ import { isTreeNode, tableRefOf } from './tree/nodes';
 export interface ExportCommandDeps {
   readonly results: ResultStore;
   readonly manager: Pick<ConnectionManager, 'acquire' | 'driverOf'>;
-  readonly tables: Pick<TableViewer, 'fullQuery'>;
+  readonly tables: Pick<TableViewer, 'fullQuery' | 'viewOf'>;
   readonly exporter: StreamExporter;
   readonly logger: Logger;
 }
@@ -53,8 +54,11 @@ interface StreamSource {
   readonly label: string;
 }
 
+/** What an export writes (V12.1): the result as it is, the whole table, or every table. */
+export type ExportScope = 'result' | 'table' | 'database';
+
 export function exportCommandHandlers(deps: ExportCommandDeps): {
-  exportResult: (resultId: string, format: ExportFormat) => Promise<void>;
+  exportResult: (resultId: string, format: ExportFormat, scope?: ExportScope) => Promise<void>;
   exportTable: (target?: unknown) => Promise<void>;
 } {
   /** Asks where to save; undefined when the user backs out. */
@@ -157,8 +161,98 @@ export function exportCommandHandlers(deps: ExportCommandDeps): {
     }
   };
 
-  const exportResult = async (resultId: string, format: ExportFormat): Promise<void> => {
+  /** The SELECT of a whole table, with no filter, order or page. */
+  const wholeTableSource = async (
+    target: SessionTarget,
+    table: TableRef,
+    format: ExportFormat,
+  ): Promise<StreamSource> => {
+    const { dialect } = await deps.manager.driverOf(target.connectionId);
+    return await tableSource(target, table, format, (columns) =>
+      Promise.resolve(
+        `SELECT ${
+          columns === undefined
+            ? '*'
+            : columns.map((name) => dialect.quoteIdentifier(name)).join(', ')
+        } FROM ${dialect.quoteTable(table)}`,
+      ),
+    );
+  };
+
+  /** Every table of the view's database or schema, one file each, in a folder. */
+  const exportDatabase = async (
+    target: SessionTarget,
+    table: TableRef,
+    format: ExportFormat,
+  ): Promise<void> => {
+    const [folder] =
+      (await vscode.window.showOpenDialog({
+        title: vscode.l10n.t('Export All Tables to a Folder'),
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        openLabel: vscode.l10n.t('Export Here'),
+      })) ?? [];
+    if (folder === undefined) {
+      return;
+    }
+    const scope = {
+      ...(table.database === undefined ? {} : { database: table.database }),
+      ...(table.schema === undefined ? {} : { schema: table.schema }),
+    };
+    const session = await browseSession(deps.manager, target.connectionId, table.database);
+    const plan = planDatabaseExport(scope, await session.metadata.listTables(scope), format);
+    if (plan.length === 0) {
+      void vscode.window.showInformationMessage(vscode.l10n.t('There is nothing to export'));
+      return;
+    }
+    let written = 0;
+    for (const entry of plan) {
+      const file = vscode.Uri.file(join(folder.fsPath, entry.fileName));
+      const source = await wholeTableSource(target, entry.table, format);
+      try {
+        await stream(source, format, file);
+        written += 1;
+      } catch (error) {
+        deps.logger.warn(`Could not export ${entry.table.name}`, error);
+        void vscode.window.showErrorMessage(
+          vscode.l10n.t('Could not export {0}: {1}', entry.table.name, errorMessage(error)),
+        );
+        return;
+      }
+    }
+    void vscode.window.showInformationMessage(
+      vscode.l10n.t('Exported {0} tables to {1}', written, folder.fsPath),
+    );
+  };
+
+  const exportResult = async (
+    resultId: string,
+    format: ExportFormat,
+    scope: ExportScope = 'result',
+  ): Promise<void> => {
     const summary = deps.results.get(resultId);
+    if (scope !== 'result') {
+      const view = summary === undefined ? undefined : deps.tables.viewOf(summary.documentUri);
+      if (view === undefined) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Only a table opened from the tree can be exported as a whole'),
+        );
+        return;
+      }
+      if (scope === 'database') {
+        await exportDatabase(view.target, view.table, format);
+        return;
+      }
+      const file = await askFile(
+        dumpFileName(view.table.name, new Date()).replace(/\.sql$/u, `.${extensionOf(format)}`),
+        format,
+      );
+      if (file !== undefined) {
+        await stream(await wholeTableSource(view.target, view.table, format), format, file);
+      }
+      return;
+    }
     const rows = deps.results.allRows(resultId);
     if (summary === undefined || rows === undefined) {
       void vscode.window.showInformationMessage(
@@ -248,17 +342,7 @@ export function exportCommandHandlers(deps: ExportCommandDeps): {
       table.database === undefined
         ? { connectionId: target.connectionId }
         : { connectionId: target.connectionId, database: table.database };
-    const { dialect } = await deps.manager.driverOf(target.connectionId);
-    const source = await tableSource(sessionTarget, table, format, (columns) =>
-      Promise.resolve(
-        `SELECT ${
-          columns === undefined
-            ? '*'
-            : columns.map((name) => dialect.quoteIdentifier(name)).join(', ')
-        } FROM ${dialect.quoteTable(table)}`,
-      ),
-    );
-    await stream(source, format, file);
+    await stream(await wholeTableSource(sessionTarget, table, format), format, file);
   };
 
   return { exportResult, exportTable };

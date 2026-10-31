@@ -6,12 +6,12 @@
 
 /* Text fields and lists. */
 .control {
-  min-height: var(--dn-control-height);
-  padding: 3px 8px;
+  min-height: 28px;
+  padding: 3px 10px;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, var(--dn-border));
-  border-radius: var(--dn-radius-s);
+  border-radius: 8px;
   font-family: inherit;
   font-size: inherit;
   line-height: 18px;
@@ -128,12 +128,12 @@ input[type='radio']:disabled {
   gap: 6px;
   align-items: center;
   justify-content: center;
-  min-height: var(--dn-control-height);
-  padding: 4px 12px;
+  min-height: 30px;
+  padding: 4px 16px;
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: var(--dn-radius-s);
+  border-radius: 10px;
   font-family: inherit;
   font-size: inherit;
   line-height: 16px;
@@ -481,4 +481,126 @@ kbd {
 
 .fade-in {
   animation: dn-fade-in var(--dn-duration) var(--dn-ease);
+}
+
+/*
+ * Dialogs (V12): a rounded card over a dimmed page. Used for a value, an export and the
+ * like; the card traps nothing itself, the component closes it on Escape and outside click.
+ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 55%, rgba(0, 0, 0, 0.45));
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(720px, 100%);
+  max-height: 84vh;
+  padding: 16px 18px;
+  color: var(--vscode-foreground);
+  background: var(--dn-surface);
+  border: 1px solid var(--dn-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.modal-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.modal-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* A group of exclusive choices drawn as one rounded capsule. */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  border-radius: 10px;
+}
+
+.seg > button {
+  height: 26px;
+  padding: 0 12px;
+  color: var(--dn-muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: var(--dn-font-small);
+  cursor: pointer;
+  transition: background-color var(--dn-duration) var(--dn-ease);
+}
+
+.seg > button:hover {
+  color: var(--vscode-foreground);
+}
+
+.seg > button[aria-pressed='true'] {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+/* A big choice with an icon and a sentence, e.g. what an export covers. */
+.choice {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--vscode-foreground);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--dn-border);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition: background-color var(--dn-duration) var(--dn-ease);
+}
+
+.choice:hover {
+  background: var(--dn-hover);
+}
+
+.choice[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--dn-accent) 16%, transparent);
+  border-color: var(--dn-accent);
+}
+
+.choice .choice-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.choice .choice-hint {
+  color: var(--dn-muted);
+  font-size: var(--dn-font-small);
 }

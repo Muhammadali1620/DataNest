@@ -3,6 +3,7 @@
 
 import * as vscode from 'vscode';
 import type { Logger } from '../core/logging/logger';
+import type { TableRef } from '../core/model/objects';
 import { browseSession } from '../services/browse-session';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
@@ -31,6 +32,8 @@ export interface ImportCommandDeps {
 
 export function importCommandHandlers(deps: ImportCommandDeps): {
   importData: (target?: unknown) => Promise<void>;
+  /** Imports into a table by reference, e.g. from the result page of its table view (V12.1). */
+  importInto: (connectionId: string, table: TableRef) => Promise<void>;
   generateData: (target?: unknown) => Promise<void>;
 } {
   const importer = new TableImporter({ manager: deps.manager, logger: deps.logger });
@@ -41,7 +44,10 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
       );
       return;
     }
-    const policy = policyOf(deps.store.get(target.connectionId));
+    await importInto(target.connectionId, tableRefOf(target));
+  };
+  const importInto = async (connectionId: string, table: TableRef): Promise<void> => {
+    const policy = policyOf(deps.store.get(connectionId));
     if (changeVerdict(policy) === 'refuse') {
       void vscode.window.showErrorMessage(
         vscode.l10n.t('"{0}" is read-only: data cannot be imported into it.', policy.name),
@@ -49,7 +55,7 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
       return;
     }
     const chosen = await vscode.window.showOpenDialog({
-      title: vscode.l10n.t('Import Data into {0}', target.name),
+      title: vscode.l10n.t('Import Data into {0}', table.name),
       canSelectMany: false,
       filters: {
         [vscode.l10n.t('CSV and JSON')]: ['csv', 'tsv', 'txt', 'json', 'jsonl', 'ndjson'],
@@ -60,16 +66,15 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
     if (file === undefined) {
       return;
     }
-    const table = tableRefOf(target);
-    const driver = await deps.manager.driverOf(target.connectionId);
-    const session = await browseSession(deps.manager, target.connectionId, table.database);
+    const driver = await deps.manager.driverOf(connectionId);
+    const session = await browseSession(deps.manager, connectionId, table.database);
     const structure = await session.metadata.describeTable(table);
     const size = (await vscode.workspace.fs.stat(file)).size;
     const model = new DataImportModel({
       target:
         table.database === undefined
-          ? { connectionId: target.connectionId }
-          : { connectionId: target.connectionId, database: table.database },
+          ? { connectionId }
+          : { connectionId, database: table.database },
       table,
       driver: driver.id,
       transactional: driver.capabilities.transactions,
@@ -87,7 +92,7 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
       size,
       policy,
       onImported: () => {
-        deps.cache.invalidate(target.connectionId);
+        deps.cache.invalidate(connectionId);
       },
     });
   };
@@ -138,5 +143,5 @@ export function importCommandHandlers(deps: ImportCommandDeps): {
     });
   };
 
-  return { importData, generateData };
+  return { importData, importInto, generateData };
 }

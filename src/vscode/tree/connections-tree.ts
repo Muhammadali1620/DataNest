@@ -37,6 +37,8 @@ import { formatSize } from '../../shared/byte-size';
 export { CONNECTIONS_VIEW_ID, TREE_CONTEXT };
 
 export interface ConnectionsTreeDeps {
+  /** Where the extension's resources are; the tree's own table icons come from there. */
+  readonly extensionUri?: vscode.Uri;
   readonly store: ConnectionStore;
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys?: RedisKeyBrowser;
@@ -232,6 +234,15 @@ export class ConnectionsTreeProvider
           node.tableKind === 'view' ? 'eye' : 'table',
           node.tableKind === 'view' ? TREE_CONTEXT.view : TREE_CONTEXT.table,
         );
+        if (this.deps.extensionUri !== undefined) {
+          item.iconPath = vscode.Uri.joinPath(
+            this.deps.extensionUri,
+            'resources',
+            'icons',
+            'tree',
+            node.tableKind === 'view' ? 'view.svg' : 'table.svg',
+          );
+        }
         item.tooltip = tableTooltip(qualifiedName(node.scope, node.name), node.stats);
         // A double click opens the table's rows; the first click only expands the row.
         item.command = {

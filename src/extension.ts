@@ -11,7 +11,7 @@ import { MetadataCache } from './services/metadata-cache';
 import type { TableRef } from './core/model/objects';
 import { setTranslator } from './core/user-message';
 import { CONFIG_KEYS, CONFIG_SECTION, CONTEXT_KEYS } from './vscode/command-ids';
-import { registerCommands } from './vscode/commands';
+import { type PageActions, registerCommands } from './vscode/commands';
 import { createOutputLogger } from './vscode/logging';
 import { QueryRunner } from './services/query-runner';
 import { policyOf } from './services/write-policy';
@@ -232,6 +232,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
   });
 
+  const pageActions: PageActions = {};
   const showResults = (documentUri: string): void => {
     ResultsPanel.show(
       {
@@ -245,6 +246,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         openRelated,
         reloadTable: (resultId, change) => tables.reload(resultId, change),
         exportResult,
+        importInto: (connectionId, table) =>
+          pageActions.importInto?.(connectionId, table) ?? Promise.resolve(),
+        runSql: (request) =>
+          pageActions.runSql?.(request) ??
+          Promise.resolve({ ok: false, error: vscode.l10n.t('Try again in a moment') }),
+        targetOf: (uri) => tables.viewOf(uri)?.target ?? editors.bindings.get(uri),
+        tableOf: (uri) => tables.viewOf(uri),
         chartResult,
         policy: (connectionId) => policyOf(store.get(connectionId)),
         logger,
@@ -311,6 +319,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const redisKeySettings = createRedisKeySettings();
   const redisKeys = new RedisKeyBrowser({ manager, settings: redisKeySettings, logger });
   const tree = new ConnectionsTreeProvider({
+    extensionUri: context.extensionUri,
     store,
     projects,
     manager,
@@ -351,6 +360,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       runner,
       history,
       showResults,
+      pageActions,
       openTable,
       exportResult,
       chartResult,

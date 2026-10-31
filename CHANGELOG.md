@@ -3,6 +3,31 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.2.0] - 2026-10-31
+
+### Added
+
+- Results: the statement is above the table and can be edited and run in place with
+  Ctrl+Enter (Cmd+Enter on a Mac).
+- Results: check boxes on rows, for actions on several rows at once.
+- Results: a magnifier on a cell opens its value in a dialog (text or JSON, format,
+  compact, copy, load from and save to a file).
+- Results: a View menu (row height, text size, lines, alignment, row numbers, check
+  boxes) and automatic refresh every few seconds.
+- Export: a dialog to export these rows, the whole table or every table of the
+  database; an Import button on a table.
+- The tree draws tables and views with their own coloured icons.
+
+### Changed
+
+- Results: bigger text and rows, the type under every column name, the row actions as
+  icons under the toolbar, paging in the toolbar, rounder fields and buttons.
+
+### Fixed
+
+- Sorting or paging a table could move its results into a new split; the panel now
+  stays where it is.
+
 ## [1.1.0] - 2026-10-31
 
 ### Changed

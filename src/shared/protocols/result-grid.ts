@@ -411,6 +411,15 @@ export const resultGridProtocol = defineProtocol({
           data: optional(string({ maxLength: Math.ceil(MAX_BINARY_VIEW_BYTES / 3) * 4 })),
         }),
       },
+      /**
+       * Page → host: run this statement in the document the result belongs to, like the
+       * Run command does (V12.1). `ok: false` carries the server's message in `error`;
+       * the new result arrives as a state update.
+       */
+      runSql: {
+        params: object({ resultId, sql: string({ maxLength: 1_000_000 }) }),
+        result: object({ ok: boolean(), error: optional(string({ maxLength: 10_000 })) }),
+      },
       /** Page → host: the rows of a visible range. */
       rows: {
         params: object({
@@ -438,7 +447,17 @@ export const resultGridProtocol = defineProtocol({
       /** Page → host: open a chart of this result beside it (V8.7). */
       chartResult: object({ resultId }),
       /** Page → host: write this result to a file the user picks. */
-      exportResult: object({ resultId, format: literal('csv', 'json', 'sql', 'markdown', 'xlsx') }),
+      exportResult: object({
+        resultId,
+        format: literal('csv', 'json', 'sql', 'markdown', 'xlsx'),
+        /**
+         * What to write (V12.1): the result with its filter (the default), the whole table
+         * without the filter, or every table of the database into a folder.
+         */
+        scope: optional(literal('result', 'table', 'database')),
+      }),
+      /** Page → host: open the import page for the table this result shows (V12.1). */
+      importInto: object({ resultId }),
     },
   },
   webview: {

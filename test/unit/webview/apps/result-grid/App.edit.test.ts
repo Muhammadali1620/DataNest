@@ -325,7 +325,8 @@ describe('result grid editing', () => {
     await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'Enter' });
     await fireEvent.keyDown(screen.getByTestId('grid'), { key: 'Delete' });
     await flush();
-    expect(screen.queryByRole('textbox')).toBeNull();
+    // The SQL bar above the grid is a text box too; only the cell editor matters here.
+    expect(queryEditor()).toBeNull();
     expect(screen.queryByTestId('editbar')).toBeNull();
     expect(edits).not.toHaveBeenCalled();
   });
@@ -347,7 +348,6 @@ describe('result grid editing', () => {
     await fireEvent.dblClick(cell(0, 1));
     await fireEvent.dblClick(cell(0, 2));
     await flush();
-    expect(screen.queryByRole('textbox')).toBeNull();
     expect(queryEditor()).toBeNull();
   });
 

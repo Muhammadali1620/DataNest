@@ -133,6 +133,12 @@ export class TableViewer {
    * The whole table an open view shows, with its filter and order but no page, so an
    * export writes every row (V5.4). `columns` narrows the select list; all by default.
    */
+  /** What the open view of a document shows: its connection and table, or undefined. */
+  viewOf(documentUri: string): { target: SessionTarget; table: TableRef } | undefined {
+    const view = this.views.get(documentUri);
+    return view === undefined ? undefined : { target: view.target, table: view.table };
+  }
+
   async fullQuery(
     documentUri: string,
     columns?: readonly string[],

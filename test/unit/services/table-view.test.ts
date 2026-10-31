@@ -465,6 +465,21 @@ describe('TableViewer', () => {
     });
   });
 
+  describe('viewOf', () => {
+    it('tells the connection and table an open view shows', async () => {
+      const table = { name: 'orders' };
+      await viewer.open({ target: target(), table });
+      expect(viewer.viewOf(tableDocumentUri(target(), table))).toEqual({
+        target: target(),
+        table,
+      });
+    });
+
+    it('knows nothing of a document that is no table view', () => {
+      expect(viewer.viewOf('file:///query.sql')).toBeUndefined();
+    });
+  });
+
   describe('fullQuery', () => {
     it('reads the whole table a view shows, filtered and sorted, without a page', async () => {
       const table = { name: 'orders' };

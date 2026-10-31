@@ -14,6 +14,8 @@ import type { Substitution } from '../../core/sql/variables';
 import { readSafeMode } from '../settings';
 import { COMMAND_IDS } from '../command-ids';
 import type { DriverId } from '../../shared/connection';
+import { type SqlTextOutcome, sqlTextOutcome } from '../../services/sql-text-outcome';
+import type { SessionTarget } from '../../services/connection-manager';
 import type { DocumentBinding } from './document-bindings';
 import type { QueryEditors } from './query-editor';
 import { SQL_LANGUAGE_ID } from './query-editor';
@@ -44,6 +46,54 @@ export interface RunQueryDeps {
 }
 
 export type RunCommandName = 'run' | 'runAll' | 'cancel' | 'runRange';
+
+/** What the SQL line of the result page asks for (V12.1). */
+export interface SqlTextRequest {
+  /** The document the result belongs to: an editor, or a table view. */
+  readonly documentUri: string;
+  readonly target: SessionTarget;
+  readonly sql: string;
+}
+
+export type SqlTextRunner = (request: SqlTextRequest) => Promise<SqlTextOutcome>;
+
+/**
+ * Runs SQL typed on the result page like Run does: same policy, safe mode, variables and
+ * transaction questions, same session of the document; its results replace the document's.
+ */
+export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
+  return async ({ documentUri, target, sql }) => {
+    const driver = deps.store.get(target.connectionId)?.driver;
+    const written = splitStatements(sql, driver);
+    if (written.length === 0) {
+      return { ok: false, error: vscode.l10n.t('Nothing to run') };
+    }
+    const policy = policyOf(deps.store.get(target.connectionId));
+    const filled =
+      deps.fillVariables === undefined
+        ? { statements: written, substitutions: new Map<number, Substitution>() }
+        : await deps.fillVariables(written, target.connectionId, driver);
+    if (filled === undefined) {
+      return { ok: false };
+    }
+    const { statements } = filled;
+    if (!(await allowed(statements, driver, policy))) {
+      return { ok: false };
+    }
+    if (!(await keepsTransaction(statements, driver, deps.transactionState?.(documentUri)))) {
+      return { ok: false };
+    }
+    deps.showResults(documentUri);
+    const outcome = await deps.runner.run({
+      documentUri,
+      target,
+      statements,
+      manualCommit: deps.isManual?.(documentUri) === true,
+    });
+    report(outcome, deps.logger);
+    return sqlTextOutcome(outcome.results, outcome.cancelled);
+  };
+}
 
 /** A range the CodeLens passes along, as plain numbers so it survives commands. */
 export interface RunRangeArgs {

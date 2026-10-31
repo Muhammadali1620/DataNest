@@ -18,13 +18,13 @@ export const DEFAULT_COLUMN_WIDTH = 140;
 export const ROW_NUMBER_WIDTH = 56;
 
 /** Pixels per character, close enough for the editor's monospace font. */
-const CHAR_WIDTH = 7.2;
+const CHAR_WIDTH = 8.4;
 
 /** Padding and the cell border. */
-const CELL_PADDING = 18;
+const CELL_PADDING = 26;
 
 /** The header's type icon, and room for the sort arrow, beside the column name. */
-export const HEADER_ICONS_WIDTH = 36;
+export const HEADER_ICONS_WIDTH = 44;
 
 /** How many rows are measured for the first guess. */
 export const SAMPLE_ROWS = 50;

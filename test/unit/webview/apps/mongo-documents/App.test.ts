@@ -237,6 +237,39 @@ describe('MongoDB documents page (V7.6)', () => {
     expect(copy).toHaveBeenCalledWith({ rows: [0, 1] });
   });
 
+  it('ticks every document of the page from the header, and none again', async () => {
+    const host = await open(state());
+    const copy = vi.fn(() => ({}));
+    host.handle('copy', copy);
+    const all = screen.getByLabelText<HTMLInputElement>('Select all on the page');
+    expect(all.checked).toBe(false);
+    await fireEvent.click(screen.getByLabelText('Select 1'));
+    // Some but not all: neither ticked nor empty.
+    expect(all.indeterminate).toBe(true);
+    expect(all.checked).toBe(false);
+    await fireEvent.click(all);
+    expect(all.checked).toBe(true);
+    expect(all.indeterminate).toBe(false);
+    expect(screen.getByLabelText<HTMLInputElement>('Select 2').checked).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy (2)' }));
+    await waitFor(() => {
+      expect(copy).toHaveBeenCalledWith({ rows: [0, 1] });
+    });
+    await fireEvent.click(all);
+    expect(all.checked).toBe(false);
+    expect(screen.queryByRole('button', { name: /^Copy \(/ })).toBeNull();
+  });
+
+  it('marks the sorted column with an arrow and for screen readers', async () => {
+    await open(state({ query: { filter: '', sort: '{ total: -1 }', projection: '', limit: 50 } }));
+    const total = screen.getByRole('columnheader', { name: 'total' });
+    expect(total.getAttribute('aria-sort')).toBe('descending');
+    expect(total.querySelector('.codicon-glyph')).not.toBeNull();
+    expect(
+      screen.getByRole('columnheader', { name: 'status' }).getAttribute('aria-sort'),
+    ).toBeNull();
+  });
+
   it('shows the documents as text, each with its actions', async () => {
     const host = await open(state());
     const remove = vi.fn(() => ({ deleted: 1 }));

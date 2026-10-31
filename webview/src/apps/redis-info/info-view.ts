@@ -36,3 +36,14 @@ export function filterSections(node: RedisInfoNode, text: string): RedisInfoNode
     }))
     .filter((section) => section.fields.length > 0);
 }
+
+/**
+ * How full a meter is, 0 to 1: used memory of the limit, for the bar under the number.
+ * Undefined when there is nothing to measure against (no limit, or no reading).
+ */
+export function shareOf(part: number | undefined, whole: number | undefined): number | undefined {
+  if (part === undefined || whole === undefined || !(whole > 0) || !Number.isFinite(part)) {
+    return undefined;
+  }
+  return Math.min(1, Math.max(0, part / whole));
+}

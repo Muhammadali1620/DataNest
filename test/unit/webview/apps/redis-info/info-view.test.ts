@@ -3,6 +3,7 @@ import {
   filterSections,
   formatPercent,
   formatUptime,
+  shareOf,
 } from '../../../../../webview/src/apps/redis-info/info-view';
 
 const NODE = {
@@ -41,5 +42,21 @@ describe('info view', () => {
     ]);
     expect(filterSections(NODE, '')).toBe(NODE.sections);
     expect(filterSections(NODE, 'zzz')).toEqual([]);
+  });
+
+  it('says how full a meter is, between none and all', () => {
+    expect(shareOf(2048, 4096)).toBe(0.5);
+    expect(shareOf(0, 4096)).toBe(0);
+    // Over the limit (it happens with maxmemory lowered at run time): full, not more.
+    expect(shareOf(5000, 4096)).toBe(1);
+    expect(shareOf(-1, 10)).toBe(0);
+  });
+
+  it('has no meter without a limit or a reading', () => {
+    expect(shareOf(2048, 0)).toBeUndefined();
+    expect(shareOf(2048, undefined)).toBeUndefined();
+    expect(shareOf(undefined, 4096)).toBeUndefined();
+    expect(shareOf(Number.NaN, 4096)).toBeUndefined();
+    expect(shareOf(1, Number.NaN)).toBeUndefined();
   });
 });

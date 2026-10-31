@@ -10,6 +10,7 @@
   } from '../../../../src/shared/protocols/test-data';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Field from '../../components/Field.svelte';
+  import Icon from '../../components/Icon.svelte';
   import type { Translate } from '../../lib/i18n';
   import { generatorLabel, problemLabel, reportLabel } from './generator-view';
 
@@ -127,299 +128,544 @@
 </script>
 
 {#if page === undefined}
-  <p class="loading">{t('form.loading')}</p>
+  <div class="empty" role="status">
+    <span class="empty-icon"><Icon name="loading" size={24} spin /></span>
+    <p class="empty-title">{t('form.loading')}</p>
+  </div>
 {:else}
-  <main>
-    <h1>{t('testData.title', page.table)}</h1>
+  <main class="page">
+    <header class="page-header">
+      <span class="header-icon"><Icon name="beaker" size={20} /></span>
+      <div class="header-text">
+        <h1>{t('testData.title', page.table)}</h1>
+        <p class="subtitle">{t('testData.subtitle')}</p>
+      </div>
+    </header>
 
-    <section class="options">
-      <Field
-        label={t('testData.count')}
-        error={countValid ? undefined : t('testData.countInvalid', MAX_GENERATED_ROWS)}
-      >
-        <input
-          class="control"
-          type="number"
-          min="1"
-          max={MAX_GENERATED_ROWS}
-          bind:value={count}
-          aria-invalid={!countValid}
-          disabled={running}
-        />
-      </Field>
-      <Field label={t('testData.seed')} hint={t('testData.seedHint')}>
-        <span class="seed">
-          <input
-            class="control"
-            type="number"
-            min="0"
-            max="4294967295"
-            value={seed}
-            disabled={running}
-            onchange={(event) => {
-              const next = Number(event.currentTarget.value);
-              if (Number.isInteger(next) && next >= 0 && next <= 0xffffffff) {
-                seed = next;
-                schedulePreview();
-              }
-            }}
-          />
-          <button class="button secondary" disabled={running} onclick={reseed}
-            >{t('testData.newSeed')}</button
+    <div class="content">
+      <section class="card" aria-label={t('testData.section.rows')}>
+        <h2 class="section-title"><Icon name="list-ordered" />{t('testData.section.rows')}</h2>
+        <div class="options">
+          <Field
+            label={t('testData.count')}
+            error={countValid ? undefined : t('testData.countInvalid', MAX_GENERATED_ROWS)}
           >
-        </span>
-      </Field>
-    </section>
+            <input
+              class="control"
+              type="number"
+              min="1"
+              max={MAX_GENERATED_ROWS}
+              bind:value={count}
+              aria-invalid={!countValid}
+              disabled={running}
+            />
+          </Field>
+          <Field label={t('testData.seed')} hint={t('testData.seedHint')}>
+            <span class="seed">
+              <input
+                class="control"
+                type="number"
+                min="0"
+                max="4294967295"
+                value={seed}
+                disabled={running}
+                onchange={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (Number.isInteger(next) && next >= 0 && next <= 0xffffffff) {
+                    seed = next;
+                    schedulePreview();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                class="button secondary"
+                title={t('testData.newSeedHint')}
+                disabled={running}
+                onclick={reseed}><Icon name="refresh" />{t('testData.newSeed')}</button
+              >
+            </span>
+          </Field>
+        </div>
+      </section>
 
-    <table class="columns">
-      <thead>
-        <tr>
-          <th>{t('import.column')}</th>
-          <th>{t('import.type')}</th>
-          <th>{t('testData.generator')}</th>
-          <th>{t('testData.nulls')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each page.columns as column, index (column.name)}
-          {@const choice = choices[index]}
-          {@const problem = problems.find((item) => item.column === column.name)}
-          <tr>
-            <td>
-              {column.name}
-              {#if column.unique}<span class="tag">{t('testData.unique')}</span>{/if}
-            </td>
-            <td class="dim">
-              {column.dataType}
-              {#if column.reference !== undefined}<span class="dim"> → {column.reference}</span>{/if}
-            </td>
-            <td>
-              {#if column.locked !== undefined}
-                <span class="dim"
-                  >{column.locked === 'auto' ? t('testData.auto') : t('import.generated')}</span
-                >
-              {:else if choice !== undefined}
-                <select
-                  class="control"
-                  aria-label={t('testData.generatorFor', column.name)}
-                  value={choice.generator}
-                  disabled={running}
-                  onchange={(event) => {
-                    const id = GENERATOR_IDS.find((g) => g === event.currentTarget.value);
-                    if (id !== undefined) {
-                      setChoice(index, { generator: id });
-                    }
-                  }}
-                >
-                  {#each GENERATOR_IDS as id (id)}
-                    <option value={id}>{generatorLabel(id, t)}</option>
-                  {/each}
-                </select>
-                {#if problem !== undefined}
-                  <span class="bad" role="alert">{problemLabel(problem.problem, t)}</span>
-                {/if}
-              {/if}
-            </td>
-            <td>
-              {#if column.nullable && column.locked === undefined && choice !== undefined}
-                <input
-                  class="control percent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  aria-label={t('testData.nullsFor', column.name)}
-                  value={choice.nullPercent}
-                  disabled={running}
-                  onchange={(event) => {
-                    const next = Math.round(Number(event.currentTarget.value));
-                    if (Number.isFinite(next)) {
-                      setChoice(index, { nullPercent: Math.min(100, Math.max(0, next)) });
-                    }
-                  }}
-                />
-              {/if}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-
-    <section aria-label={t('import.preview')}>
-      <h2>{t('import.preview')}</h2>
-      <div class="scroll">
-        <table class="preview" data-testid="preview">
-          <thead>
-            <tr>
-              {#each page.columns as column (column.name)}
-                <th>{column.name}</th>
-              {/each}
-            </tr>
-          </thead>
-          <tbody>
-            {#each rows as row, rowIndex (rowIndex)}
+      <section class="card" aria-label={t('import.columns')}>
+        <div class="section-head">
+          <h2 class="section-title"><Icon name="symbol-field" />{t('import.columns')}</h2>
+          <span class="muted small">{t('testData.filled', filled, page.columns.length)}</span>
+        </div>
+        <div class="scroll">
+          <table class="grid columns">
+            <thead>
               <tr>
-                {#each row as value, index (index)}
-                  {#if value === null}
-                    <td class="dim"
-                      >{choices[index]?.generator === 'default' ? t('import.default') : 'NULL'}</td
-                    >
-                  {:else}
-                    <td>{value}</td>
-                  {/if}
+                <th>{t('import.column')}</th>
+                <th>{t('import.type')}</th>
+                <th>{t('testData.generator')}</th>
+                <th class="nulls">{t('testData.nulls')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each page.columns as column, index (column.name)}
+                {@const choice = choices[index]}
+                {@const problem = problems.find((item) => item.column === column.name)}
+                <tr>
+                  <td>
+                    <span class="name">{column.name}</span>
+                    {#if column.unique}<span class="badge outline">{t('testData.unique')}</span>{/if}
+                  </td>
+                  <td class="muted">
+                    <span class="type">{column.dataType}</span>
+                    {#if column.reference !== undefined}
+                      <span class="reference"
+                        ><Icon name="arrow-right" size={12} /><span>{column.reference}</span></span
+                      >
+                    {/if}
+                  </td>
+                  <td class="generator">
+                    {#if column.locked !== undefined}
+                      <span class="muted locked"
+                        ><Icon name="lock" size={14} /><span
+                          >{column.locked === 'auto'
+                            ? t('testData.auto')
+                            : t('import.generated')}</span
+                        ></span
+                      >
+                    {:else if choice !== undefined}
+                      <select
+                        class="control"
+                        class:skipped={choice.generator === 'default'}
+                        aria-label={t('testData.generatorFor', column.name)}
+                        aria-invalid={problem !== undefined}
+                        value={choice.generator}
+                        disabled={running}
+                        onchange={(event) => {
+                          const id = GENERATOR_IDS.find((g) => g === event.currentTarget.value);
+                          if (id !== undefined) {
+                            setChoice(index, { generator: id });
+                          }
+                        }}
+                      >
+                        {#each GENERATOR_IDS as id (id)}
+                          <option value={id}>{generatorLabel(id, t)}</option>
+                        {/each}
+                      </select>
+                      {#if problem !== undefined}
+                        <span class="field-error" role="alert"
+                          ><Icon name="error" size={14} /><span
+                            >{problemLabel(problem.problem, t)}</span
+                          ></span
+                        >
+                      {/if}
+                    {/if}
+                  </td>
+                  <td class="nulls">
+                    {#if column.nullable && column.locked === undefined && choice !== undefined}
+                      <input
+                        class="control percent"
+                        type="number"
+                        min="0"
+                        max="100"
+                        aria-label={t('testData.nullsFor', column.name)}
+                        value={choice.nullPercent}
+                        disabled={running}
+                        onchange={(event) => {
+                          const next = Math.round(Number(event.currentTarget.value));
+                          if (Number.isFinite(next)) {
+                            setChoice(index, { nullPercent: Math.min(100, Math.max(0, next)) });
+                          }
+                        }}
+                      />
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-label={t('import.preview')}>
+        <h2 class="section-title"><Icon name="preview" />{t('import.preview')}</h2>
+        <div class="scroll">
+          <table class="grid preview" data-testid="preview">
+            <thead>
+              <tr>
+                {#each page.columns as column (column.name)}
+                  <th>{column.name}</th>
                 {/each}
               </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </section>
+            </thead>
+            <tbody>
+              {#each rows as row, rowIndex (rowIndex)}
+                <tr>
+                  {#each row as value, index (index)}
+                    {#if value === null}
+                      <td class="muted special"
+                        >{choices[index]?.generator === 'default' ? t('import.default') : 'NULL'}</td
+                      >
+                    {:else}
+                      <td>{value}</td>
+                    {/if}
+                  {/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
-    {#if error !== undefined}
-      <p class="bad" role="alert">{error}</p>
-    {/if}
-
-    {#if progress !== undefined}
-      <div class="progress" role="status" data-testid="progress">
-        <progress max={progress.total} value={progress.done}></progress>
-        <span>{t('testData.progress', progress.done, progress.total)}</span>
-        <button
-          class="button secondary"
-          onclick={() => {
-            rpc.emit('cancel', {});
-          }}>{t('import.stop')}</button
+    <footer class="actions-bar">
+      {#if error !== undefined}
+        <p class="notice error fade-in" role="alert"><Icon name="error" /><span>{error}</span></p>
+      {/if}
+      {#if progress !== undefined}
+        <div class="progress" role="status" data-testid="progress">
+          <span
+            class="meter"
+            role="progressbar"
+            aria-label={t('testData.progressLabel')}
+            aria-valuemin="0"
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.done}
+            ><span
+              class="meter-fill"
+              style="transform: scaleX({progress.total === 0 ? 0 : progress.done / progress.total})"
+            ></span></span
+          >
+          <span class="small">{t('testData.progress', progress.done, progress.total)}</span>
+          <button
+            type="button"
+            class="button secondary"
+            onclick={() => {
+              rpc.emit('cancel', {});
+            }}><Icon name="debug-stop" />{t('import.stop')}</button
+          >
+        </div>
+      {/if}
+      {#if report !== undefined}
+        <p
+          class="notice fade-in"
+          class:success={report.outcome === 'done'}
+          class:warning={report.outcome !== 'done'}
+          role="status"
+          data-testid="report"
         >
-      </div>
-    {/if}
-
-    {#if report !== undefined}
-      <p class={report.outcome === 'done' ? 'good' : 'warn'} role="status" data-testid="report">
-        {reportLabel(report, t)}
-      </p>
-    {/if}
-
-    <footer>
-      <span class="hint">{t('testData.filled', filled, page.columns.length)}</span>
+          <Icon name={report.outcome === 'done' ? 'pass' : 'warning'} /><span
+            >{reportLabel(report, t)}</span
+          >
+        </p>
+      {/if}
       <span class="spacer"></span>
       <button
+        type="button"
         class="button secondary"
         onclick={() => {
           rpc.emit('close', {});
         }}>{t('import.close')}</button
       >
       <button
+        type="button"
         class="button secondary"
         disabled={running || !countValid || filled === 0}
-        onclick={() => void openSql()}>{t('testData.openSql')}</button
+        onclick={() => void openSql()}><Icon name="go-to-file" />{t('testData.openSql')}</button
       >
       <button
+        type="button"
         class="button"
         disabled={running || !countValid || filled === 0 || problems.length > 0}
-        onclick={() => void insert()}>{t('testData.insert')}</button
+        onclick={() => void insert()}
+        ><Icon name={running ? 'loading' : 'play'} spin={running} />{t('testData.insert')}</button
       >
     </footer>
   </main>
 {/if}
 
 <style>
-  main {
+  /* The page scrolls; the bar of actions stays at the bottom. */
+  .page {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px 16px;
+    height: 100vh;
+  }
+
+  .page-header {
+    display: flex;
+    flex: none;
+    gap: var(--dn-gap-m);
+    align-items: center;
+    padding: 18px var(--dn-gap-xl) 14px;
+  }
+
+  .header-icon {
+    display: inline-flex;
+    padding: 9px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: 10px;
+  }
+
+  .header-text {
+    min-width: 0;
   }
 
   h1 {
-    margin: 0;
-    font-size: 1.3em;
-    font-weight: 600;
+    overflow-wrap: anywhere;
   }
 
-  h2 {
-    margin: 0 0 6px;
-    font-size: 1.05em;
-    font-weight: 600;
+  .subtitle {
+    margin: 2px 0 0;
+    color: var(--dn-muted);
   }
 
-  .loading {
-    padding: 12px 16px;
+  .content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap-m);
+    min-height: 0;
+    padding: 4px var(--dn-gap-xl) var(--dn-gap-xl);
+    overflow-y: auto;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap-m);
+    min-width: 0;
+  }
+
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-s) var(--dn-gap-m);
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .section-title {
+    display: flex;
+    gap: var(--dn-gap);
+    align-items: center;
+  }
+
+  .section-title :global(.codicon-glyph) {
+    color: var(--dn-muted);
   }
 
   .options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(140px, 200px) minmax(220px, 360px);
+    gap: var(--dn-gap-m);
+    align-items: start;
   }
 
   .seed {
     display: flex;
-    gap: 6px;
+    gap: var(--dn-gap-s);
   }
 
-  table {
-    border-collapse: collapse;
-  }
-
-  th,
-  td {
-    padding: 3px 8px;
-    text-align: left;
-    border-bottom: 1px solid var(--vscode-panel-border, transparent);
-    white-space: nowrap;
-  }
-
-  .preview td {
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .percent {
-    width: 5em;
+  .seed input {
+    flex: 1;
+    min-width: 0;
   }
 
   .scroll {
     overflow-x: auto;
   }
 
-  .tag {
-    margin-left: 6px;
-    padding: 0 4px;
-    font-size: 0.85em;
-    border: 1px solid var(--vscode-panel-border, currentColor);
-    border-radius: 2px;
+  .grid {
+    border-collapse: collapse;
   }
 
-  .dim,
-  .hint {
-    color: var(--vscode-descriptionForeground);
+  .columns {
+    width: 100%;
   }
 
-  .bad {
-    display: block;
-    color: var(--vscode-errorForeground);
+  th {
+    padding: 0 10px 6px;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--dn-divider);
   }
 
-  .warn {
-    color: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
+  td {
+    padding: 5px 10px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--dn-divider);
   }
 
-  .good {
-    color: var(--vscode-testing-iconPassed, var(--vscode-foreground));
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .columns td {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  .name {
+    margin-right: var(--dn-gap-s);
+    font-weight: 600;
+  }
+
+  .type {
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+  }
+
+  .reference {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+    margin-left: var(--dn-gap-s);
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+  }
+
+  .generator {
+    width: 40%;
+  }
+
+  .generator select {
+    width: 100%;
+    max-width: 320px;
+    min-width: 150px;
+  }
+
+  .generator select.skipped {
+    color: var(--dn-muted);
+  }
+
+  .locked {
+    display: inline-flex;
+    gap: var(--dn-gap-s);
+    align-items: center;
+    font-style: italic;
+  }
+
+  .field-error {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-top: 2px;
+    color: var(--vscode-inputValidation-errorForeground, var(--dn-danger));
+    font-size: var(--dn-font-small);
+  }
+
+  .field-error > :global(.codicon-glyph) {
+    color: var(--dn-danger);
+  }
+
+  .nulls {
+    width: 1%;
+  }
+
+  .percent {
+    width: 6em;
+  }
+
+  .preview td {
+    max-width: 220px;
+    overflow: hidden;
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+    text-overflow: ellipsis;
+    user-select: text;
+  }
+
+  .special {
+    font-style: italic;
+  }
+
+  /* The bar of actions: what happened on the left, what to do on the right. */
+  .actions-bar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap);
+    align-items: center;
+    padding: 10px var(--dn-gap-xl);
+    background: var(--vscode-editor-background);
+    border-top: 1px solid var(--dn-divider);
+  }
+
+  .actions-bar .notice {
+    margin: 0;
+    padding: 4px 10px;
   }
 
   .progress {
     display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-m);
     align-items: center;
-    gap: 10px;
   }
 
-  footer {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .meter {
+    display: block;
+    width: 140px;
+    height: 4px;
+    overflow: hidden;
+    background: var(--dn-divider);
+    border-radius: 2px;
+  }
+
+  .meter-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--vscode-progressBar-background, var(--dn-accent));
+    transform-origin: left;
+    transition: transform var(--dn-duration) var(--dn-ease);
   }
 
   .spacer {
     flex: 1;
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: var(--dn-muted);
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 12px;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
+  }
+
+  @media (max-width: 560px) {
+    .page-header,
+    .content,
+    .actions-bar {
+      padding-right: var(--dn-gap-m);
+      padding-left: var(--dn-gap-m);
+    }
+
+    .options {
+      grid-template-columns: 1fr;
+    }
+
+    .generator {
+      width: auto;
+    }
   }
 </style>

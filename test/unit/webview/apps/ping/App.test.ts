@@ -40,6 +40,8 @@ describe('ping App', () => {
   it('waits for the host until the first notice arrives', async () => {
     const { host } = setup();
     expect(screen.getByTestId('status').textContent).toBe('Waiting for the extension host…');
+    // Nothing to show yet: no empty log.
+    expect(screen.queryByRole('list')).toBeNull();
     host.emit('notice', { text: 'Hello from host' });
     await waitFor(() => {
       expect(screen.getByTestId('status').textContent).toBe('Connected');

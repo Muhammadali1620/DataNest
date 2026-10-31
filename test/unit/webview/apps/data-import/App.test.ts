@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
   dataImportProtocol,
@@ -76,8 +76,12 @@ async function setup(initial: ImportPageState = state()) {
   const previews: ImportMapping[] = [];
   const starts: { mode: string; mapping: ImportMapping }[] = [];
   let started = true;
+  let loadError: string | undefined;
   host.handle('load', (options) => {
     loads.push(options);
+    if (loadError !== undefined) {
+      throw new Error(loadError);
+    }
     return { source: initial.source, mapping: [null, 0, null] };
   });
   host.handle('preview', ({ mapping }) => {
@@ -115,6 +119,9 @@ async function setup(initial: ImportPageState = state()) {
     closed,
     refuse: () => {
       started = false;
+    },
+    failLoad: (message: string) => {
+      loadError = message;
     },
   };
 }
@@ -255,5 +262,57 @@ describe('data import page without transactions (V6.3)', () => {
       screen.getByText('All or nothing: stop at the first bad row and keep nothing'),
     ).not.toBeNull();
     expect(screen.queryByText(/the rows before it stay/u)).toBeNull();
+  });
+});
+
+describe('data import page layout (V11)', () => {
+  it('shows the run as a progress bar next to its counts', async () => {
+    const page = await setup(state({ progress: { read: 5, inserted: 5, failed: 0, percent: 10 } }));
+    const bar = within(screen.getByTestId('progress')).getByRole('progressbar', {
+      name: 'Import progress',
+    });
+    expect(bar.getAttribute('aria-valuenow')).toBe('10');
+    page.host.emit('progress', { read: 50, inserted: 49, failed: 1, percent: 55 });
+    await waitFor(() => {
+      expect(bar.getAttribute('aria-valuenow')).toBe('55');
+    });
+  });
+
+  it('brings the result into view at the top when the import ends', async () => {
+    const page = await setup(state({ progress: { read: 5, inserted: 5, failed: 0, percent: 10 } }));
+    const scroller = screen.getByRole('main').querySelector<HTMLElement>('.content');
+    if (scroller === null) {
+      throw new Error('The page has no scrolling content');
+    }
+    scroller.scrollTop = 300;
+    page.host.emit('finished', {
+      outcome: 'done',
+      read: 5,
+      inserted: 5,
+      failedCount: 0,
+      failures: [],
+      rolledBack: false,
+      durationMs: 1,
+    });
+    const report = await screen.findByTestId('report');
+    expect(report.classList.contains('success')).toBe(true);
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  it('marks a report with rows left out as a warning, and a failed load as an error', async () => {
+    const page = await setup();
+    page.host.emit('finished', {
+      outcome: 'done',
+      read: 3,
+      inserted: 2,
+      failedCount: 1,
+      failures: [{ line: 3, message: 'duplicate key' }],
+      rolledBack: false,
+      durationMs: 1,
+    });
+    expect((await screen.findByTestId('report')).classList.contains('warning')).toBe(true);
+    page.failLoad('The file cannot be read');
+    await fireEvent.change(screen.getByLabelText('Delimiter'), { target: { value: ';' } });
+    expect((await screen.findByRole('alert')).textContent).toBe('The file cannot be read');
   });
 });

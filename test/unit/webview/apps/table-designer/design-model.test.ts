@@ -10,6 +10,7 @@ import {
   moveColumn,
   nextColumnId,
   problemMessage,
+  problemPlace,
   removeColumn,
   removeForeignKey,
   removeIndex,
@@ -217,6 +218,20 @@ describe('problems of indexes and keys', () => {
     expect(problemMessage({ kind: 'key-target-columns', key: 'k' })).toBe(
       'designer.problem.keyTargetColumns',
     );
+  });
+});
+
+describe('problemPlace (V11)', () => {
+  it('sends each problem to the tab where it is fixed', () => {
+    expect(problemPlace({ kind: 'table-name' })).toBe('table');
+    expect(problemPlace({ kind: 'no-columns' })).toBe('columns');
+    expect(problemPlace({ kind: 'column-name', column: 'c' })).toBe('columns');
+    expect(problemPlace({ kind: 'duplicate-column', column: 'c' })).toBe('columns');
+    expect(problemPlace({ kind: 'auto-increment', column: 'c', reason: 'type' })).toBe('columns');
+    expect(problemPlace({ kind: 'index-columns', index: 'i' })).toBe('indexes');
+    expect(problemPlace({ kind: 'duplicate-index', index: 'i' })).toBe('indexes');
+    expect(problemPlace({ kind: 'key-target', key: 'k' })).toBe('keys');
+    expect(problemPlace({ kind: 'key-target-columns', key: 'k' })).toBe('keys');
   });
 });
 

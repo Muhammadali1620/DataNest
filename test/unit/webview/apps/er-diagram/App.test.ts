@@ -11,6 +11,7 @@ import App from '../../../../../webview/src/apps/er-diagram/App.svelte';
 import type { DiagramColors } from '../../../../../webview/src/apps/er-diagram/diagram-view';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
+import { chooseFromMenu, menuLabels } from '../../../../helpers/webview/menu';
 
 type HostPeer = RpcPeer<ErDiagramProtocol['host'], ErDiagramProtocol['webview']>;
 
@@ -132,8 +133,16 @@ describe('ER diagram page', () => {
     await setup();
     expect(screen.getByText('Tables: 3, keys: 1')).not.toBeNull();
     expect(boxOf('orders').textContent).toContain('customer_id');
-    expect(boxOf('orders').textContent).toContain('PK');
-    expect(boxOf('orders').textContent).toContain('FK');
+    // Key marks are icons; which key a mark stands for is in its data, not in colour alone.
+    const marks = [...boxOf('orders').querySelectorAll('[data-mark]')].map((mark) =>
+      mark.getAttribute('data-mark'),
+    );
+    expect(marks).toEqual(['PK', 'FK']);
+    expect(boxOf('orders').querySelector('[data-mark="PK"]')?.classList.contains('primary')).toBe(
+      true,
+    );
+    expect(screen.getByText('primary key')).not.toBeNull();
+    expect(screen.getByText('foreign key')).not.toBeNull();
     expect(boxOf('ext').classList.contains('external')).toBe(true);
     expect(document.querySelectorAll('g.line')).toHaveLength(1);
   });
@@ -221,8 +230,12 @@ describe('ER diagram page', () => {
     await fireEvent.input(search, { target: { value: 'ORD' } });
     expect(boxOf('orders').classList.contains('match')).toBe(true);
     expect(boxOf('customers').classList.contains('match')).toBe(false);
+    expect(screen.getByTestId('er-hits').textContent.trim()).toBe('Found: 1');
     await fireEvent.keyDown(search, { key: 'Enter' });
     expect(boxOf('orders').classList.contains('selected')).toBe(true);
+    await fireEvent.input(search, { target: { value: 'invoices' } });
+    expect(screen.getByTestId('er-hits').textContent.trim()).toBe('No such table');
+    expect(document.querySelector('g.box.match')).toBeNull();
   });
 
   it('zooms with the buttons and the keyboard', async () => {
@@ -333,6 +346,8 @@ describe('ER diagram page', () => {
       await setup();
       const help = document.getElementById(canvas().getAttribute('aria-describedby') ?? '');
       expect(help?.textContent).toContain('] and [');
+      // The same help is the tooltip of the question mark in the status bar.
+      expect(help?.parentElement?.getAttribute('title')).toContain('double click opens its rows');
       expect(screen.getByRole('button', { name: 'Zoom in (+)' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Zoom out (-)' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Actual size: 100%' })).toBeTruthy();
@@ -369,9 +384,14 @@ describe('ER diagram page', () => {
     expect(screen.getByRole('button', { name: 'Refresh' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it('offers the picture formats in one menu', async () => {
+    await setup();
+    expect(await menuLabels('er-export')).toEqual(['Save SVG', 'Save PNG']);
+  });
+
   it('saves an SVG with the theme colours', async () => {
     const page = await setup();
-    await fireEvent.click(screen.getByRole('button', { name: 'Save SVG' }));
+    await chooseFromMenu('er-export', 'Save SVG');
     await waitFor(() => {
       expect(page.saves).toHaveLength(1);
     });
@@ -382,7 +402,7 @@ describe('ER diagram page', () => {
 
   it('saves a PNG drawn from the SVG at its size', async () => {
     const page = await setup();
-    await fireEvent.click(screen.getByRole('button', { name: 'Save PNG' }));
+    await chooseFromMenu('er-export', 'Save PNG');
     await waitFor(() => {
       expect(page.saves).toEqual([{ format: 'png', data: 'iVBORw0KGgo=' }]);
     });
@@ -395,7 +415,7 @@ describe('ER diagram page', () => {
   it('shows why a picture could not be made', async () => {
     const page = await setup();
     page.toPng.mockRejectedValueOnce(new Error('The diagram could not be drawn as a picture'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Save PNG' }));
+    await chooseFromMenu('er-export', 'Save PNG');
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe(
         'The diagram could not be drawn as a picture',
@@ -412,10 +432,35 @@ describe('ER diagram page', () => {
     });
   });
 
+  it('reads again from the failure when asked to try again', async () => {
+    const page = await setup({ initial: null });
+    page.host.emit('failed', { message: 'connection reset' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    await waitFor(() => {
+      expect(page.events.refresh).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('Reading the tables…');
+  });
+
+  it('shows the progress of a refresh under the diagram it keeps', async () => {
+    const page = await setup();
+    page.host.emit('loading', { done: 2, total: 5 });
+    await waitFor(() => {
+      expect(screen.getByRole('progressbar')).not.toBeNull();
+    });
+    expect(screen.getByText('Reading the tables: 2 of 5')).not.toBeNull();
+    expect(boxOf('orders')).not.toBeNull();
+  });
+
   it('says so when there are no tables', async () => {
     await setup({ initial: state({ tables: [], relations: [] }) });
     expect(screen.getByText('There are no tables here')).not.toBeNull();
     expect(screen.queryByRole('application')).toBeNull();
+    // Nothing to zoom or save, but the tables can be read again.
+    expect(screen.queryByRole('button', { name: 'Zoom in (+)' })).toBeNull();
+    expect(screen.queryByTestId('er-export')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).not.toBeNull();
   });
 
   it('forgets a selected table that is gone after a refresh', async () => {

@@ -118,9 +118,15 @@ describe('data comparison page', () => {
     const cell = screen.getByText('MILK').closest('td');
     expect(cell?.classList.contains('differs')).toBe(true);
     expect(cell?.textContent).toContain('milk');
+    // The target's value is struck out, the source's follows: not told by colour only.
+    expect(screen.getByText('MILK').tagName).toBe('DEL');
+    expect(screen.getByText('milk').tagName).toBe('INS');
     // Only differing columns: price is the same everywhere, so it is hidden.
     expect(screen.queryByRole('columnheader', { name: 'price' })).toBeNull();
-    await fireEvent.click(screen.getByLabelText('Only columns that differ'));
+    const toggle = screen.getByLabelText('Only columns that differ');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('columnheader', { name: 'price' })).not.toBeNull();
   });
 
@@ -132,6 +138,14 @@ describe('data comparison page', () => {
     });
     expect(screen.getByText('NULL')).not.toBeNull();
     expect(screen.getByText('Shown 2 of 2.')).not.toBeNull();
+    expect(
+      screen.getByRole('tab', { name: 'Only in the source (2)' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Different (1)' }).getAttribute('aria-selected')).toBe(
+      'false',
+    );
+    // The legend and its toggle are about changed cells only.
+    expect(screen.queryByLabelText('Only columns that differ')).toBeNull();
     expect(page.requests.at(-1)).toEqual({ kind: 'onlySource', offset: 0 });
   });
 

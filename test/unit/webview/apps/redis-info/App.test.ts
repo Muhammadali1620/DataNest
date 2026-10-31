@@ -97,6 +97,34 @@ describe('Redis server info page', () => {
     expect(await screen.findByText('No field matches')).toBeTruthy();
   });
 
+  it('reads again every five seconds while Auto is on', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const host = await open();
+      const refresh = vi.fn(() => ({}));
+      host.handle('refresh', refresh);
+      const auto = screen.getByRole('button', { name: 'Auto (5 s)' });
+      expect(auto.getAttribute('aria-pressed')).toBe('false');
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(refresh).not.toHaveBeenCalled();
+      await fireEvent.click(auto);
+      expect(auto.getAttribute('aria-pressed')).toBe('true');
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      await fireEvent.click(auto);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows how full the memory is against its limit', async () => {
+    await open();
+    const meter = screen.getByTestId('cards').querySelector<HTMLElement>('.meter > span');
+    expect(meter?.style.width).toBe('50%');
+  });
+
   it('reads again on Refresh, and shows a failure', async () => {
     const host = await open();
     const refresh = vi.fn(() => {

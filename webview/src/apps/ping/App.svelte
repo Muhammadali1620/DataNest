@@ -3,6 +3,7 @@
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import type { PingProtocol } from '../../../../src/shared/protocols/ping';
   import { PING_MAX_TEXT_LENGTH } from '../../../../src/shared/protocols/ping';
+  import Icon from '../../components/Icon.svelte';
   import type { Translate } from '../../lib/i18n';
 
   interface Props {
@@ -49,75 +50,98 @@
 </script>
 
 <main>
-  <h1>{t('ping.title')}</h1>
-  <p data-testid="status">{connected ? t('ping.connected') : t('ping.waiting')}</p>
-  <form onsubmit={ping}>
-    <label>
-      {t('ping.input')}
-      <input bind:value={text} maxlength={PING_MAX_TEXT_LENGTH} />
-    </label>
-    <button type="submit" disabled={busy}>{t('ping.send')}</button>
-  </form>
-  <ul data-testid="log">
-    {#each lines as line, index (index)}
-      <li>{line}</li>
-    {/each}
-  </ul>
+  <header class="page-header">
+    <span class="header-icon"><Icon name="plug" size={20} /></span>
+    <h1>{t('ping.title')}</h1>
+  </header>
+  <section class="card">
+    <p class="badge" class:outline={!connected} class:success={connected} data-testid="status"
+      ><Icon name={connected ? 'pass' : 'loading'} spin={!connected} size={12} />{connected
+        ? t('ping.connected')
+        : t('ping.waiting')}</p
+    >
+    <form onsubmit={ping}>
+      <label class="field">
+        <span class="label">{t('ping.input')}</span>
+        <input class="control" bind:value={text} maxlength={PING_MAX_TEXT_LENGTH} />
+      </label>
+      <button type="submit" class="button" disabled={busy}
+        ><Icon name={busy ? 'loading' : 'send'} spin={busy} />{t('ping.send')}</button
+      >
+    </form>
+    {#if lines.length > 0}
+      <ul class="log" data-testid="log">
+        {#each lines as line, index (index)}
+          <li>{line}</li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
 </main>
 
 <style>
   main {
-    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap-m);
+    max-width: 640px;
+    padding: 18px 24px 24px;
   }
 
-  h1 {
-    margin: 0 0 8px;
-    font-size: 1.4em;
-    font-weight: 600;
+  .page-header {
+    display: flex;
+    gap: var(--dn-gap-m);
+    align-items: center;
   }
 
-  p {
-    margin: 0 0 12px;
-    color: var(--vscode-descriptionForeground);
+  .header-icon {
+    display: inline-flex;
+    padding: 9px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: 10px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap-m);
+    align-items: flex-start;
+  }
+
+  .badge {
+    margin: 0;
   }
 
   form {
     display: flex;
-    gap: 8px;
-    align-items: end;
+    gap: var(--dn-gap);
+    align-items: flex-end;
+    align-self: stretch;
   }
 
-  label {
+  .field {
     display: flex;
+    flex: 1;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
-  input {
-    padding: 4px 6px;
-    color: var(--vscode-input-foreground);
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, transparent);
+  .label {
+    font-weight: 600;
   }
 
-  button {
-    padding: 4px 12px;
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border: none;
-    cursor: pointer;
-  }
-
-  button:hover {
-    background: var(--vscode-button-hoverBackground);
-  }
-
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  ul {
-    padding-left: 20px;
+  /* What came back, as a terminal shows it. */
+  .log {
+    align-self: stretch;
+    margin: 0;
+    padding: var(--dn-gap) var(--dn-gap-m);
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+    line-height: 1.6;
+    list-style: none;
+    background: var(--vscode-terminal-background, var(--vscode-editor-background));
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius);
   }
 </style>

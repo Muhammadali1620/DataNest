@@ -339,9 +339,45 @@ describe('server monitor page', () => {
       expect(calls.processes).toBe(2);
       expect(calls.status).toBe(2);
     });
-    await fireEvent.click(screen.getByLabelText('Auto'));
+    expect(screen.getByTestId('auto-state').textContent.trim()).toBe('Refreshing every 2 s');
+    await fireEvent.click(screen.getByRole('button', { name: 'Pause auto refresh' }));
+    expect(screen.getByTestId('auto-state').textContent.trim()).toBe('Auto refresh is paused');
     vi.advanceTimersByTime(10_000);
     await flush();
     expect(calls.processes).toBe(2);
+    // Resumed, it reads again at the interval.
+    await fireEvent.click(screen.getByRole('button', { name: 'Resume auto refresh' }));
+    vi.advanceTimersByTime(2000);
+    await vi.waitFor(() => {
+      expect(calls.processes).toBe(3);
+    });
+  });
+
+  it('draws the trend of the rate once two readings are in', async () => {
+    const { calls } = await setup();
+    await vi.waitFor(() => {
+      expect(calls.status).toBe(1);
+    });
+    expect(screen.queryByTestId('trend')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => {
+      // The same rate twice: a level line at the height of the highest reading.
+      expect(screen.getByTestId('trend').querySelector('polyline')?.getAttribute('points')).toBe(
+        '0,1 120,1',
+      );
+    });
+    expect(screen.getByTestId('trend').getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('marks the changed settings in words for screen readers too', async () => {
+    await setup();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Variables' }));
+    const table = await screen.findByTestId('settings');
+    await waitFor(() => {
+      expect(table.textContent).toContain('sort_buffer_size');
+    });
+    const changed = within(table).getByText('Changed from the default');
+    expect(changed.closest('tr')?.textContent).toContain('sort_buffer_size');
+    expect(within(table).getAllByText('Changed from the default')).toHaveLength(1);
   });
 });

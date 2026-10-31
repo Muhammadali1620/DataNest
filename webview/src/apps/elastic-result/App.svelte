@@ -7,6 +7,8 @@
     ElasticResultState,
   } from '../../../../src/shared/protocols/elastic-result';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import { cellClass, groupDigits } from '../mongo-documents/documents-view';
 
@@ -51,6 +53,15 @@
     selected = selected.includes(row) ? selected.filter((one) => one !== row) : [...selected, row];
   }
 
+  const allSelected = $derived(
+    answer !== undefined && answer.rows.length > 0 && selected.length === answer.rows.length,
+  );
+
+  /** The box in the header: ticks every hit, or none. */
+  function toggleAll(): void {
+    selected = allSelected ? [] : (answer?.rows.map((_, index) => index) ?? []);
+  }
+
   function summaryText(state: ElasticResultState): string | undefined {
     const summary = state.summary;
     switch (summary?.kind) {
@@ -76,62 +87,93 @@
 
 <main>
   {#if answer === undefined}
-    <p class="hint">{t('elastic.loading')}</p>
+    <div class="empty">
+      <span class="empty-icon"><Icon name="loading" spin size={24} /></span>
+      <p class="empty-title">{t('elastic.loading')}</p>
+    </div>
   {:else}
-    <header>
-      <h1><code>{answer.request}</code></h1>
-      <p class="meta" data-testid="meta">
-        <span class="status" class:failed={answer.status >= 400} data-testid="status">{answer.status}</span>
-        <span>{answer.connectionName}</span>
-        <span>{t('elastic.took', answer.tookMs)}</span>
-        {#if answer.summary?.took !== undefined}
-          <span>{t('elastic.serverTook', answer.summary.took)}</span>
-        {/if}
-      </p>
+    {@const summary = summaryText(answer)}
+    <header class="top">
+      <span class="top-icon"><Icon name="search" size={18} /></span>
+      <div class="top-text">
+        <h1><code>{answer.request}</code></h1>
+        <p class="meta" data-testid="meta">
+          <span
+            class="badge {answer.status >= 400 ? 'danger' : 'success'}"
+            class:failed={answer.status >= 400}
+            data-testid="status"><Icon name={answer.status >= 400 ? 'error' : 'pass'} size={12} />{answer.status}</span
+          >
+          <span class="fact"><Icon name="database" size={12} />{answer.connectionName}</span>
+          <span class="fact"><Icon name="watch" size={12} />{t('elastic.took', answer.tookMs)}</span>
+          {#if answer.summary?.took !== undefined}
+            <span class="fact">{t('elastic.serverTook', answer.summary.took)}</span>
+          {/if}
+        </p>
+      </div>
+      <div class="toolbar">
+        <IconButton icon="clippy" label={t('elastic.copyAll')} onclick={() => void copy(undefined)} />
+      </div>
     </header>
-    {#if summaryText(answer) !== undefined}
-      <p class:error={answer.summary?.kind === 'error'} data-testid="summary">{summaryText(answer)}</p>
+    {#if summary !== undefined && answer.summary?.kind === 'error'}
+      <p class="notice error problem" data-testid="summary"><Icon name="error" /><span class="message">{summary}</span></p>
     {/if}
     {#if error !== undefined}
-      <p class="error" role="alert">{error}</p>
+      <p class="notice error problem" role="alert"><Icon name="error" /><span class="message">{error}</span></p>
     {/if}
-    <section class="toolbar">
+    <div class="viewbar">
       {#if hasTable}
         <div class="tabs" role="tablist">
           <button
             type="button"
             role="tab"
             class="tab"
+            class:active={view === 'table'}
             aria-selected={view === 'table'}
             onclick={() => {
               view = 'table';
-            }}>{t('elastic.table')}</button
+            }}><Icon name="table" />{t('elastic.table')}</button
           >
           <button
             type="button"
             role="tab"
             class="tab"
+            class:active={view === 'text'}
             aria-selected={view === 'text'}
             onclick={() => {
               view = 'text';
-            }}>{t('elastic.text')}</button
+            }}><Icon name="json" />{t('elastic.text')}</button
           >
         </div>
+      {:else}
+        <span class="view-title"><Icon name="json" />{t('elastic.text')}</span>
       {/if}
       <span class="grow"></span>
       {#if selected.length > 0}
-        <button type="button" class="button secondary" onclick={() => void copy(selected)}
-          >{t('elastic.copyHits', selected.length)}</button
-        >
+        <IconButton
+          class="fade-in"
+          icon="copy"
+          label={t('elastic.copyHits', selected.length)}
+          text={t('elastic.copyHits', selected.length)}
+          onclick={() => void copy(selected)}
+        />
       {/if}
-      <button type="button" class="button secondary" onclick={() => void copy(undefined)}>{t('elastic.copyAll')}</button>
-    </section>
+    </div>
     {#if view === 'table' && hasTable}
       <div class="scroll">
         <table class="hits">
           <thead>
             <tr>
-              <th class="pick"></th>
+              <th class="pick">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  {@attach (box: HTMLInputElement) => {
+                    box.indeterminate = selected.length > 0 && !allSelected;
+                  }}
+                  onchange={toggleAll}
+                  aria-label={t('elastic.selectAll')}
+                />
+              </th>
               {#each answer.columns as column (column)}
                 <th>{column}</th>
               {/each}
@@ -163,123 +205,291 @@
         </table>
       </div>
     {:else}
-      <pre class="code" data-testid="text">{answer.text}</pre>
-      {#if answer.truncated}
-        <p class="hint">{t('elastic.truncated')}</p>
-      {/if}
+      <div class="text-view">
+        {#if answer.truncated}
+          <p class="notice warning"><Icon name="warning" /><span>{t('elastic.truncated')}</span></p>
+        {/if}
+        <pre class="code" data-testid="text">{answer.text}</pre>
+      </div>
+    {/if}
+    {#if summary !== undefined && answer.summary?.kind !== 'error'}
+      <footer class="status">
+        <span class="summary" data-testid="summary">{summary}</span>
+      </footer>
     {/if}
   {/if}
 </main>
 
 <style>
   main {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    height: 100vh;
   }
-  h1 {
-    font-size: 1.15em;
-    margin: 0;
-    word-break: break-all;
-  }
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    color: var(--vscode-descriptionForeground);
-    margin: 4px 0 0;
-  }
-  .status {
-    border: 1px solid var(--vscode-charts-green, var(--vscode-focusBorder));
-    padding: 0 6px;
-    border-radius: 3px;
-    color: var(--vscode-foreground);
-  }
-  .status.failed {
-    border-color: var(--vscode-errorForeground);
-  }
-  .toolbar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
+
   .grow {
     flex: 1;
   }
-  .hint {
-    color: var(--vscode-descriptionForeground);
-    margin: 0;
-  }
-  .error {
-    color: var(--vscode-errorForeground);
-    margin: 0;
-  }
-  .tabs {
+
+  /* The request, its status and timing. */
+  .top {
     display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-m);
+    align-items: center;
+    padding: var(--dn-gap-m) var(--dn-gap-l);
+    border-bottom: 1px solid var(--dn-divider);
   }
-  .tab {
+
+  .top-icon {
+    display: inline-flex;
+    padding: 7px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: var(--dn-radius-l);
+  }
+
+  .top-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  h1 {
+    font-size: 14px;
+    word-break: break-all;
+  }
+
+  h1 code {
+    padding: 0;
+    font-size: inherit;
     background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--vscode-foreground);
-    padding: 4px 10px;
-    cursor: pointer;
   }
-  .tab[aria-selected='true'] {
-    border-bottom-color: var(--vscode-focusBorder);
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-s) var(--dn-gap-m);
+    align-items: center;
+    margin: 4px 0 0;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
   }
-  .scroll {
-    overflow: auto;
-    max-height: calc(100vh - 160px);
-  }
-  .hits {
-    border-collapse: collapse;
-    font-family: var(--vscode-editor-font-family, monospace);
-  }
-  .hits th,
-  .hits td {
-    text-align: left;
-    padding: 2px 8px;
-    border-bottom: 1px solid var(--vscode-panel-border, transparent);
-    max-width: 320px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+
+  .fact {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
     white-space: nowrap;
   }
+
+  .problem {
+    flex: none;
+    margin: var(--dn-gap) var(--dn-gap-l) 0;
+  }
+
+  .message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Hits or the whole answer, and what to copy. */
+  .viewbar {
+    display: flex;
+    flex: none;
+    gap: var(--dn-gap);
+    align-items: center;
+    min-height: 34px;
+    padding: 0 var(--dn-gap) 0 var(--dn-gap-s);
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    align-self: stretch;
+  }
+
+  .tab,
+  .view-title {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  .tab {
+    margin-bottom: -1px;
+    color: var(--vscode-panelTitle-inactiveForeground, var(--dn-muted));
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    transition: color var(--dn-duration) var(--dn-ease);
+  }
+
+  .tab:hover,
+  .tab.active {
+    color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
+  }
+
+  .tab.active {
+    border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--dn-accent));
+  }
+
+  .view-title {
+    color: var(--dn-muted);
+  }
+
+  /* The hits, drawn as the result grid draws its rows. */
+  .scroll {
+    --dn-header-background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+    --dn-grid-line: var(--vscode-editorGroup-border, var(--dn-divider));
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .hits {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+  }
+
+  .hits th,
+  .hits td {
+    max-width: 320px;
+    height: 22px;
+    padding: 2px 8px;
+    overflow: hidden;
+    line-height: 18px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-right: 1px solid var(--dn-grid-line);
+  }
+
   .hits thead th {
     position: sticky;
     top: 0;
-    background: var(--vscode-editor-background);
+    z-index: 1;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    font-weight: 600;
+    background: var(--dn-header-background);
+    box-shadow: 0 1px 0 var(--dn-divider);
   }
+
+  .hits tbody tr:nth-child(even) {
+    background: var(--vscode-keybindingTable-rowsBackground, transparent);
+  }
+
+  .hits tbody tr:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+
   .hits tbody tr.selected {
-    background: var(--vscode-list-activeSelectionBackground);
+    background: var(--vscode-list-inactiveSelectionBackground);
   }
+
   .pick {
-    width: 24px;
+    width: 30px;
+    text-align: center;
   }
+
+  .hits .pick input {
+    width: 16px;
+    height: 16px;
+  }
+
   .number {
-    text-align: right;
     color: var(--vscode-debugTokenExpression-number, var(--vscode-foreground));
+    text-align: right;
   }
+
   .string {
     color: var(--vscode-debugTokenExpression-string, var(--vscode-foreground));
   }
+
   .null,
   .missing {
-    color: var(--vscode-descriptionForeground);
+    color: var(--dn-muted);
     font-style: italic;
   }
+
   .bool {
     color: var(--vscode-debugTokenExpression-boolean, var(--vscode-foreground));
   }
-  .code {
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: var(--vscode-editor-font-size, 13px);
+
+  /* The whole answer as text. */
+  .text-view {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    min-height: 0;
+    padding: var(--dn-gap-m) var(--dn-gap-l);
+  }
+
+  .text-view .notice {
+    flex: none;
     margin: 0;
-    padding: 6px 8px;
-    background: var(--vscode-textCodeBlock-background);
+  }
+
+  .code {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: var(--dn-gap) var(--dn-gap-m);
     overflow: auto;
+    font-size: var(--vscode-editor-font-size, 13px);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius);
+    user-select: text;
+  }
+
+  .status {
+    display: flex;
+    flex: none;
+    align-items: center;
+    min-height: 28px;
+    padding: 2px var(--dn-gap-l);
+    color: var(--dn-muted);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  /* Waiting for the answer: centred. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    color: var(--dn-muted);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
   }
 </style>

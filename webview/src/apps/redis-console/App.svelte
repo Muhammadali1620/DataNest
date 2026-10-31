@@ -7,6 +7,8 @@
     RedisConsoleState,
   } from '../../../../src/shared/protocols/redis-console';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import {
     commandOf,
@@ -181,55 +183,69 @@
 </script>
 
 <main>
+  {#if running}
+    <div class="progress-bar" aria-hidden="true"></div>
+  {/if}
   {#if consoleState === undefined}
-    <p class="hint">{t('console.loading')}</p>
+    <div class="empty">
+      <span class="empty-icon"><Icon name="loading" spin size={24} /></span>
+      <p class="empty-title">{t('console.loading')}</p>
+    </div>
   {:else}
     <header class="bar">
-      <span data-testid="where">
+      <span class="where-icon"><Icon name="terminal" /></span>
+      <span class="where" data-testid="where">
         {consoleState.connectionName} · db{consoleState.database}{consoleState.mode === 'standalone'
           ? ''
           : ` · ${consoleState.mode}`}
       </span>
       {#if consoleState.readOnly}
-        <span class="badge">{t('redis.readOnly')}</span>
+        <span class="badge outline"><Icon name="lock" size={12} />{t('redis.readOnly')}</span>
       {/if}
       {#if consoleState.production}
-        <span class="badge warn">{t('console.production')}</span>
+        <span class="badge danger"><Icon name="flame" size={12} />{t('console.production')}</span>
       {/if}
       <span class="grow"></span>
-      <button
-        type="button"
-        class="button secondary"
-        disabled={!running}
-        onclick={() => void rpc.request('stop', {})}>{t('console.stop')}</button
-      >
-      <button
-        type="button"
-        class="button secondary"
-        onclick={() => {
-          entries = [];
-        }}>{t('console.clear')}</button
-      >
+      <div class="toolbar">
+        <IconButton
+          icon="debug-stop"
+          label={t('console.stop')}
+          disabled={!running}
+          onclick={() => void rpc.request('stop', {})}
+        />
+        <IconButton
+          icon="clear-all"
+          label={t('console.clear')}
+          hint={`${t('console.clear')} (Ctrl+L)`}
+          onclick={() => {
+            entries = [];
+          }}
+        />
+      </div>
     </header>
 
     <section class="output" bind:this={output} aria-live="polite" data-testid="output">
       {#if entries.length === 0}
-        <p class="hint">{t('console.welcome')}</p>
+        <div class="welcome">
+          <span class="empty-icon"><Icon name="terminal" size={24} /></span>
+          <p class="welcome-text">{t('console.welcome')}</p>
+        </div>
       {/if}
       {#each entries as entry, index (index)}
         <div class="entry" class:failed={entry.error}>
           <div class="command">
-            <span class="prompt">&gt;</span> {entry.command}
+            <span class="prompt"><Icon name="chevron-right" size={14} /></span>
+            <span class="command-text">{entry.command}</span>
             {#if entry.ms !== undefined}<span class="time">{t('console.ms', entry.ms)}</span>{/if}
           </div>
-          <pre>{entry.lines.join('\n')}</pre>
+          <pre class="lines">{entry.lines.join('\n')}</pre>
         </div>
       {/each}
     </section>
 
     <section class="input">
       {#if suggestions.length > 0}
-        <ul class="suggestions" role="listbox" aria-label={t('console.suggestions')}>
+        <ul class="suggestions fade-in" role="listbox" aria-label={t('console.suggestions')}>
           {#each suggestions as item, index (item.label)}
             <li
               role="option"
@@ -246,24 +262,37 @@
           {/each}
         </ul>
       {/if}
-      <textarea
-        class="control code"
-        rows="2"
-        bind:this={field}
-        bind:value={input}
-        oninput={() => void suggest()}
-        onkeydown={keydown}
-        placeholder={t('console.placeholder')}
-        aria-label={t('console.input')}
-        spellcheck="false"
-        autocomplete="off"
-      ></textarea>
+      <div class="line">
+        <span class="prompt"><Icon name="chevron-right" /></span>
+        <textarea
+          class="code"
+          rows="1"
+          bind:this={field}
+          bind:value={input}
+          oninput={() => void suggest()}
+          onkeydown={keydown}
+          placeholder={t('console.placeholder')}
+          aria-label={t('console.input')}
+          spellcheck="false"
+          autocomplete="off"
+        ></textarea>
+        <IconButton
+          icon="play"
+          label={t('console.run')}
+          hint={`${t('console.run')} (Enter)`}
+          disabled={running || input.trim() === ''}
+          onclick={() => {
+            void run();
+            field?.focus();
+          }}
+        />
+      </div>
       <p class="syntax" data-testid="syntax">
         {#if current !== undefined}
           <code>{syntaxLine(current)}</code>
           {#if current.summary !== undefined}<span class="detail"> — {current.summary}</span>{/if}
         {:else}
-          <span class="hint">{t('console.keys')}</span>
+          <span class="detail">{t('console.keys')}</span>
         {/if}
       </p>
     </section>
@@ -272,101 +301,259 @@
 
 <style>
   main {
+    /* A terminal: the theme's terminal colours, the editor's font. */
+    --dn-term-background: var(--vscode-terminal-background, var(--vscode-panel-background, var(--vscode-editor-background)));
+    --dn-term-foreground: var(--vscode-terminal-foreground, var(--vscode-foreground));
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100vh;
-    box-sizing: border-box;
-    padding: 8px 12px;
-    gap: 8px;
+    background: var(--dn-term-background);
   }
-  .bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+
   .grow {
     flex: 1;
   }
-  .badge {
-    border: 1px solid var(--vscode-focusBorder);
-    padding: 0 6px;
-    border-radius: 3px;
+
+  .bar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap);
+    align-items: center;
+    min-height: 34px;
+    padding: 4px var(--dn-gap) 4px var(--dn-gap-m);
+    background: var(--vscode-editor-background);
+    border-bottom: 1px solid var(--dn-divider);
   }
-  .badge.warn {
-    border-color: var(--vscode-errorForeground);
+
+  .where-icon {
+    display: inline-flex;
+    color: var(--dn-muted);
   }
+
+  .where {
+    font-weight: 600;
+  }
+
+  /* The log: each command with its prompt and time, its answer below. */
   .output {
     flex: 1;
+    min-height: 0;
+    padding: var(--dn-gap) var(--dn-gap-m);
     overflow: auto;
-    font-family: var(--vscode-editor-font-family, monospace);
+    color: var(--dn-term-foreground);
+    font-family: var(--dn-mono);
     font-size: var(--vscode-editor-font-size, 13px);
+    line-height: 1.45;
   }
+
   .entry {
-    margin-bottom: 8px;
+    padding: 4px 0 6px;
   }
+
+  .entry + .entry {
+    border-top: 1px solid var(--vscode-terminal-border, var(--dn-divider));
+  }
+
   .command {
-    color: var(--vscode-textLink-foreground);
+    display: flex;
+    gap: 6px;
+    align-items: center;
   }
+
+  .prompt {
+    display: inline-flex;
+    flex: none;
+    color: var(--vscode-terminal-ansiGreen, var(--dn-success));
+  }
+
+  .command-text {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
   .time {
-    color: var(--vscode-descriptionForeground);
-    margin-left: 8px;
+    flex: none;
+    color: var(--dn-muted);
+    font-family: var(--vscode-font-family);
+    font-size: 11px;
   }
-  .entry pre {
-    margin: 2px 0 0 14px;
+
+  .lines {
+    margin: 2px 0 0 20px;
+    font: inherit;
     white-space: pre-wrap;
     word-break: break-all;
   }
-  .entry.failed pre {
-    color: var(--vscode-errorForeground);
+
+  .entry.failed .prompt,
+  .entry.failed .lines {
+    color: var(--vscode-terminal-ansiRed, var(--dn-danger));
   }
+
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: var(--dn-gap-xl);
+    text-align: center;
+  }
+
+  .welcome-text {
+    max-width: 460px;
+    margin: 0;
+    color: var(--dn-muted);
+    font-family: var(--vscode-font-family);
+  }
+
+  /* The command line, pinned at the bottom. */
   .input {
     position: relative;
+    flex: none;
+    padding: 6px var(--dn-gap) 4px var(--dn-gap-m);
+    background: var(--vscode-editor-background);
+    border-top: 1px solid var(--dn-divider);
   }
+
+  .line {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    padding: 2px 2px 2px 6px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border, var(--dn-border));
+    border-radius: var(--dn-radius);
+    transition: border-color var(--dn-duration) var(--dn-ease);
+  }
+
+  .line:focus-within {
+    border-color: var(--vscode-focusBorder);
+  }
+
+  .line .prompt {
+    margin-top: 3px;
+  }
+
   .code {
-    width: 100%;
-    box-sizing: border-box;
-    font-family: var(--vscode-editor-font-family, monospace);
-    resize: vertical;
+    flex: 1;
+    min-width: 0;
+    min-height: 24px;
+    max-height: 30vh;
+    padding: 3px 0;
+    color: var(--vscode-input-foreground);
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--dn-mono);
+    font-size: var(--vscode-editor-font-size, 13px);
+    line-height: 18px;
+    resize: none;
+    field-sizing: content;
   }
+
+  .code::placeholder {
+    color: var(--vscode-input-placeholderForeground);
+  }
+
   .suggestions {
     position: absolute;
-    bottom: 100%;
-    left: 0;
-    right: 0;
-    max-height: 240px;
-    overflow: auto;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    background: var(--vscode-editorSuggestWidget-background, var(--vscode-editor-background));
-    border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-focusBorder));
+    right: var(--dn-gap);
+    bottom: calc(100% - 2px);
+    left: var(--dn-gap-m);
     z-index: 1;
+    max-height: 240px;
+    margin: 0;
+    padding: 4px;
+    overflow: auto;
+    color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+    list-style: none;
+    background: var(--vscode-editorSuggestWidget-background, var(--dn-surface));
+    border: 1px solid var(--vscode-editorSuggestWidget-border, var(--dn-border));
+    border-radius: var(--dn-radius-l);
+    box-shadow: var(--dn-shadow);
   }
+
   .suggestions li {
-    padding: 2px 8px;
-    cursor: pointer;
     display: flex;
     gap: 12px;
-    white-space: nowrap;
+    align-items: baseline;
+    padding: 2px 8px;
     overflow: hidden;
+    border-radius: var(--dn-radius);
+    white-space: nowrap;
+    cursor: pointer;
   }
+
+  .suggestions li:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+
   .suggestions li.active {
+    color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
     background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
   }
+
   .name {
-    font-family: var(--vscode-editor-font-family, monospace);
+    font-family: var(--dn-mono);
   }
-  .detail,
-  .hint {
-    color: var(--vscode-descriptionForeground);
+
+  .detail {
     overflow: hidden;
+    color: var(--dn-muted);
     text-overflow: ellipsis;
   }
+
+  .suggestions li.active .detail {
+    color: inherit;
+    opacity: 0.8;
+  }
+
   .syntax {
-    margin: 4px 0 0;
-    min-height: 1.4em;
+    min-height: 18px;
+    margin: 4px 0 0 2px;
     overflow: hidden;
+    font-size: var(--dn-font-small);
+    line-height: 18px;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .syntax code {
+    color: var(--vscode-textPreformat-foreground, var(--vscode-foreground));
+  }
+
+  /* Waiting for the server: centred. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    color: var(--dn-muted);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
   }
 </style>

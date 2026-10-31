@@ -20,6 +20,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - Every page's tab has its own icon, and the tree's context menu groups Generate SQL and
   the data commands (dump, export, import, test data, copy, compare) into submenus.
 - The empty Connections view also offers to open a SQLite file.
+- Table designer, import, test data and users: the same clean form layout, with icon
+  buttons, tab badges, examples only where you type, and a pinned bar with progress.
+- ER diagram, chart, query plan and server monitor: tool pages with icon toolbars and a
+  status bar; the diagram gets a grid, card-like tables and a legend, the monitor gets
+  metric tiles with a queries-per-second sparkline.
+- Schema and data compare, Redis, MongoDB and Elasticsearch pages: differences marked with
+  a sign as well as a colour, a terminal-like Redis console, side panels for editing.
 
 ### Fixed
 

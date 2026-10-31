@@ -116,6 +116,68 @@ describe('Redis key page', () => {
     });
   });
 
+  it('sets the TTL and renames on Enter, and removes the TTL', async () => {
+    const host = await open(state({ ttlMs: 65_000 }));
+    const setTtl = vi.fn(() => ({}));
+    const rename = vi.fn(() => ({ renamed: true }));
+    host.handle('setTtl', setTtl);
+    host.handle('rename', rename);
+    const ttl = screen.getByLabelText<HTMLInputElement>('Set TTL');
+    // Not a number of seconds: Enter does nothing.
+    await fireEvent.input(ttl, { target: { value: 'soon' } });
+    await fireEvent.keyDown(ttl, { key: 'Enter' });
+    expect(setTtl).not.toHaveBeenCalled();
+    await fireEvent.input(ttl, { target: { value: '90' } });
+    await fireEvent.keyDown(ttl, { key: 'Enter' });
+    await waitFor(() => {
+      expect(setTtl).toHaveBeenCalledWith({ seconds: 90 });
+    });
+    await waitFor(() => {
+      expect(ttl.value).toBe('');
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove TTL' }));
+    await waitFor(() => {
+      expect(setTtl).toHaveBeenLastCalledWith({ seconds: null });
+    });
+    const name = screen.getByLabelText('New name');
+    // The same name is no rename.
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    expect(rename).not.toHaveBeenCalled();
+    await fireEvent.input(name, { target: { value: 'user:9' } });
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() => {
+      expect(rename).toHaveBeenCalledWith({ name: 'user:9' });
+    });
+  });
+
+  it('shows the type and the TTL as badges, the expiry marked', async () => {
+    await open(state({ ttlMs: 65_000 }));
+    const ttl = screen.getByTestId('ttl');
+    expect(ttl.classList.contains('badge')).toBe(true);
+    expect(ttl.classList.contains('expiring')).toBe(true);
+  });
+
+  it('closes the item editor with its Close button', async () => {
+    await open(state(HASH));
+    await fireEvent.click(screen.getByText('Alice'));
+    expect(await screen.findByRole('region', { name: 'Item' })).toBeTruthy();
+    const row = screen.getByText('Alice').closest('tr');
+    expect(row?.getAttribute('aria-selected')).toBe('true');
+    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: 'Item' })).toBeNull();
+    expect(row?.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('opens an item from the keyboard', async () => {
+    await open(state(HASH));
+    const row = screen.getByText('a@x').closest('tr');
+    if (row === null) {
+      throw new Error('no row');
+    }
+    await fireEvent.keyDown(row, { key: 'Enter' });
+    expect(await screen.findByRole('region', { name: 'Item' })).toBeTruthy();
+  });
+
   it('lists hash fields and edits the one clicked', async () => {
     const host = await open(state(HASH));
     const setField = vi.fn(() => ({}));

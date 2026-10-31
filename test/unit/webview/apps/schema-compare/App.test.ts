@@ -123,7 +123,10 @@ describe('schema comparison page', () => {
 
   it('shows identical objects on request', async () => {
     await setup();
-    await fireEvent.click(screen.getByLabelText('Show the same ones'));
+    const toggle = screen.getByLabelText('Show the same ones');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText('same_one')).not.toBeNull();
     expect(box('same_one').disabled).toBe(true);
   });
@@ -140,6 +143,27 @@ describe('schema comparison page', () => {
     expect(detail.textContent).toContain('fk_c');
     expect(detail.textContent).toContain('generated column g is only in the source');
     expect(detail.textContent).toContain('ALTER TABLE "dst"."customers"');
+  });
+
+  it('names the state of each difference in words, not only by its colour', async () => {
+    await setup();
+    expect(screen.getByRole('button', { name: 'different customers' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'new notes' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'only in target legacy' })).not.toBeNull();
+    const notes = screen.getByRole('button', { name: 'new notes' });
+    expect(notes.getAttribute('aria-current')).toBeNull();
+    await fireEvent.click(screen.getByText('customers'));
+    await waitFor(() => {
+      expect(screen.getByText('email')).not.toBeNull();
+    });
+    const picked = screen.getByRole('button', { name: 'different customers' });
+    expect(picked.getAttribute('aria-current')).toBe('true');
+    // The old value is struck out and the new one follows it.
+    expect(screen.getByText('varchar(20)').tagName).toBe('DEL');
+    expect(screen.getByText('varchar(50) NOT NULL').tagName).toBe('INS');
+    const detail = screen.getByRole('region', { name: 'Difference' });
+    expect(detail.textContent).toContain('changed');
+    expect(detail.textContent).toContain('gone');
   });
 
   it('shows a definition as lines removed and added', async () => {

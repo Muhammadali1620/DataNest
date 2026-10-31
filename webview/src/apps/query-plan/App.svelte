@@ -7,6 +7,8 @@
   } from '../../../../src/shared/protocols/query-plan';
   import type { PlanWarning } from '../../../../src/shared/query-plan';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import type { MessageKey } from '../../l10n/en';
   import { formatMs, formatNumber, parentOf, percent, rowsText, visibleRows } from './plan-view';
@@ -34,12 +36,12 @@
   /** The same columns in every row, so the numbers line up under their heading. */
   const columns = $derived(
     [
-      'minmax(240px, 1fr)',
+      'minmax(160px, 1fr)',
+      'minmax(44px, 120px)',
+      hasTime ? '84px' : '',
+      hasCost ? '72px' : '',
       '110px',
-      hasTime ? '90px' : '',
-      hasCost ? '80px' : '',
-      '120px',
-      hasLoops ? '56px' : '',
+      hasLoops ? '52px' : '',
     ]
       .filter((width) => width !== '')
       .join(' '),
@@ -165,78 +167,94 @@
 </script>
 
 <main>
-  <header class="bar">
-    <h1>{t('plan.title')}</h1>
-    {#if page !== undefined}
-      <span class="badge" class:actual={page.analyzed}>
-        {page.analyzed ? t('plan.actual') : t('plan.estimated')}
-      </span>
-      <span class="hint">{page.connection}</span>
-      <span class="grow"></span>
-      <button
-        type="button"
-        class="button secondary"
-        disabled={page.running}
-        onclick={() => {
-          explain(false);
-        }}>{t('plan.explain')}</button
-      >
-      <button
-        type="button"
-        class="button secondary"
-        disabled={page.running || !page.canAnalyze}
-        title={page.canAnalyze ? t('plan.analyzeHint') : t('plan.analyzeUnavailable')}
-        onclick={() => {
-          explain(true);
-        }}>{t('plan.analyze')}</button
-      >
-      <button type="button" class="button secondary" disabled={rows.length === 0} onclick={expandAll}
-        >{t('plan.expandAll')}</button
-      >
-      <button
-        type="button"
-        class="button secondary"
-        disabled={rows.length === 0}
-        onclick={collapseAll}>{t('plan.collapseAll')}</button
-      >
-      <button
-        type="button"
-        class="button secondary"
-        disabled={rows.length === 0}
-        onclick={() => {
-          rpc.emit('showRaw', {});
-        }}>{t('plan.raw')}</button
-      >
-    {/if}
-  </header>
-
+  {#if page?.running === true}
+    <div class="progress-bar" role="progressbar" aria-label={t('plan.running')}></div>
+  {/if}
   {#if page === undefined}
-    <p class="hint">{t('form.loading')}</p>
+    <div class="empty" role="status">
+      <Icon name="loading" size={20} spin />
+      <p class="empty-title">{t('form.loading')}</p>
+    </div>
   {:else}
-    <pre class="statement" title={page.statement}>{page.statement}</pre>
-    {#if page.running}
-      <p class="hint" role="status">{t('plan.running')}</p>
-    {/if}
-    {#if page.error !== undefined}
-      <p class="error" role="alert">{page.error}</p>
-    {/if}
-    {#if page.notes.length > 0}
-      <section class="notes" aria-label={t('plan.notes')}>
-        <h2>{t('plan.notes')}</h2>
-        <ul>
-          {#each page.notes as note, index (index)}
-            <li><code>{note}</code></li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
+    <header class="toolbar-row">
+      <div class="title">
+        <Icon name="list-tree" />
+        <h1>{t('plan.title')}</h1>
+        {#if page.analyzed}
+          <span class="badge success"><Icon name="pulse" size={12} />{t('plan.actual')}</span>
+        {:else}
+          <span class="badge outline"><Icon name="lightbulb" size={12} />{t('plan.estimated')}</span>
+        {/if}
+        <span class="connection muted small" title={page.connection}>{page.connection}</span>
+      </div>
+      <span class="spacer"></span>
+      <div class="toolbar" role="toolbar" aria-label={t('plan.toolbar')}>
+        <IconButton
+          icon="play"
+          label={t('plan.explain')}
+          text={t('plan.explain')}
+          hint={t('plan.explainHint')}
+          disabled={page.running}
+          onclick={() => {
+            explain(false);
+          }}
+        />
+        <IconButton
+          icon="watch"
+          label={t('plan.analyze')}
+          text={t('plan.analyze')}
+          hint={page.canAnalyze ? t('plan.analyzeHint') : t('plan.analyzeUnavailable')}
+          disabled={page.running || !page.canAnalyze}
+          onclick={() => {
+            explain(true);
+          }}
+        />
+        <span class="toolbar-separator"></span>
+        <IconButton
+          icon="expand-all"
+          label={t('plan.expandAll')}
+          disabled={rows.length === 0}
+          onclick={expandAll}
+        />
+        <IconButton
+          icon="collapse-all"
+          label={t('plan.collapseAll')}
+          disabled={rows.length === 0}
+          onclick={collapseAll}
+        />
+        <IconButton
+          icon="file-code"
+          label={t('plan.raw')}
+          hint={t('plan.rawHint')}
+          disabled={rows.length === 0}
+          onclick={() => {
+            rpc.emit('showRaw', {});
+          }}
+        />
+      </div>
+    </header>
+
+    <div class="intro">
+      <pre class="statement" title={page.statement}>{page.statement}</pre>
+      {#if page.error !== undefined}
+        <div class="notice error" role="alert"><Icon name="error" /><span class="error-text">{page.error}</span></div>
+      {/if}
+      {#if page.notes.length > 0}
+        <section class="notice info notes" aria-label={t('plan.notes')}>
+          <Icon name="lightbulb" />
+          <div>
+            <h2>{t('plan.notes')}</h2>
+            <ul>
+              {#each page.notes as note, index (index)}
+                <li><code>{note}</code></li>
+              {/each}
+            </ul>
+          </div>
+        </section>
+      {/if}
+    </div>
+
     {#if rows.length > 0}
-      <p class="hint summary">
-        {basisText}
-        {#each page.properties as [key, value], index (index)}
-          <span class="prop"><span class="key">{key}:</span> {value}</span>
-        {/each}
-      </p>
       <div class="layout">
         <div
           class="tree"
@@ -282,21 +300,28 @@
                       onclick={(event) => {
                         event.stopPropagation();
                         toggle(index);
-                      }}>{collapsed.includes(index) ? '▸' : '▾'}</button
+                      }}
+                      ><Icon name={collapsed.includes(index) ? 'chevron-right' : 'chevron-down'} /></button
                     >
                   {:else}
                     <span class="twisty-space"></span>
                   {/if}
-                  <span class="name">{row.operation}</span>
-                  {#if row.object !== undefined}<span class="object">{row.object}</span>{/if}
-                  {#each row.warnings as warning (warning)}
-                    <span class="warning">{t(WARNING_KEYS[warning])}</span>
-                  {/each}
-                  {#if row.detail !== undefined}<span class="detail">{row.detail}</span>{/if}
+                  <span class="op-body">
+                    <span class="name">{row.operation}</span>
+                    {#if row.object !== undefined}<span class="object">{row.object}</span>{/if}
+                    {#each row.warnings as warning (warning)}
+                      <span class="badge warning"><Icon name="warning" size={12} />{t(WARNING_KEYS[warning])}</span>
+                    {/each}
+                    {#if row.detail !== undefined}<span class="detail">{row.detail}</span>{/if}
+                  </span>
                 </span>
                 <span class="num share" title={percent(row.share)}>
-                  <span class="bar" style="width: {Math.round(row.share * 100)}%"></span>
-                  <span class="value">{page.basis === 'none' ? '' : percent(row.share)}</span>
+                  {#if page.basis !== 'none'}
+                    <span class="track" aria-hidden="true"
+                      ><span class="fill" style="transform: scaleX({row.share})"></span></span
+                    >
+                    <span class="value">{percent(row.share)}</span>
+                  {/if}
                 </span>
                 {#if hasTime}<span class="num">{formatMs(row.timeMs, locale)}</span>{/if}
                 {#if hasCost}<span class="num">{formatNumber(row.cost, locale)}</span>{/if}
@@ -310,13 +335,9 @@
           <aside class="details" aria-label={t('plan.details')}>
             <h2>{current.operation}</h2>
             {#if current.object !== undefined}<p class="object">{current.object}</p>{/if}
-            {#if current.warnings.length > 0}
-              <ul class="warnings">
-                {#each current.warnings as warning (warning)}
-                  <li>{t(WARNING_HINTS[warning])}</li>
-                {/each}
-              </ul>
-            {/if}
+            {#each current.warnings as warning (warning)}
+              <div class="notice warning hint"><Icon name="warning" /><span>{t(WARNING_HINTS[warning])}</span></div>
+            {/each}
             <table>
               <tbody>
                 {#if page.basis !== 'none'}
@@ -336,228 +357,388 @@
           </aside>
         {/if}
       </div>
+    {:else if page.error === undefined && !page.running}
+      <div class="empty">
+        <span class="empty-icon"><Icon name="list-tree" size={28} /></span>
+        <p class="empty-title">{t('plan.empty')}</p>
+      </div>
+    {:else}
+      <div class="spacer"></div>
     {/if}
+
+    <footer class="status">
+      {#if page.running}
+        <span class="running" role="status">{t('plan.running')}</span>
+      {:else if rows.length > 0}
+        <span>{basisText}</span>
+      {/if}
+      {#each page.properties as [key, value], index (index)}
+        <span class="prop"><span class="key">{key}:</span> {value}</span>
+      {/each}
+    </footer>
   {/if}
 </main>
 
 <style>
   main {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 8px 12px;
     height: 100vh;
   }
-  .bar {
+
+  .spacer {
+    flex: 1;
+  }
+
+  .toolbar-row {
     display: flex;
+    flex: none;
     flex-wrap: wrap;
+    gap: 4px var(--dn-gap);
     align-items: center;
-    gap: 6px;
+    min-height: 36px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--dn-divider);
   }
+
+  .title {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    color: var(--dn-muted);
+  }
+
   h1 {
-    font-size: 1.2em;
-    margin: 0 4px 0 0;
+    color: var(--vscode-foreground);
+    font-size: 13px;
+    white-space: nowrap;
   }
+
+  .connection {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   h2 {
-    font-size: 1em;
     margin: 0 0 4px;
   }
-  .grow {
-    flex: 1;
+
+  /* The statement and what the server said about it. */
+  .intro {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    padding: var(--dn-gap) var(--dn-gap) 0;
   }
-  .badge {
-    padding: 1px 6px;
-    border-radius: 8px;
-    background: var(--vscode-badge-background);
-    color: var(--vscode-badge-foreground);
-    font-size: 0.85em;
-  }
-  .badge.actual {
-    background: var(--vscode-charts-green, var(--vscode-badge-background));
-  }
-  .hint {
-    color: var(--vscode-descriptionForeground);
-    margin: 0;
-  }
-  .error {
-    color: var(--vscode-errorForeground);
-    margin: 0;
-    white-space: pre-wrap;
-  }
+
   .statement {
+    display: -webkit-box;
     margin: 0;
-    max-height: 4.5em;
+    padding: 6px 10px;
     overflow: hidden;
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: 0.9em;
-    color: var(--vscode-descriptionForeground);
+    color: var(--dn-muted);
+    background: var(--vscode-textCodeBlock-background, var(--dn-surface));
+    border-radius: var(--dn-radius);
+    font-size: var(--dn-font-small);
     white-space: pre-wrap;
-  }
-  .notes ul {
-    margin: 0;
-    padding-left: 18px;
-  }
-  .notes code {
-    font-family: var(--vscode-editor-font-family, monospace);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     user-select: text;
   }
-  .summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 14px;
+
+  .error-text {
+    font-family: var(--dn-mono);
+    white-space: pre-wrap;
   }
-  .prop .key {
-    opacity: 0.8;
+
+  .notes ul {
+    margin: 0;
+    padding-left: 16px;
   }
+
+  .notes code {
+    font-size: var(--dn-font-small);
+    user-select: text;
+  }
+
   .layout {
-    flex: 1;
-    min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 32%);
-    gap: 10px;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 30%);
+    min-height: 0;
+    margin-top: var(--dn-gap);
+    border-top: 1px solid var(--dn-divider);
   }
+
   /* Beside a narrow editor the details go under the tree. */
-  @media (max-width: 900px) {
+  @media (max-width: 760px) {
     .layout {
-      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .details {
+      border-top: 1px solid var(--dn-divider);
+      border-left: none !important;
     }
   }
+
   .tree {
     overflow: auto;
-    border: 1px solid var(--vscode-panel-border, transparent);
-    font-size: 0.95em;
+    container-type: inline-size;
   }
+
+  /* In a narrow tree the share is told in figures only. */
+  @container (max-width: 520px) {
+    .track {
+      display: none;
+    }
+  }
+
   .tree:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
   }
+
   .head,
   .row {
     display: grid;
     grid-template-columns: var(--columns);
+    column-gap: 12px;
     align-items: center;
-    column-gap: 10px;
-    padding: 2px 8px 2px 0;
+    padding: 3px 10px 3px 0;
   }
+
   .head {
     position: sticky;
     top: 0;
-    background: var(--vscode-editor-background);
-    color: var(--vscode-descriptionForeground);
-    border-bottom: 1px solid var(--vscode-panel-border, transparent);
-    font-size: 0.9em;
+    z-index: 1;
+    min-height: 26px;
+    color: var(--dn-muted);
+    background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+    border-bottom: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+    font-weight: 600;
   }
+
+  .head .op {
+    padding-left: 8px;
+  }
+
   .row {
-    cursor: default;
+    min-height: 26px;
     border-left: 3px solid transparent;
+    cursor: default;
+    transition: background-color var(--dn-duration) var(--dn-ease);
   }
+
   .row:hover {
     background: var(--vscode-list-hoverBackground);
   }
+
   .row.selected {
     background: var(--vscode-list-inactiveSelectionBackground);
   }
+
+  .tree:focus .row.selected {
+    color: var(--vscode-list-activeSelectionForeground, inherit);
+    background: var(--vscode-list-activeSelectionBackground);
+  }
+
+  /* How much of the work a row takes: an edge in warmer colours, and the share in words. */
   .heat-hot {
-    border-left-color: var(--vscode-charts-red, #f14c4c);
+    --heat: var(--dn-danger);
+
+    border-left-color: var(--heat);
   }
+
   .heat-warm {
-    border-left-color: var(--vscode-charts-orange, #d18616);
+    --heat: var(--vscode-charts-orange, var(--dn-warning));
+
+    border-left-color: var(--heat);
   }
+
   .heat-mild {
-    border-left-color: var(--vscode-charts-yellow, #cca700);
+    --heat: var(--dn-warning);
+
+    border-left-color: var(--heat);
   }
+
   .op {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 6px;
+    gap: 2px;
+    align-items: flex-start;
     min-width: 0;
   }
+
+  .op-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    align-items: center;
+    min-width: 0;
+  }
+
   .twisty {
-    font: inherit;
+    display: inline-flex;
+    flex: none;
+    margin-top: 1px;
+    width: 16px;
+    padding: 0;
+    color: inherit;
     background: none;
     border: none;
-    color: inherit;
     cursor: pointer;
-    padding: 0;
-    width: 14px;
   }
+
   .twisty-space {
     display: inline-block;
-    width: 14px;
+    flex: none;
+    width: 16px;
   }
+
   .name {
     font-weight: 600;
   }
+
   .object {
-    color: var(--vscode-textLink-foreground);
     margin: 0;
+    color: var(--vscode-textLink-foreground);
   }
+
   .detail {
     flex-basis: 100%;
-    padding-left: 20px;
-    color: var(--vscode-descriptionForeground);
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: 0.9em;
+    color: var(--dn-muted);
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
     overflow-wrap: anywhere;
   }
-  .warning {
-    padding: 0 5px;
-    border-radius: 6px;
-    font-size: 0.8em;
-    background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.2));
-    border: 1px solid var(--vscode-inputValidation-warningBorder, transparent);
-  }
+
   .num {
+    font-variant-numeric: tabular-nums;
     text-align: right;
     white-space: nowrap;
-    font-variant-numeric: tabular-nums;
   }
+
   .share {
-    position: relative;
-    height: 1.3em;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
   }
-  .share .bar {
-    position: absolute;
-    left: 0;
-    top: 15%;
-    height: 70%;
-    background: var(--vscode-charts-orange, #d18616);
-    opacity: 0.35;
+
+  .track {
+    flex: 1;
+    height: 6px;
+    overflow: hidden;
+    background: var(--dn-hover);
+    border-radius: 3px;
   }
-  .heat-hot .share .bar {
-    background: var(--vscode-charts-red, #f14c4c);
-    opacity: 0.5;
+
+  .fill {
+    display: block;
+    height: 100%;
+    background: var(--heat, var(--dn-muted));
+    border-radius: 3px;
+    transform-origin: left;
   }
-  .share .value {
-    position: relative;
+
+  .value {
+    min-width: 3ch;
   }
+
   .details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    min-height: 0;
+    padding: var(--dn-gap-m);
     overflow: auto;
-    border: 1px solid var(--vscode-panel-border, transparent);
-    padding: 6px 8px;
+    background: var(--dn-surface);
+    border-left: 1px solid var(--dn-divider);
   }
+
+  .details h2 {
+    margin: 0;
+    font-size: 13px;
+  }
+
   .details table {
-    border-collapse: collapse;
     width: 100%;
-    font-size: 0.9em;
+    border-collapse: collapse;
+    font-size: var(--dn-font-small);
   }
+
   .details th,
   .details td {
+    padding: 4px 4px 4px 0;
     text-align: left;
     vertical-align: top;
-    padding: 2px 4px;
-    border-bottom: 1px solid var(--vscode-panel-border, transparent);
+    border-bottom: 1px solid var(--dn-divider);
     overflow-wrap: anywhere;
     user-select: text;
   }
+
   .details th {
-    font-weight: normal;
-    color: var(--vscode-descriptionForeground);
     width: 40%;
+    color: var(--dn-muted);
+    font-weight: normal;
   }
-  .warnings {
-    margin: 4px 0 8px;
-    padding-left: 18px;
+
+  .hint {
+    font-size: var(--dn-font-small);
+  }
+
+  /* Empty and waiting states, centred. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
+  }
+
+  .status {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+    align-items: center;
+    min-height: 26px;
+    padding: 2px 8px;
+    color: var(--dn-muted);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  .running {
+    color: var(--vscode-foreground);
+  }
+
+  .prop .key {
+    opacity: 0.8;
   }
 </style>

@@ -8,8 +8,12 @@ import {
   formatDuration,
   formatRate,
   nextSort,
+  pushReading,
   sortProcesses,
+  sparkline,
   statusKey,
+  TREND_LENGTH,
+  usage,
 } from '../../../../../webview/src/apps/server-monitor/monitor-view';
 
 const row = (id: string, parts: Partial<MonitorProcess> = {}): MonitorProcess => ({
@@ -111,5 +115,61 @@ describe('formatting', () => {
     expect(formatRate(-3)).toBe('−3');
     expect(formatRate(0.023)).toBe('+0.02');
     expect(formatRate(1234.6)).toBe('+1235');
+  });
+});
+
+describe('pushReading', () => {
+  it('adds the reading at the end', () => {
+    expect(pushReading([1, 2], 3)).toEqual([1, 2, 3]);
+    expect(pushReading([], 5)).toEqual([5]);
+  });
+
+  it('keeps only the latest readings', () => {
+    const full = Array.from({ length: TREND_LENGTH }, (_, index) => index);
+    const next = pushReading(full, 99);
+    expect(next).toHaveLength(TREND_LENGTH);
+    expect(next[0]).toBe(1);
+    expect(next.at(-1)).toBe(99);
+  });
+
+  it('leaves the old history as it was', () => {
+    const history = [1, 2];
+    pushReading(history, 3);
+    expect(history).toEqual([1, 2]);
+  });
+});
+
+describe('sparkline', () => {
+  it('draws nothing from fewer than two readings', () => {
+    expect(sparkline([], 100, 20)).toBe('');
+    expect(sparkline([4], 100, 20)).toBe('');
+  });
+
+  it('spreads the readings across the width, the highest at the top', () => {
+    expect(sparkline([0, 5, 10], 100, 20)).toBe('0,19 50,10 100,1');
+  });
+
+  it('keeps a flat zero line at the bottom', () => {
+    expect(sparkline([0, 0, 0], 60, 20)).toBe('0,19 30,19 60,19');
+  });
+
+  it('treats values that are not finite or below zero as zero', () => {
+    expect(sparkline([Number.NaN, 10, -4], 10, 20)).toBe('0,19 5,1 10,19');
+  });
+});
+
+describe('usage', () => {
+  it('is the share of the limit in use', () => {
+    expect(usage(5, 20)).toBe(0.25);
+  });
+
+  it('stays between empty and full', () => {
+    expect(usage(30, 20)).toBe(1);
+    expect(usage(-1, 20)).toBe(0);
+  });
+
+  it('is unknown without a limit', () => {
+    expect(usage(5, undefined)).toBeUndefined();
+    expect(usage(5, 0)).toBeUndefined();
   });
 });

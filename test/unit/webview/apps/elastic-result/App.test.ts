@@ -92,6 +92,23 @@ describe('Elasticsearch result page (V7.8)', () => {
     expect(screen.getByTestId('text').textContent).toBe('{\n  "hits": {}\n}');
   });
 
+  it('ticks every hit from the header, and copies them', async () => {
+    const host = await open(state());
+    const copy = vi.fn(() => ({}));
+    host.handle('copy', copy);
+    const all = screen.getByLabelText<HTMLInputElement>('Select all hits');
+    await fireEvent.click(screen.getByLabelText('Select hit 1'));
+    expect(all.indeterminate).toBe(true);
+    await fireEvent.click(all);
+    expect(all.checked).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy (2)' }));
+    await waitFor(() => {
+      expect(copy).toHaveBeenCalledWith({ rows: [0, 1] });
+    });
+    await fireEvent.click(all);
+    expect(screen.getByLabelText<HTMLInputElement>('Select hit 2').checked).toBe(false);
+  });
+
   it('shows an answer without hits as text, and a failure in red', async () => {
     await open(
       state({

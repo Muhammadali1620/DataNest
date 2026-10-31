@@ -278,3 +278,20 @@ export function indexProblems(problems: readonly DesignProblem[], id: string): D
 export function keyProblems(problems: readonly DesignProblem[], id: string): DesignProblem[] {
   return problems.filter((problem) => 'key' in problem && problem.key === id);
 }
+
+/** Where a problem is fixed: the fields above the tabs, or one of the tabs. */
+export type ProblemPlace = 'table' | 'columns' | 'indexes' | 'keys';
+
+export function problemPlace(problem: DesignProblem): ProblemPlace {
+  if ('column' in problem) {
+    return 'columns';
+  }
+  if ('index' in problem) {
+    return 'indexes';
+  }
+  if ('key' in problem) {
+    return 'keys';
+  }
+  // A table without columns is fixed by adding one on the columns tab.
+  return problem.kind === 'no-columns' ? 'columns' : 'table';
+}

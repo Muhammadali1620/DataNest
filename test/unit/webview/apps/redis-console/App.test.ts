@@ -83,6 +83,23 @@ describe('Redis console page', () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it('runs the line with the Run button, which waits for a command', async () => {
+    const { host, input } = await open();
+    const run = vi.fn(() => ({}));
+    host.handle('run', run);
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Run' });
+    expect(button.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: '   ' } });
+    expect(button.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: 'DBSIZE' } });
+    expect(button.disabled).toBe(false);
+    await fireEvent.click(button);
+    await waitFor(() => {
+      expect(run).toHaveBeenCalledWith({ text: 'DBSIZE' });
+    });
+    expect(input.value).toBe('');
+  });
+
   it('suggests commands and completes with Tab', async () => {
     const { input } = await open();
     await fireEvent.input(input, { target: { value: 'ge' } });

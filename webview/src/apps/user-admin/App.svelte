@@ -9,6 +9,9 @@
     UserAdminState,
   } from '../../../../src/shared/protocols/user-admin';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Field from '../../components/Field.svelte';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import {
@@ -97,6 +100,9 @@
     createdb: 'users.option.createdb',
     createrole: 'users.option.createrole',
   };
+
+  /** Locked and expired accounts cannot sign in: their marks warn. */
+  const WARNING_FLAGS: ReadonlySet<string> = new Set(['locked', 'expired']);
 
   function flagText(flag: string): string {
     const key = FLAG_KEYS[flag];
@@ -255,49 +261,73 @@
   });
 </script>
 
-<main>
-  <header class="bar">
-    <h1>{t('users.title')}</h1>
-    {#if page !== undefined}
-      <span class="hint" data-testid="where">
-        {[page.connectionName, page.server, page.database].filter((part) => part !== undefined).join(' · ')}
-      </span>
-      <span class="grow"></span>
-      {#if features !== undefined}
-        <button
-          type="button"
-          class="button secondary"
+<main class="page">
+  <header class="topbar">
+    <span class="title-icon"><Icon name="organization" /></span>
+    <div class="title">
+      <h1>{t('users.title')}</h1>
+      {#if page !== undefined}
+        <span class="muted small where" data-testid="where">
+          {[page.connectionName, page.server, page.database]
+            .filter((part) => part !== undefined)
+            .join(' · ')}
+        </span>
+      {/if}
+    </div>
+    <span class="spacer"></span>
+    {#if page !== undefined && features !== undefined}
+      <div class="toolbar" role="toolbar" aria-label={t('users.toolbar')}>
+        <IconButton
+          icon="person-add"
+          label={t('users.new')}
+          text={t('users.new')}
+          pressed={mode === 'create'}
+          onclick={() => {
+            mode = 'create';
+            chosenKey = undefined;
+            pending = undefined;
+            notice = undefined;
+          }}
+        />
+        <span class="toolbar-separator"></span>
+        <IconButton
+          icon="refresh"
+          label={t('users.refresh')}
           onclick={() => {
             void loadUsers();
             void loadGrants(chosen);
-          }}>{t('users.refresh')}</button
-        >
-      {/if}
+          }}
+        />
+      </div>
     {/if}
   </header>
 
   {#if page === undefined || (features === undefined && page.error === undefined)}
-    <p class="hint">{t('users.loading')}</p>
+    <div class="empty" role="status">
+      <span class="empty-icon"><Icon name="loading" size={24} spin /></span>
+      <p class="empty-title">{t('users.loading')}</p>
+    </div>
   {:else if page.error !== undefined}
-    <p class="error" role="alert">{page.error}</p>
+    <div class="empty">
+      <span class="empty-icon"><Icon name="organization" size={24} /></span>
+      <p class="notice error" role="alert"><Icon name="error" /><span>{page.error}</span></p>
+    </div>
   {:else if features !== undefined}
     {#if page.readOnly}
-      <p class="hint">{t('users.readOnly')}</p>
+      <p class="notice warning read-only"><Icon name="lock" /><span>{t('users.readOnly')}</span></p>
     {/if}
     <div class="columns">
       <aside class="users">
-        <div class="row">
-          <input class="control" bind:value={filter} placeholder={t('users.filter')} aria-label={t('users.filter')} />
-          <button
-            type="button"
-            class="button"
-            onclick={() => {
-              mode = 'create';
-              chosenKey = undefined;
-              pending = undefined;
-              notice = undefined;
-            }}>{t('users.new')}</button
-          >
+        <div class="search">
+          <Icon name="search" />
+          <input
+            class="control"
+            bind:value={filter}
+            placeholder={t('users.filter')}
+            aria-label={t('users.filter')}
+            autocomplete="off"
+            spellcheck="false"
+          />
         </div>
         <ul class="list" aria-label={t('users.title')}>
           {#each shownUsers as user (userKey(user))}
@@ -310,189 +340,353 @@
                   choose(user);
                 }}
               >
+                <Icon name={user.role === true ? 'organization' : 'person'} />
                 <span class="name">{userLabel(user)}</span>
-                {#if user.role === true}<span class="badge">{t('users.role')}</span>{:else if !user.login}<span class="badge">{t('users.noLogin')}</span>{/if}
-                {#each user.flags as flag (flag)}<span class="badge" class:warn={flag === 'locked' || flag === 'expired'}>{flagText(flag)}</span>{/each}
+                {#if user.role === true}<span class="badge outline">{t('users.role')}</span
+                  >{:else if !user.login}<span class="badge outline">{t('users.noLogin')}</span
+                  >{/if}
+                {#each user.flags as flag (flag)}<span
+                    class="badge"
+                    class:warning={WARNING_FLAGS.has(flag)}
+                    class:outline={!WARNING_FLAGS.has(flag)}>{flagText(flag)}</span
+                  >{/each}
               </button>
             </li>
           {/each}
         </ul>
         {#if shownUsers.length === 0}
-          <p class="hint">{t('users.none')}</p>
+          <p class="muted small none">{t('users.none')}</p>
         {/if}
       </aside>
 
       <section class="details">
-        {#if error !== undefined}
-          <p class="error" role="alert">{error}</p>
-        {/if}
-        {#if notice !== undefined}
-          <p class="notice" role="status">{notice}</p>
-        {/if}
-
-        {#if mode === 'create'}
-          <h2>{t('users.newTitle')}</h2>
-          <form
-            class="form"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void preview({
-                kind: 'create',
-                user: features.hosts ? { name: create.name.trim(), host: create.host.trim() || '%' } : { name: create.name.trim() },
-                password: create.password,
-                options: create.options,
-              });
-            }}
-          >
-            <label>{t('users.name')} <input class="control" bind:value={create.name} required /></label>
-            {#if features.hosts}
-              <label>{t('users.host')} <input class="control" bind:value={create.host} /></label>
-            {/if}
-            <label>
-              {features.passwordOptional ? t('users.passwordOptional') : t('users.password')}
-              <input class="control" type="password" autocomplete="new-password" bind:value={create.password} required={!features.passwordOptional} />
-            </label>
-            {#each features.createOptions as option (option)}
-              <label class="inline">
-                <input type="checkbox" checked={create.options.includes(option)} onchange={(event) => {
-                    toggleOption(option, event.currentTarget.checked);
-                  }} />
-                {OPTION_KEYS[option] === undefined ? option : t(OPTION_KEYS[option])}
-              </label>
-            {/each}
-            <div class="row"><button type="submit" class="button" disabled={create.name.trim() === ''}>{t('users.preview')}</button></div>
-          </form>
-        {:else if chosen !== undefined}
-          <div class="row">
-            <h2>{userLabel(chosen)}</h2>
-            <span class="grow"></span>
-            {#if chosen.login && chosen.readOnly !== true}
-              <button type="button" class="button secondary" onclick={() => {
-                mode = 'password';
-                pending = undefined;
-              }}>{t('users.changePassword')}</button>
-            {/if}
-            {#if features.lock && chosen.login && chosen.readOnly !== true}
-              <button
-                type="button"
-                class="button secondary"
-                onclick={() => void preview({ kind: chosen.flags.includes('locked') ? 'unlock' : 'lock', user: ref(chosen) })}
-                >{chosen.flags.includes('locked') ? t('users.unlock') : t('users.lock')}</button
-              >
-            {/if}
-            {#if chosen.readOnly !== true}
-              <button type="button" class="button secondary" onclick={startGrant}>{t('users.grant')}</button>
-              <button
-                type="button"
-                class="button secondary danger"
-                onclick={() => void preview({ kind: 'drop', user: ref(chosen), ...(chosen.role === true ? { role: true } : {}) })}
-                >{chosen.role === true ? t('users.dropRole') : t('users.drop')}</button
-              >
-            {/if}
-          </div>
-          {#if chosen.readOnly === true}
-            <p class="hint">{t('users.fileUser')}</p>
+        <div class="details-scroll">
+          {#if error !== undefined}
+            <p class="notice error fade-in" role="alert"><Icon name="error" /><span>{error}</span></p>
           {/if}
-          {#if chosen.memberOf.length > 0}
-            <p class="hint">{t('users.memberOf', chosen.memberOf.join(', '))}</p>
+          {#if notice !== undefined}
+            <p class="notice success fade-in" role="status">
+              <Icon name="pass" /><span>{notice}</span>
+            </p>
           {/if}
 
-          {#if mode === 'password'}
+          {#if mode === 'create'}
             <form
-              class="form"
+              class="card form"
               onsubmit={(event) => {
                 event.preventDefault();
-                void preview({ kind: 'password', user: ref(chosen), password: newPassword });
+                void preview({
+                  kind: 'create',
+                  user: features.hosts
+                    ? { name: create.name.trim(), host: create.host.trim() || '%' }
+                    : { name: create.name.trim() },
+                  password: create.password,
+                  options: create.options,
+                });
               }}
             >
-              <label>{t('users.newPassword')} <input class="control" type="password" autocomplete="new-password" bind:value={newPassword} required /></label>
-              <div class="row"><button type="submit" class="button" disabled={newPassword === ''}>{t('users.preview')}</button></div>
-            </form>
-          {:else if mode === 'grant'}
-            <form
-              class="form"
-              onsubmit={(event) => {
-                event.preventDefault();
-                void preview(grantChange(chosen, form, features));
-              }}
-            >
-              <label>
-                {t('users.level')}
-                <select class="control" bind:value={form.level} onchange={() => (form.privileges = [])}>
-                  {#each features.levels as entry (entry.level)}
-                    <option value={entry.level}>{t(LEVEL_KEYS[entry.level])}</option>
-                  {/each}
-                </select>
-              </label>
-              {#each targetFields(form.level, features) as field (field)}
-                {#if field === 'role'}
-                  <label>{t('users.roleName')} <input class="control" list="dn-roles" bind:value={form.role} /></label>
-                  <datalist id="dn-roles">{#each roles as role (userKey(role))}<option value={role.name}></option>{/each}</datalist>
-                {:else if field === 'host'}
-                  <label>{t('users.roleHost')} <input class="control" bind:value={form.host} /></label>
-                {:else}
-                  <label>
-                    {field === 'database' ? t('users.database') : field === 'schema' ? t('users.schema') : t('users.object')}
-                    <input class="control" list={`dn-${field}`} bind:value={form[field]} onfocus={() => void suggest(field)} />
-                  </label>
-                  <datalist id={`dn-${field}`}>{#each suggestions[field] as name (name)}<option value={name}></option>{/each}</datalist>
+              <h2 class="section-title"><Icon name="person-add" />{t('users.newTitle')}</h2>
+              <div class="pair">
+                <Field label={t('users.name')}>
+                  <input
+                    class="control"
+                    bind:value={create.name}
+                    required
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </Field>
+                {#if features.hosts}
+                  <Field label={t('users.host')}>
+                    <input
+                      class="control"
+                      bind:value={create.host}
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                  </Field>
                 {/if}
-              {/each}
-              {#if form.level !== 'role'}
-                <fieldset class="privileges">
-                  <legend>{t('users.privileges')}</legend>
-                  {#each privilegesOf(features, form.level) as privilege (privilege)}
-                    <label class="inline">
-                      <input type="checkbox" checked={form.privileges.includes(privilege)} onchange={(event) => {
-                          togglePrivilege(privilege, event.currentTarget.checked);
-                        }} />
-                      {privilege}
+              </div>
+              <Field label={features.passwordOptional ? t('users.passwordOptional') : t('users.password')}>
+                <input
+                  class="control"
+                  type="password"
+                  autocomplete="new-password"
+                  bind:value={create.password}
+                  required={!features.passwordOptional}
+                />
+              </Field>
+              {#if features.createOptions.length > 0}
+                <div class="checks">
+                  {#each features.createOptions as option (option)}
+                    <label class="check">
+                      <input
+                        type="checkbox"
+                        checked={create.options.includes(option)}
+                        onchange={(event) => {
+                          toggleOption(option, event.currentTarget.checked);
+                        }}
+                      />
+                      {OPTION_KEYS[option] === undefined ? option : t(OPTION_KEYS[option])}
                     </label>
                   {/each}
-                </fieldset>
+                </div>
               {/if}
-              <label class="inline"><input type="checkbox" bind:checked={form.grantable} /> {form.level === 'role' ? t('users.adminOption') : t('users.grantOption')}</label>
-              <div class="row"><button type="submit" class="button" disabled={!grantReady(form, features)}>{t('users.preview')}</button></div>
+              <div class="form-actions">
+                <button type="submit" class="button" disabled={create.name.trim() === ''}
+                  ><Icon name="preview" />{t('users.preview')}</button
+                >
+              </div>
             </form>
-          {/if}
+          {:else if chosen !== undefined}
+            <div class="account">
+              <span class="account-icon"
+                ><Icon name={chosen.role === true ? 'organization' : 'person'} size={20} /></span
+              >
+              <div class="account-text">
+                <h2>{userLabel(chosen)}</h2>
+                {#if chosen.memberOf.length > 0}
+                  <p class="muted small member">{t('users.memberOf', chosen.memberOf.join(', '))}</p>
+                {/if}
+              </div>
+              <span class="spacer"></span>
+              {#if chosen.readOnly !== true}
+                <div class="toolbar actions" role="toolbar" aria-label={t('users.actions')}>
+                  {#if chosen.login}
+                    <IconButton
+                      icon="key"
+                      label={t('users.changePassword')}
+                      text={t('users.changePassword')}
+                      pressed={mode === 'password'}
+                      onclick={() => {
+                        mode = 'password';
+                        pending = undefined;
+                      }}
+                    />
+                  {/if}
+                  {#if features.lock && chosen.login}
+                    {@const locked = chosen.flags.includes('locked')}
+                    <IconButton
+                      icon={locked ? 'unlock' : 'lock'}
+                      label={locked ? t('users.unlock') : t('users.lock')}
+                      text={locked ? t('users.unlock') : t('users.lock')}
+                      onclick={() =>
+                        void preview({ kind: locked ? 'unlock' : 'lock', user: ref(chosen) })}
+                    />
+                  {/if}
+                  <IconButton
+                    icon="add"
+                    label={t('users.grant')}
+                    text={t('users.grant')}
+                    pressed={mode === 'grant'}
+                    onclick={startGrant}
+                  />
+                  <span class="toolbar-separator"></span>
+                  <IconButton
+                    icon="trash"
+                    class="danger"
+                    label={chosen.role === true ? t('users.dropRole') : t('users.drop')}
+                    text={chosen.role === true ? t('users.dropRole') : t('users.drop')}
+                    onclick={() =>
+                      void preview({
+                        kind: 'drop',
+                        user: ref(chosen),
+                        ...(chosen.role === true ? { role: true } : {}),
+                      })}
+                  />
+                </div>
+              {/if}
+            </div>
+            {#if chosen.readOnly === true}
+              <p class="notice info"><Icon name="info" /><span>{t('users.fileUser')}</span></p>
+            {/if}
 
-          <h3>{t('users.grants', grants.length)}</h3>
-          {#if shownGrants.length === 0}
-            <p class="hint">{t('users.noGrants')}</p>
+            {#if mode === 'password'}
+              <form
+                class="card form"
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  void preview({ kind: 'password', user: ref(chosen), password: newPassword });
+                }}
+              >
+                <h3 class="section-title"><Icon name="key" />{t('users.changePassword')}</h3>
+                <Field label={t('users.newPassword')}>
+                  <input
+                    class="control"
+                    type="password"
+                    autocomplete="new-password"
+                    bind:value={newPassword}
+                    required
+                  />
+                </Field>
+                <div class="form-actions">
+                  <button type="submit" class="button" disabled={newPassword === ''}
+                    ><Icon name="preview" />{t('users.preview')}</button
+                  >
+                </div>
+              </form>
+            {:else if mode === 'grant'}
+              <form
+                class="card form"
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  void preview(grantChange(chosen, form, features));
+                }}
+              >
+                <h3 class="section-title"><Icon name="add" />{t('users.grantTitle')}</h3>
+                <div class="pair">
+                  <Field label={t('users.level')}>
+                    <select
+                      class="control"
+                      bind:value={form.level}
+                      onchange={() => (form.privileges = [])}
+                    >
+                      {#each features.levels as entry (entry.level)}
+                        <option value={entry.level}>{t(LEVEL_KEYS[entry.level])}</option>
+                      {/each}
+                    </select>
+                  </Field>
+                  {#each targetFields(form.level, features) as field (field)}
+                    {#if field === 'role'}
+                      <Field label={t('users.roleName')}>
+                        <input
+                          class="control"
+                          list="dn-roles"
+                          bind:value={form.role}
+                          autocomplete="off"
+                        />
+                      </Field>
+                      <datalist id="dn-roles"
+                        >{#each roles as role (userKey(role))}<option value={role.name}
+                          ></option>{/each}</datalist
+                      >
+                    {:else if field === 'host'}
+                      <Field label={t('users.roleHost')}>
+                        <input class="control" bind:value={form.host} autocomplete="off" />
+                      </Field>
+                    {:else}
+                      <Field
+                        label={field === 'database'
+                          ? t('users.database')
+                          : field === 'schema'
+                            ? t('users.schema')
+                            : t('users.object')}
+                      >
+                        <input
+                          class="control"
+                          list={`dn-${field}`}
+                          bind:value={form[field]}
+                          autocomplete="off"
+                          onfocus={() => void suggest(field)}
+                        />
+                      </Field>
+                      <datalist id={`dn-${field}`}
+                        >{#each suggestions[field] as name (name)}<option value={name}
+                          ></option>{/each}</datalist
+                      >
+                    {/if}
+                  {/each}
+                </div>
+                {#if form.level !== 'role'}
+                  <fieldset class="privileges">
+                    <legend>{t('users.privileges')}</legend>
+                    {#each privilegesOf(features, form.level) as privilege (privilege)}
+                      <label class="check">
+                        <input
+                          type="checkbox"
+                          checked={form.privileges.includes(privilege)}
+                          onchange={(event) => {
+                            togglePrivilege(privilege, event.currentTarget.checked);
+                          }}
+                        />
+                        <code>{privilege}</code>
+                      </label>
+                    {/each}
+                  </fieldset>
+                {/if}
+                <label class="check">
+                  <input type="checkbox" bind:checked={form.grantable} />
+                  {form.level === 'role' ? t('users.adminOption') : t('users.grantOption')}
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="button" disabled={!grantReady(form, features)}
+                    ><Icon name="preview" />{t('users.preview')}</button
+                  >
+                </div>
+              </form>
+            {/if}
+
+            <section class="grants" aria-label={t('users.privileges')}>
+              <h3 class="section-title"><Icon name="shield" />{t('users.grants', grants.length)}</h3>
+              {#if shownGrants.length === 0}
+                <p class="muted small">{t('users.noGrants')}</p>
+              {:else}
+                <div class="scroll">
+                  <table data-testid="grants">
+                    <thead>
+                      <tr>
+                        <th>{t('users.level')}</th>
+                        <th>{t('users.object')}</th>
+                        <th>{t('users.privilege')}</th>
+                        <th class="flag">{t('users.grantable')}</th>
+                        <th><span class="sr-only">{t('users.actions')}</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each shownGrants as grant, index (index)}
+                        <tr>
+                          <td>{t(LEVEL_KEYS[grant.level])}</td>
+                          <td class="code">{targetLabel(grant)}</td>
+                          <td class="code">{grant.privilege}</td>
+                          <td class="flag"
+                            >{#if grant.grantable}<Icon name="check" /><span class="sr-only"
+                                >{t('users.grantableYes')}</span
+                              >{/if}</td
+                          >
+                          <td class="row-action">
+                            {#if grant.fixed !== true && chosen.readOnly !== true}
+                              <button
+                                type="button"
+                                class="link-button"
+                                onclick={() => void preview(revokeChange(chosen, grant))}
+                                >{t('users.revoke')}</button
+                              >
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/if}
+            </section>
           {:else}
-            <table data-testid="grants">
-              <thead>
-                <tr><th>{t('users.level')}</th><th>{t('users.object')}</th><th>{t('users.privilege')}</th><th>{t('users.grantable')}</th><th></th></tr>
-              </thead>
-              <tbody>
-                {#each shownGrants as grant, index (index)}
-                  <tr>
-                    <td>{t(LEVEL_KEYS[grant.level])}</td>
-                    <td>{targetLabel(grant)}</td>
-                    <td>{grant.privilege}</td>
-                    <td>{grant.grantable ? '✓' : ''}</td>
-                    <td>
-                      {#if grant.fixed !== true && chosen.readOnly !== true}
-                        <button type="button" class="link" onclick={() => void preview(revokeChange(chosen, grant))}>{t('users.revoke')}</button>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
+            <div class="empty">
+              <span class="empty-icon"><Icon name="person" size={24} /></span>
+              <p class="empty-title">{t('users.pick')}</p>
+            </div>
           {/if}
-        {:else}
-          <p class="hint">{t('users.pick')}</p>
-        {/if}
+        </div>
 
         {#if pending !== undefined}
-          <section class="preview" data-testid="preview">
-            <h3>{t('users.previewTitle')}</h3>
+          <section class="pending fade-in" data-testid="preview" aria-label={t('users.previewTitle')}>
+            <h3 class="section-title"><Icon name="code" />{t('users.previewTitle')}</h3>
             <pre>{pending.statements.join(';\n')};</pre>
-            <div class="row">
-              <button type="button" class="button" disabled={busy || page.readOnly} onclick={() => void run()}>{t('users.run')}</button>
-              <button type="button" class="button secondary" onclick={() => void openInEditor()}>{t('users.openInEditor')}</button>
-              <button type="button" class="button secondary" onclick={() => (pending = undefined)}>{t('users.cancel')}</button>
+            <div class="pending-actions">
+              <span class="spacer"></span>
+              <button type="button" class="button secondary" onclick={() => (pending = undefined)}
+                >{t('users.cancel')}</button
+              >
+              <button type="button" class="button secondary" onclick={() => void openInEditor()}
+                ><Icon name="go-to-file" />{t('users.openInEditor')}</button
+              >
+              <button
+                type="button"
+                class="button"
+                disabled={busy || page.readOnly}
+                onclick={() => void run()}
+                ><Icon name={busy ? 'loading' : 'play'} spin={busy} />{t('users.run')}</button
+              >
             </div>
           </section>
         {/if}
@@ -502,167 +696,424 @@
 </main>
 
 <style>
-  main {
+  .page {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px 12px;
     height: 100vh;
-    box-sizing: border-box;
   }
-  .bar,
-  .row {
+
+  /* The title and the page's own actions, as a view's title bar. */
+  .topbar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-m);
+    align-items: center;
+    padding: var(--dn-gap-m) var(--dn-gap-l);
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .title-icon {
+    display: inline-flex;
+    padding: 6px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: var(--dn-radius-l);
+  }
+
+  .title {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
+    gap: 2px var(--dn-gap-m);
+    align-items: baseline;
+    min-width: 0;
   }
-  h1 {
-    font-size: 1.2em;
-    margin: 0;
+
+  .title h1 {
+    font-size: 15px;
   }
-  h2 {
-    font-size: 1.1em;
-    margin: 0;
-  }
-  h3 {
-    font-size: 1em;
-    margin: 8px 0 4px;
-  }
-  .grow {
+
+  .spacer {
     flex: 1;
   }
-  .hint {
-    color: var(--vscode-descriptionForeground);
-    margin: 0;
+
+  .read-only {
+    flex: none;
+    margin: var(--dn-gap-m) var(--dn-gap-l) 0;
   }
-  .error {
-    color: var(--vscode-errorForeground);
-    margin: 0;
-    white-space: pre-wrap;
-  }
-  .notice {
-    color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-foreground));
-    margin: 0;
-  }
+
   .columns {
-    flex: 1;
-    min-height: 0;
     display: grid;
+    flex: 1;
     grid-template-columns: minmax(220px, 300px) 1fr;
-    gap: 12px;
+    min-height: 0;
   }
-  .users,
-  .details {
+
+  /* The accounts: a list like the editor's views, with a filter on top. */
+  .users {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--dn-gap);
     min-height: 0;
+    padding: var(--dn-gap-m) var(--dn-gap);
     overflow: auto;
+    border-right: 1px solid var(--dn-divider);
   }
+
+  .search {
+    position: relative;
+    display: flex;
+    flex: none;
+    margin: 0 var(--dn-gap-s);
+  }
+
+  .search > :global(.codicon-glyph) {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    color: var(--dn-muted);
+    pointer-events: none;
+  }
+
+  .search input {
+    flex: 1;
+    min-width: 0;
+    padding-left: 28px;
+  }
+
   .list {
-    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     margin: 0;
     padding: 0;
+    list-style: none;
   }
+
   .user {
-    width: 100%;
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--dn-gap-s) 6px;
     align-items: center;
-    text-align: left;
-    font: inherit;
+    width: 100%;
+    min-height: 26px;
+    padding: 3px var(--dn-gap);
     color: var(--vscode-foreground);
     background: transparent;
-    border: none;
-    padding: 3px 6px;
+    border: 1px solid transparent;
+    border-radius: var(--dn-radius);
+    font: inherit;
+    text-align: left;
     cursor: pointer;
+    transition: background-color var(--dn-duration) var(--dn-ease);
   }
-  .user[aria-pressed='true'] {
-    background: var(--vscode-list-activeSelectionBackground);
-    color: var(--vscode-list-activeSelectionForeground);
+
+  .user > :global(.codicon-glyph) {
+    color: var(--dn-muted);
   }
+
   .user:hover:not([aria-pressed='true']) {
     background: var(--vscode-list-hoverBackground);
   }
+
+  .user[aria-pressed='true'] {
+    color: var(--vscode-list-activeSelectionForeground);
+    background: var(--vscode-list-activeSelectionBackground);
+  }
+
+  .user[aria-pressed='true'] > :global(.codicon-glyph) {
+    color: inherit;
+  }
+
   .name {
-    font-family: var(--vscode-editor-font-family, monospace);
+    font-family: var(--dn-mono);
   }
-  .badge {
-    font-size: 0.85em;
-    padding: 0 4px;
-    border-radius: 3px;
-    background: var(--vscode-badge-background);
-    color: var(--vscode-badge-foreground);
+
+  .none {
+    margin: 0 var(--dn-gap);
   }
-  .badge.warn {
-    background: var(--vscode-inputValidation-warningBackground, var(--vscode-badge-background));
+
+  /* The chosen account: scrolls, with the SQL to run pinned under it. */
+  .details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
+
+  .details-scroll {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap-m);
+    min-height: 0;
+    padding: var(--dn-gap-l) var(--dn-gap-xl) var(--dn-gap-xl);
+    overflow: auto;
+  }
+
+  .details-scroll > .notice {
+    margin: 0;
+  }
+
+  .account {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-m);
+    align-items: center;
+  }
+
+  .account-icon {
+    display: inline-flex;
+    padding: 8px;
+    color: var(--dn-muted);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .account-text {
+    min-width: 0;
+  }
+
+  .account h2 {
+    font-family: var(--dn-mono);
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  .member {
+    margin: 2px 0 0;
+  }
+
+  .actions {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .actions :global(.icon-button.danger) {
+    color: var(--dn-danger);
+  }
+
+  .section-title {
+    display: flex;
+    gap: var(--dn-gap);
+    align-items: center;
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .section-title :global(.codicon-glyph) {
+    color: var(--dn-muted);
+  }
+
   .form {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    max-width: 520px;
-    padding: 8px;
-    border: 1px solid var(--vscode-panel-border, transparent);
+    gap: var(--dn-gap-m);
+    max-width: 640px;
   }
-  .form label:not(.inline) {
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--dn-gap-m);
+  }
+
+  .checks {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--dn-gap);
   }
-  .inline {
+
+  .check {
     display: flex;
+    gap: var(--dn-gap);
     align-items: center;
-    gap: 4px;
-  }
-  .privileges {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 2px 10px;
-    border: 1px solid var(--vscode-panel-border, transparent);
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 0.95em;
-  }
-  th,
-  td {
-    text-align: left;
-    padding: 2px 8px;
-    border-bottom: 1px solid var(--vscode-panel-border, transparent);
-    user-select: text;
-  }
-  th {
-    color: var(--vscode-descriptionForeground);
-    font-weight: normal;
-  }
-  td:nth-child(2),
-  td:nth-child(3) {
-    font-family: var(--vscode-editor-font-family, monospace);
-  }
-  .link {
-    font: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--vscode-textLink-foreground);
     cursor: pointer;
   }
-  .danger {
-    color: var(--vscode-errorForeground);
+
+  .privileges {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: var(--dn-gap) var(--dn-gap-m);
+    margin: 0;
+    padding: var(--dn-gap) var(--dn-gap-m) var(--dn-gap-m);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius);
   }
-  .preview {
-    padding: 8px;
-    border: 1px solid var(--vscode-focusBorder);
+
+  .privileges legend {
+    padding: 0 var(--dn-gap-s);
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
   }
-  pre {
-    margin: 0 0 8px;
+
+  .privileges code {
+    padding: 0;
+    color: inherit;
+    background: none;
+    font-size: var(--dn-font-small);
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .grants {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    margin-top: var(--dn-gap-s);
+  }
+
+  .grants p {
+    margin: 0;
+  }
+
+  .scroll {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th {
+    padding: 0 10px 6px;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  td {
+    padding: 5px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--dn-divider);
+    user-select: text;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr {
+    transition: background-color var(--dn-duration) var(--dn-ease);
+  }
+
+  tbody tr:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+
+  .code {
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+  }
+
+  .flag {
+    width: 1%;
+    color: var(--dn-success);
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  th.flag {
+    color: var(--dn-muted);
+  }
+
+  .row-action {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* The SQL a change runs: pinned under the account, with what to do with it. */
+  .pending {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    max-height: 45%;
+    padding: var(--dn-gap-m) var(--dn-gap-xl);
+    background: var(--dn-surface);
+    border-top: 1px solid var(--dn-divider);
+    box-shadow: var(--dn-shadow);
+  }
+
+  .pending pre {
+    min-height: 0;
+    margin: 0;
+    padding: var(--dn-gap) var(--dn-gap-m);
+    overflow: auto;
+    background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius);
+    font-family: var(--dn-mono);
+    font-size: var(--vscode-editor-font-size);
     white-space: pre-wrap;
     word-break: break-word;
-    font-family: var(--vscode-editor-font-family, monospace);
     user-select: text;
+  }
+
+  .pending-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap);
+    align-items: center;
+  }
+
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty .notice {
+    margin: 0;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 12px;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
+  }
+
+  @media (max-width: 600px) {
+    .columns {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(120px, 34%) 1fr;
+    }
+
+    .users {
+      border-right: none;
+      border-bottom: 1px solid var(--dn-divider);
+    }
+
+    .topbar,
+    .details-scroll,
+    .pending {
+      padding-right: var(--dn-gap-m);
+      padding-left: var(--dn-gap-m);
+    }
   }
 </style>

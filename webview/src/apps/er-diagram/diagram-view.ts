@@ -19,6 +19,8 @@ export const BOX = {
   gap: 24,
   minWidth: 140,
   maxWidth: 460,
+  /** Rounded corners, as the page's cards have. */
+  radius: 6,
 } as const;
 
 /** Text width in pixels; the page measures with the editor font, tests count characters. */
@@ -325,6 +327,16 @@ export interface DiagramColors {
 
 const MARGIN = 20;
 
+/** The header band of a box: rounded at the top like the box, square where the rows start. */
+export function headerPath(x: number, y: number, width: number): string {
+  const r = BOX.radius;
+  const left = x + 0.5;
+  const right = x + width - 0.5;
+  const top = y + 0.5;
+  const bottom = y + BOX.header;
+  return `M${n(left)},${n(bottom)} V${n(top + r)} Q${n(left)},${n(top)} ${n(left + r)},${n(top)} H${n(right - r)} Q${n(right)},${n(top)} ${n(right)},${n(top + r)} V${n(bottom)} Z`;
+}
+
 /** A standalone SVG of the scene: fixed colours and no scripts, so any viewer shows it. */
 export function sceneToSvg(scene: DiagramScene, colors: DiagramColors): string {
   const { bounds } = scene;
@@ -346,8 +358,8 @@ export function sceneToSvg(scene: DiagramScene, colors: DiagramColors): string {
   for (const box of scene.boxes) {
     const dashed = box.table.external === true ? ' stroke-dasharray="4 3"' : '';
     out.push(
-      `<g><rect x="${n(box.x)}" y="${n(box.y)}" width="${box.width}" height="${box.height}" rx="4" fill="${xml(colors.box)}" stroke="${xml(colors.border)}"${dashed}/>`,
-      `<path d="M${n(box.x + 0.5)},${n(box.y + BOX.header)} V${n(box.y + 4)} Q${n(box.x + 0.5)},${n(box.y + 0.5)} ${n(box.x + 4)},${n(box.y + 0.5)} H${n(box.x + box.width - 4)} Q${n(box.x + box.width - 0.5)},${n(box.y + 0.5)} ${n(box.x + box.width - 0.5)},${n(box.y + 4)} V${n(box.y + BOX.header)} Z" fill="${xml(colors.header)}" stroke="${xml(colors.border)}"${dashed}/>`,
+      `<g><rect x="${n(box.x)}" y="${n(box.y)}" width="${box.width}" height="${box.height}" rx="${BOX.radius}" fill="${xml(colors.box)}" stroke="${xml(colors.border)}"${dashed}/>`,
+      `<path d="${headerPath(box.x, box.y, box.width)}" fill="${xml(colors.header)}" stroke="${xml(colors.border)}"${dashed}/>`,
       `<text x="${n(box.x + BOX.padding)}" y="${n(box.y + BOX.header / 2 + 4)}" font-weight="bold" fill="${xml(colors.text)}">${xml(box.text.label)}</text>`,
     );
     for (const [index, row] of box.text.rows.entries()) {

@@ -11,6 +11,7 @@ import App from '../../../../../webview/src/apps/result-chart/App.svelte';
 import type { ChartColors } from '../../../../../webview/src/apps/result-chart/chart-svg';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
+import { chooseFromMenu, menuLabels } from '../../../../helpers/webview/menu';
 
 type HostPeer = RpcPeer<ResultChartProtocol['host'], ResultChartProtocol['webview']>;
 
@@ -150,14 +151,15 @@ describe('result chart page', () => {
 
   it('saves the chart as SVG and as PNG in the theme colours', async () => {
     const { saves, toPng } = await setup();
-    await fireEvent.click(screen.getByRole('button', { name: 'Save SVG' }));
+    expect(await menuLabels('chart-export')).toEqual(['Save SVG', 'Save PNG']);
+    await chooseFromMenu('chart-export', 'Save SVG');
     await waitFor(() => {
       expect(saves).toHaveLength(1);
     });
     expect(saves[0]?.format).toBe('svg');
     expect(saves[0]?.data).toContain('<svg');
     expect(saves[0]?.data).toContain('#a00');
-    await fireEvent.click(screen.getByRole('button', { name: 'Save PNG' }));
+    await chooseFromMenu('chart-export', 'Save PNG');
     await waitFor(() => {
       expect(saves[1]).toEqual({ format: 'png', data: 'iVBORw0KGgo=' });
     });
@@ -237,6 +239,42 @@ describe('result chart page', () => {
   it('shows points left out over the limit', async () => {
     await setup({ ...STATE, data: { ...STATE.data, points: 2500, skipped: 0 } });
     expect(screen.getByTestId('notes').textContent).toContain('Shown 3 points of 2500');
+  });
+
+  it('hides and shows the settings beside the chart', async () => {
+    await setup();
+    const toggle = screen.getByRole('button', { name: 'Chart settings' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('complementary', { name: 'Chart settings' })).toBeTruthy();
+    await fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(screen.queryByLabelText('Labels (X)')).toBeNull();
+    // The chart stays, and its type can still be changed from the toolbar.
+    expect(screen.getByTestId('chart')).toBeTruthy();
+    await fireEvent.click(toggle);
+    expect(screen.getByLabelText('Labels (X)')).toBeTruthy();
+  });
+
+  it('marks each chosen value with the colour of its series', async () => {
+    await setup();
+    const swatch = (name: string): Element | null | undefined =>
+      screen.getByLabelText(name).closest('label')?.querySelector('.swatch');
+    expect(swatch('orders')?.classList.contains('fill-0')).toBe(true);
+    expect(swatch('total')?.classList.contains('fill-1')).toBe(true);
+    await fireEvent.click(screen.getByLabelText('orders'));
+    await waitFor(() => {
+      expect(swatch('orders')).toBeNull();
+    });
+    expect(swatch('total')?.classList.contains('fill-0')).toBe(true);
+  });
+
+  it('cannot save a picture while there is nothing to draw', async () => {
+    await setup({
+      ...STATE,
+      data: { ...STATE.data, labels: [], series: [], points: 0, skipped: 0 },
+    });
+    expect(screen.getByTestId('chart-export').hasAttribute('disabled')).toBe(true);
   });
 
   it('shows a refused change', async () => {

@@ -10,6 +10,7 @@ import { RpcPeer } from '../../../../../src/shared/rpc';
 import { newTableDesign, type TableDesign } from '../../../../../src/shared/table-design';
 import App from '../../../../../webview/src/apps/table-designer/App.svelte';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
+import { chooseFromMenu, menuLabels } from '../../../../helpers/webview/menu';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
 type HostPeer = RpcPeer<TableDesignerProtocol['host'], TableDesignerProtocol['webview']>;
@@ -219,11 +220,16 @@ describe('table designer App', () => {
     await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
     expect(screen.getByText('No indexes besides the primary key')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Add index' }));
-    const add = screen.getByLabelText<HTMLSelectElement>('Add to Columns of ix_orders_1');
-    await fireEvent.change(add, { target: { value: 'new-2' } });
-    await fireEvent.change(screen.getByLabelText('Add to Columns of ix_orders_1'), {
-      target: { value: 'new-1' },
-    });
+    // The add menu is named after the picker and offers the columns not picked yet.
+    expect(screen.getByRole('button', { name: 'Add to Columns of ix_orders_1' })).toBe(
+      screen.getByTestId('index-columns-index-1'),
+    );
+    expect(await menuLabels('index-columns-index-1')).toEqual(['id', 'email']);
+    await chooseFromMenu('index-columns-index-1', 'email');
+    expect(await menuLabels('index-columns-index-1')).toEqual(['id']);
+    await chooseFromMenu('index-columns-index-1', 'id');
+    // Every column is picked: nothing is left to add.
+    expect(screen.queryByTestId('index-columns-index-1')).toBeNull();
     await fireEvent.click(input('Unique of ix_orders_1'));
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await flush();
@@ -236,9 +242,7 @@ describe('table designer App', () => {
     await setup();
     await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Add index' }));
-    await fireEvent.change(screen.getByLabelText('Add to Columns of ix_table_1'), {
-      target: { value: 'new-1' },
-    });
+    await chooseFromMenu('index-columns-index-1', 'id');
     await fireEvent.click(
       screen.getByRole('button', { name: 'Remove id from Columns of ix_table_1' }),
     );
@@ -256,9 +260,7 @@ describe('table designer App', () => {
     await fireEvent.input(input('Name of column #2'), { target: { value: 'customer_id' } });
     await fireEvent.click(screen.getByRole('tab', { name: 'Foreign keys' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Add foreign key' }));
-    await fireEvent.change(screen.getByLabelText('Add to Columns of fk_orders_1'), {
-      target: { value: 'new-2' },
-    });
+    await chooseFromMenu('key-columns-key-1', 'customer_id');
     await waitFor(() => {
       expect(
         screen.getByLabelText<HTMLSelectElement>('References table of fk_orders_1').options.length,
@@ -271,11 +273,12 @@ describe('table designer App', () => {
       expect(askedColumns).toEqual(['customers']);
     });
     await waitFor(() => {
-      expect(screen.getByLabelText('Add to Referenced columns of fk_orders_1')).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Add to Referenced columns of fk_orders_1' }),
+      ).toBeTruthy();
     });
-    await fireEvent.change(screen.getByLabelText('Add to Referenced columns of fk_orders_1'), {
-      target: { value: 'id' },
-    });
+    expect(await menuLabels('key-targets-key-1')).toEqual(['id', 'email']);
+    await chooseFromMenu('key-targets-key-1', 'id');
     await fireEvent.change(screen.getByLabelText('On delete of fk_orders_1'), {
       target: { value: 'CASCADE' },
     });
@@ -302,10 +305,7 @@ describe('table designer App', () => {
     const select = screen.getByLabelText<HTMLSelectElement>('References table of fk_nodes_1');
     expect([...select.options].map((option) => option.textContent)).toContain('nodes (this table)');
     await fireEvent.change(select, { target: { value: 'nodes' } });
-    const targets = screen.getByLabelText<HTMLSelectElement>(
-      'Add to Referenced columns of fk_nodes_1',
-    );
-    expect([...targets.options].map((option) => option.value)).toEqual(['', 'id']);
+    expect(await menuLabels('key-targets-key-1')).toEqual(['id']);
     expect(askedColumns).toEqual([]);
   });
 
@@ -317,6 +317,84 @@ describe('table designer App', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Pick at least one column, each once')).toBeTruthy();
     expect(screen.getByText('Pick the referenced table')).toBeTruthy();
+  });
+
+  it('marks the tabs that hold problems once a save was tried (V11)', async () => {
+    await setup();
+    await fireEvent.input(screen.getByLabelText('Table name'), { target: { value: 't' } });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Foreign keys' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add foreign key' }));
+    expect(screen.queryByRole('tab', { name: 'Foreign keys, has problems' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByRole('tab', { name: 'Foreign keys, has problems' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Columns' })).toBeTruthy();
+    expect(screen.getByText('Problems to fix: 2')).toBeTruthy();
+    expect(screen.getByTestId('notice').classList.contains('error')).toBe(true);
+  });
+
+  it('moves between tabs with the arrow keys, Home and End (V11)', async () => {
+    await setup();
+    const columns = screen.getByRole('tab', { name: 'Columns' });
+    expect(columns.tabIndex).toBe(0);
+    expect(screen.getByRole('tab', { name: 'Indexes' }).tabIndex).toBe(-1);
+    await fireEvent.keyDown(columns, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Indexes' }));
+    });
+    expect(screen.getByRole('tab', { name: 'Indexes' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel', { name: 'Indexes' })).toBeTruthy();
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'SQL' }));
+    });
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Columns' }));
+    });
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'SQL' }));
+    });
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Home' });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Columns' }));
+    });
+    // Other keys are left to the page.
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'x' });
+    expect(screen.getByRole('tab', { name: 'Columns' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('opens the keys tab from the keyboard and asks for the tables once (V11)', async () => {
+    await setup();
+    await fireEvent.keyDown(screen.getByRole('tab', { name: 'Columns' }), { key: 'ArrowLeft' });
+    await fireEvent.keyDown(screen.getByRole('tab', { name: 'SQL' }), { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Add foreign key' })).toBeTruthy();
+    });
+  });
+
+  it('says when an index has no columns left to pick (V11)', async () => {
+    await setup();
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove column id' }));
+    await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add index' }));
+    expect(screen.getByText('No columns to pick')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Add to Columns/ })).toBeNull();
+  });
+
+  it('shows how many columns, indexes and keys there are without renaming the tabs (V11)', async () => {
+    await setup();
+    const counts = screen
+      .getAllByRole('tab')
+      .map((tab) => tab.querySelector('[data-count]')?.getAttribute('data-count') ?? null);
+    expect(counts).toEqual(['1', '0', '0', null]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+    expect(
+      screen
+        .getByRole('tab', { name: 'Columns' })
+        .querySelector('[data-count]')
+        ?.getAttribute('data-count'),
+    ).toBe('2');
   });
 
   describe('editing an existing table', () => {

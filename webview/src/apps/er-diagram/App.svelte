@@ -7,18 +7,23 @@
     type ErDiagramState,
   } from '../../../../src/shared/protocols/er-diagram';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
+  import MenuButton from '../../components/MenuButton.svelte';
+  import { CODICONS } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
   import {
     BOX,
     charMeasure,
     type DiagramColors,
+    headerPath,
     type Measure,
     measureBoxes,
     placeScene,
     sceneToSvg,
   } from './diagram-view';
   import { layoutDiagram, type Point } from './layout';
-  import { svgToPng } from './picture';
+  import { cssColor, svgToPng } from './picture';
   import { clampZoom, fitView, zoomAt, type View } from './view-math';
 
   interface Props {
@@ -370,23 +375,36 @@
     };
   });
 
-  /** The theme's colours, so the saved picture looks like the page. */
+  /**
+   * The theme's colours, so the saved picture looks like the page: the canvas defines
+   * them (see the styles below) and the browser resolves them to plain colours.
+   */
   function themeColors(): DiagramColors {
-    const style = getComputedStyle(document.body);
+    const host = canvas ?? document.body;
     const pick = (name: string, fallback: string): string =>
-      style.getPropertyValue(name).trim() || fallback;
+      cssColor(`var(${name})`, fallback, host);
     return {
       background: pick('--vscode-editor-background', '#ffffff'),
-      box: pick('--vscode-editorWidget-background', '#f3f3f3'),
-      header: pick('--vscode-sideBarSectionHeader-background', '#e6e6e6'),
-      border: pick('--vscode-editorWidget-border', '#c8c8c8'),
+      box: pick('--er-box', '#f3f3f3'),
+      header: pick('--er-head', '#e6e6e6'),
+      border: pick('--er-border', '#c8c8c8'),
       text: pick('--vscode-foreground', '#333333'),
-      muted: pick('--vscode-descriptionForeground', '#717171'),
-      key: pick('--vscode-charts-orange', '#d18616'),
-      line: pick('--vscode-descriptionForeground', '#717171'),
-      font: pick('--vscode-font-family', 'sans-serif'),
+      muted: pick('--dn-muted', '#717171'),
+      key: pick('--er-primary', '#d18616'),
+      line: pick('--er-line', '#717171'),
+      font:
+        getComputedStyle(document.body).getPropertyValue('--vscode-font-family').trim() ||
+        'sans-serif',
     };
   }
+
+  /** The key marks are the editor's icons, drawn as text in the icon font. */
+  const MARKS = {
+    PK: String.fromCodePoint(CODICONS.key),
+    FK: String.fromCodePoint(CODICONS.link),
+  } as const;
+  /** Dots of the background grid, in diagram pixels; they move and scale with the view. */
+  const GRID = 20;
 
   const zoomLabel = $derived(`${Math.round(view.zoom * 100)}%`);
   const dim = (id: string): boolean => related !== undefined && !related.includes(id);
@@ -395,272 +413,604 @@
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
 
 <main>
-  <header class="bar">
-    <h1>{page === undefined ? t('er.loading') : t('er.title', page.scope)}</h1>
-    {#if page !== undefined}
-      <span class="hint">{t('er.counts', page.tables.length, page.relations.length)}</span>
-      <span class="grow"></span>
-      <label class="inline">
-        {t('er.details')}
-        <select
-          class="control"
-          value={details}
-          onchange={(event) => {
-            setDetails(event.currentTarget.value as ErDetails);
-          }}
-        >
-          {#each ER_DETAILS as option (option)}
-            <option value={option}>{t(`er.details.${option}`)}</option>
-          {/each}
-        </select>
-      </label>
-      <input
-        class="control search"
-        type="search"
-        placeholder={t('er.search')}
-        aria-label={t('er.search')}
-        bind:value={query}
-        onkeydown={(event) => {
-          if (event.key === 'Enter') {
-            nextMatch();
-          }
-        }}
-      />
-      <button type="button" class="button secondary" title={t('er.zoomOut')} aria-label={t('er.zoomOut')} onclick={() => {
-          zoomBy(1 / 1.2);
-        }}
-        >−</button
-      >
-      <button
-        type="button"
-        class="button secondary zoom"
-        title={t('er.zoomReset')}
-        aria-label={`${t('er.zoomReset')}: ${zoomLabel}`}
-        onclick={() => {
-          view = clampZoom({ ...view, zoom: 1 });
-        }}>{zoomLabel}</button
-      >
-      <button type="button" class="button secondary" title={t('er.zoomIn')} aria-label={t('er.zoomIn')} onclick={() => {
-          zoomBy(1.2);
-        }}
-        >+</button
-      >
-      <button type="button" class="button secondary" onclick={fit}>{t('er.fit')}</button>
-      <button type="button" class="button secondary" onclick={() => {
-          arrange();
-        }}>{t('er.arrange')}</button>
-      <button type="button" class="button secondary" disabled={loading !== undefined} onclick={refresh}
-        >{t('er.refresh')}</button
-      >
-      <button type="button" class="button secondary" disabled={busy} onclick={() => void save('svg')}
-        >{t('er.saveSvg')}</button
-      >
-      <button type="button" class="button secondary" disabled={busy} onclick={() => void save('png')}
-        >{t('er.savePng')}</button
-      >
+  {#if page !== undefined && loading !== undefined}
+    <div class="progress-bar" role="progressbar" aria-label={t('er.loading')}></div>
+  {/if}
+  {#if page === undefined}
+    {#if failure !== undefined}
+      <div class="empty">
+        <div class="notice error" role="alert"><Icon name="error" /><span>{failure}</span></div>
+        <button type="button" class="button secondary" onclick={refresh}>
+          <Icon name="refresh" />{t('er.retry')}
+        </button>
+      </div>
+    {:else}
+      <div class="empty" role="status">
+        <Icon name="loading" size={20} spin />
+        <p class="empty-title">
+          {loading === undefined || loading.total === 0
+            ? t('er.loading')
+            : t('er.progress', loading.done, loading.total)}
+        </p>
+        {#if loading !== undefined && loading.total > 0}
+          <span class="meter" aria-hidden="true">
+            <span style="transform: scaleX({loading.done / loading.total})"></span>
+          </span>
+        {/if}
+      </div>
     {/if}
-  </header>
+  {:else}
+    {@const hasTables = page.tables.length > 0}
+    <header class="toolbar-row">
+      <div class="title">
+        <Icon name="type-hierarchy" />
+        <h1 title={t('er.title', page.scope)}>{t('er.title', page.scope)}</h1>
+      </div>
+      <span class="spacer"></span>
+      {#if hasTables}
+        <div class="find">
+          <span class="find-icon"><Icon name="search" size={14} /></span>
+          <input
+            class="control find-input"
+            type="search"
+            placeholder={t('er.search')}
+            aria-label={t('er.search')}
+            bind:value={query}
+            onkeydown={(event) => {
+              if (event.key === 'Enter') {
+                nextMatch();
+              }
+            }}
+          />
+          {#if query.trim() !== ''}
+            <span class="hits" class:none={matches.length === 0} aria-live="polite" data-testid="er-hits">
+              {matches.length === 0 ? t('er.noMatches') : t('er.matches', matches.length)}
+            </span>
+          {/if}
+        </div>
+        <label class="details">
+          <span class="sr-only">{t('er.details')}</span>
+          <select
+            class="control"
+            title={t('er.details')}
+            value={details}
+            onchange={(event) => {
+              setDetails(event.currentTarget.value as ErDetails);
+            }}
+          >
+            {#each ER_DETAILS as option (option)}
+              <option value={option}>{t(`er.details.${option}`)}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      <div class="toolbar" role="toolbar" aria-label={t('er.toolbar')}>
+        {#if hasTables}
+          <IconButton
+            icon="zoom-out"
+            label={t('er.zoomOut')}
+            onclick={() => {
+              zoomBy(1 / 1.2);
+            }}
+          />
+          <button
+            type="button"
+            class="icon-button zoom"
+            title={t('er.zoomReset')}
+            aria-label={`${t('er.zoomReset')}: ${zoomLabel}`}
+            onclick={() => {
+              view = clampZoom({ ...view, zoom: 1 });
+            }}>{zoomLabel}</button
+          >
+          <IconButton
+            icon="zoom-in"
+            label={t('er.zoomIn')}
+            onclick={() => {
+              zoomBy(1.2);
+            }}
+          />
+          <IconButton icon="screen-full" label={t('er.fit')} hint={t('er.fitHint')} onclick={fit} />
+          <span class="toolbar-separator"></span>
+          <IconButton
+            icon="layout"
+            label={t('er.arrange')}
+            hint={t('er.arrangeHint')}
+            onclick={() => {
+              arrange();
+            }}
+          />
+        {/if}
+        <IconButton
+          icon="refresh"
+          label={t('er.refresh')}
+          hint={t('er.refreshHint')}
+          disabled={loading !== undefined}
+          onclick={refresh}
+        />
+        {#if hasTables}
+          <span class="toolbar-separator"></span>
+          <MenuButton
+            icon="export"
+            label={t('er.export')}
+            testid="er-export"
+            disabled={busy}
+            items={[
+              { id: 'svg', label: t('er.saveSvg'), icon: 'file-code' },
+              { id: 'png', label: t('er.savePng'), icon: 'file-media' },
+            ]}
+            onSelect={(format: 'svg' | 'png') => {
+              void save(format);
+            }}
+          />
+        {/if}
+      </div>
+    </header>
 
-  {#if failure !== undefined}
-    <p class="error" role="alert">{failure}</p>
-  {/if}
-  {#if loading !== undefined}
-    <p class="hint" role="status">
-      {loading.total === 0 ? t('er.loading') : t('er.progress', loading.done, loading.total)}
-    </p>
-  {/if}
+    {#if failure !== undefined}
+      <div class="notice error problem fade-in" role="alert"><Icon name="error" /><span>{failure}</span></div>
+    {/if}
 
-  {#if page?.tables.length === 0}
-    <p class="hint">{t('er.empty')}</p>
-  {:else if page !== undefined}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-    <div
-      class="canvas"
-      tabindex="0"
-      role="application"
-      aria-label={t('er.title', page.scope)}
-      aria-describedby="er-help"
-      bind:this={canvas}
-      onpointerdown={startPan}
-      onwheel={onWheel}
-      onkeydown={onKey}
-    >
-      <svg width="100%" height="100%">
-        <g transform="translate({view.x} {view.y}) scale({view.zoom})">
-          {#each scene.lines as line, index (index)}
-            {@const lit =
-              selected !== undefined &&
-              (line.relation.from === selected || line.relation.to === selected)}
-            <g class="line" class:lit class:faded={related !== undefined && !lit}>
-              <title>{line.relation.name}: {line.relation.columns.join(', ')} → {line.relation.targetColumns.join(', ')}</title>
-              <path class="wire" d={line.path} />
-              <path d={line.many} />
-              <path d={line.one} />
-              {#if line.optionalRing !== undefined}
-                <circle class="ring" cx={line.optionalRing.x} cy={line.optionalRing.y} r="3.5" />
-              {/if}
-            </g>
-          {/each}
-          {#each scene.boxes as box (box.table.id)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <g
-              class="box"
-              class:external={box.table.external === true}
-              class:selected={selected === box.table.id}
-              class:match={matches.includes(box.table.id)}
-              class:faded={dim(box.table.id)}
-              data-table={box.table.id}
-              transform="translate({box.x} {box.y})"
-              onpointerdown={(event) => {
-                startBoxDrag(event, box.table.id);
-              }}
-              ondblclick={() => {
-                openTable(box.table.id);
-              }}
-            >
-              <title>{box.table.label}</title>
-              <rect class="frame" width={box.width} height={box.height} rx="4" />
-              <rect class="head" width={box.width} height={BOX.header} rx="4" />
-              <text class="label" x={BOX.padding} y={BOX.header / 2 + 4}>{box.text.label}</text>
-              {#each box.text.rows as row, index (index)}
-                {@const y = BOX.header + index * BOX.row + BOX.row / 2 + 4}
-                <g class="row">
-                  <title>{row.title}</title>
-                  {#if row.mark !== ''}
-                    <text class="mark" class:pk={row.mark === 'PK'} x={BOX.padding} {y}>{row.mark}</text>
-                  {/if}
-                  <text x={BOX.padding + BOX.icon} {y}>{row.name}</text>
-                  {#if row.type !== ''}
-                    <text class="type" x={box.width - BOX.padding} {y} text-anchor="end">{row.type}</text>
-                  {/if}
-                </g>
-              {/each}
-            </g>
-          {/each}
-        </g>
-      </svg>
-    </div>
-    <p class="hint footer" id="er-help">{t('er.help')} {t('er.keys')}</p>
-    <p class="sr-only" role="status" data-testid="er-announce">{announcement}</p>
+    {#if !hasTables}
+      <div class="empty">
+        <span class="empty-icon"><Icon name="type-hierarchy" size={28} /></span>
+        <p class="empty-title">{t('er.empty')}</p>
+        <p class="empty-hint">{t('er.emptyHint')}</p>
+      </div>
+    {:else}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+      <div
+        class="canvas"
+        tabindex="0"
+        role="application"
+        aria-label={t('er.title', page.scope)}
+        aria-describedby="er-help"
+        style="background-position: {view.x}px {view.y}px; background-size: {GRID * view.zoom}px {GRID *
+          view.zoom}px"
+        bind:this={canvas}
+        onpointerdown={startPan}
+        onwheel={onWheel}
+        onkeydown={onKey}
+      >
+        <svg width="100%" height="100%">
+          <g transform="translate({view.x} {view.y}) scale({view.zoom})">
+            {#each scene.lines as line, index (index)}
+              {@const lit =
+                selected !== undefined &&
+                (line.relation.from === selected || line.relation.to === selected)}
+              <g class="line" class:lit class:faded={related !== undefined && !lit}>
+                <title>{line.relation.name}: {line.relation.columns.join(', ')} → {line.relation.targetColumns.join(', ')}</title>
+                <path class="wire" d={line.path} />
+                <path d={line.many} />
+                <path d={line.one} />
+                {#if line.optionalRing !== undefined}
+                  <circle class="ring" cx={line.optionalRing.x} cy={line.optionalRing.y} r="3.5" />
+                {/if}
+              </g>
+            {/each}
+            {#each scene.boxes as box (box.table.id)}
+              {@const isSelected = selected === box.table.id}
+              {@const isMatch = matches.includes(box.table.id)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <g
+                class="box"
+                class:external={box.table.external === true}
+                class:selected={isSelected}
+                class:match={isMatch}
+                class:faded={dim(box.table.id)}
+                data-table={box.table.id}
+                transform="translate({box.x} {box.y})"
+                onpointerdown={(event) => {
+                  startBoxDrag(event, box.table.id);
+                }}
+                ondblclick={() => {
+                  openTable(box.table.id);
+                }}
+              >
+                <title>{box.table.label}</title>
+                {#if isSelected || isMatch}
+                  <rect
+                    class="halo"
+                    x="-4"
+                    y="-4"
+                    width={box.width + 8}
+                    height={box.height + 8}
+                    rx={BOX.radius + 3}
+                  />
+                {/if}
+                <rect class="frame" width={box.width} height={box.height} rx={BOX.radius} />
+                <path class="head" d={headerPath(0, 0, box.width)} />
+                <text class="label" x={BOX.padding} y={BOX.header / 2 + 4}>{box.text.label}</text>
+                {#each box.text.rows as row, index (index)}
+                  {@const y = BOX.header + index * BOX.row + BOX.row / 2 + 4}
+                  <g class="row">
+                    <title>{row.title}</title>
+                    {#if row.mark !== ''}
+                      <text
+                        class="mark"
+                        class:primary={row.mark === 'PK'}
+                        data-mark={row.mark}
+                        aria-hidden="true"
+                        x={BOX.padding - 2}
+                        y={y + 1}>{MARKS[row.mark]}</text
+                      >
+                    {/if}
+                    <text x={BOX.padding + BOX.icon} {y}>{row.name}</text>
+                    {#if row.type !== ''}
+                      <text class="type" x={box.width - BOX.padding} {y} text-anchor="end">{row.type}</text>
+                    {/if}
+                  </g>
+                {/each}
+              </g>
+            {/each}
+          </g>
+        </svg>
+      </div>
+    {/if}
+
+    <footer class="status">
+      <span class="stat">{t('er.counts', page.tables.length, page.relations.length)}</span>
+      {#if loading !== undefined}
+        <span class="stat">
+          {loading.total === 0 ? t('er.loading') : t('er.progress', loading.done, loading.total)}
+        </span>
+      {/if}
+      <span class="selected-info" role="status" data-testid="er-announce">{announcement}</span>
+      <span class="spacer"></span>
+      {#if hasTables}
+        <span class="legend">
+          <span class="legend-item"><span class="legend-mark primary"><Icon name="key" size={12} /></span>{t('er.legend.primary')}</span>
+          <span class="legend-item"><span class="legend-mark foreign"><Icon name="link" size={12} /></span>{t('er.legend.foreign')}</span>
+          <span class="legend-item"><span class="legend-external"></span>{t('er.legend.external')}</span>
+        </span>
+        <span class="help" title={`${t('er.help')}\n${t('er.keys')}`}>
+          <Icon name="question" size={14} /><span class="sr-only" id="er-help">{t('er.help')} {t('er.keys')}</span>
+        </span>
+      {/if}
+    </footer>
   {/if}
 </main>
 
 <style>
   main {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding: 8px 12px;
-    gap: 6px;
   }
-  .bar {
+
+  .spacer {
+    flex: 1;
+  }
+
+  /* One row of tools over the diagram, as the result page has. */
+  .toolbar-row {
     display: flex;
+    flex: none;
     flex-wrap: wrap;
+    gap: 4px var(--dn-gap);
     align-items: center;
-    gap: 6px;
+    min-height: 36px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--dn-divider);
   }
-  h1 {
-    font-size: 1.2em;
-    margin: 0 8px 0 0;
-  }
-  .grow {
-    flex: 1;
-  }
-  .inline {
+
+  .title {
     display: flex;
+    gap: 6px;
     align-items: center;
-    gap: 4px;
+    min-width: 0;
+    color: var(--dn-muted);
   }
-  .search {
-    width: 160px;
-  }
-  .zoom {
-    min-width: 56px;
-  }
-  .hint {
-    color: var(--vscode-descriptionForeground);
-    margin: 0;
-  }
-  .error {
-    color: var(--vscode-errorForeground);
-    margin: 0;
-  }
-  .canvas {
-    flex: 1;
-    min-height: 200px;
+
+  h1 {
     overflow: hidden;
-    border: 1px solid var(--vscode-panel-border, transparent);
+    color: var(--vscode-foreground);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .find {
+    position: relative;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .find-icon {
+    position: absolute;
+    left: 7px;
+    display: inline-flex;
+    color: var(--dn-muted);
+    pointer-events: none;
+  }
+
+  .find-input {
+    width: 180px;
+    min-width: 120px;
+    padding-left: 26px;
+  }
+
+  .hits {
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    white-space: nowrap;
+  }
+
+  .hits.none {
+    color: var(--dn-danger);
+  }
+
+  .details select {
+    min-height: 24px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  .zoom {
+    min-width: 44px;
+    font-size: var(--dn-font-small);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .problem {
+    flex: none;
+    margin: 8px 8px 0;
+  }
+
+  /* Empty, loading and failed states, centred in the page. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty .notice {
+    max-width: 640px;
+    text-align: left;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
+  }
+
+  .empty-hint {
+    margin: 0;
+    font-size: var(--dn-font-small);
+  }
+
+  .meter {
+    width: 200px;
+    height: 2px;
+    overflow: hidden;
+    background: var(--dn-divider);
+    border-radius: 1px;
+  }
+
+  .meter span {
+    display: block;
+    height: 100%;
+    background: var(--vscode-progressBar-background, var(--dn-accent));
+    transform-origin: left;
+    transition: transform var(--dn-duration) var(--dn-ease);
+  }
+
+  /*
+   * The diagram. Its colours are named here once: the page draws with them and the
+   * saved picture reads them back (themeColors), so both look the same.
+   */
+  .canvas {
+    --er-box: var(--dn-surface);
+    --er-head: color-mix(in srgb, var(--dn-accent) 14%, var(--dn-surface));
+    --er-border: var(--vscode-editorWidget-border, var(--dn-divider));
+    --er-line: var(--dn-muted);
+    --er-primary: var(--dn-warning);
+    --er-foreign: var(--dn-info);
+
+    flex: 1;
+    min-height: 160px;
+    overflow: hidden;
+    background-color: var(--vscode-editor-background);
+    background-image: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--dn-muted) 28%, transparent) 1px,
+      transparent 1.2px
+    );
     cursor: grab;
     touch-action: none;
     user-select: none;
   }
+
+  .canvas:active {
+    cursor: grabbing;
+  }
+
   .canvas:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
   }
+
   svg {
     display: block;
-    font-size: 12px;
     font-family: var(--vscode-font-family);
+    font-size: 12px;
   }
+
   .box {
     cursor: move;
+    transition: opacity var(--dn-duration) var(--dn-ease);
   }
+
   .frame {
-    fill: var(--vscode-editorWidget-background);
-    stroke: var(--vscode-editorWidget-border, var(--vscode-panel-border));
+    fill: var(--er-box);
+    stroke: var(--er-border);
   }
+
   .head {
-    fill: var(--vscode-sideBarSectionHeader-background, var(--vscode-editorWidget-background));
-    stroke: var(--vscode-editorWidget-border, var(--vscode-panel-border));
+    fill: var(--er-head);
+    stroke: var(--er-border);
   }
+
   .external .frame,
   .external .head {
     stroke-dasharray: 4 3;
   }
+
+  .halo {
+    fill: none;
+    stroke: var(--vscode-editor-findMatchBorder, var(--dn-accent));
+    stroke-dasharray: 4 3;
+    stroke-width: 1.5;
+  }
+
+  .selected .halo {
+    stroke: var(--dn-accent);
+    stroke-dasharray: none;
+    stroke-opacity: 0.45;
+    stroke-width: 3;
+  }
+
   .selected .frame,
   .selected .head {
-    stroke: var(--vscode-focusBorder);
-    stroke-width: 2;
+    stroke: var(--dn-accent);
+    stroke-width: 1.5;
   }
-  .match .frame {
-    stroke: var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder));
-    stroke-width: 2;
+
+  .selected .head {
+    fill: color-mix(in srgb, var(--dn-accent) 30%, var(--er-box));
   }
+
   text {
     fill: var(--vscode-foreground);
   }
+
   .label {
-    font-weight: bold;
+    font-weight: 600;
   }
+
   .type {
-    fill: var(--vscode-descriptionForeground);
+    fill: var(--dn-muted);
   }
+
   .mark {
-    font-size: 9px;
-    font-weight: bold;
-    fill: var(--vscode-charts-blue, #3794ff);
+    font-family: codicon;
+    font-size: 13px;
+    fill: var(--er-foreign);
   }
-  .mark.pk {
-    fill: var(--vscode-charts-orange, #d18616);
+
+  .mark.primary {
+    fill: var(--er-primary);
   }
+
   .line path,
   .line circle {
     fill: none;
-    stroke: var(--vscode-descriptionForeground);
+    stroke: var(--er-line);
     stroke-width: 1.3;
+    transition: opacity var(--dn-duration) var(--dn-ease);
   }
+
   .line .ring {
     fill: var(--vscode-editor-background);
   }
+
   .line.lit path,
   .line.lit circle {
-    stroke: var(--vscode-focusBorder);
+    stroke: var(--dn-accent);
     stroke-width: 2;
   }
+
   .faded {
-    opacity: 0.3;
+    opacity: 0.25;
   }
-  .footer {
-    font-size: 0.9em;
+
+  /* The status bar: what the diagram holds, the chosen table, the key marks. */
+  .status {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+    min-height: 26px;
+    padding: 2px 8px;
+    color: var(--dn-muted);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  .stat,
+  .selected-info {
+    white-space: nowrap;
+  }
+
+  .selected-info {
+    overflow: hidden;
+    color: var(--vscode-foreground);
+    text-overflow: ellipsis;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    align-items: center;
+  }
+
+  .legend-item {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .legend-mark.primary {
+    display: inline-flex;
+    color: var(--dn-warning);
+  }
+
+  .legend-mark.foreign {
+    display: inline-flex;
+    color: var(--dn-info);
+  }
+
+  .legend-external {
+    width: 14px;
+    height: 10px;
+    border: 1px dashed var(--vscode-editorWidget-border, var(--dn-muted));
+    border-radius: var(--dn-radius-s);
+  }
+
+  .help {
+    display: inline-flex;
+    padding: 0 2px;
+    cursor: help;
+  }
+
+  /* Beside a narrow editor the legend gives way to the diagram's own tooltips. */
+  @media (max-width: 640px) {
+    .legend {
+      display: none;
+    }
+
+    .find-input {
+      width: 140px;
+    }
   }
 </style>

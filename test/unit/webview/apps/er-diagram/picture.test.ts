@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { canvasMeasure, pngScale } from '../../../../../webview/src/apps/er-diagram/picture';
+import {
+  canvasMeasure,
+  cssColor,
+  pngScale,
+} from '../../../../../webview/src/apps/er-diagram/picture';
 
 describe('pngScale', () => {
   it('draws ordinary diagrams at twice the size', () => {
@@ -52,5 +56,57 @@ describe('canvasMeasure', () => {
     const measure = canvasMeasure('sans-serif');
     expect(measure('orders')).toBeCloseTo(6 * 7.2);
     expect(measure('orders', true)).toBeGreaterThan(measure('orders'));
+  });
+});
+
+describe('cssColor', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const paint = (pixel: number[]) => {
+    const context = {
+      fillStyle: '',
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      getImageData: vi.fn(() => ({ data: Uint8ClampedArray.from(pixel) })),
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      context as unknown as CanvasRenderingContext2D,
+    );
+    return context;
+  };
+
+  it('paints the colour the browser computes and reads it back as rgb()', () => {
+    const context = paint([30, 60, 90, 255]);
+    expect(cssColor('rgb(30, 60, 90)', '#fff')).toBe('rgb(30, 60, 90)');
+    expect(context.fillStyle).toBe('rgb(30, 60, 90)');
+    expect(document.body.querySelector('span')).toBeNull();
+  });
+
+  it('keeps the transparency of a see-through colour', () => {
+    paint([0, 0, 0, 51]);
+    expect(cssColor('rgba(0, 0, 0, 0.2)', '#fff')).toBe('rgba(0, 0, 0, 0.2)');
+  });
+
+  it('resolves inside the given element, which may define the variables', () => {
+    paint([1, 2, 3, 255]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const append = vi.spyOn(host, 'append');
+    cssColor('blue', '#fff', host);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(host.children).toHaveLength(0);
+    host.remove();
+  });
+
+  it('gives the computed colour where nothing can paint', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    expect(cssColor('rgb(1, 2, 3)', '#fff')).toBe('rgb(1, 2, 3)');
+  });
+
+  it('falls back where the colour is not one', () => {
+    paint([9, 9, 9, 255]);
+    expect(cssColor('not a colour', '#abcdef')).toBe('#abcdef');
   });
 });

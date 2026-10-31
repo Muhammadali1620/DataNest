@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type TestDataChoice,
@@ -51,8 +51,12 @@ async function setup(initial: TestDataState = state()) {
   const inserts: { count: number; seed: number }[] = [];
   const scripts: number[] = [];
   let problems: { column: string; problem: string }[] = [];
+  let previewError: string | undefined;
   host.handle('preview', (request) => {
     previews.push(request);
+    if (previewError !== undefined) {
+      throw new Error(previewError);
+    }
     return { rows: [[null, 'anna.smith1@example.com', null, '3']], problems };
   });
   host.handle('insert', ({ count, seed }) => {
@@ -79,6 +83,9 @@ async function setup(initial: TestDataState = state()) {
     cancelled,
     setProblems: (next: typeof problems) => {
       problems = next;
+    },
+    failPreview: (message: string) => {
+      previewError = message;
     },
   };
 }
@@ -175,5 +182,42 @@ describe('test data page', () => {
     expect(screen.getByTestId('report').textContent).toContain(
       'Nothing was inserted: duplicate key',
     );
+  });
+});
+
+describe('test data page layout (V11)', () => {
+  it('shows the run as a progress bar, and the result by its kind', async () => {
+    const page = await setup(state({ progress: { done: 10, total: 200 } }));
+    const bar = within(screen.getByTestId('progress')).getByRole('progressbar', {
+      name: 'Insert progress',
+    });
+    expect(bar.getAttribute('aria-valuenow')).toBe('10');
+    expect(bar.getAttribute('aria-valuemax')).toBe('200');
+    page.host.emit('finished', { outcome: 'done', inserted: 200, durationMs: 3 });
+    const report = await screen.findByTestId('report');
+    expect(report.classList.contains('success')).toBe(true);
+    expect(screen.queryByTestId('progress')).toBeNull();
+  });
+
+  it('marks a stopped run as a warning and shows a failed preview as an error', async () => {
+    const page = await setup(
+      state({ report: { outcome: 'cancelled', inserted: 0, durationMs: 1 } }),
+    );
+    expect(screen.getByTestId('report').classList.contains('warning')).toBe(true);
+    page.failPreview('The table is gone');
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('The table is gone');
+  });
+
+  it('marks the generator of a column that cannot be filled as invalid', async () => {
+    const page = await setup();
+    page.setProblems([{ column: 'team_id', problem: 'no-references' }]);
+    await fireEvent.change(screen.getByLabelText('What fills note'), {
+      target: { value: 'words' },
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText('What fills team_id').getAttribute('aria-invalid')).toBe('true');
+    });
+    expect(screen.getByLabelText('What fills email').getAttribute('aria-invalid')).toBe('false');
   });
 });

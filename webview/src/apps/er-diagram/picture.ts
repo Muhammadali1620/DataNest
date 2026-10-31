@@ -62,3 +62,32 @@ export function canvasMeasure(font: string): (text: string, bold?: boolean) => n
     return width;
   };
 }
+
+/**
+ * A CSS colour (a theme variable, a `color-mix()`) as plain `rgb()`, so a saved picture
+ * needs no variables and any viewer draws it. The browser resolves the colour on a
+ * hidden element inside `host` (whose own variables it sees) and paints one pixel with
+ * it; `fallback` stands in where it cannot.
+ */
+export function cssColor(css: string, fallback: string, host: Element = document.body): string {
+  const probe = document.createElement('span');
+  probe.style.display = 'none';
+  probe.style.color = css;
+  host.append(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  if (probe.style.color === '' || computed === '') {
+    return fallback;
+  }
+  const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  if (context === null) {
+    return computed;
+  }
+  context.clearRect(0, 0, 1, 1);
+  context.fillStyle = computed;
+  context.fillRect(0, 0, 1, 1);
+  const [red = 0, green = 0, blue = 0, alpha = 255] = context.getImageData(0, 0, 1, 1).data;
+  return alpha === 255
+    ? `rgb(${red}, ${green}, ${blue})`
+    : `rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 1000) / 1000})`;
+}

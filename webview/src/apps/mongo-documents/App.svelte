@@ -11,6 +11,8 @@
     type TypedProblem,
   } from '../../../../src/shared/protocols/mongo-documents';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import type { MessageKey } from '../../l10n/en';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -111,6 +113,17 @@
     selected = selected.includes(row) ? selected.filter((one) => one !== row) : [...selected, row];
   }
 
+  const allSelected = $derived(
+    page !== undefined &&
+      page.rows.length > 0 &&
+      page.rows.every((row) => selected.includes(row.index)),
+  );
+
+  /** The box in the header: ticks every document of the page, or none. */
+  function toggleAll(): void {
+    selected = allSelected ? [] : (page?.rows.map((row) => row.index) ?? []);
+  }
+
   function openEditor(row: number): void {
     if (page?.editable !== true) {
       view = 'text';
@@ -163,386 +176,814 @@
 </script>
 
 <main>
+  {#if busy}
+    <div class="progress-bar" aria-hidden="true"></div>
+  {/if}
   {#if page === undefined}
-    <p class="hint">{t('mongo.loading')}</p>
+    <div class="empty">
+      <span class="empty-icon"><Icon name="loading" spin size={24} /></span>
+      <p class="empty-title">{t('mongo.loading')}</p>
+    </div>
   {:else}
-    <header>
-      <h1>{page.collection === '' ? page.database : `${page.database}.${page.collection}`}</h1>
-      <p class="meta" data-testid="meta">
-        <span>{page.connectionName}</span>
-        {#if page.collectionType !== 'collection'}
-          <span class="badge">{t(page.collectionType === 'view' ? 'mongo.view' : 'mongo.timeseries')}</span>
-        {/if}
-        {#if page.readOnly}
-          <span class="badge">{t('mongo.readOnly')}</span>
-        {/if}
-        {#if page.total !== undefined}
-          <span data-testid="total"
-            >{t(page.total.exact ? 'mongo.total' : 'mongo.totalEstimate', groupDigits(page.total.count))}</span
-          >
-        {/if}
-        <span>{t('mongo.took', page.tookMs)}</span>
-      </p>
+    <header class="top">
+      <span class="top-icon"><Icon name={page.mode === 'result' ? 'output' : 'json'} size={18} /></span>
+      <div class="top-text">
+        <h1>{page.collection === '' ? page.database : `${page.database}.${page.collection}`}</h1>
+        <p class="meta" data-testid="meta">
+          <span class="fact"><Icon name="database" size={12} />{page.connectionName}</span>
+          {#if page.collectionType !== 'collection'}
+            <span class="badge outline"
+              ><Icon name={page.collectionType === 'view' ? 'eye' : 'history'} size={12} />{t(
+                page.collectionType === 'view' ? 'mongo.view' : 'mongo.timeseries',
+              )}</span
+            >
+          {/if}
+          {#if page.readOnly}
+            <span class="badge outline"><Icon name="lock" size={12} />{t('mongo.readOnly')}</span>
+          {/if}
+          {#if page.total !== undefined}
+            <span class="fact" data-testid="total"
+              >{t(page.total.exact ? 'mongo.total' : 'mongo.totalEstimate', groupDigits(page.total.count))}</span
+            >
+          {/if}
+          <span class="fact"><Icon name="watch" size={12} />{t('mongo.took', page.tookMs)}</span>
+        </p>
+      </div>
+      {#if page.mode === 'collection' || page.insertable}
+        <div class="toolbar">
+          {#if page.mode === 'collection'}
+            <IconButton
+              icon="refresh"
+              label={t('mongo.refresh')}
+              disabled={busy}
+              onclick={() => void act(() => rpc.request('refresh', {}))}
+            />
+          {/if}
+          {#if page.insertable}
+            <span class="toolbar-separator"></span>
+            <button type="button" class="button" disabled={busy} onclick={openNew}
+              ><Icon name="add" />{t('mongo.insert')}</button
+            >
+          {/if}
+        </div>
+      {/if}
     </header>
 
     {#if page.mode === 'result'}
-      <pre class="code statement" data-testid="statement">{page.statement ?? ''}</pre>
-      {#if page.summary !== undefined}
-        <p data-testid="summary">{page.summary}</p>
-      {/if}
+      <div class="result">
+        <pre class="code statement" data-testid="statement">{page.statement ?? ''}</pre>
+        {#if page.summary !== undefined}
+          <p class="notice success" data-testid="summary"><Icon name="pass" /><span>{page.summary}</span></p>
+        {/if}
+      </div>
     {:else}
-    <section class="query" aria-label={t('mongo.query')}>
-      <input
-        class="control filter"
-        bind:value={query.filter}
-        onkeydown={keydown}
-        placeholder={'{ status: "new" }'}
-        aria-label={t('mongo.filter')}
-        aria-invalid={problem?.box === 'filter'}
-        spellcheck="false"
-      />
-      <input
-        class="control"
-        bind:value={query.sort}
-        onkeydown={keydown}
-        placeholder={'{ _id: -1 }'}
-        aria-label={t('mongo.sort')}
-        aria-invalid={problem?.box === 'sort'}
-        spellcheck="false"
-      />
-      <input
-        class="control"
-        bind:value={query.projection}
-        onkeydown={keydown}
-        placeholder={'{ name: 1 }'}
-        aria-label={t('mongo.projection')}
-        aria-invalid={problem?.box === 'projection'}
-        spellcheck="false"
-      />
-      <select class="control size" bind:value={query.limit} aria-label={t('mongo.pageSize')}>
-        {#each PAGE_SIZES as size (size)}
-          <option value={size}>{size}</option>
-        {/each}
-      </select>
-      <button type="button" class="button" disabled={busy} onclick={runQuery}>{t('mongo.run')}</button>
-    </section>
+      <section class="query" aria-label={t('mongo.query')}>
+        <div class="query-field filter" class:invalid={problem?.box === 'filter'}>
+          <span class="query-label" aria-hidden="true">{t('mongo.filter')}</span>
+          <input
+            class="control"
+            bind:value={query.filter}
+            onkeydown={keydown}
+            placeholder={'{ status: "new" }'}
+            aria-label={t('mongo.filter')}
+            aria-invalid={problem?.box === 'filter'}
+            spellcheck="false"
+          />
+        </div>
+        <div class="query-field" class:invalid={problem?.box === 'sort'}>
+          <span class="query-label" aria-hidden="true">{t('mongo.sort')}</span>
+          <input
+            class="control"
+            bind:value={query.sort}
+            onkeydown={keydown}
+            placeholder={'{ _id: -1 }'}
+            aria-label={t('mongo.sort')}
+            aria-invalid={problem?.box === 'sort'}
+            spellcheck="false"
+          />
+        </div>
+        <div class="query-field" class:invalid={problem?.box === 'projection'}>
+          <span class="query-label" aria-hidden="true">{t('mongo.projection')}</span>
+          <input
+            class="control"
+            bind:value={query.projection}
+            onkeydown={keydown}
+            placeholder={'{ name: 1 }'}
+            aria-label={t('mongo.projection')}
+            aria-invalid={problem?.box === 'projection'}
+            spellcheck="false"
+          />
+        </div>
+        <div class="query-run">
+          <select class="control size" bind:value={query.limit} aria-label={t('mongo.pageSize')} title={t('mongo.pageSize')}>
+            {#each PAGE_SIZES as size (size)}
+              <option value={size}>{size}</option>
+            {/each}
+          </select>
+          <button type="button" class="button" disabled={busy} onclick={runQuery}
+            ><Icon name="search" />{t('mongo.run')}</button
+          >
+        </div>
+      </section>
     {/if}
 
     {#if problem !== undefined}
-      <p class="error" role="alert" data-testid="query-problem">
-        {t(BOX_LABELS[problem.box])}: {problemText(problem)}
-      </p>
+      <p class="notice error problem" role="alert" data-testid="query-problem"><Icon name="error" /><span>{t(BOX_LABELS[problem.box])}: {problemText(problem)}</span></p>
     {/if}
     {#if error !== undefined}
-      <p class="error" role="alert" data-testid="error">{error}</p>
+      <p class="notice error problem" role="alert" data-testid="error"><Icon name="error" /><span class="message">{error}</span></p>
     {/if}
 
-    <section class="toolbar">
-      <div class="tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="tab"
-          aria-selected={view === 'table'}
-          onclick={() => {
-            view = 'table';
-          }}>{t('mongo.table')}</button
-        >
-        <button
-          type="button"
-          role="tab"
-          class="tab"
-          aria-selected={view === 'text'}
-          onclick={() => {
-            view = 'text';
-          }}>{t('mongo.text')}</button
-        >
-      </div>
-      <button
-        type="button"
-        class="button secondary"
-        disabled={busy || page.skip === 0}
-        onclick={() => void act(() => rpc.request('page', { skip: previousSkip(page?.skip ?? 0, query.limit) }))}
-        aria-label={t('mongo.previous')}>‹</button
-      >
-      <span data-testid="range">{t('mongo.range', range.from, range.to)}</span>
-      <button
-        type="button"
-        class="button secondary"
-        disabled={busy || !page.more}
-        onclick={() => void act(() => rpc.request('page', { skip: (page?.skip ?? 0) + (page?.rows.length ?? 0) }))}
-        aria-label={t('mongo.next')}>›</button
-      >
-      {#if page.total === undefined}
-        <button type="button" class="button secondary" disabled={busy} onclick={() => void act(() => rpc.request('count', {}))}
-          >{t('mongo.count')}</button
-        >
-      {/if}
-      <span class="grow"></span>
-      {#if page.mode === 'collection'}
-        <button type="button" class="button secondary" disabled={busy} onclick={() => void act(() => rpc.request('refresh', {}))}
-          >{t('mongo.refresh')}</button
-        >
-      {/if}
-      {#if selected.length > 0}
-        <button type="button" class="button secondary" disabled={busy} onclick={() => { copy(selected); }}
-          >{t('mongo.copy', selected.length)}</button
-        >
-        {#if page.editable}
-          <button type="button" class="button secondary" disabled={busy} onclick={() => { remove(selected); }}
-            >{t('mongo.delete', selected.length)}</button
+    {#if page.mode !== 'result' || page.rows.length > 0}
+      <div class="viewbar">
+        <div class="tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            class="tab"
+            class:active={view === 'table'}
+            aria-selected={view === 'table'}
+            onclick={() => {
+              view = 'table';
+            }}><Icon name="table" />{t('mongo.table')}</button
           >
+          <button
+            type="button"
+            role="tab"
+            class="tab"
+            class:active={view === 'text'}
+            aria-selected={view === 'text'}
+            onclick={() => {
+              view = 'text';
+            }}><Icon name="json" />{t('mongo.text')}</button
+          >
+        </div>
+        <span class="grow"></span>
+        {#if selected.length > 0}
+          <div class="toolbar fade-in">
+            <IconButton
+              icon="copy"
+              label={t('mongo.copy', selected.length)}
+              text={t('mongo.copy', selected.length)}
+              disabled={busy}
+              onclick={() => {
+                copy(selected);
+              }}
+            />
+            {#if page.editable}
+              <IconButton
+                icon="trash"
+                label={t('mongo.delete', selected.length)}
+                text={t('mongo.delete', selected.length)}
+                disabled={busy}
+                onclick={() => {
+                  remove(selected);
+                }}
+              />
+            {/if}
+          </div>
         {/if}
-      {/if}
-      {#if page.insertable}
-        <button type="button" class="button" disabled={busy} onclick={openNew}>{t('mongo.insert')}</button>
-      {/if}
-    </section>
-
-    {#if editor !== undefined}
-      {#key editorVersion}
-        <DocumentEditor
-          title={editor.kind === 'new' ? t('mongo.newDocument') : t('mongo.editDocument', page.rows[editor.row]?.id ?? '')}
-          text={editor.text}
-          {t}
-          {busy}
-          problem={editorProblem}
-          onsave={save}
-          oncancel={() => {
-            editor = undefined;
-          }}
-        />
-      {/key}
+      </div>
     {/if}
 
-    {#if page.rows.length === 0}
-      <p class="hint" data-testid="empty">{t('mongo.empty')}</p>
-    {:else if view === 'table'}
-      <div class="scroll">
-        <table class="documents">
-          <thead>
-            <tr>
-              <th class="pick"></th>
-              {#each page.columns as column (column)}
-                <th>
-                  <button type="button" class="head" onclick={() => { sortBy(column); }} title={t('mongo.sortBy', column)}>
-                    {column}
-                    {#if sortOf(query.sort, column) === 'asc'}▲{:else if sortOf(query.sort, column) === 'desc'}▼{/if}
-                  </button>
-                </th>
-              {/each}
-            </tr>
-          </thead>
-          <tbody>
+    <div class="body" class:editing={editor !== undefined}>
+      <div class="content">
+        {#if page.rows.length === 0}
+          {#if page.mode !== 'result'}
+            <div class="empty">
+              <span class="empty-icon"><Icon name="search" size={24} /></span>
+              <p class="empty-title" data-testid="empty">{t('mongo.empty')}</p>
+            </div>
+          {/if}
+        {:else if view === 'table'}
+          <div class="scroll">
+            <table class="documents">
+              <thead>
+                <tr>
+                  <th class="pick">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      {@attach (box: HTMLInputElement) => {
+                        box.indeterminate = selected.length > 0 && !allSelected;
+                      }}
+                      onchange={toggleAll}
+                      aria-label={t('mongo.selectAll')}
+                    />
+                  </th>
+                  {#each page.columns as column (column)}
+                    {@const direction = sortOf(query.sort, column)}
+                    <th aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : undefined}>
+                      <button
+                        type="button"
+                        class="head"
+                        onclick={() => {
+                          sortBy(column);
+                        }}
+                        title={t('mongo.sortBy', column)}
+                      >
+                        <span class="head-name">{column}</span>
+                        {#if direction !== undefined}<span class="arrow"
+                            ><Icon name={direction === 'asc' ? 'arrow-up' : 'arrow-down'} size={14} /></span
+                          >{/if}
+                      </button>
+                    </th>
+                  {/each}
+                </tr>
+              </thead>
+              <tbody>
+                {#each page.rows as row (row.index)}
+                  <tr
+                    class:selected={selected.includes(row.index)}
+                    ondblclick={() => {
+                      openEditor(row.index);
+                    }}
+                  >
+                    <td class="pick">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(row.index)}
+                        onchange={() => {
+                          toggle(row.index);
+                        }}
+                        aria-label={t('mongo.select', row.id ?? String(row.index + 1))}
+                      />
+                    </td>
+                    {#each row.cells as cell, column (column)}
+                      {#if cell === null}
+                        <td class="missing"></td>
+                      {:else}
+                        <td class={cellClass(cell.type)} title={cell.text}>{cell.text}</td>
+                      {/if}
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {:else}
+          <ol class="texts">
             {#each page.rows as row (row.index)}
-              <tr class:selected={selected.includes(row.index)} ondblclick={() => { openEditor(row.index); }}>
-                <td class="pick">
+              <li class="doc" class:selected={selected.includes(row.index)}>
+                <div class="doc-head">
                   <input
                     type="checkbox"
                     checked={selected.includes(row.index)}
-                    onchange={() => { toggle(row.index); }}
+                    onchange={() => {
+                      toggle(row.index);
+                    }}
                     aria-label={t('mongo.select', row.id ?? String(row.index + 1))}
                   />
-                </td>
-                {#each row.cells as cell, column (column)}
-                  {#if cell === null}
-                    <td class="missing"></td>
-                  {:else}
-                    <td class={cellClass(cell.type)} title={cell.text}>{cell.text}</td>
-                  {/if}
-                {/each}
-              </tr>
+                  <span class="doc-id">{row.id ?? ''}</span>
+                  <span class="grow"></span>
+                  <div class="toolbar">
+                    {#if page.editable && !row.truncated}
+                      <IconButton
+                        icon="edit"
+                        label={t('mongo.edit')}
+                        disabled={busy}
+                        onclick={() => {
+                          openEditor(row.index);
+                        }}
+                      />
+                    {/if}
+                    <IconButton
+                      icon="copy"
+                      label={t('mongo.copyOne')}
+                      disabled={busy}
+                      onclick={() => {
+                        copy([row.index]);
+                      }}
+                    />
+                    {#if page.editable}
+                      <IconButton
+                        icon="trash"
+                        label={t('mongo.deleteOne')}
+                        disabled={busy}
+                        onclick={() => {
+                          remove([row.index]);
+                        }}
+                      />
+                    {/if}
+                  </div>
+                </div>
+                <pre class="doc-text">{row.text}</pre>
+                {#if row.truncated}
+                  <p class="notice warning truncated"><Icon name="warning" /><span>{t('mongo.truncated')}</span></p>
+                {/if}
+              </li>
             {/each}
-          </tbody>
-        </table>
+          </ol>
+        {/if}
       </div>
-      {#if page.editable}
-        <p class="hint">{t('mongo.tableHint')}</p>
+
+      {#if editor !== undefined}
+        <aside class="panel fade-in">
+          {#key editorVersion}
+            <DocumentEditor
+              title={editor.kind === 'new' ? t('mongo.newDocument') : t('mongo.editDocument', page.rows[editor.row]?.id ?? '')}
+              text={editor.text}
+              isNew={editor.kind === 'new'}
+              {t}
+              {busy}
+              problem={editorProblem}
+              onsave={save}
+              oncancel={() => {
+                editor = undefined;
+              }}
+            />
+          {/key}
+        </aside>
       {/if}
-    {:else}
-      <ol class="texts">
-        {#each page.rows as row (row.index)}
-          <li>
-            <div class="row-actions">
-              <input
-                type="checkbox"
-                checked={selected.includes(row.index)}
-                onchange={() => { toggle(row.index); }}
-                aria-label={t('mongo.select', row.id ?? String(row.index + 1))}
-              />
-              <span class="hint">{row.id ?? ''}</span>
-              <span class="grow"></span>
-              {#if page.editable && !row.truncated}
-                <button type="button" class="button secondary" disabled={busy} onclick={() => { openEditor(row.index); }}
-                  >{t('mongo.edit')}</button
-                >
-              {/if}
-              <button type="button" class="button secondary" disabled={busy} onclick={() => { copy([row.index]); }}
-                >{t('mongo.copyOne')}</button
-              >
-              {#if page.editable}
-                <button type="button" class="button secondary" disabled={busy} onclick={() => { remove([row.index]); }}
-                  >{t('mongo.deleteOne')}</button
-                >
-              {/if}
-            </div>
-            <pre class="code">{row.text}</pre>
-            {#if row.truncated}
-              <p class="hint">{t('mongo.truncated')}</p>
-            {/if}
-          </li>
-        {/each}
-      </ol>
+    </div>
+
+    {#if page.mode !== 'result' || page.rows.length > 0}
+      <footer class="status">
+        <span class="hint">
+          {#if page.editable && view === 'table' && page.rows.length > 0}
+            <Icon name="info" size={14} />{t('mongo.tableHint')}
+          {/if}
+        </span>
+        <div class="pager">
+          <IconButton
+            icon="chevron-left"
+            label={t('mongo.previous')}
+            disabled={busy || page.skip === 0}
+            onclick={() => void act(() => rpc.request('page', { skip: previousSkip(page?.skip ?? 0, query.limit) }))}
+          />
+          <span class="range" data-testid="range">{t('mongo.range', range.from, range.to)}</span>
+          <IconButton
+            icon="chevron-right"
+            label={t('mongo.next')}
+            disabled={busy || !page.more}
+            onclick={() => void act(() => rpc.request('page', { skip: (page?.skip ?? 0) + (page?.rows.length ?? 0) }))}
+          />
+          {#if page.total === undefined}
+            <span class="toolbar-separator"></span>
+            <IconButton
+              icon="symbol-numeric"
+              label={t('mongo.count')}
+              text={t('mongo.count')}
+              disabled={busy}
+              onclick={() => void act(() => rpc.request('count', {}))}
+            />
+          {/if}
+        </div>
+      </footer>
     {/if}
   {/if}
 </main>
 
 <style>
   main {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    height: 100vh;
   }
-  h1 {
-    font-size: 1.3em;
-    margin: 0;
-    word-break: break-all;
-  }
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    color: var(--vscode-descriptionForeground);
-    margin: 4px 0 0;
-  }
-  .badge {
-    border: 1px solid var(--vscode-focusBorder);
-    padding: 0 6px;
-    border-radius: 3px;
-    color: var(--vscode-foreground);
-  }
-  .query,
-  .toolbar,
-  .row-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .query input {
-    font-family: var(--vscode-editor-font-family, monospace);
-    flex: 1 1 160px;
-  }
-  .query .filter {
-    flex: 3 1 260px;
-  }
-  .size {
-    width: 80px;
-  }
+
   .grow {
     flex: 1;
   }
-  .hint {
-    color: var(--vscode-descriptionForeground);
-    margin: 0;
-  }
-  .error {
-    color: var(--vscode-errorForeground);
-    margin: 0;
-  }
-  .tabs {
+
+  /* The collection, what it is, and its actions. */
+  .top {
     display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-m);
+    align-items: center;
+    padding: var(--dn-gap-m) var(--dn-gap-l);
+    border-bottom: 1px solid var(--dn-divider);
   }
-  .tab {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--vscode-foreground);
-    padding: 4px 10px;
-    cursor: pointer;
+
+  .top-icon {
+    display: inline-flex;
+    padding: 7px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: var(--dn-radius-l);
   }
-  .tab[aria-selected='true'] {
-    border-bottom-color: var(--vscode-focusBorder);
+
+  .top-text {
+    flex: 1;
+    min-width: 0;
   }
-  .scroll {
-    overflow: auto;
-    max-height: calc(100vh - 220px);
+
+  h1 {
+    font-size: 14px;
+    overflow-wrap: anywhere;
   }
-  .documents {
-    border-collapse: collapse;
-    font-family: var(--vscode-editor-font-family, monospace);
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-s) var(--dn-gap-m);
+    align-items: center;
+    margin: 4px 0 0;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
   }
-  .documents th,
-  .documents td {
-    text-align: left;
-    padding: 2px 8px;
-    border-bottom: 1px solid var(--vscode-panel-border, transparent);
-    max-width: 320px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+
+  .fact {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
     white-space: nowrap;
   }
+
+  /* Filter, sort and projection in the shell's syntax, each with its name. */
+  .query {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap);
+    align-items: center;
+    padding: var(--dn-gap) var(--dn-gap-l);
+    background: var(--vscode-sideBar-background, var(--dn-surface));
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .query-field {
+    display: flex;
+    flex: 1 1 180px;
+    align-items: stretch;
+    min-width: 0;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border, var(--dn-border));
+    border-radius: var(--dn-radius-s);
+    transition: border-color var(--dn-duration) var(--dn-ease);
+  }
+
+  .query-field.filter {
+    flex: 3 1 280px;
+  }
+
+  .query-field:focus-within {
+    border-color: var(--vscode-focusBorder);
+  }
+
+  .query-field.invalid {
+    border-color: var(--vscode-inputValidation-errorBorder, var(--dn-danger));
+  }
+
+  .query-label {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    padding: 0 8px;
+    color: var(--dn-muted);
+    font-size: 11px;
+    border-right: 1px solid var(--vscode-input-border, var(--dn-border));
+  }
+
+  .query-field .control {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--dn-mono);
+    border: none;
+  }
+
+  .query-run {
+    display: flex;
+    gap: var(--dn-gap);
+  }
+
+  .size {
+    width: 72px;
+  }
+
+  .problem {
+    flex: none;
+    margin: var(--dn-gap) var(--dn-gap-l) 0;
+  }
+
+  .message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .result {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    padding: var(--dn-gap-m) var(--dn-gap-l) 0;
+  }
+
+  .result .notice {
+    margin: 0;
+  }
+
+  .code {
+    max-height: 160px;
+    margin: 0;
+    padding: var(--dn-gap) var(--dn-gap-m);
+    overflow: auto;
+    font-size: var(--vscode-editor-font-size, 13px);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius);
+  }
+
+  /* Table or text, and what to do with the ticked documents. */
+  .viewbar {
+    display: flex;
+    flex: none;
+    gap: var(--dn-gap);
+    align-items: center;
+    min-height: 34px;
+    padding: 0 var(--dn-gap) 0 var(--dn-gap-s);
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    align-self: stretch;
+  }
+
+  .tab {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: -1px;
+    padding: 0 10px;
+    color: var(--vscode-panelTitle-inactiveForeground, var(--dn-muted));
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    font-family: inherit;
+    font-size: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--dn-duration) var(--dn-ease);
+  }
+
+  .tab:hover,
+  .tab.active {
+    color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
+  }
+
+  .tab.active {
+    border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--dn-accent));
+  }
+
+  .body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .panel {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    width: min(560px, 50%);
+    min-height: 0;
+    background: var(--vscode-sideBar-background, var(--dn-surface));
+    border-left: 1px solid var(--dn-divider);
+  }
+
+  /* Narrow: the editor takes the place of the documents while it is open. */
+  @media (max-width: 720px) {
+    .body.editing .content {
+      display: none;
+    }
+
+    .panel {
+      width: 100%;
+      border-left: none;
+    }
+  }
+
+  /* The documents as a table, drawn as the result grid draws its rows. */
+  .scroll {
+    --dn-header-background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+    --dn-grid-line: var(--vscode-editorGroup-border, var(--dn-divider));
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .documents {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+  }
+
+  .documents th,
+  .documents td {
+    max-width: 320px;
+    height: 22px;
+    padding: 2px 8px;
+    overflow: hidden;
+    line-height: 18px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-right: 1px solid var(--dn-grid-line);
+  }
+
   .documents thead th {
     position: sticky;
     top: 0;
-    background: var(--vscode-editor-background);
+    z-index: 1;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    background: var(--dn-header-background);
+    box-shadow: 0 1px 0 var(--dn-divider);
   }
+
   .head {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    width: 100%;
+    padding: 0;
+    color: inherit;
     background: none;
     border: none;
-    color: var(--vscode-foreground);
-    font-weight: bold;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
     cursor: pointer;
-    padding: 0;
   }
-  .documents tbody tr.selected {
-    background: var(--vscode-list-activeSelectionBackground);
+
+  .head-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+
+  .arrow {
+    display: inline-flex;
+    color: var(--dn-accent);
+  }
+
+  .documents tbody tr:nth-child(even) {
+    background: var(--vscode-keybindingTable-rowsBackground, transparent);
+  }
+
   .documents tbody tr:hover {
     background: var(--vscode-list-hoverBackground);
   }
-  .pick {
-    width: 24px;
+
+  .documents tbody tr.selected {
+    background: var(--vscode-list-inactiveSelectionBackground);
   }
+
+  .pick {
+    width: 30px;
+    text-align: center;
+  }
+
+  .documents .pick input {
+    width: 16px;
+    height: 16px;
+  }
+
   .number {
     color: var(--vscode-debugTokenExpression-number, var(--vscode-foreground));
     text-align: right;
   }
+
   .string {
     color: var(--vscode-debugTokenExpression-string, var(--vscode-foreground));
   }
+
   .null,
   .missing {
-    color: var(--vscode-descriptionForeground);
+    color: var(--dn-muted);
     font-style: italic;
   }
+
   .bool {
     color: var(--vscode-debugTokenExpression-boolean, var(--vscode-foreground));
   }
+
   .id,
   .date {
     color: var(--vscode-debugTokenExpression-name, var(--vscode-foreground));
   }
+
+  /* The documents as text: a card each, with its own actions. */
   .texts {
-    list-style: none;
-    padding: 0;
-    margin: 0;
     display: flex;
+    flex: 1;
     flex-direction: column;
-    gap: 10px;
-  }
-  .statement {
-    max-height: 120px;
+    gap: var(--dn-gap);
     margin: 0;
-  }
-  .code {
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: var(--vscode-editor-font-size, 13px);
-    margin: 4px 0 0;
-    padding: 6px 8px;
-    background: var(--vscode-textCodeBlock-background);
+    padding: var(--dn-gap-m) var(--dn-gap-l);
     overflow: auto;
+    list-style: none;
+  }
+
+  .doc {
+    flex: none;
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius-l);
+    transition: border-color var(--dn-duration) var(--dn-ease);
+  }
+
+  .doc.selected {
+    border-color: var(--vscode-focusBorder);
+  }
+
+  .doc-head {
+    display: flex;
+    gap: var(--dn-gap);
+    align-items: center;
+    padding: 3px 4px 3px 10px;
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .doc-id {
+    overflow: hidden;
+    color: var(--dn-muted);
+    font-family: var(--dn-mono);
+    font-size: var(--dn-font-small);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .doc-text {
     max-height: 480px;
+    margin: 0;
+    padding: var(--dn-gap) var(--dn-gap-m);
+    overflow: auto;
+    font-size: var(--vscode-editor-font-size, 13px);
+  }
+
+  .truncated {
+    margin: 0 var(--dn-gap-m) var(--dn-gap-m);
+  }
+
+  /* The status bar: a hint on the left, the pager on the right. */
+  .status {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 30px;
+    padding: 2px 8px 2px var(--dn-gap-l);
+    color: var(--dn-muted);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  .hint {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .pager {
+    display: flex;
+    gap: 2px 4px;
+    align-items: center;
+  }
+
+  .range {
+    margin: 0 2px;
+    white-space: nowrap;
+  }
+
+  /* Waiting and nothing found: centred. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    color: var(--dn-muted);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
   }
 </style>

@@ -206,6 +206,34 @@ describe('query plan page', () => {
     expect(screen.getByRole('button', { name: 'Explain' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it('shows the work going on as a bar on top while it explains', async () => {
+    const page = await setup();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    page.host.emit('state', state({ running: true }));
+    await waitFor(() => {
+      expect(screen.getByRole('progressbar', { name: 'Explaining…' })).toBeTruthy();
+    });
+    // The plan read before stays on screen until the new one comes.
+    expect(items()).toHaveLength(4);
+  });
+
+  it('says so when the server returns no plan and no error', async () => {
+    await setup(state({ rows: [], notes: [], properties: [] }));
+    expect(screen.getByText('The server returned no plan for this statement')).toBeTruthy();
+    expect(screen.queryByRole('tree')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Expand all' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('names its icon buttons and says which plan it shows', async () => {
+    await setup();
+    for (const name of ['Expand all', 'Collapse all', 'Show original']) {
+      expect(screen.getByRole('button', { name }).getAttribute('title')).not.toBeNull();
+    }
+    expect(screen.getByRole('button', { name: 'Explain Analyze' }).getAttribute('title')).toBe(
+      'Runs the statement and shows real rows and times',
+    );
+  });
+
   it('shows real times and loops once the statement ran', async () => {
     await setup(
       state({

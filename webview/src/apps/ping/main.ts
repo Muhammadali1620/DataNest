@@ -4,6 +4,7 @@ import { RpcPeer } from '../../../../src/shared/rpc';
 import { pageTranslator } from '../../lib/i18n';
 import { createWebviewTransport, getVsCodeApi } from '../../lib/vscode-api';
 import '../../styles/base.css';
+import '../../styles/controls.css';
 import App from './App.svelte';
 
 const target = document.getElementById('app');

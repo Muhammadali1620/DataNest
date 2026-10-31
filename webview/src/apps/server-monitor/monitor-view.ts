@@ -139,3 +139,39 @@ export function formatRate(perSecond: number): string {
 export function statusKey(row: MonitorStatusRow): string {
   return `${row.group ?? ''}\u0000${row.name}`;
 }
+
+/** How many readings of the rate the trend line keeps. */
+export const TREND_LENGTH = 30;
+
+/** The history with the new reading at the end, the oldest dropped past `TREND_LENGTH`. */
+export function pushReading(history: readonly number[], value: number): number[] {
+  return [...history, value].slice(-TREND_LENGTH);
+}
+
+/**
+ * The points of a small trend line: the readings spread across `width`, scaled so the
+ * highest touches the top and zero the bottom. Fewer than two readings draw nothing.
+ */
+export function sparkline(values: readonly number[], width: number, height: number): string {
+  if (values.length < 2) {
+    return '';
+  }
+  const top = Math.max(...values.map((value) => (Number.isFinite(value) ? value : 0)));
+  const step = width / (values.length - 1);
+  return values
+    .map((value, index) => {
+      const share = top <= 0 || !Number.isFinite(value) ? 0 : Math.max(0, value) / top;
+      const x = Math.round(index * step * 10) / 10;
+      const y = Math.round((height - 1 - share * (height - 2)) * 10) / 10;
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
+/** How full a limit is, 0 to 1, or undefined without a limit. */
+export function usage(used: number, limit: number | undefined): number | undefined {
+  if (limit === undefined || limit <= 0) {
+    return undefined;
+  }
+  return Math.min(1, Math.max(0, used / limit));
+}

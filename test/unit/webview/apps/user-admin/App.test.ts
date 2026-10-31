@@ -157,8 +157,12 @@ describe('users and privileges page', () => {
     ).toEqual([
       'Whole server|*|PROCESS||Revoke',
       'Table|shop.c|SELECT (id)||',
-      'Table|shop.orders|UPDATE|✓|Revoke',
+      'Table|shop.orders|UPDATE|yes|Revoke',
     ]);
+    // The mark is an icon; the word is there for screen readers.
+    const mark = rows[2]?.querySelectorAll('td')[3];
+    expect(mark?.querySelector('.codicon-glyph')).not.toBeNull();
+    expect(mark?.querySelector('.sr-only')?.textContent).toBe('yes');
     expect(screen.getByText('Member of: reader')).toBeTruthy();
   });
 
@@ -358,5 +362,37 @@ describe('users and privileges page', () => {
     await setup({ connectionName: 'File', readOnly: false, error: 'A SQLite file has no users' });
     expect((await screen.findByRole('alert')).textContent).toBe('A SQLite file has no users');
     expect(screen.queryByRole('button', { name: 'New user…' })).toBeNull();
+  });
+
+  it('shows which form is open on its button (V11)', async () => {
+    await setup();
+    const create = await screen.findByRole('button', { name: 'New user…' });
+    expect(create.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(create);
+    expect(create.getAttribute('aria-pressed')).toBe('true');
+    await pick('app@%');
+    expect(create.getAttribute('aria-pressed')).toBe('false');
+    const grant = await screen.findByRole('button', { name: 'Grant…' });
+    const password = screen.getByRole('button', { name: 'Change password' });
+    await fireEvent.click(grant);
+    expect(grant.getAttribute('aria-pressed')).toBe('true');
+    expect(password.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(password);
+    expect(password.getAttribute('aria-pressed')).toBe('true');
+    expect(grant.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('reads the accounts again from the toolbar (V11)', async () => {
+    const { calls } = await setup();
+    await screen.findByText('app@%');
+    expect(calls.users).toBe(1);
+    await fireEvent.click(
+      within(screen.getByRole('toolbar', { name: 'Users' })).getByRole('button', {
+        name: 'Refresh',
+      }),
+    );
+    await waitFor(() => {
+      expect(calls.users).toBe(2);
+    });
   });
 });

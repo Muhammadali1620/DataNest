@@ -7,6 +7,7 @@ import '../../styles/base.css';
 import '../../styles/controls.css';
 import './tools.css';
 import App from './App.svelte';
+import { createToolsState } from './state';
 
 const target = document.getElementById('app');
 if (!target) {
@@ -19,4 +20,6 @@ const rpc = new RpcPeer({
   transport: createWebviewTransport(getVsCodeApi()),
 });
 
-mount(App, { target, props: { rpc, t: pageTranslator() } });
+const api = getVsCodeApi();
+
+mount(App, { target, props: { rpc, t: pageTranslator(), state: createToolsState(api) } });

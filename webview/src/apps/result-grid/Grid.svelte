@@ -1140,7 +1140,7 @@
         ><Icon name={typeIcon(columns[index]?.dataType)} size={14} /></span
       >
       <span class="label-box">
-        <span class="label">{columns[index]?.name ?? ''}</span>
+        <span class="label">{columns[index]?.name ?? ''}</span>{#if editColumns?.[index]?.nullable === false}<span class="required" title={t('grid.notNull')} data-testid="not-null" aria-hidden="true">*</span><span class="sr-only">{t('grid.notNull')}</span>{/if}
         {#if columns[index]?.dataType !== undefined}<span class="dtype">{columns[index].dataType}</span>{/if}
       </span>
     </button>
@@ -1497,6 +1497,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
+  }
+
+  /* A NOT NULL column: the mark is red and sits right after the name. */
+  .name .required {
+    flex: none;
+    color: var(--dn-danger, var(--vscode-errorForeground));
+    font-weight: 700;
+    line-height: 1;
   }
 
   .name .label {

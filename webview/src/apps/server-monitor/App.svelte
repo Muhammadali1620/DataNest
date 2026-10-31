@@ -12,10 +12,21 @@
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
+  import LineChart, { type ChartSeries } from '../../components/LineChart.svelte';
   import type { CodiconName } from '../../lib/codicons';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
   import { formatBytes } from '../redis-key/key-view';
+  import {
+    dashboardSeries,
+    EMPTY_HISTORY,
+    HISTORY_WINDOW_MS,
+    pushSample,
+    sampleSet,
+    type DashboardSeries,
+    type History,
+    type SeriesSet,
+  } from './dashboard-series';
   import {
     DEFAULT_SORT,
     filterProcesses,
@@ -44,7 +55,7 @@
 
   type Tab = 'processes' | 'settings' | 'status';
 
-  const INTERVALS = [2, 5, 10, 30];
+  const INTERVALS = [2, 3, 5, 10, 30];
   const units = $derived({ seconds: t('monitor.unit.seconds'), days: t('monitor.unit.days') });
 
   let page = $state<ServerMonitorState | undefined>(undefined);
@@ -52,7 +63,9 @@
   // svelte-ignore state_referenced_locally
   let tab = $state<Tab>(only ?? 'processes');
   let auto = $state(true);
-  let interval = $state(5);
+  // The Dashboard draws a chart: a reading every 3 seconds keeps its lines lively.
+  // svelte-ignore state_referenced_locally
+  let interval = $state(only === 'status' ? 3 : 5);
   // Read by the timer, which Svelte's analysis does not see as a reader.
   const timerSettings = (): { auto: boolean; interval: number; tab: Tab } => ({ auto, interval, tab });
 
@@ -74,6 +87,10 @@
   let statusAt = $state<number | undefined>(undefined);
   /** The rate of the latest readings, for the trend line on its card. */
   let rates = $state<number[]>([]);
+  /** The counters the charts draw for this server, and what they have read so far. */
+  let dashboard = $state<DashboardSeries | undefined>(undefined);
+  let trafficHistory = $state<History>(EMPTY_HISTORY);
+  let queriesHistory = $state<History>(EMPTY_HISTORY);
   let statusFilter = $state('');
   let changingOnly = $state(false);
 
@@ -168,12 +185,47 @@
         rates = pushReading(rates, answer.summary.rate.perSecond);
       }
       statusAt = answer.at;
+      recordCharts(answer.rows, answer.at);
       errors.status = undefined;
     } catch (error) {
       errors.status = failure(error);
     } finally {
       busy.status = false;
     }
+  }
+
+  /** Adds this reading to the lines of the Traffic and Queries charts. */
+  function recordCharts(rows: readonly MonitorStatusRow[], at: number): void {
+    dashboard = dashboardSeries(rows);
+    if (dashboard === undefined) {
+      return;
+    }
+    const traffic = sampleSet(rows, dashboard.traffic);
+    const queries = sampleSet(rows, dashboard.queries);
+    if (traffic !== undefined) {
+      trafficHistory = pushSample(trafficHistory, at, traffic);
+    }
+    if (queries !== undefined) {
+      queriesHistory = pushSample(queriesHistory, at, queries);
+    }
+  }
+
+  /** The series of a set with this page's words and the history so far. */
+  function chartSeries(set: SeriesSet, history: History): ChartSeries[] {
+    return set.series.map((def) => ({
+      key: def.key,
+      label: t(SERIES_LABELS[def.key] ?? 'monitor.series.select'),
+      color: def.color,
+      values: history.values[def.key] ?? [],
+    }));
+  }
+
+  /** Axis and tooltip text: bytes with their unit, counts with at most one decimal. */
+  function chartValue(set: SeriesSet, value: number): string {
+    if (set.unit === 'bytes') {
+      return formatBytes(value);
+    }
+    return value >= 10 ? Math.round(value).toLocaleString() : Number(value.toFixed(1)).toString();
   }
 
   /** What the current tab shows, and the numbers on top. */
@@ -234,7 +286,13 @@
     const timer = setInterval(() => {
       const current = timerSettings();
       elapsed += 1;
-      if (current.auto && elapsed >= current.interval && current.tab !== 'settings') {
+      // A page nobody looks at does not poll the server.
+      if (
+        current.auto &&
+        !document.hidden &&
+        elapsed >= current.interval &&
+        current.tab !== 'settings'
+      ) {
         elapsed = 0;
         void refresh(current.tab);
       }
@@ -250,6 +308,17 @@
     processes: 'server-process',
     settings: 'settings-gear',
     status: 'pulse',
+  };
+  const SERIES_LABELS: Record<string, MessageKey> = {
+    read: 'monitor.series.read',
+    hit: 'monitor.series.hit',
+    received: 'monitor.series.received',
+    sent: 'monitor.series.sent',
+    insert: 'monitor.series.insert',
+    update: 'monitor.series.update',
+    delete: 'monitor.series.delete',
+    select: 'monitor.series.select',
+    fetched: 'monitor.series.fetched',
   };
   /** Size of the trend line on the rate card. */
   const TREND = { width: 120, height: 28 };
@@ -386,6 +455,31 @@
           }}><Icon name={TAB_ICONS.status} size={14} />{t('monitor.tab.status')}</button
         >
       </div>
+
+      {#if tab === 'status' && dashboard !== undefined}
+        {@const board = dashboard}
+        <section class="charts" data-testid="charts" aria-label={t('monitor.charts')}>
+          <LineChart
+            title={t('monitor.chart.traffic')}
+            bytes
+            icon="arrow-swap"
+            times={trafficHistory.times}
+            series={chartSeries(board.traffic, trafficHistory)}
+            format={(value: number) => chartValue(board.traffic, value)}
+            {t}
+            windowMs={HISTORY_WINDOW_MS}
+          />
+          <LineChart
+            title={t('monitor.chart.queries')}
+            icon="graph-line"
+            times={queriesHistory.times}
+            series={chartSeries(board.queries, queriesHistory)}
+            format={(value: number) => chartValue(board.queries, value)}
+            {t}
+            windowMs={HISTORY_WINDOW_MS}
+          />
+        </section>
+      {/if}
 
       {#if tab === 'processes'}
         <div class="tab-tools">
@@ -612,6 +706,14 @@
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: var(--dn-gap);
     padding: var(--dn-gap-m) var(--dn-gap) var(--dn-gap);
+  }
+
+  .charts {
+    display: grid;
+    flex: none;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: var(--dn-gap);
+    padding: 0 var(--dn-gap) var(--dn-gap);
   }
 
   .cards:empty {

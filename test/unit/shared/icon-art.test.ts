@@ -109,3 +109,50 @@ describe('action icons', () => {
     }
   });
 });
+
+describe('brand glyphs of the database marks', () => {
+  const BRANDS = {
+    postgres: 'siPostgresql',
+    mysql: 'siMysql',
+    sqlite: 'siSqlite',
+    clickhouse: 'siClickhouse',
+    redis: 'siRedis',
+    mongodb: 'siMongodb',
+    elasticsearch: 'siElasticsearch',
+  } as const;
+
+  it('copies the glyphs of the CC0 package unchanged', async () => {
+    const icons = (await import('simple-icons')) as unknown as Record<
+      string,
+      { hex: string; path: string }
+    >;
+    const { BRAND_PATHS } = await import('../../../src/shared/db-brand-paths');
+    for (const [driver, key] of Object.entries(BRANDS)) {
+      const icon = icons[key];
+      expect(icon, key).toBeDefined();
+      expect(BRAND_PATHS[driver as keyof typeof BRANDS], driver).toEqual({
+        hex: icon?.hex,
+        path: icon?.path,
+      });
+    }
+  });
+
+  it('draws a brand glyph on a rounded tile, a dark glyph on the light ClickHouse tile', () => {
+    expect(dbMarkSvg('postgres')).toContain('<rect x="1" y="1" width="22" height="22" rx="6"');
+    expect(dbMarkSvg('postgres')).toContain('fill="#ffffff"');
+    expect(dbMarkSvg('clickhouse')).toContain('fill="#1f1f1f"');
+  });
+
+  it('draws SQL Server and Oracle itself, white on a tile', () => {
+    for (const driver of ['mssql', 'oracle'] as const) {
+      expect(dbMarkSvg(driver), driver).toContain('fill="#ffffff"');
+      expect(dbMarkSvg(driver), driver).not.toContain('<path d="M');
+    }
+  });
+
+  it('keeps the trademark notice that ships in the package', () => {
+    const notice = readFileSync(join(ROOT, 'resources/licenses/brands.txt'), 'utf8');
+    expect(notice).toContain('trademarks');
+    expect(notice).toContain('CC0');
+  });
+});

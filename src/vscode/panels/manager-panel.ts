@@ -15,6 +15,7 @@ import { type DumpSink, expandOutput, type ManagerModel, type ManagerStart } fro
 import type { ServerMonitorModel } from './server-monitor-model';
 import { confirmStop } from './stop-confirm';
 import { tableActionCall } from './table-action';
+import { navigateTable } from './table-nav';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 
 export interface ManagerPanelDeps {
@@ -273,17 +274,16 @@ export class ManagerPanel implements vscode.Disposable {
         return;
       }
       const call = tableActionCall(action, view);
-      void (async () => {
-        try {
-          await vscode.commands.executeCommand(call.command, ...call.args);
-          // The other page takes this one's place, unless a dump is still being written.
-          if (action !== 'history' && this.dumpAbort === undefined) {
-            this.dispose();
-          }
-        } catch (error) {
-          this.log.warn(`Opening the ${action} page failed`, error);
-        }
-      })();
+      // A dump that is still being written keeps this page: the target opens in its own tab.
+      const run =
+        this.dumpAbort === undefined
+          ? navigateTable(this.panel, call, false)
+          : Promise.resolve(vscode.commands.executeCommand(call.command, ...call.args)).then(
+              () => undefined,
+            );
+      void run.catch((error: unknown) => {
+        this.log.warn(`Opening the ${action} page failed`, error);
+      });
     });
   }
 

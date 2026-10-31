@@ -18,20 +18,29 @@
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import Card from './Card.svelte';
+  import DnsCard from './DnsCard.svelte';
+  import IcmpCard from './IcmpCard.svelte';
+  import OverviewCard from './OverviewCard.svelte';
+  import { useToolsState } from './state';
 
   interface Props {
     rpc: RpcPeer<ToolsProtocol['webview'], ToolsProtocol['host']>;
     t: Translate;
+    copy?: (text: string) => void;
   }
 
-  const { rpc, t }: Props = $props();
+  const { rpc, t, copy = () => undefined }: Props = $props();
+  const remember = useToolsState();
 
   // ---- Interfaces
   let interfaces = $state<InterfaceInfo[]>([]);
+  let hostname = $state<string | undefined>(undefined);
   let interfacesLoaded = $state(false);
 
   async function loadInterfaces(): Promise<void> {
-    interfaces = (await rpc.request('interfaces', {})).items;
+    const answer = await rpc.request('interfaces', {});
+    interfaces = answer.items;
+    hostname = answer.hostname;
     interfacesLoaded = true;
   }
 
@@ -55,9 +64,9 @@
     t(`tools.error.${code ?? 'failed'}`);
 
   // ---- Port check
-  let portHost = $state('127.0.0.1');
-  let portNumber = $state('3306');
-  let portTimeout = $state(3000);
+  let portHost = $state(remember.get('net.portHost', '127.0.0.1'));
+  let portNumber = $state(remember.get('net.portNumber', '3306'));
+  let portTimeout = $state(remember.get('net.portTimeout', 3000));
   let portBusy = $state(false);
   let portProblem = $state<string | undefined>(undefined);
   let portResult = $state<{ open: boolean; ms?: number | undefined; error?: NetworkErrorCode | undefined } | undefined>(undefined);
@@ -77,32 +86,11 @@
     }
   }
 
-  // ---- DNS
-  let dnsHost = $state('localhost');
-  let dnsBusy = $state(false);
-  let dnsProblem = $state<string | undefined>(undefined);
-  let dnsResult = $state<{ addresses: { address: string; family: 4 | 6 }[]; error?: NetworkErrorCode | undefined } | undefined>(undefined);
-
-  async function lookupNow(): Promise<void> {
-    dnsResult = undefined;
-    const target = checkTarget(dnsHost, undefined);
-    dnsProblem = typeof target === 'string' ? target : undefined;
-    if (typeof target === 'string' || dnsBusy) {
-      return;
-    }
-    dnsBusy = true;
-    try {
-      dnsResult = await rpc.request('dnsLookup', { host: target.host });
-    } finally {
-      dnsBusy = false;
-    }
-  }
-
   // ---- TCP ping
-  let pingHost = $state('127.0.0.1');
-  let pingPort = $state('3306');
-  let pingCount = $state(4);
-  let pingTimeout = $state(2000);
+  let pingHost = $state(remember.get('net.tcpHost', '127.0.0.1'));
+  let pingPort = $state(remember.get('net.tcpPort', '3306'));
+  let pingCount = $state(remember.get('net.tcpCount', 4));
+  let pingTimeout = $state(remember.get('net.tcpTimeout', 2000));
   let pingBusy = $state(false);
   let pingProblem = $state<string | undefined>(undefined);
   let pingResult = $state<{ attempts: { ok: boolean; ms?: number | undefined; error?: NetworkErrorCode | undefined }[]; error?: NetworkErrorCode | undefined } | undefined>(undefined);
@@ -127,12 +115,23 @@
     }
   }
 
+  $effect(() => {
+    remember.set('net.portHost', portHost);
+    remember.set('net.portNumber', portNumber);
+    remember.set('net.portTimeout', portTimeout);
+    remember.set('net.tcpHost', pingHost);
+    remember.set('net.tcpPort', pingPort);
+    remember.set('net.tcpCount', pingCount);
+    remember.set('net.tcpTimeout', pingTimeout);
+  });
+
   onMount(() => {
     void loadInterfaces();
   });
 </script>
 
-<div class="tl-grid wide">
+<div class="net">
+    <OverviewCard {rpc} {t} {hostname} {interfaces} {copy} />
   <Card title={t('tools.interfaces')} icon="server-environment" tone="blue">
     {#snippet actions()}
       <IconButton icon="refresh" tone="teal" label={t('tools.refresh')} onclick={() => { void loadInterfaces(); }} />
@@ -194,34 +193,8 @@
     {/if}
   </Card>
 
-  <Card title={t('tools.dns')} icon="globe" tone="purple">
-    <div class="tl-row">
-      <label class="grow">
-        <span class="tl-label">{t('tools.host')}</span>
-        <input class="control tl-mono" bind:value={dnsHost} data-testid="dns-host" />
-      </label>
-      <button type="button" class="button" disabled={dnsBusy} data-testid="dns-run" onclick={() => { void lookupNow(); }}>
-        <Icon name={dnsBusy ? 'loading' : 'search'} spin={dnsBusy} />{t('tools.lookup')}
-      </button>
-    </div>
-    {#if dnsProblem !== undefined}
-      <p class="tl-problem" role="alert" data-testid="dns-problem"><Icon name="error" size={14} />{dnsProblem}</p>
-    {/if}
-    {#if dnsResult !== undefined}
-      <div class="tl-stack" data-testid="dns-result">
-        {#if dnsResult.error !== undefined}
-          <p class="tl-problem"><Icon name="error" size={14} />{errorText(dnsResult.error)}</p>
-        {/if}
-        {#each dnsResult.addresses as entry (entry.address)}
-          <div class="tl-line">
-            <span class="badge">{entry.family === 4 ? 'A' : 'AAAA'}</span>
-            <span class="tl-mono">{entry.address}</span>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </Card>
-
+    <DnsCard {rpc} {t} />
+    <IcmpCard {rpc} {t} />
   <Card title={t('tools.tcpPing')} icon="broadcast" tone="orange">
     <div class="tl-row">
       <label class="grow">
@@ -281,6 +254,19 @@
 </div>
 
 <style>
+  /* The cards flow down two newspaper columns, each at its own height: a short card never
+     leaves a hole beside a tall one, and the columns balance themselves. One column when
+     the page is narrow. */
+  .net {
+    columns: 440px 2;
+    column-gap: 14px;
+  }
+
+  .net > :global(section) {
+    margin-bottom: 14px;
+    break-inside: avoid;
+  }
+
   .grow {
     flex: 1;
     min-width: 160px;

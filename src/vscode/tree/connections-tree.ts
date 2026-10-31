@@ -6,6 +6,12 @@ import type { MetadataCache } from '../../services/metadata-cache';
 import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import { PROJECT_FILE_PATH } from '../../services/project-connections';
 import {
+  LabelCache,
+  readServerVersion,
+  readSizeBytes,
+  shortSize,
+} from '../../services/server-labels';
+import {
   type ConnectionConfig,
   type DriverId,
   describeTarget,
@@ -71,6 +77,19 @@ export class ConnectionsTreeProvider
 {
   private readonly changed = new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
+
+  /** The server version of each connected connection (V11.14); key: the connection id. */
+  private readonly versions = new LabelCache<string>((connectionId) => {
+    this.changed.fire({ kind: 'connection', connectionId });
+  });
+  /** Sizes of databases and schemas; key: connection id, a NUL, the node id. */
+  private readonly sizes = new LabelCache<number>((key) => {
+    const node = this.sizeNodes.get(key);
+    if (node !== undefined) {
+      this.changed.fire(node);
+    }
+  });
+  private readonly sizeNodes = new Map<string, TreeNode>();
 
   private readonly model: TreeModel;
   private readonly deps: ConnectionsTreeDeps;
@@ -164,6 +183,13 @@ export class ConnectionsTreeProvider
 
   /** Reloads the whole tree, or the subtree of one node. */
   refresh(node?: TreeNode): void {
+    // What was read about versions and sizes is read again once the tree is redrawn.
+    if (node === undefined) {
+      this.versions.clear();
+      this.sizes.clear();
+    } else if ('connectionId' in node) {
+      this.sizes.clear(`${node.connectionId}\u0000`);
+    }
     this.changed.fire(node);
   }
 
@@ -202,10 +228,16 @@ export class ConnectionsTreeProvider
       }
       case 'connection':
         return this.connectionItem(node.connectionId);
-      case 'database':
-        return expandable(node, node.database, 'database', TREE_CONTEXT.database);
-      case 'schema':
-        return expandable(node, node.schema, 'symbol-namespace', TREE_CONTEXT.schema);
+      case 'database': {
+        const item = expandable(node, node.database, 'database', TREE_CONTEXT.database);
+        item.description = this.sizeText(node);
+        return item;
+      }
+      case 'schema': {
+        const item = expandable(node, node.schema, 'symbol-namespace', TREE_CONTEXT.schema);
+        item.description = this.sizeText(node);
+        return item;
+      }
       case 'group': {
         const item = expandable(
           node,
@@ -465,6 +497,45 @@ export class ConnectionsTreeProvider
     this.subscriptions.length = 0;
   }
 
+  /** The version of a connected server, read once in the background. */
+  private versionText(
+    connectionId: string,
+    driver: ConnectionConfig['driver'] | undefined,
+    connected: boolean,
+  ): string | undefined {
+    if (!connected || driver === undefined || this.deps.settings.showSizes?.() === false) {
+      return undefined;
+    }
+    this.versions.ask(connectionId, async () => {
+      return await readServerVersion(this.deps.manager, connectionId, driver);
+    });
+    return this.versions.peek(connectionId);
+  }
+
+  /** The size of a database or schema node, read once in the background; `2.4M`. */
+  private sizeText(node: Extract<TreeNode, { kind: 'database' | 'schema' }>): string | undefined {
+    const driver = this.deps.store.get(node.connectionId)?.driver;
+    if (
+      driver === undefined ||
+      !connectedNow(this.deps.manager.getState(node.connectionId).status) ||
+      this.deps.settings.showSizes?.() === false
+    ) {
+      return undefined;
+    }
+    const key = `${node.connectionId}\u0000${nodeId(node)}`;
+    this.sizeNodes.set(key, node);
+    this.sizes.ask(key, async () => {
+      // A MySQL "database" is its schema; the others name a schema inside a database.
+      const target =
+        node.kind === 'database'
+          ? { database: node.database }
+          : { database: node.database, schema: node.schema };
+      return await readSizeBytes(this.deps.manager, node.connectionId, driver, target);
+    });
+    const bytes = this.sizes.peek(key);
+    return bytes === undefined ? undefined : shortSize(bytes);
+  }
+
   private connectionItem(connectionId: string): vscode.TreeItem {
     const config = this.deps.store.get(connectionId);
     const state = this.deps.manager.getState(connectionId);
@@ -478,7 +549,9 @@ export class ConnectionsTreeProvider
     const tags = tagsOf(config).map(tagText);
     const target = config === undefined ? '' : describeTarget(config);
     // The marks come first, so they stay visible when the description is cut.
-    item.description = tags.length === 0 ? target : `${tags.join(' · ')} · ${target}`;
+    const version = this.versionText(connectionId, config?.driver, connectedNow(state.status));
+    const rest = tags.length === 0 ? target : `${tags.join(' · ')} · ${target}`;
+    item.description = version === undefined ? rest : `${version} · ${rest}`;
     const project = this.deps.store.projectOf(connectionId);
     const connected = state.status === 'connected';
     item.contextValue = connectionContext({
@@ -765,4 +838,8 @@ function tableTooltip(name: string, stats: TableStats | undefined): string {
 
 function qualifiedName(scope: { database?: string; schema?: string }, name: string): string {
   return [scope.database, scope.schema, name].filter((part) => part !== undefined).join('.');
+}
+
+function connectedNow(status: string): boolean {
+  return status === 'connected';
 }

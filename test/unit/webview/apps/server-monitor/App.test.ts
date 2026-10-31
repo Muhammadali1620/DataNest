@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type MonitorProcess,
+  type MonitorStatusRow,
   type MonitorScope,
   serverMonitorProtocol,
   type ServerMonitorProtocol,
@@ -73,7 +74,12 @@ interface Setup {
 
 async function setup(
   state: ServerMonitorState = STATE,
-  options: { stopped?: boolean; failProcesses?: string } = {},
+  options: {
+    stopped?: boolean;
+    failProcesses?: string;
+    /** The status rows of reading number `call` (1, 2, …), for the charts. */
+    statusRows?: (call: number) => MonitorStatusRow[];
+  } = {},
 ): Promise<Setup> {
   const transports = createLinkedTransports();
   const host: HostPeer = new RpcPeer({
@@ -96,8 +102,9 @@ async function setup(
   });
   host.handle('status', () => {
     calls.status += 1;
+    const call = calls.status;
     return {
-      rows: [
+      rows: options.statusRows?.(call) ?? [
         { name: 'Questions', value: '1200', perSecond: 12.5 },
         { name: 'Uptime', value: '3600' },
         { name: 'Query', value: '3', group: 'events' },
@@ -109,7 +116,7 @@ async function setup(
         maxConnections: 151,
         rate: { kind: 'queries', perSecond: 12.5 },
       },
-      at: 0,
+      at: call * 3000,
     };
   });
   host.handle('settings', ({ scope }) => {
@@ -379,5 +386,98 @@ describe('server monitor page', () => {
     const changed = within(table).getByText('Changed from the default');
     expect(changed.closest('tr')?.textContent).toContain('sort_buffer_size');
     expect(within(table).getAllByText('Changed from the default')).toHaveLength(1);
+  });
+
+  describe('charts', () => {
+    const POSTGRES = (call: number): MonitorStatusRow[] => {
+      const rate = call > 1;
+      return [
+        {
+          name: 'blks_read',
+          value: '10',
+          group: 'pg_stat_database',
+          ...(rate ? { perSecond: 2 } : {}),
+        },
+        {
+          name: 'blks_hit',
+          value: '90',
+          group: 'pg_stat_database',
+          ...(rate ? { perSecond: 10 } : {}),
+        },
+        {
+          name: 'tup_inserted',
+          value: '5',
+          group: 'pg_stat_database',
+          ...(rate ? { perSecond: 1 } : {}),
+        },
+        { name: 'tup_updated', value: '5', group: 'pg_stat_database' },
+        { name: 'tup_deleted', value: '5', group: 'pg_stat_database' },
+        {
+          name: 'tup_returned',
+          value: '5',
+          group: 'pg_stat_database',
+          ...(rate ? { perSecond: 4 } : {}),
+        },
+        {
+          name: 'tup_fetched',
+          value: '5',
+          group: 'pg_stat_database',
+          ...(rate ? { perSecond: 3 } : {}),
+        },
+      ];
+    };
+
+    async function openStatus(rows: (call: number) => MonitorStatusRow[]): Promise<Setup> {
+      const made = await setup(STATE, { statusRows: rows });
+      await fireEvent.click(screen.getByRole('tab', { name: 'Status' }));
+      await screen.findByTestId('status');
+      return made;
+    }
+
+    it('shows both charts on the status tab, after the cards and before the table', async () => {
+      await openStatus(POSTGRES);
+      const charts = screen.getByTestId('charts');
+      expect(within(charts).getAllByTestId('chart')).toHaveLength(2);
+      expect(
+        charts.compareDocumentPosition(screen.getByTestId('status')) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('draws Traffic and Queries with their legends once readings arrive', async () => {
+      const { calls } = await openStatus(POSTGRES);
+      await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      await waitFor(() => {
+        expect(calls.status).toBeGreaterThanOrEqual(3);
+      });
+      const [traffic, queries] = screen.getAllByTestId('chart');
+      expect(traffic?.textContent).toContain('Traffic');
+      expect(traffic?.textContent).toContain('read');
+      expect(traffic?.textContent).toContain('hit');
+      expect(queries?.textContent).toContain('Queries');
+      for (const word of ['insert', 'update', 'delete', 'select', 'fetched']) {
+        expect(queries?.textContent).toContain(word);
+      }
+      expect(traffic?.querySelectorAll('path.line')).toHaveLength(2);
+      expect(queries?.querySelectorAll('path.line')).toHaveLength(5);
+      // Blocks of 8 KB: 10 blocks a second is 80 KB.
+      expect(traffic?.querySelector('table')?.textContent).toContain('80.0 KB');
+    });
+
+    it('has the same counters for MySQL', async () => {
+      await openStatus((call) => [
+        { name: 'Bytes_received', value: '1', ...(call > 1 ? { perSecond: 500 } : {}) },
+        { name: 'Bytes_sent', value: '1', ...(call > 1 ? { perSecond: 900 } : {}) },
+        { name: 'Com_select', value: '1', ...(call > 1 ? { perSecond: 3 } : {}) },
+        { name: 'Com_insert', value: '1' },
+      ]);
+      expect(screen.getAllByTestId('chart')).toHaveLength(2);
+      expect(screen.getAllByTestId('chart')[0]?.textContent).toContain('received');
+    });
+
+    it('draws no charts for a server whose counters are not known', async () => {
+      await openStatus(() => [{ name: 'Questions', value: '1200', perSecond: 12.5 }]);
+      expect(screen.queryByTestId('charts')).toBeNull();
+    });
   });
 });

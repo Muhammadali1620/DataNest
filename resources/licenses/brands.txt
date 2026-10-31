@@ -1,0 +1,10 @@
+Database marks (resources/icons/db, src/shared/db-brand-paths.ts)
+
+The glyph shapes of PostgreSQL, MySQL, SQLite, ClickHouse, Redis, MongoDB and Elasticsearch
+come from the "simple-icons" package (https://simpleicons.org), released under CC0 1.0
+(public domain dedication). The licence covers the drawing files, not the marks.
+
+The names and logos of these products are trademarks of their respective owners. DataNest is
+not affiliated with, sponsored by or endorsed by them. The marks are used only to identify
+the database a connection talks to (nominative use). The SQL Server and Oracle marks are
+simple drawings of ours.

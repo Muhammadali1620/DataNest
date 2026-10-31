@@ -1078,5 +1078,12 @@
   "Manager: {0}": "Менеджер: {0}",
   "Forget the statements of \"{0}\"?": "Забыть запросы «{0}»?",
   "They are removed from the query history too.": "Они удалятся и из истории запросов.",
-  "A dump is already running": "Дамп уже выполняется"
+  "A dump is already running": "Дамп уже выполняется",
+  "Force quit": "Завершить принудительно",
+  "End process": "Завершить процесс",
+  "Force quit \"{0}\" (PID {1})?": "Принудительно завершить «{0}» (PID {1})?",
+  "End \"{0}\" (PID {1})?": "Завершить «{0}» (PID {1})?",
+  "The program is asked to stop. Unsaved work in it may be lost. This is a process of the whole machine, not only of the editor.": "Программу просят остановиться. Несохранённые данные в ней могут пропасть. Это процесс всего компьютера, а не только редактора.",
+  "Open link": "Открыть ссылку",
+  "Open this link from the QR code?": "Открыть эту ссылку из QR-кода?"
 }

@@ -6,6 +6,7 @@ import {
   buildContentSecurityPolicy,
   createNonce,
   OWN_ICON,
+  PAGE_FADE_IN,
   PANEL_ICONS,
   panelIconPaths,
   renderWebviewHtml,
@@ -226,5 +227,36 @@ describe('panel tab icons', () => {
       const file = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-dark.svg`), 'utf8');
       expect(file, app).toContain(shapes);
     }
+  });
+});
+
+describe('page fade', () => {
+  it('fades every page in, and not for those who asked for less motion', () => {
+    const html = renderWebviewHtml(base);
+    expect(html).toContain(`<style>${PAGE_FADE_IN}</style>`);
+    expect(PAGE_FADE_IN).toMatch(/\.table-bar~\*\{animation:dn-page-in 1\d\dms/u);
+    expect(PAGE_FADE_IN).toMatch(
+      /prefers-reduced-motion:reduce\)\{\.table-bar~\*\{animation:none/u,
+    );
+    // Inline styles are allowed by the policy; scripts still need the nonce.
+    expect(cspOf(html)).toContain(
+      "style-src https://file+.vscode-resource.vscode-cdn.net 'unsafe-inline'",
+    );
+  });
+});
+
+describe('a page that takes the tab of another page of a table', () => {
+  it('is told its place in the table on the body, for the bar to stand ready', () => {
+    const html = renderWebviewHtml({ ...base, bar: { page: 'er', isView: true } });
+    expect(html).toContain('<body data-table-page="er" data-table-view="view">');
+    expect(renderWebviewHtml({ ...base, bar: { page: 'data', isView: false } })).toContain(
+      '<body data-table-page="data" data-table-view="table">',
+    );
+  });
+
+  it('has a plain body otherwise, and cannot be made to inject markup', () => {
+    expect(renderWebviewHtml(base)).toContain('<body>');
+    const html = renderWebviewHtml({ ...base, bar: { page: '"><script>', isView: false } });
+    expect(html).not.toContain('"><script>');
   });
 });

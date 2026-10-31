@@ -176,6 +176,14 @@ export const CODICONS = {
   'symbol-color': 0xeb5c,
   'symbol-ruler': 0xea96,
   tools: 0xeb6d,
+  circle: 0xeabc,
+  layers: 0xebd2,
+  'primitive-square': 0xea72,
+  'screen-normal': 0xeb4d,
+  'type-hierarchy-sub': 0xebba,
+  'fold-down': 0xeaf3,
+  'fold-up': 0xeaf4,
+  mirror: 0xea69,
 } as const;
 
 export type CodiconName = keyof typeof CODICONS;

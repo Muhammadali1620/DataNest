@@ -3,7 +3,7 @@
 
 import type { TableRef } from '../../core/model/objects';
 import type { SessionTarget } from '../../services/connection-manager';
-import type { TableAction } from '../../shared/table-actions';
+import type { TableAction, TablePage } from '../../shared/table-actions';
 import { COMMAND_IDS } from '../command-ids';
 import type { TableNode } from '../tree/nodes';
 
@@ -45,9 +45,22 @@ export interface TablePageView {
   readonly kind?: 'table' | 'view';
 }
 
+/** The webview app that shows each page of a table. */
+export const TABLE_PAGE_APPS: Readonly<Record<TablePage, string>> = {
+  properties: 'table-designer',
+  data: 'result-grid',
+  er: 'er-diagram',
+  generate: 'test-data',
+  compare: 'data-compare',
+  manager: 'manager',
+};
+
 export interface TableActionCall {
   readonly command: string;
   readonly args: readonly unknown[];
+  /** The page of the table the command opens; absent for the history. */
+  readonly page?: TablePage;
+  readonly isView?: boolean;
 }
 
 /** The command to run for a bar action; the history is filtered to the table instead. */
@@ -72,10 +85,12 @@ export function tableActionCall(
           table: { name: node.name, kind: view.kind ?? 'table' },
         },
       ],
+      page: 'manager',
+      isView: view.kind === 'view',
     };
   }
   // A view's "Properties" is its definition editor; the designer is for tables.
   const command =
     action === 'properties' && view.kind === 'view' ? COMMAND_IDS.editObject : COMMANDS[action];
-  return { command, args: [tableNodeOf(view)] };
+  return { command, args: [tableNodeOf(view)], page: action, isView: view.kind === 'view' };
 }

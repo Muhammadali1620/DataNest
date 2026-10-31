@@ -17,6 +17,21 @@ import {
 
 const columns = [{ name: 'id' }, { name: 'email' }];
 
+describe('NOT NULL columns', () => {
+  it('make room for the mark after the name', () => {
+    const header = [{ name: 'a_rather_long_column_name' }];
+    const [plain] = initialWidths(header);
+    const [marked] = initialWidths(header, [], [true]);
+    expect(marked).toBeGreaterThan(plain ?? 0);
+    expect(initialWidths(header, [], [false])).toEqual([plain]);
+  });
+
+  it('count the mark when fitting to the content too', () => {
+    const column = { name: 'a_rather_long_column_name' };
+    expect(fitColumnWidth(column, 0, [], true)).toBeGreaterThan(fitColumnWidth(column, 0, []));
+  });
+});
+
 describe('initialWidths', () => {
   it('gives one width per column', () => {
     expect(initialWidths(columns)).toHaveLength(2);

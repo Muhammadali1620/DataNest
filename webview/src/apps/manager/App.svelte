@@ -9,6 +9,7 @@
   import type { TableAction } from '../../../../src/shared/table-actions';
   import Icon from '../../components/Icon.svelte';
   import TableBar from '../../components/TableBar.svelte';
+  import BootBar from '../../components/BootBar.svelte';
   import type { Translate } from '../../lib/i18n';
   import DumpSection from './DumpSection.svelte';
   import LogSection from './LogSection.svelte';
@@ -61,11 +62,21 @@
 
 <main>
   {#if page === undefined}
+    <BootBar {t} />
     <div class="empty" role="status">
       <Icon name="loading" size={20} spin />
       <p class="empty-title">{t('manager.loading')}</p>
     </div>
   {:else}
+    {#if page.table !== undefined}
+      <TableBar
+        active="manager"
+        isView={page.table.kind === 'view'}
+        {t}
+        onAction={navigate}
+      />
+    {/if}
+
     <header class="top">
       <span class="top-icon"><Icon name="dashboard" size={18} /></span>
       <div class="top-text">
@@ -77,15 +88,6 @@
         </p>
       </div>
     </header>
-
-    {#if page.table !== undefined}
-      <TableBar
-        active="manager"
-        isView={page.table.kind === 'view'}
-        {t}
-        onAction={navigate}
-      />
-    {/if}
 
     <div class="body">
       <div

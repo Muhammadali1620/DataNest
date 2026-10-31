@@ -60,6 +60,9 @@ describe('the Russian dictionary', () => {
   // Names of products, file formats and terms that stay as they are in Russian too.
   const UNTRANSLATED = new Set([
     'tools.kind.base64',
+    'tools.provider.cloudflare',
+    'tools.provider.google',
+    'tools.set.group.redis',
     'tools.kind.unicode',
     'form.driver.mysql',
     'form.driver.postgres',
@@ -84,6 +87,11 @@ describe('the Russian dictionary', () => {
     'grid.exportFormat.markdown',
     'grid.exportFormat.xlsx',
     'users.flag.file',
+    // SQL words, the same in every language.
+    'monitor.series.insert',
+    'monitor.series.update',
+    'monitor.series.delete',
+    'monitor.series.select',
   ]);
 
   it('translates every text except names and terms', () => {

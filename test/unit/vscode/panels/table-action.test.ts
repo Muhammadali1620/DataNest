@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   MANAGER_COMMAND,
+  TABLE_PAGE_APPS,
   tableActionCall,
   tableNodeOf,
 } from '../../../../src/vscode/panels/table-action';
 import { COMMAND_IDS } from '../../../../src/vscode/command-ids';
 import { isTreeNode } from '../../../../src/vscode/tree/nodes';
-import { TABLE_ACTIONS } from '../../../../src/shared/table-actions';
+import { TABLE_ACTIONS, TABLE_PAGES } from '../../../../src/shared/table-actions';
 
 const view = {
   target: { connectionId: 'c1', database: 'shop' },
@@ -76,6 +77,8 @@ describe('tableActionCall', () => {
           table: { name: 'orders', kind: 'table' },
         },
       ],
+      page: 'manager',
+      isView: false,
     });
   });
 
@@ -84,5 +87,19 @@ describe('tableActionCall', () => {
       command: COMMAND_IDS.showHistory,
       args: [{ connectionId: 'c1', table: 'orders' }],
     });
+  });
+
+  it('names the page a command opens, so the page can stand under the same bar while it loads', () => {
+    for (const action of TABLE_ACTIONS.filter((candidate) => candidate !== 'history')) {
+      expect(tableActionCall(action, view)).toMatchObject({ page: action, isView: false });
+    }
+    expect(tableActionCall('er', { ...view, kind: 'view' })).toMatchObject({ isView: true });
+    expect(tableActionCall('history', view).page).toBeUndefined();
+  });
+
+  it('knows the app of every page, so only that page takes over the tab', () => {
+    expect(Object.keys(TABLE_PAGE_APPS).sort()).toEqual([...TABLE_PAGES].sort());
+    expect(new Set(Object.values(TABLE_PAGE_APPS)).size).toBe(TABLE_PAGES.length);
+    expect(TABLE_PAGE_APPS.properties).toBe('table-designer');
   });
 });

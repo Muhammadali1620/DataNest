@@ -17,6 +17,7 @@
   import Icon from '../../components/Icon.svelte';
   import type { Tone } from '../../components/tone';
   import TableBar from '../../components/TableBar.svelte';
+  import BootBar from '../../components/BootBar.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
@@ -464,10 +465,13 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if designerState === undefined || design === undefined}
+  <main class="page">
+  <BootBar {t} />
   <div class="empty loading" role="status">
     <span class="empty-icon"><Icon name="loading" size={24} spin /></span>
     <p class="empty-title">{t('designer.loading')}</p>
   </div>
+  </main>
 {:else}
   <main class="page">
     {#if designerState.tableBar !== undefined}

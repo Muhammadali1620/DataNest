@@ -44,7 +44,9 @@ describe('ToolsModel', () => {
 
   it('lists interfaces, checks a port, resolves a name and pings', async () => {
     const { model: m } = model();
-    expect(m.interfaces()).toEqual({ items: [] });
+    const listed = m.interfaces();
+    expect(listed.items).toEqual([]);
+    expect(typeof listed.hostname).toBe('string');
     expect(await m.portCheck({ host: 'localhost', port: 80, timeoutMs: 500 })).toEqual({
       open: true,
       ms: 2,

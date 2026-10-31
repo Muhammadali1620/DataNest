@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import type { RpcTransport } from '../../shared/rpc';
-import { takeColumnHint } from './column-hint';
+import { guardPanel, takeOffer } from './panel-handoff';
 import {
   createNonce,
   panelIconPaths,
@@ -29,25 +29,32 @@ export function createWebviewAppPanel(
   options: WebviewAppPanelOptions,
 ): vscode.WebviewPanel {
   const root = vscode.Uri.joinPath(extensionUri, ...WEBVIEW_ASSET_DIR);
-  // A page reached from the bar of another page of a table takes that page's place.
-  const handedColumn = takeColumnHint();
-  const panel = vscode.window.createWebviewPanel(
-    options.viewType,
-    options.title,
-    handedColumn === undefined
-      ? {
-          viewColumn: options.column ?? vscode.ViewColumn.Active,
-          preserveFocus: options.preserveFocus ?? false,
-        }
-      : { viewColumn: handedColumn, preserveFocus: false },
-    { enableScripts: true, localResourceRoots: [root] },
-  );
+  // A page reached from the bar of another page of a table takes that page's tab (D117):
+  // same tab, same place, its content replaced.
+  const offer = takeOffer(options.app);
+  const handed = offer?.panel;
+  const panel =
+    handed ??
+    vscode.window.createWebviewPanel(
+      options.viewType,
+      options.title,
+      {
+        viewColumn: options.column ?? vscode.ViewColumn.Active,
+        preserveFocus: options.preserveFocus ?? false,
+      },
+      { enableScripts: true, localResourceRoots: [root] },
+    );
+  if (handed !== undefined) {
+    panel.title = options.title;
+  }
   const icon = panelIconPaths(options.app);
   if (icon !== undefined) {
     panel.iconPath = {
       light: vscode.Uri.joinPath(extensionUri, ...icon.light),
       dark: vscode.Uri.joinPath(extensionUri, ...icon.dark),
     };
+  } else if (handed !== undefined) {
+    panel.iconPath = undefined;
   }
   const { webview } = panel;
   const assets = webviewAssetPaths(options.app);
@@ -60,8 +67,9 @@ export function createWebviewAppPanel(
     nonce: createNonce(),
     title: options.title,
     lang: vscode.env.language,
+    ...(offer?.bar === undefined ? {} : { bar: offer.bar }),
   });
-  return panel;
+  return guardPanel(panel);
 }
 
 /** RPC transport over a webview; failed posts are logged instead of rejecting unhandled. */

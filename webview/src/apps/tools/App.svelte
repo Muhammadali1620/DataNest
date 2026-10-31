@@ -1,35 +1,55 @@
 <script lang="ts">
   import TextContextMenu from '../../components/TextContextMenu.svelte';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import type { ToolsProtocol } from '../../../../src/shared/protocols/tools';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Icon from '../../components/Icon.svelte';
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
+  import { browserCanvasApi, type CanvasApi } from './canvas-api';
   import ColorsTab from './ColorsTab.svelte';
   import GeneralTab from './GeneralTab.svelte';
   import ImageTab from './ImageTab.svelte';
   import { browserImageApi, type ImageApi } from './image-api';
   import NetworkTab from './NetworkTab.svelte';
+  import QrTab from './QrTab.svelte';
+  import SettingsTab from './SettingsTab.svelte';
+  import { createToolsState, provideToolsState, type ToolsState } from './state';
+  import TasksTab from './TasksTab.svelte';
 
   interface Props {
     rpc: RpcPeer<ToolsProtocol['webview'], ToolsProtocol['host']>;
     t: Translate;
     /** The browser's image machinery; tests give a fake. */
     images?: ImageApi;
+    /** The browser's canvas, for the tools that need pixels; tests give a fake. */
+    canvas?: CanvasApi;
+    /** What the page keeps while its editor tab is hidden; tests may leave it out. */
+    state?: ToolsState;
   }
 
-  const { rpc, t, images = browserImageApi }: Props = $props();
+  const { rpc, t, images = browserImageApi, canvas = browserCanvasApi, state: provided }: Props = $props();
+  // The store is chosen once, when the page loads; a later prop change is not a new store.
+  const remembered = untrack(() => provided) ?? createToolsState();
+  provideToolsState(remembered);
 
-  type TabId = 'general' | 'network' | 'colors' | 'image';
+  type TabId = 'general' | 'network' | 'qr' | 'colors' | 'tasks' | 'settings' | 'image';
   const TABS: readonly { id: TabId; icon: CodiconName }[] = [
     { id: 'general', icon: 'symbol-misc' },
     { id: 'network', icon: 'globe' },
+    { id: 'qr', icon: 'symbol-structure' },
     { id: 'colors', icon: 'symbol-color' },
+    { id: 'tasks', icon: 'server-process' },
+    { id: 'settings', icon: 'settings-gear' },
     { id: 'image', icon: 'file-media' },
   ];
 
-  let tab = $state<TabId>('general');
+  const savedTab = remembered.get('tab', 'general');
+  let tab = $state<TabId>(TABS.find((item) => item.id === savedTab)?.id ?? 'general');
+
+  $effect(() => {
+    remembered.set('tab', tab);
+  });
   let copied = $state(false);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -105,11 +125,17 @@
     {#if tab === 'general'}
       <GeneralTab {rpc} {t} {copy} />
     {:else if tab === 'network'}
-      <NetworkTab {rpc} {t} />
+      <NetworkTab {rpc} {t} {copy} />
+    {:else if tab === 'qr'}
+      <QrTab {rpc} {t} {copy} {images} {canvas} />
     {:else if tab === 'colors'}
       <ColorsTab {t} {copy} />
+    {:else if tab === 'tasks'}
+      <TasksTab {rpc} {t} />
+    {:else if tab === 'settings'}
+      <SettingsTab {rpc} {t} />
     {:else}
-      <ImageTab {rpc} {t} {copy} {images} />
+      <ImageTab {rpc} {t} {copy} {images} {canvas} />
     {/if}
   </div>
 

@@ -96,6 +96,8 @@ export interface TreeSettings {
   showSystemObjects(): boolean;
   /** `datanest.tree.tableStats`: rows, size and comment of tables (V10.2.3). */
   tableStats?(): boolean;
+  /** `datanest.tree.showSizes`: server version and database/schema sizes (V11.14). */
+  showSizes?(): boolean;
 }
 
 /** Where the project files of the workspace are read from. */

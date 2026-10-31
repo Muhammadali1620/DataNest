@@ -10,6 +10,8 @@ export interface WebviewHtmlOptions {
   readonly title: string;
   /** UI language, `vscode.env.language`. */
   readonly lang?: string;
+  /** The page was opened from the bar of another page of a table: which page it is (D117). */
+  readonly bar?: { readonly page: string; readonly isView: boolean };
 }
 
 const NONCE_PATTERN = /^[A-Za-z0-9+/]+=*$/;
@@ -92,6 +94,16 @@ export function buildContentSecurityPolicy(cspSource: string, nonce: string): st
   ].join('; ');
 }
 
+/**
+ * What follows the bar of a table page fades in instead of a hard cut, so moving between
+ * the pages of a table (they share one tab, D117) does not flash while the bar itself
+ * stays put. Motion is switched off on request.
+ */
+export const PAGE_FADE_IN =
+  '@keyframes dn-page-in{from{opacity:0}to{opacity:1}}' +
+  '.table-bar~*{animation:dn-page-in 140ms ease-out both}' +
+  '@media (prefers-reduced-motion:reduce){.table-bar~*{animation:none}}';
+
 export function renderWebviewHtml(options: WebviewHtmlOptions): string {
   const csp = buildContentSecurityPolicy(options.cspSource, options.nonce);
   const style =
@@ -105,13 +117,21 @@ export function renderWebviewHtml(options: WebviewHtmlOptions): string {
     <meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(options.title)}</title>${style}
+    <style>${PAGE_FADE_IN}</style>
   </head>
-  <body>
+  <body${bodyAttributes(options.bar)}>
     <div id="app"></div>
     <script type="module" nonce="${options.nonce}" src="${escapeHtml(options.scriptUri)}"></script>
   </body>
 </html>
 `;
+}
+
+function bodyAttributes(bar: WebviewHtmlOptions['bar']): string {
+  if (bar === undefined) {
+    return '';
+  }
+  return ` data-table-page="${escapeHtml(bar.page)}" data-table-view="${bar.isView ? 'view' : 'table'}"`;
 }
 
 function assertNonce(nonce: string): void {

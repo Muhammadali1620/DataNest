@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.0] - 2026-10-31
+
+### Added
+
+- Tools: QR code (read and create), Task manager, Settings, crop, compress (on this machine or TinyPNG), SVG designer, public IP, DNS over HTTPS, ICMP ping, 20 colour previews; the page remembers its tab.
+- Manager dashboard: live traffic and query charts.
+- Server version after the connection name and size after the schema name in the tree (`datanest.tree.showSizes`).
+- Red asterisk on NOT NULL columns in result headers.
+
+### Changed
+
+- Pages of a table switch in the same tab with a fixed bar.
+- Recognisable database marks (simple-icons, CC0; the marks stay trademarks of their owners).
+
 ## [1.5.0] - 2026-10-31
 
 ### Added

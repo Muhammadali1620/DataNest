@@ -73,6 +73,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import SqlBar from './SqlBar.svelte';
   import type { TableAction } from '../../../../src/shared/table-actions';
   import TableBar from '../../components/TableBar.svelte';
+  import BootBar from '../../components/BootBar.svelte';
   import TextContextMenu from '../../components/TextContextMenu.svelte';
   import ValueDialog from './ValueDialog.svelte';
   import ViewSettings from './ViewSettings.svelte';
@@ -180,13 +181,18 @@ import type { RowAction } from '../../../../src/shared/row-action';
     ).filter((row): row is readonly CellValue[] => row !== undefined);
   }
 
+  /** A NOT NULL column of an editable result shows a `*` in its header. */
+  function isRequired(index: number): boolean {
+    return editColumns?.[index]?.nullable === false;
+  }
+
   function fit(index: number, rows: readonly (readonly CellValue[])[]): void {
     const column = activeTab?.columns[index];
     if (column === undefined) {
       return;
     }
     const next = [...widths];
-    next[index] = fitColumnWidth(column, index, rows);
+    next[index] = fitColumnWidth(column, index, rows, isRequired(index));
     rememberWidths(next);
   }
 
@@ -196,7 +202,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
       return;
     }
     const rows = rowsOnScreen();
-    rememberWidths(tab.columns.map((column, index) => fitColumnWidth(column, index, rows)));
+    rememberWidths(tab.columns.map((column, index) => fitColumnWidth(column, index, rows, isRequired(index))));
   }
 
   /** The value panel beside the grid, and the cell it follows. */
@@ -562,7 +568,13 @@ import type { RowAction } from '../../../../src/shared/row-action';
           // The first rows are what the column widths are measured from, unless the
           // user has already sized them.
           if (!userSized) {
-            widths = initialWidths(tab.columns, window.rows);
+            widths = initialWidths(
+              tab.columns,
+              window.rows,
+              tab.edit?.editable === true
+                ? tab.edit.columns?.map((column) => column?.nullable === false)
+                : [],
+            );
           }
         }
         loaded += 1;
@@ -971,6 +983,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
     <div class="progress-bar" role="progressbar" aria-label={t('grid.running')}></div>
   {/if}
   {#if gridState === undefined}
+    <BootBar {t} />
     <div class="empty" role="status">
       <Icon name="loading" size={20} spin />
       <p class="empty-title">{t('grid.loading')}</p>

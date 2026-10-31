@@ -14,6 +14,9 @@ const ALLOWED_IGNORES: Record<string, number> = {
   // The diagram is a canvas (role="application") with its own keys; a box is a drawn
   // shape, selected and opened by those keys as well as by the pointer.
   'webview/src/apps/er-diagram/App.svelte': 2,
+  // The designer's canvas (role="application") is one drawing surface with its own keys
+  // and the layer list beside it; shapes are picked by geometry, not by an element each.
+  'webview/src/apps/tools/DesignerCanvas.svelte': 1,
 };
 
 describe('webview accessibility', () => {

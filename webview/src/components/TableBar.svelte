@@ -71,8 +71,10 @@
     flex-wrap: wrap;
     gap: 4px 6px;
     align-items: center;
-    min-height: 40px;
-    padding: 4px 10px;
+    box-sizing: border-box;
+    min-height: 44px;
+    margin: 0;
+    padding: 7px 12px;
     border-bottom: 1px solid var(--dn-divider);
   }
 

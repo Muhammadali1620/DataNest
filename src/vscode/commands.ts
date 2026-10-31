@@ -159,6 +159,8 @@ export interface CommandDeps {
   readonly redisKeySeparator: () => string;
   /** The saved queries of the tree's "Query" folders (V11.12). */
   readonly savedQueries: SavedQueryStore;
+  /** The editor's secret store; the Tools page keeps its TinyPNG key there. */
+  readonly secrets?: vscode.SecretStorage;
 }
 
 /** The items selected in the tree, which VS Code passes after the clicked one. */
@@ -257,7 +259,21 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     logger: deps.logger,
   });
-  const toolPages = toolsCommandHandlers({ extensionUri: deps.extensionUri, logger: deps.logger });
+  const toolPages = toolsCommandHandlers({
+    extensionUri: deps.extensionUri,
+    logger: deps.logger,
+    actions: {
+      ...(deps.secrets === undefined ? {} : { secrets: deps.secrets }),
+      closeConnections: async () => {
+        for (const connectionId of deps.manager.connectedIds()) {
+          await deps.manager.disconnect(connectionId);
+        }
+      },
+      clearCache: () => {
+        deps.cache.invalidate();
+      },
+    },
+  });
   const users = userCommandHandlers({
     extensionUri: deps.extensionUri,
     store: deps.store,

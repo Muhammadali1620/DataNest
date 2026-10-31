@@ -42,6 +42,7 @@ function measure(
   rows: readonly (readonly CellValue[] | undefined)[],
   maxChars: number,
   maxWidth: number,
+  required = false,
 ): number {
   let longest = 0;
   for (const row of rows) {
@@ -53,7 +54,9 @@ function measure(
       longest = Math.max(longest, Math.min(firstLine.length, maxChars));
     }
   }
-  const header = name.length * CHAR_WIDTH + CELL_PADDING + HEADER_ICONS_WIDTH;
+  // A NOT NULL column shows a `*` after its name.
+  const header =
+    (name.length + (required ? 1 : 0)) * CHAR_WIDTH + CELL_PADDING + HEADER_ICONS_WIDTH;
   const content = longest * CHAR_WIDTH + CELL_PADDING;
   return clamp(Math.round(Math.max(header, content)), MIN_COLUMN_WIDTH, maxWidth);
 }
@@ -66,9 +69,12 @@ function measure(
 export function initialWidths(
   columns: readonly ResultColumnInfo[],
   rows: readonly (readonly CellValue[] | undefined)[] = [],
+  required: readonly (boolean | undefined)[] = [],
 ): number[] {
   const sample = rows.slice(0, SAMPLE_ROWS);
-  return columns.map((column, index) => measure(column.name, index, sample, 200, MAX_AUTO_WIDTH));
+  return columns.map((column, index) =>
+    measure(column.name, index, sample, 200, MAX_AUTO_WIDTH, required[index] === true),
+  );
 }
 
 /**
@@ -79,8 +85,9 @@ export function fitColumnWidth(
   column: ResultColumnInfo,
   index: number,
   rows: readonly (readonly CellValue[] | undefined)[],
+  required = false,
 ): number {
-  return measure(column.name, index, rows.slice(0, FIT_ROWS), 400, MAX_FIT_WIDTH);
+  return measure(column.name, index, rows.slice(0, FIT_ROWS), 400, MAX_FIT_WIDTH, required);
 }
 
 export function clamp(value: number, min: number, max: number): number {

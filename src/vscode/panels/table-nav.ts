@@ -1,19 +1,19 @@
-// Moves from one page of a table to another in place (D116): the bar of a table page
-// names the target, the new page opens in the column of the old one and the old page is
-// closed once the new one exists, so the user keeps one tab and the bar stays under the
-// cursor. A target that was already open elsewhere, or a command the user cancelled,
-// leaves the old page alone.
+// Moves from one page of a table to another inside one editor tab (D117): the bar of a
+// table page names the target, the page offers its tab and the target page loads its
+// content into that very tab. Nothing closes or moves, and the old page keeps working
+// until the new one is ready to appear. A target that is already open in another tab, or
+// a command the user cancelled, leaves the old page alone.
 
 import * as vscode from 'vscode';
 import { COMMAND_IDS } from '../command-ids';
-import { clearColumnHint, hasColumnHint, hintColumn } from './column-hint';
+import { clearOffer, offerPanel } from './panel-handoff';
 import type { TableAction, TablePage } from '../../shared/table-actions';
-import { type TableActionCall, tableActionCall, type TablePageView } from './table-action';
-
-const SETTLE_MS = 1500;
-const POLL_MS = 40;
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+import {
+  TABLE_PAGE_APPS,
+  type TableActionCall,
+  tableActionCall,
+  type TablePageView,
+} from './table-action';
 
 /** Runs a bar action of a table page; the history is a quick pick and stays out of it. */
 export async function navigateTable(
@@ -28,18 +28,17 @@ export async function navigateTable(
   if (dirty && !(await confirmLeave())) {
     return;
   }
-  hintColumn(origin.viewColumn);
+  if (call.page !== undefined) {
+    offerPanel(origin, TABLE_PAGE_APPS[call.page], {
+      page: call.page,
+      isView: call.isView === true,
+    });
+  }
   try {
     await vscode.commands.executeCommand(call.command, ...call.args);
-    // A handler may create its panel after it has returned; give it a moment.
-    for (let waited = 0; hasColumnHint() && waited < SETTLE_MS; waited += POLL_MS) {
-      await sleep(POLL_MS);
-    }
-    if (!hasColumnHint()) {
-      origin.dispose();
-    }
   } finally {
-    clearColumnHint();
+    // Nobody took the tab (the page was already open elsewhere): the old page stays.
+    clearOffer();
   }
 }
 

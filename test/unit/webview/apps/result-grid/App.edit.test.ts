@@ -620,4 +620,31 @@ describe('result grid editing', () => {
       expect(saves).not.toHaveBeenCalled();
     });
   });
+
+  describe('NOT NULL columns', () => {
+    function marked(): string[] {
+      return screen
+        .getAllByRole('columnheader')
+        .filter((header) => header.querySelector('[data-testid="not-null"]') !== null)
+        .map((header) => header.getAttribute('data-column') ?? '');
+    }
+
+    it('shows a red mark in the header of each NOT NULL column only', async () => {
+      await open();
+      expect(marked()).toEqual(['0', '3']);
+      const first = screen
+        .getAllByRole('columnheader')
+        .find((header) => header.getAttribute('data-column') === '0');
+      expect(first?.textContent).toContain('NOT NULL: a value is required');
+      expect(first?.querySelector('[data-testid="not-null"]')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      );
+    });
+
+    it('shows no mark when the result is read-only', async () => {
+      const { edit: _edit, ...rest } = EDITABLE_TAB;
+      await open({ ...rest, edit: { editable: false, reason: 'view' } });
+      expect(marked()).toEqual([]);
+    });
+  });
 });

@@ -20,6 +20,12 @@ filter, sorting and **Cancel statement** / **End session** (it asks first). They
 [server monitor](tools.md#server-monitor) inside the Manager. A SQLite file has no other
 sessions, so it has no Processes section.
 
+On PostgreSQL, MySQL and MariaDB the Dashboard also draws two live charts of the last five
+minutes, one reading every 3 seconds: **Traffic** (PostgreSQL: blocks read from disk and found
+in cache, in bytes; MySQL: bytes received and sent) and **Queries** (inserts, updates, deletes,
+selects and rows fetched per second). Point at a chart, or use the arrow keys, to see the
+values of one moment. The page does not read the server while it is hidden.
+
 ## Dump
 
 Writes a SQL script of the chosen tables and views — and, if you tick it, the routines,

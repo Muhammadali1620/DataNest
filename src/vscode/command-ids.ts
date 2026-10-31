@@ -229,6 +229,7 @@ export const CONFIG_KEYS = {
   syncConnections: 'connections.sync',
   /** Rows, size and comment of tables in the tree (V10.2.3). */
   treeTableStats: 'tree.tableStats',
+  treeShowSizes: 'tree.showSizes',
   /** Largest number of rows one statement brings back. */
   rowLimit: 'rowLimit',
   /** Rows one page of a table view holds. */

@@ -361,6 +361,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       logger,
       channel,
       extensionUri: context.extensionUri,
+      secrets: context.secrets,
       store,
       manager,
       tree,

@@ -13,6 +13,7 @@
   import Field from '../../components/Field.svelte';
   import Icon from '../../components/Icon.svelte';
   import TableBar from '../../components/TableBar.svelte';
+  import BootBar from '../../components/BootBar.svelte';
   import type { Translate } from '../../lib/i18n';
   import { generatorLabel, problemLabel, reportLabel } from './generator-view';
 
@@ -130,10 +131,13 @@
 </script>
 
 {#if page === undefined}
+  <main class="page">
+  <BootBar {t} />
   <div class="empty" role="status">
     <span class="empty-icon"><Icon name="loading" size={24} spin /></span>
     <p class="empty-title">{t('form.loading')}</p>
   </div>
+  </main>
 {:else}
   <main class="page">
     {#if page.tableBar !== undefined}

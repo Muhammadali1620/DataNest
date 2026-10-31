@@ -10,14 +10,14 @@ export const MAX_PING_COUNT = 10;
 
 const LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/iu;
 
-function isIpv4(text: string): boolean {
+export function isIpv4(text: string): boolean {
   const parts = text.split('.');
   return (
     parts.length === 4 && parts.every((part) => /^\d{1,3}$/u.test(part) && Number(part) <= 255)
   );
 }
 
-function isIpv6(text: string): boolean {
+export function isIpv6(text: string): boolean {
   if (!/^[0-9a-f:.]+$/iu.test(text) || !text.includes(':') || text.includes(':::')) {
     return false;
   }

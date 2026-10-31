@@ -246,3 +246,5 @@ Plan and progress: [ROADMAP.md](ROADMAP.md).
 ## License
 
 [MIT](LICENSE)
+
+Database names and logos shown next to connections are trademarks of their owners; DataNest is not affiliated with them (see `resources/licenses/brands.txt`).

@@ -97,42 +97,59 @@ const input = (testId: string): HTMLInputElement | HTMLTextAreaElement =>
 
 async function goTo(tab: string): Promise<void> {
   await fireEvent.click(screen.getByRole('tab', { name: tab }));
+  // The Image tab opens on Crop; the older tests of it are about Resize.
+  if (tab === 'Image') {
+    await fireEvent.click(screen.getByTestId('mode-resize'));
+  }
 }
 
 describe('the page', () => {
-  it('tells the host it is ready and shows four tabs, General first', async () => {
+  it('tells the host it is ready and shows its tabs, General first', async () => {
     const { ready } = await open();
     expect(ready).toHaveBeenCalledOnce();
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual([
+    const names = screen.getAllByRole('tab').map((tab) => tab.textContent.trim());
+    expect(names.slice(0, 6)).toEqual([
       'General',
       'Network',
+      'QR code',
       'Colors',
-      'Image',
+      'Task manager',
+      'Settings',
     ]);
+    expect(names).toContain('Image');
     expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tabpanel')).toBeTruthy();
   });
 
   it('switches tabs by click and by the arrow keys', async () => {
     await open();
+    const names = screen.getAllByRole('tab').map((tab) => tab.textContent.trim());
+    const last = names.at(-1) ?? '';
+    const selected = (name: string) =>
+      screen.getByRole('tab', { name }).getAttribute('aria-selected');
     await goTo('Colors');
     expect(screen.getByTestId('hex')).toBeTruthy();
     await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' });
-    expect(screen.getByRole('tab', { name: 'Image' }).getAttribute('aria-selected')).toBe('true');
-    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' });
-    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-selected')).toBe('true');
-    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' });
-    expect(screen.getByRole('tab', { name: 'Image' }).getAttribute('aria-selected')).toBe('true');
-    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'Home' });
-    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-selected')).toBe('true');
+    expect(selected('Task manager')).toBe('true');
     await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' });
-    expect(screen.getByRole('tab', { name: 'Image' }).getAttribute('aria-selected')).toBe('true');
+    expect(selected('Colors')).toBe('true');
+    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' });
+    expect(selected(last)).toBe('true');
+    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' });
+    expect(selected('General')).toBe('true');
+    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' });
+    expect(selected(last)).toBe('true');
+    await fireEvent.keyDown(screen.getByRole('tablist'), { key: 'Home' });
+    expect(selected('General')).toBe('true');
   });
 
   it('only the selected tab is in the tab order', async () => {
     await open();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((tab) => tab.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1']);
+    expect(tabs.map((tab) => tab.getAttribute('tabindex'))).toEqual([
+      '0',
+      ...tabs.slice(1).map(() => '-1'),
+    ]);
   });
 });
 

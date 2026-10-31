@@ -12,6 +12,7 @@
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import TableBar from '../../components/TableBar.svelte';
+  import BootBar from '../../components/BootBar.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
@@ -108,6 +109,9 @@
 </script>
 
 <main>
+  {#if page === undefined}
+    <BootBar {t} />
+  {/if}
   {#if page?.tableBar !== undefined}
     <TableBar
       {t}

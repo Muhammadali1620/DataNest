@@ -19,23 +19,42 @@
   } from '../../../../src/shared/tools/image-data';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
+  import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
   import Card from './Card.svelte';
+  import type { CanvasApi } from './canvas-api';
+  import CompressSection from './CompressSection.svelte';
+  import CropSection from './CropSection.svelte';
+  import DesignerSection from './DesignerSection.svelte';
   import type { ImageApi, LoadedImage } from './image-api';
   import ImagePicker from './ImagePicker.svelte';
+  import { useToolsState } from './state';
 
   interface Props {
     rpc: RpcPeer<ToolsProtocol['webview'], ToolsProtocol['host']>;
     t: Translate;
     copy: (text: string) => void;
     images: ImageApi;
+    canvas: CanvasApi;
   }
 
-  const { rpc, t, copy, images }: Props = $props();
+  const { rpc, t, copy, images, canvas }: Props = $props();
 
-  type Mode = 'resize' | 'base64' | 'svg';
-  const MODES: readonly Mode[] = ['resize', 'base64', 'svg'];
-  let mode = $state<Mode>('resize');
+  type Mode = 'crop' | 'resize' | 'compress' | 'base64' | 'svg' | 'designer';
+  const MODES: readonly { id: Mode; icon: CodiconName }[] = [
+    { id: 'crop', icon: 'screen-normal' },
+    { id: 'resize', icon: 'symbol-ruler' },
+    { id: 'compress', icon: 'fold-down' },
+    { id: 'base64', icon: 'code' },
+    { id: 'svg', icon: 'file-code' },
+    { id: 'designer', icon: 'edit' },
+  ];
+  const memory = useToolsState();
+  const savedMode = memory.get('imageMode', 'crop');
+  let mode = $state<Mode>(MODES.find((item) => item.id === savedMode)?.id ?? 'crop');
+  $effect(() => {
+    memory.set('imageMode', mode);
+  });
 
   // The image picked for the first two modes is shared, so switching keeps it.
   let loaded = $state<LoadedImage | undefined>(undefined);
@@ -127,6 +146,12 @@
   );
 
   // ---- SVG editor
+
+  /** The designer's drawing goes into the editor's text, and the editor is shown. */
+  function sendToEditor(next: string): void {
+    svg = next;
+    mode = 'svg';
+  }
   let svg = $state(
     '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">\n  <rect width="200" height="200" fill="#ffffff"/>\n  <rect x="40" y="40" width="120" height="120" rx="24" fill="#409eff"/>\n</svg>',
   );
@@ -177,24 +202,30 @@
   }
 </script>
 
-<div class="tl-stack">
-  <div class="seg modes" role="group" aria-label={t('tools.img.mode')}>
-    {#each MODES as item (item)}
+<div class="image-layout">
+  <nav class="side-nav" aria-label={t('tools.img.mode')}>
+    {#each MODES as item (item.id)}
       <button
         type="button"
-        aria-pressed={mode === item}
-        data-testid={`mode-${item}`}
+        class="nav-item"
+        aria-pressed={mode === item.id}
+        data-testid={`mode-${item.id}`}
         onclick={() => {
-          mode = item;
+          mode = item.id;
           note = undefined;
         }}
       >
-        {t(`tools.img.${item}`)}
+        <Icon name={item.icon} size={15} />{t(`tools.img.${item.id}`)}
       </button>
     {/each}
-  </div>
+  </nav>
 
-  {#if mode === 'resize'}
+<div class="tl-stack content-area">
+  {#if mode === 'crop'}
+    <CropSection {t} {images} {canvas} {loaded} onLoad={onLoaded} {save} />
+  {:else if mode === 'compress'}
+    <CompressSection {rpc} {t} {images} {canvas} {loaded} onLoad={onLoaded} {save} />
+  {:else if mode === 'resize'}
     <div class="tl-grid wide">
       <Card title={t('tools.img.source')} icon="file-media" tone="blue">
         <ImagePicker {images} current={loaded} onLoad={onLoaded} {t} />
@@ -277,7 +308,7 @@
         {/if}
       </Card>
     </div>
-  {:else}
+  {:else if mode === 'svg'}
     <div class="tl-grid wide">
       <Card title="SVG" icon="code" tone="orange">
         {#snippet actions()}
@@ -318,16 +349,83 @@
         {/if}
       </Card>
     </div>
+  {:else}
+    <DesignerSection
+      {rpc}
+      {t}
+      {copy}
+      {images}
+      editorSvg={svg}
+      {sendToEditor}
+      {save}
+    />
   {/if}
 
   {#if note !== undefined}
     <p class="notice success" role="status" data-testid="img-note"><Icon name="pass" />{note}</p>
   {/if}
 </div>
+</div>
 
 <style>
-  .modes {
-    align-self: flex-start;
+  .image-layout {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 760px) {
+    .image-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .side-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--dn-border);
+    border-radius: 14px;
+  }
+
+  .nav-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 7px 10px;
+    color: var(--dn-muted);
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    transition:
+      color var(--dn-duration) var(--dn-ease),
+      background-color var(--dn-duration) var(--dn-ease);
+  }
+
+  .nav-item:hover {
+    color: var(--vscode-foreground);
+    background: var(--dn-hover);
+  }
+
+  .nav-item[aria-pressed='true'] {
+    color: var(--vscode-foreground);
+    background: color-mix(in srgb, var(--dn-accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--dn-accent) 55%, transparent);
+  }
+
+  .nav-item:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 1px;
+  }
+
+  .content-area {
+    min-width: 0;
   }
 
   .num {

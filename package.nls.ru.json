@@ -148,6 +148,7 @@
   "configuration.editor.highlightStatement.description": "Подсвечивать запрос под курсором — тот, что выполнит `Ctrl+Enter`, — когда в SQL-файле их несколько. Цвет — `datanest.statementHighlightBackground` в `workbench.colorCustomizations`.",
   "configuration.editor.foldStatements.description": "Сворачивать SQL по запросам, а также по блочным комментариям, меткам `-- #region` и отступам. Выключено — обычное сворачивание редактора по отступам.",
   "color.statementHighlightBackground": "Фон запроса под курсором в SQL-редакторе.",
+  "configuration.tree.showSizes.description": "Показывать версию сервера после подключения и размер базы или схемы после её имени (`gamezone.dev 15.19`, `public 2.4M`). Каждое читается лениво одним небольшим запросом и не задерживает дерево.",
   "configuration.tree.tableStats.description": "Показывать в дереве оценку числа строк каждой таблицы, а размер и комментарий — в подсказке. Берётся из статистики самого сервера, без `COUNT(*)`. У SQLite такой статистики нет.",
   "commands.table.duplicate.title": "Дублировать таблицу…",
   "commands.connections.openSqliteFile.title": "Открыть базу SQLite…",

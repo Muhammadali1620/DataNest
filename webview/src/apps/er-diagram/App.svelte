@@ -12,6 +12,7 @@
   import IconButton from '../../components/IconButton.svelte';
   import MenuButton from '../../components/MenuButton.svelte';
   import TableBar from '../../components/TableBar.svelte';
+  import BootBar from '../../components/BootBar.svelte';
   import { CODICONS } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
   import {
@@ -448,6 +449,9 @@
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
 
 <main>
+  {#if page === undefined}
+    <BootBar {t} />
+  {/if}
   {#if page?.tableBar !== undefined}
     <TableBar
       {t}

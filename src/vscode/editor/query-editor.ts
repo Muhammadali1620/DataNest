@@ -3,6 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import { ConnectionManager } from '../../services/connection-manager';
 import { endTransaction } from '../../services/transactions';
 import type { ConnectionStore } from '../../services/connection-store';
+import { type BindingMemory, isKeptDocument, SaveAsMatcher } from '../../services/binding-memory';
 import { COMMAND_IDS } from '../command-ids';
 import { pickConnection, pickDatabase } from '../connection-pick';
 import { DocumentBindings, type DocumentBinding } from './document-bindings';
@@ -27,6 +28,8 @@ export interface QueryEditorDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly logger: Logger;
+  /** Where saved files keep their binding across restarts (V10.2.2). */
+  readonly memory?: BindingMemory;
 }
 
 /**
@@ -35,6 +38,8 @@ export interface QueryEditorDeps {
  */
 export class QueryEditors implements vscode.Disposable {
   readonly bindings = new DocumentBindings();
+
+  private readonly savedAs = new SaveAsMatcher();
 
   private readonly deps: QueryEditorDeps;
   private readonly status: vscode.StatusBarItem;
@@ -64,6 +69,30 @@ export class QueryEditors implements vscode.Disposable {
         void this.forget(document);
       }),
     );
+    const { memory } = deps;
+    if (memory !== undefined) {
+      this.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument((document) => {
+          this.restore(document, memory);
+        }),
+        this.bindings.onDidChange((documentUri) => {
+          const binding = this.bindings.get(documentUri);
+          if (binding !== undefined) {
+            void this.keep(memory.remember(documentUri, binding));
+          }
+        }),
+        vscode.workspace.onDidRenameFiles((event) => {
+          for (const { oldUri, newUri } of event.files) {
+            void this.keep(memory.rename(oldUri.toString(), newUri.toString()));
+          }
+        }),
+        // Project connections arrive after activation, and once a workspace is trusted.
+        deps.store.onDidChange(() => {
+          this.restoreOpen(memory);
+        }),
+      );
+      this.restoreOpen(memory);
+    }
     this.updateStatus();
   }
 
@@ -147,10 +176,51 @@ export class QueryEditors implements vscode.Disposable {
     this.subscriptions.length = 0;
   }
 
+  /** Binds a SQL file to what it was bound to before, or to the query it was saved from. */
+  private restore(document: vscode.TextDocument, memory: BindingMemory): void {
+    const uri = document.uri.toString();
+    if (
+      document.languageId !== SQL_LANGUAGE_ID ||
+      !isKeptDocument(uri) ||
+      this.bindings.get(uri) !== undefined
+    ) {
+      return;
+    }
+    // A query saved over an old file brings its own connection with it.
+    const target = this.savedAs.fileOpened(uri, document.getText()) ?? memory.get(uri);
+    if (target !== undefined && this.deps.store.get(target.connectionId) !== undefined) {
+      this.bindings.bind(uri, target);
+    }
+  }
+
+  private restoreOpen(memory: BindingMemory): void {
+    for (const document of vscode.workspace.textDocuments) {
+      this.restore(document, memory);
+    }
+  }
+
+  private async keep(saving: Promise<void>): Promise<void> {
+    try {
+      await saving;
+    } catch (error) {
+      this.logger.warn('Could not remember the connection of a SQL file', error);
+    }
+  }
+
   private async forget(document: vscode.TextDocument): Promise<void> {
     const uri = document.uri.toString();
-    if (this.bindings.get(uri) === undefined) {
+    const binding = this.bindings.get(uri);
+    if (binding === undefined) {
       return;
+    }
+    if (this.deps.memory !== undefined && !isKeptDocument(uri)) {
+      const file = this.savedAs.untitledClosed(document.getText(), binding);
+      const saved = vscode.workspace.textDocuments.find(
+        (candidate) => candidate.uri.toString() === file,
+      );
+      if (file !== undefined && saved !== undefined && this.bindings.get(file) === undefined) {
+        this.bindings.bind(file, binding);
+      }
     }
     this.bindings.unbind(uri);
     try {

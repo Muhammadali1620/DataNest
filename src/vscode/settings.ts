@@ -98,6 +98,18 @@ export function readQueryVariablesMode(): QueryVariablesMode {
   return isQueryVariablesMode(value) ? value : 'remember';
 }
 
+/** One of the on/off settings of SQL editors (V10.2.2); all of them are on by default. */
+export function readEditorSwitch(
+  key:
+    | typeof CONFIG_KEYS.editorCodeLens
+    | typeof CONFIG_KEYS.editorHighlightStatement
+    | typeof CONFIG_KEYS.editorFoldStatements,
+): boolean {
+  // Only `false` turns one off; anything else a hand-edited file holds leaves it on.
+  const value: unknown = vscode.workspace.getConfiguration(CONFIG_SECTION).get(key, true);
+  return value !== false;
+}
+
 /** The mode a SQL editor starts in, until the user switches it there (V4.8). */
 export function readTransactionMode(): TransactionMode {
   const value = vscode.workspace

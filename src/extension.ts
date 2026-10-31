@@ -25,6 +25,8 @@ import { ResultEditor } from './services/result-editor';
 import { ResultSaver } from './services/result-saver';
 import { QueryHistory } from './services/history';
 import { QueryVariableMemory } from './services/query-variables';
+import { BindingMemory } from './services/binding-memory';
+import { StatementView } from './vscode/editor/statement-view';
 import { ResultStore } from './services/result-store';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
@@ -46,6 +48,7 @@ import {
   readHistoryLimit,
   readPageSize,
   readQueryTimeoutMs,
+  readEditorSwitch,
   readQueryVariablesMode,
   readRowLimit,
   readTransactionMode,
@@ -96,7 +99,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(manager);
   const cache = new MetadataCache({ logger });
 
-  const editors = new QueryEditors({ store, manager, logger });
+  const editors = new QueryEditors({
+    store,
+    manager,
+    logger,
+    memory: new BindingMemory(context.workspaceState),
+  });
   context.subscriptions.push(editors);
 
   const history = new QueryHistory({
@@ -246,9 +254,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     showResults,
     diagnostics,
+    codeLens: () => readEditorSwitch(CONFIG_KEYS.editorCodeLens),
+  });
+  const statementView = new StatementView({
+    driverOf: (documentUri) => {
+      const binding = editors.bindings.get(documentUri);
+      return binding === undefined ? undefined : store.get(binding.connectionId)?.driver;
+    },
+    highlight: () => readEditorSwitch(CONFIG_KEYS.editorHighlightStatement),
+    fold: () => readEditorSwitch(CONFIG_KEYS.editorFoldStatements),
   });
   context.subscriptions.push(
     lenses,
+    statementView,
     // Results belong to a document; closing it throws them away.
     vscode.workspace.onDidCloseTextDocument((document) => {
       results.clearDocument(document.uri.toString());
@@ -257,6 +275,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     editors.bindings.onDidChange(() => {
       // The dialect may have changed with the connection, so the split may differ.
       lenses.refresh();
+      statementView.applySettings();
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(`${CONFIG_SECTION}.editor`)) {
+        lenses.refresh();
+        statementView.applySettings();
+      }
     }),
   );
 

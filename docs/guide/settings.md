@@ -15,6 +15,14 @@ once, without a restart.
 | `datanest.safeMode` | `confirm` | `confirm`, `block`, `off` | What happens before a `DELETE` or `UPDATE` without `WHERE`, a `DROP` or a `TRUNCATE` (and their Redis, MongoDB and Elasticsearch kin): ask, refuse or just run. |
 | `datanest.historyLimit` | `500` | 0 – 10 000 | Statements kept in the query history; `0` turns it off. Passwords in statements are masked before saving. |
 
+## SQL editors
+
+| Setting | Default | Values | What it does |
+|---|---|---|---|
+| `datanest.editor.codeLens` | `true` | | Show **▶ Run** above each statement. |
+| `datanest.editor.highlightStatement` | `true` | | Highlight the statement under the cursor — the one `Ctrl+Enter` runs — when a file holds several. Its colour is `datanest.statementHighlightBackground` in `workbench.colorCustomizations`. |
+| `datanest.editor.foldStatements` | `true` | | Fold by statements, block comments, `-- #region` markers and indentation. Off: the editor's own folding by indentation. |
+
 ## The tree
 
 | Setting | Default | Values | What it does |

@@ -138,5 +138,9 @@
   "configuration.queryVariables.description": "What `:name` and `${name}` in a statement do. DataNest asks for each value before the statement runs and puts it in as a literal: a number, `NULL` or text (in single quotes, `'42'` stays text). Strings, comments and routine or trigger definitions are left alone.",
   "configuration.queryVariables.remember": "Ask, offering the value given last time",
   "configuration.queryVariables.ask": "Ask every time; nothing is kept",
-  "configuration.queryVariables.off": "Leave them in the text as written"
+  "configuration.queryVariables.off": "Leave them in the text as written",
+  "configuration.editor.codeLens.description": "Show **▶ Run** above each statement of a SQL editor.",
+  "configuration.editor.highlightStatement.description": "Highlight the statement under the cursor — the one `Ctrl+Enter` runs — when a SQL file holds several. The colour is `datanest.statementHighlightBackground` in `workbench.colorCustomizations`.",
+  "configuration.editor.foldStatements.description": "Fold SQL by statements, as well as by block comments, `-- #region` markers and indentation. Off: the editor's own folding by indentation.",
+  "color.statementHighlightBackground": "Background of the statement under the cursor in a SQL editor."
 }

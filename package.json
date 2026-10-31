@@ -1477,6 +1477,21 @@
           "default": "remember",
           "markdownDescription": "%configuration.queryVariables.description%"
         },
+        "datanest.editor.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.editor.codeLens.description%"
+        },
+        "datanest.editor.highlightStatement": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.editor.highlightStatement.description%"
+        },
+        "datanest.editor.foldStatements": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.editor.foldStatements.description%"
+        },
         "datanest.format.keywordCase": {
           "type": "string",
           "enum": [
@@ -1586,6 +1601,18 @@
         }
       }
     },
+    "colors": [
+      {
+        "id": "datanest.statementHighlightBackground",
+        "description": "%color.statementHighlightBackground%",
+        "defaults": {
+          "dark": "#ffffff0d",
+          "light": "#0000000a",
+          "highContrast": "#ffffff1f",
+          "highContrastLight": "#0000001a"
+        }
+      }
+    ],
     "keybindings": [
       {
         "command": "datanest.query.run",

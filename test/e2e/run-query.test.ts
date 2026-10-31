@@ -100,6 +100,38 @@ describe('running queries', () => {
     );
   });
 
+  it('hides the Run lenses when the setting turns them off', async () => {
+    const config = vscode.workspace.getConfiguration('datanest');
+    const editor = await openSql('SELECT 1;\nSELECT 2;\n');
+    await config.update('editor.codeLens', false, vscode.ConfigurationTarget.Global);
+    try {
+      await sleep(300);
+      const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
+        'vscode.executeCodeLensProvider',
+        editor.document.uri,
+      );
+      assert.deepEqual(
+        lenses.filter((lens) => lens.command?.command === 'datanest.query.runRange'),
+        [],
+      );
+    } finally {
+      await config.update('editor.codeLens', undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  it('folds SQL by statements', async () => {
+    const editor = await openSql('-- note\nSELECT a,\n  b\nFROM t;\n\nSELECT 1;\n');
+    await sleep(300);
+    const folds = await vscode.commands.executeCommand<vscode.FoldingRange[]>(
+      'vscode.executeFoldingRangeProvider',
+      editor.document.uri,
+    );
+    assert.ok(
+      folds.some((fold) => fold.start === 1 && fold.end === 3),
+      `no fold of the statement: ${JSON.stringify(folds)}`,
+    );
+  });
+
   it('does nothing but warn when there is no SQL editor', async () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     await sleep(100);

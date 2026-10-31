@@ -10,6 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - Query variables: write `:name` or `${name}` where a value goes, and DataNest asks for it
   when the statement runs, offering the value given last time
   (`datanest.queryVariables`). Values go in as literals of the connection's dialect.
+- A saved `.sql` file remembers its connection and database: open it again, after a restart
+  too, and it is bound as before. A new query saved as a file keeps its connection.
+- The statement under the cursor is highlighted when a file holds several, and SQL folds by
+  statements, block comments, `-- #region` markers and indentation. Settings
+  `datanest.editor.codeLens`, `datanest.editor.highlightStatement` and
+  `datanest.editor.foldStatements` turn the Run lenses, the highlight and the folding off.
 
 ## [0.9.0] - 2026-10-30
 

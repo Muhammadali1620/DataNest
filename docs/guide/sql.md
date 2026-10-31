@@ -2,6 +2,11 @@
 
 ## Running
 
+A **New Query** is bound to the connection (and database) you opened it from; the status
+bar shows which, and a click there switches it. A saved `.sql` file keeps its connection:
+open it again — after a restart too — and it is bound as before. Saving a new query as a
+file keeps its connection as well.
+
 - `Ctrl+Enter` (`Cmd+Enter`) runs the statement under the cursor, or the selection.
 - `Ctrl+Shift+Enter` runs every statement of the file, one after another.
 - The **▶ Run** lens above each statement runs just that one.
@@ -13,7 +18,9 @@
 
 The splitter understands strings, comments, `$$ … $$` bodies, MySQL's `DELIMITER`, SQL
 Server's `GO`, procedure bodies and batch variables, so a statement is never cut in the
-middle.
+middle. When a file holds several statements, the one under the cursor is highlighted, and
+statements fold like blocks; the `datanest.editor.*` [settings](settings.md#sql-editors)
+turn the lenses, the highlight and the folding off.
 
 ## Variables
 

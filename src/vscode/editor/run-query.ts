@@ -33,6 +33,8 @@ export interface RunQueryDeps {
   readonly isManual?: (documentUri: string) => boolean;
   /** The transaction of the document's session, as the server last reported it. */
   readonly transactionState?: (documentUri: string) => TransactionState | undefined;
+  /** False hides the Run lenses (V10.2.2). */
+  readonly codeLens?: () => boolean;
   /** Asks for the values of query variables (V10.2.1); undefined when cancelled. */
   readonly fillVariables?: (
     statements: readonly SqlStatement[],
@@ -369,7 +371,7 @@ export class RunCodeLensProvider implements vscode.CodeLensProvider {
   constructor(private readonly deps: RunQueryDeps) {}
 
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-    if (document.languageId !== SQL_LANGUAGE_ID) {
+    if (document.languageId !== SQL_LANGUAGE_ID || this.deps.codeLens?.() === false) {
       return [];
     }
     const driver = driverOf(this.deps, document.uri.toString());

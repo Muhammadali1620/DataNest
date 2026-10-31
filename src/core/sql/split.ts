@@ -159,19 +159,34 @@ export function statementAt(
   driver?: DriverId,
 ): SqlStatement | undefined {
   const statements = splitStatements(sql, driver);
+  const index = statementIndexAt(statements, offset);
+  return index === undefined ? undefined : statements[index];
+}
+
+/**
+ * Which of the statements (in order, as `splitStatements` gives them) holds the offset:
+ * a statement owns everything up to the start of the next one, so a cursor just after
+ * a semicolon still belongs to the statement it ended, and text before the first
+ * belongs to the first. Undefined when there are none.
+ */
+export function statementIndexAt(
+  statements: readonly SqlStatement[],
+  offset: number,
+): number | undefined {
   if (statements.length === 0) {
     return undefined;
   }
-  for (const [position, statement] of statements.entries()) {
-    const next = statements[position + 1];
-    // A statement owns everything up to the start of the next one, so a cursor
-    // sitting after a semicolon still belongs to the statement it just ended.
-    const until = next === undefined ? sql.length : next.start;
-    if (offset <= until && (position === statements.length - 1 || offset < until)) {
-      return statement;
+  let low = 0;
+  let high = statements.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if ((statements[middle]?.start ?? 0) <= offset) {
+      low = middle;
+    } else {
+      high = middle - 1;
     }
   }
-  return statements[statements.length - 1];
+  return low;
 }
 
 /** The statements that overlap a selected range. */

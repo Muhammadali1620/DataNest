@@ -6,6 +6,7 @@ import {
   splitScript,
   splitStatements,
   statementAt,
+  statementIndexAt,
   statementsIn,
 } from '../../../../src/core/sql/split';
 import type { DriverId } from '../../../../src/shared/connection';
@@ -265,6 +266,44 @@ describe('splitScript', () => {
 
   it('reads MySQL hash comments as comments when deciding what is code', () => {
     expect(texts('# only a comment\n;', 'mysql')).toEqual([]);
+  });
+});
+
+describe('statementIndexAt', () => {
+  const statements = splitStatements('SELECT 1;  SELECT 2;\n\nSELECT 3');
+  const starts = statements.map((statement) => statement.start);
+
+  it('finds the statement whose text holds the offset', () => {
+    expect(statementIndexAt(statements, 3)).toBe(0);
+    expect(statementIndexAt(statements, (starts[1] ?? 0) + 2)).toBe(1);
+    expect(statementIndexAt(statements, (starts[2] ?? 0) + 8)).toBe(2);
+  });
+
+  it('gives the space after a statement to it, and a statement start to the new one', () => {
+    expect(statementIndexAt(statements, 9)).toBe(0);
+    expect(statementIndexAt(statements, (starts[1] ?? 0) - 1)).toBe(0);
+    expect(statementIndexAt(statements, starts[1] ?? 0)).toBe(1);
+  });
+
+  it('gives text before the first statement to the first, and past the end to the last', () => {
+    const leading = splitStatements('\n\n  SELECT 1; SELECT 2');
+    expect(statementIndexAt(leading, 0)).toBe(0);
+    expect(statementIndexAt(statements, 10_000)).toBe(2);
+  });
+
+  it('matches a plain scan at every offset', () => {
+    const sql = '-- a\nSELECT 1;\n\nSELECT 2; SELECT 3;\n';
+    const split = splitStatements(sql);
+    // Each statement owns the text up to the next one's start.
+    const scan = (offset: number): number =>
+      split.reduce((owner, statement, index) => (statement.start <= offset ? index : owner), 0);
+    for (let offset = 0; offset <= sql.length; offset++) {
+      expect(statementIndexAt(split, offset)).toBe(scan(offset));
+    }
+  });
+
+  it('is undefined without statements', () => {
+    expect(statementIndexAt([], 0)).toBeUndefined();
   });
 });
 

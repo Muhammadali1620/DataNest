@@ -201,6 +201,10 @@ export const CONFIG_KEYS = {
   transactionMode: 'transactionMode',
   /** What `:name` and `${name}` in a statement do: ask and remember, ask, or nothing. */
   queryVariables: 'queryVariables',
+  /** SQL editors (V10.2.2): the Run lenses, the current statement, statement folding. */
+  editorCodeLens: 'editor.codeLens',
+  editorHighlightStatement: 'editor.highlightStatement',
+  editorFoldStatements: 'editor.foldStatements',
   // How Format Document writes SQL (sql-formatter options).
   formatKeywordCase: 'format.keywordCase',
   formatDataTypeCase: 'format.dataTypeCase',

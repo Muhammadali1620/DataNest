@@ -126,6 +126,9 @@
   /** One row is exactly this tall, which is what makes the arithmetic simple. */
   const ROW_HEIGHT = 22;
 
+  /** The header row is as tall as a data row; rows are placed below it. */
+  const HEADER_HEIGHT = ROW_HEIGHT;
+
   /**
    * Until the browser reports a size, one screenful is assumed: the first rows
    * then load right away instead of waiting for the first layout pass.
@@ -636,7 +639,7 @@
   data-testid="grid"
 >
   <p class="sr-only" id={`${uid}-keys`}>{t('grid.keys')}</p>
-  <div class="canvas" style="height: {rows.totalHeight}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
+  <div class="canvas" style="height: {rows.totalHeight + HEADER_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
     <div class="header" role="row" aria-rowindex={1} style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
       <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader" aria-colindex={1}>#</div>
       {#each pinnedPositions as position (position)}
@@ -656,7 +659,7 @@
         class:deleted={stateAt(index) === 'deleted'}
         role="row"
         aria-rowindex={index + 2}
-        style="top: {index * ROW_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
+        style="top: {HEADER_HEIGHT + index * ROW_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
       >
         <div class="cell rownum" style="width: {ROW_NUMBER_WIDTH}px;" role="rowheader" aria-colindex={1}>
           {#if stateAt(index) === 'inserted'}
@@ -879,15 +882,16 @@
 
   .canvas {
     position: relative;
-    /* The header sits inside the canvas so it scrolls sideways with the rows. */
-    padding-top: 22px;
   }
 
+  /*
+   * The header sits inside the canvas so it scrolls sideways with the rows, and sticks
+   * to the top when they scroll down; rows are placed absolutely below it.
+   */
   .header {
-    position: absolute;
+    position: sticky;
     top: 0;
-    left: 0;
-    z-index: 1;
+    z-index: 3;
     display: flex;
     height: 22px;
     background: var(--vscode-editorGroupHeader-tabsBackground);

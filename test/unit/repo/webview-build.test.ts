@@ -35,6 +35,38 @@ describe('webview build', () => {
     }
   });
 
+  // A page links only <app>.css: CSS that Vite moved into a file shared by several
+  // apps never reached the editor, and every page ran without base.css and controls.css.
+  it('emits no CSS besides the <app>.css files', () => {
+    const css = readdirSync(tmp.path, { recursive: true })
+      .map(String)
+      .filter((file) => file.endsWith('.css'))
+      .sort();
+    expect(css).toEqual(apps.map((app) => `${app}.css`).sort());
+  });
+
+  it('puts the shared styles into every app, before its own', () => {
+    for (const app of apps) {
+      const css = readFileSync(join(tmp.path, `${app}.css`), 'utf8');
+      // base.css: the theme colours on body and the screen-reader-only class.
+      expect(css, app).toMatch(/^:root\{color-scheme:light dark\}body\{/);
+      expect(css, app).toContain('.sr-only{');
+    }
+  });
+
+  it('puts controls.css and shared components into the apps that import them', () => {
+    const imports = (app: string): string =>
+      readFileSync(join(ROOT, 'webview/src/apps', app, 'main.ts'), 'utf8');
+    const users = apps.filter((app) => imports(app).includes('controls.css'));
+    expect(users).toContain('connection-form');
+    for (const app of users) {
+      expect(readFileSync(join(tmp.path, `${app}.css`), 'utf8'), app).toContain('.control{');
+    }
+    // Field.svelte is shared by several forms; its scoped styles come along.
+    const form = readFileSync(join(tmp.path, 'connection-form.css'), 'utf8');
+    expect(form).toMatch(/\.field\.svelte-[a-z0-9]+\{[^}]*flex-direction:column/);
+  });
+
   it('emits no HTML and no source maps in production', () => {
     const files = readdirSync(tmp.path, { recursive: true }).map(String);
     expect(files.filter((file) => file.endsWith('.html'))).toEqual([]);

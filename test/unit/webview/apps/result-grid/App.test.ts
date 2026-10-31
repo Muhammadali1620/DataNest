@@ -164,6 +164,20 @@ describe('result grid App', () => {
     });
   });
 
+  // jsdom does no layout, so the geometry is checked on the inline styles: in the
+  // editor the first row was drawn at the top of the canvas, under the header.
+  it('places the first row below the header, and makes room for the header', async () => {
+    await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+    await waitFor(() => {
+      expect(cellTexts()).toHaveLength(2);
+    });
+    const header = screen.getAllByRole('row')[0];
+    const data = screen.getAllByRole('row').slice(1);
+    expect(header?.querySelector('[role="columnheader"]')).not.toBeNull();
+    expect(data.map((row) => row.style.top)).toEqual(['22px', '44px']);
+    expect(header?.parentElement?.style.height).toBe('66px');
+  });
+
   it('summarizes the row count and the time', async () => {
     await withState({ tabs: [tab()], activeId: 'result-1', running: false });
     await waitFor(() => {
@@ -402,8 +416,8 @@ describe('result grid App', () => {
         expect(screen.getByTestId('grid').querySelector('.canvas')).not.toBeNull();
       });
       const canvas = screen.getByTestId('grid').querySelector('.canvas');
-      // 1000 rows at 22px each; the scrollbar must match the result, not the DOM.
-      expect(canvas?.getAttribute('style')).toContain('height: 22000px');
+      // 1000 rows at 22px each plus the header; the scrollbar must match the result, not the DOM.
+      expect(canvas?.getAttribute('style')).toContain('height: 22022px');
     });
 
     it('exposes the row and column counts for assistive technology', async () => {
@@ -1293,6 +1307,6 @@ describe('result grid App with a million rows', () => {
     }
     // The scrollbar still spans every row.
     const canvas = document.querySelector<HTMLElement>('.canvas');
-    expect(canvas?.style.height).toBe(`${MILLION * 22}px`);
+    expect(canvas?.style.height).toBe(`${MILLION * 22 + 22}px`);
   });
 });

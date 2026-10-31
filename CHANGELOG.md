@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+### Fixed
+
+- The `datanest.format.*` settings are read for the document being formatted, so a folder of
+  a multi-root workspace can keep its own SQL style; before, the folder's value was ignored
+  and the editor logged a warning on every Format Document.
+- Every page (connection form, results, table designer and the rest) gets its shared styles
+  again: the build had moved them into files no page loaded, so in the editor fields and
+  buttons fell back to the browser's own look and help meant only for screen readers showed
+  on screen.
+- The results table shows its first row — it was drawn under the header — and the header
+  stays at the top while the rows scroll.
+
 ## [1.0.0] - 2026-10-31
 
 DataNest 1.0: everything the most used database extension of the editor offers for working

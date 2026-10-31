@@ -213,6 +213,76 @@ export function findWebviewApps(rootDir) {
   return apps;
 }
 
+/**
+ * A page links only `<app>.css`, but Vite moves the CSS of modules shared by several
+ * apps (base.css, controls.css, shared components) into files of their own, which no
+ * page links — in the editor every page then ran without the shared styles. This
+ * plugin gives each app one self-contained `<app>.css`: the CSS of the chunks it
+ * imports, in import order, then its own; the shared files are dropped.
+ *
+ * @returns {import('vite').Plugin}
+ */
+export function selfContainedCssPlugin() {
+  return {
+    name: 'datanest-self-contained-css',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      /** @param {string} fileName @param {Set<string>} seen @param {string[]} order */
+      const collect = (fileName, seen, order) => {
+        const chunk = bundle[fileName];
+        if (chunk?.type !== 'chunk' || seen.has(fileName)) {
+          return;
+        }
+        seen.add(fileName);
+        for (const imported of chunk.imports) {
+          collect(imported, seen, order);
+        }
+        for (const css of chunk.viteMetadata?.importedCss ?? []) {
+          if (!order.includes(css)) {
+            order.push(css);
+          }
+        }
+      };
+      /** @param {string} fileName */
+      const cssText = (fileName) => {
+        const asset = bundle[fileName];
+        return asset?.type === 'asset' ? String(asset.source) : '';
+      };
+      /** @type {Set<string>} */
+      const shared = new Set();
+      /** @type {Map<string, string>} */
+      const merged = new Map();
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'chunk' || !chunk.isEntry) {
+          continue;
+        }
+        /** @type {string[]} */
+        const order = [];
+        collect(chunk.fileName, new Set(), order);
+        const own = `${chunk.name}.css`;
+        for (const file of order) {
+          if (file !== own) {
+            shared.add(file);
+          }
+        }
+        const parts = order.map(cssText).filter((text) => text.length > 0);
+        merged.set(own, parts.join('\n'));
+      }
+      for (const file of shared) {
+        Reflect.deleteProperty(bundle, file);
+      }
+      for (const [file, source] of merged) {
+        const asset = bundle[file];
+        if (asset?.type === 'asset') {
+          asset.source = source;
+        } else {
+          this.emitFile({ type: 'asset', fileName: file, source });
+        }
+      }
+    },
+  };
+}
+
 /** Compiled e2e tests; @vscode/test-cli runs them inside VS Code. */
 export const E2E_OUT_DIR = 'out/test/e2e';
 

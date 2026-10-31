@@ -2,7 +2,12 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
-import { findWebviewApps, WEBVIEW_OUT_DIR, WEBVIEW_TARGET } from '../scripts/build-config.mjs';
+import {
+  findWebviewApps,
+  selfContainedCssPlugin,
+  WEBVIEW_OUT_DIR,
+  WEBVIEW_TARGET,
+} from '../scripts/build-config.mjs';
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 
@@ -11,7 +16,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: fileURLToPath(new URL('.', import.meta.url)),
     base: './',
-    plugins: [svelte()],
+    plugins: [svelte(), selfContainedCssPlugin()],
     build: {
       outDir: join(rootDir, WEBVIEW_OUT_DIR),
       emptyOutDir: true,

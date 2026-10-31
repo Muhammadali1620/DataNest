@@ -182,6 +182,14 @@ describe('resolveEditability', () => {
     expect(result).toEqual(readOnlyResult('no-key'));
   });
 
+  it('never edits a ClickHouse table by its values: it cannot count the rows it changed', () => {
+    const columns = [column('a'), column('b')];
+    const result = resolveEditability(
+      input({ columns, resultColumns: ['a', 'b'], driver: 'clickhouse' }),
+    );
+    expect(result).toEqual(readOnlyResult('no-key'));
+  });
+
   it('is read-only without a key when no column compares exactly', () => {
     const columns = [column('x', { dataType: 'real' }), column('y', { dataType: 'json' })];
     const result = resolveEditability(input({ columns, resultColumns: ['x', 'y'] }));

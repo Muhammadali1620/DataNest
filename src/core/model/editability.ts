@@ -229,7 +229,9 @@ function valueKey(
   columnMap: readonly (string | null)[],
   driver: DriverId | undefined,
 ): string[] | undefined {
-  if (!columns.every((column) => columnMap.includes(column.name))) {
+  // ClickHouse changes rows by mutations, without a transaction or a count of the rows
+  // they touched, so "exactly one row matched" cannot be checked there.
+  if (driver === 'clickhouse' || !columns.every((column) => columnMap.includes(column.name))) {
     return undefined;
   }
   const exact = columns

@@ -209,7 +209,13 @@ describe('result editability on real databases', () => {
         });
         await runAll(session, 'DROP TABLE edit_nopk');
         await runAll(session, 'CREATE TABLE edit_nopk (code TEXT UNIQUE, note TEXT)');
-        expect(await analyze(session, driver, 'SELECT * FROM edit_nopk')).toEqual({
+        // A nullable unique key finds no row for sure: the whole row's values do (V10.2.4).
+        expect(await analyze(session, driver, 'SELECT * FROM edit_nopk')).toMatchObject({
+          editable: true,
+          keyless: true,
+          keyColumns: ['code', 'note'],
+        });
+        expect(await analyze(session, driver, 'SELECT code FROM edit_nopk')).toEqual({
           editable: false,
           reason: 'no-key',
         });
@@ -249,11 +255,19 @@ describe('result editability on real databases', () => {
       });
     });
 
-    it('refuses a table without a key, a view and a join', async () => {
-      expect(await analyze(session, driver, 'SELECT * FROM loose')).toEqual({
+    it('edits a table without a key by its values only when the whole row is shown', async () => {
+      expect(await analyze(session, driver, 'SELECT * FROM loose')).toMatchObject({
+        editable: true,
+        keyless: true,
+        keyColumns: ['a', 'b'],
+      });
+      expect(await analyze(session, driver, 'SELECT a FROM loose')).toEqual({
         editable: false,
         reason: 'no-key',
       });
+    });
+
+    it('refuses a view and a join', async () => {
       expect(await analyze(session, driver, 'SELECT * FROM v')).toEqual({
         editable: false,
         reason: 'view',

@@ -8,7 +8,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
     type ResultGridProtocol,
     type ResultGridState,
     type ResultTab,
+    type SelectionTotals,
   } from '../../../../src/shared/protocols/result-grid';
+
+  /** How long the selection must stay still before its totals are asked for. */
+  const TOTALS_DELAY_MS = 150;
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import type { Translate } from '../../lib/i18n';
   import type { TableFilter } from '../../../../src/shared/table-filter';
@@ -66,6 +70,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let selected = $state<SelectionInfo | undefined>(undefined);
   /** What the last "Copy as" did, until the selection changes. */
   let copyNote = $state<string | undefined>(undefined);
+  /** Totals of the selected cells (V10.2.4), for a selection of more than one cell. */
+  let totals = $state<SelectionTotals | undefined>(undefined);
+  let totalsTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Grows with every question, so an answer about an older selection is dropped. */
+  let totalsAsked = 0;
   /** The filter bar of a table view, the columns it offers and whether a request is out. */
   let filterOpen = $state(false);
   let filterColumns = $state<string[]>([]);
@@ -481,6 +490,106 @@ import type { RowAction } from '../../../../src/shared/row-action';
     }
   }
 
+  /** Asks for the totals a moment after the selection settles; one cell has none. */
+  function scheduleTotals(tab: ResultTab | undefined, selection: SelectionInfo | undefined): void {
+    clearTimeout(totalsTimer);
+    const ask = ++totalsAsked;
+    if (
+      tab === undefined ||
+      selection === undefined ||
+      (selection.bottom === selection.top && selection.columns.length < 2)
+    ) {
+      totals = undefined;
+      return;
+    }
+    totalsTimer = setTimeout(() => {
+      void fetchTotals(tab.id, selection, ask);
+    }, TOTALS_DELAY_MS);
+  }
+
+  async function fetchTotals(resultId: string, selection: SelectionInfo, ask: number) {
+    try {
+      const answer = await rpc.request('summarize', {
+        resultId,
+        top: selection.top,
+        bottom: selection.bottom,
+        columns: [...selection.columns],
+      });
+      if (ask === totalsAsked) {
+        totals = answer.stale === true ? undefined : answer;
+      }
+    } catch {
+      // Totals are a convenience: a failed answer (a closed panel) just leaves them out.
+      if (ask === totalsAsked) {
+        totals = undefined;
+      }
+    }
+  }
+
+  function totalsText(summary: SelectionTotals): string {
+    const parts = [t('grid.totals.count', summary.values ?? 0)];
+    if ((summary.numbers ?? 0) > 0) {
+      const about = summary.approximate === true ? '≈ ' : '';
+      parts.push(
+        t('grid.totals.sum', `${about}${summary.sum ?? ''}`),
+        t('grid.totals.average', `${about}${summary.average ?? ''}`),
+        t('grid.totals.min', summary.min ?? ''),
+        t('grid.totals.max', summary.max ?? ''),
+      );
+    }
+    return parts.join(' · ');
+  }
+
+  /** Kinds of columns a file can be loaded into: bytes, text and JSON (V10.2.4). */
+  function canLoadFile(tab: ResultTab | undefined, cell: CellRef | undefined): boolean {
+    if (tab?.edit?.editable !== true || cell === undefined) {
+      return false;
+    }
+    const kind = tab.edit.columns?.[cell.column]?.kind;
+    return kind === 'binary' || kind === 'text' || kind === 'json';
+  }
+
+  async function saveValueFile(): Promise<void> {
+    const tab = activeTab;
+    const cell = focused;
+    if (tab === undefined || cell === undefined) {
+      return;
+    }
+    try {
+      const answer = await rpc.request('saveValue', {
+        resultId: tab.id,
+        row: cell.row,
+        column: cell.column,
+      });
+      // A closed dialog is the user's choice; a failed write was already reported.
+      if (answer.error === 'no-value' || answer.error === 'too-large') {
+        failure = t(`value.saveError.${answer.error}`);
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('value.saveFailed');
+    }
+  }
+
+  async function loadValueFile(): Promise<void> {
+    const tab = activeTab;
+    const cell = focused;
+    if (tab === undefined || cell === undefined) {
+      return;
+    }
+    try {
+      const answer = await rpc.request('loadValue', {
+        resultId: tab.id,
+        row: cell.row,
+        column: cell.column,
+      });
+      if (!answer.ok && answer.cancelled !== true) {
+        failure = t(`grid.editError.${answer.error ?? 'not-editable'}`);
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.editFailed');
+    }
+  }
+
   function onCopy(selection: SelectionInfo): void {
     const tab = activeTab;
     if (tab !== undefined && tab.error === undefined) {
@@ -583,6 +692,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
         previous.sort?.column === tab.sort?.column &&
         previous.sort?.direction === tab.sort?.direction;
       const sameResult = sameOrder && previous.revision === tab.revision;
+      if (!sameResult) {
+        // Edits, a sort or new rows change what the selected cells hold.
+        scheduleTotals(tab, sameOrder ? selected : undefined);
+      }
       if (sameOrder && !sameResult) {
         // A pending change moved: the rows must be read again, but the widths and the
         // search belong to the same result and stay.
@@ -890,9 +1003,18 @@ import type { RowAction } from '../../../../src/shared/row-action';
             )}
           </span>
         {/if}
+        {#if totals !== undefined && (totals.cells ?? 0) > 1}
+          <span class="totals" data-testid="selection-totals">{totalsText(totals)}</span>
+        {/if}
         {#if activeTab.edit !== undefined}
           {#if activeTab.edit.editable}
-            <span class="badge" data-testid="edit-badge">{t('grid.editable')}</span>
+            <span
+              class="badge"
+              data-testid="edit-badge"
+              title={activeTab.edit.keyless === true ? t('grid.editableKeyless') : ''}
+            >
+              {activeTab.edit.keyless === true ? t('grid.editableByValues') : t('grid.editable')}
+            </span>
           {:else}
             <span
               class="badge readonly"
@@ -1023,6 +1145,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           onSelectionChange={(next: SelectionInfo | undefined) => {
             selected = next;
             copyNote = undefined;
+            scheduleTotals(activeTab, next);
           }}
           onFocusChange={(cell: CellRef | undefined) => {
             focused = cell;
@@ -1074,6 +1197,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
               onClose={() => {
                 valueOpen = false;
               }}
+              onSaveFile={focused === undefined ? undefined : saveValueFile}
+              onLoadFile={canLoadFile(activeTab, focused) ? loadValueFile : undefined}
               {t}
             />
           {/if}

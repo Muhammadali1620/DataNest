@@ -5,6 +5,7 @@ import { postgresDialect } from '../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
 import { buildChangeStatements, type ChangePlan } from '../../../src/services/change-sql';
 import type { CellChange } from '../../../src/services/pending-edits';
+import { binaryValue } from '../../../src/drivers/common/values';
 
 function column(name: string, extra: Partial<EditableColumn> = {}): EditableColumn {
   return { name, dataType: 'text', nullable: true, kind: 'text', ...extra };
@@ -208,5 +209,66 @@ describe('buildChangeStatements', () => {
         postgresDialect,
       ),
     ).toThrow('not backed');
+  });
+});
+
+describe('buildChangeStatements with values from files (V10.2.4)', () => {
+  const photo: EditableResult = {
+    ...EDIT,
+    columnMap: ['id', 'photo'],
+    columns: [
+      column('id', { dataType: 'int', kind: 'integer', nullable: false }),
+      column('photo', { dataType: 'bytea', kind: 'binary' }),
+    ],
+  };
+
+  it('writes every byte of a loaded binary value, not just its preview', () => {
+    const bytes = Uint8Array.from({ length: 400 }, (_, index) => index % 256);
+    const [statement] = buildChangeStatements(
+      plan({
+        edit: photo,
+        updates: [{ row: [1, null], cells: new Map([[1, value(binaryValue(bytes))]]) }],
+      }),
+      postgresDialect,
+    );
+    expect(statement?.sql).toContain(`'\\x${Buffer.from(bytes).toString('hex')}'::bytea`);
+  });
+
+  it('refuses a binary value whose bytes it does not have, rather than cut it', () => {
+    expect(() =>
+      buildChangeStatements(
+        plan({
+          edit: photo,
+          updates: [
+            {
+              row: [1, null],
+              cells: new Map([[1, value({ kind: 'binary', size: 9000, preview: 'ff' })]]),
+            },
+          ],
+        }),
+        postgresDialect,
+      ),
+    ).toThrow(/larger than DataNest can copy/u);
+  });
+
+  it('finds a row of a keyless table by all the values in its "key"', () => {
+    const loose: EditableResult = {
+      ...EDIT,
+      columnMap: ['name', 'qty'],
+      columns: [column('name'), column('qty', { dataType: 'int', kind: 'integer' })],
+      keyColumns: ['name', 'qty'],
+      keyIndexes: [0, 1],
+      keyless: true,
+    };
+    const [removal, update] = buildChangeStatements(
+      plan({
+        edit: loose,
+        updates: [{ row: ['pen', null], cells: new Map([[1, value(3)]]) }],
+        deletions: [['cup', 2]],
+      }),
+      mysqlDialect,
+    ).sort((a, b) => a.kind.localeCompare(b.kind));
+    expect(removal?.sql).toBe("DELETE FROM `users` WHERE `name` = 'cup' AND `qty` = 2");
+    expect(update?.sql).toBe("UPDATE `users` SET `qty` = 3 WHERE `name` = 'pen' AND `qty` IS NULL");
   });
 });

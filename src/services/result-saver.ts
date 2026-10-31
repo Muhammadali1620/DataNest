@@ -165,11 +165,16 @@ export class ResultSaver {
               ? msg(
                   'A row was not found: it was changed or deleted since it was read. Nothing was saved.',
                 )
-              : msg(
-                  'A statement affected {0} rows instead of {1}. Nothing was saved.',
-                  affected,
-                  statement.expectedRows,
-                ),
+              : summary.edit?.editable === true && summary.edit.keyless === true
+                ? msg(
+                    '{0} rows have exactly these values, and the table has no key to tell them apart. Nothing was saved.',
+                    affected,
+                  )
+                : msg(
+                    'A statement affected {0} rows instead of {1}. Nothing was saved.',
+                    affected,
+                    statement.expectedRows,
+                  ),
             statement.sql,
           );
         }

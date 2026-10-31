@@ -1,6 +1,8 @@
 // Decides whether a query result can be edited in place. Editing needs to know
 // exactly which table row each result row is, so the rule is strict: one table, no
-// aggregation, and a key (primary or unique, never NULL) present in the result.
+// aggregation, and a key (primary or unique, never NULL) present in the result. A
+// table without a key is edited by the values of its whole row (V10.2.4): saving then
+// checks that exactly one row matched, and puts everything back otherwise.
 
 import { enumOptions, type InputKind, inputKindOf } from '../../shared/cell-input';
 import type { DriverId } from '../../shared/connection';
@@ -33,6 +35,12 @@ export interface EditableResult {
   /** Key column names, and where each one sits in the result. */
   readonly keyColumns: readonly string[];
   readonly keyIndexes: readonly number[];
+  /**
+   * The table has no key: a row is found by the values of all its columns that can be
+   * compared exactly, and the "key" is those columns (V10.2.4). Nothing about them is
+   * unique, so a duplicated row copies them too.
+   */
+  readonly keyless?: true;
   /** Foreign keys of the table, so a cell can lead to the row it points at (V2.13). */
   readonly foreignKeys?: readonly ForeignKey[];
 }
@@ -137,7 +145,8 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
     return readOnly('columns-mismatch');
   }
 
-  const key = chooseKey(input.columns, input.uniqueKeys);
+  const chosen = chooseKey(input.columns, input.uniqueKeys);
+  const key = chosen ?? valueKey(input.columns, columnMap, input.driver);
   if (key === undefined) {
     return readOnly('no-key');
   }
@@ -159,7 +168,7 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
   }
   const columns = columnMap.map((name): EditableColumn | null => {
     const info = name === null ? undefined : findByName(input.columns, name);
-    if (info === undefined) {
+    if (info === undefined || isSpatial(info.dataType, input.driver)) {
       return null;
     }
     const options = enumOptions(info.dataType);
@@ -172,5 +181,59 @@ export function resolveEditability(input: EditabilityInput): ResultEdit {
       ...(info.defaultValue === undefined ? {} : { defaultValue: info.defaultValue }),
     };
   });
-  return { editable: true, table: input.table, columnMap, columns, keyColumns: key, keyIndexes };
+  return {
+    editable: true,
+    table: input.table,
+    columnMap,
+    columns,
+    keyColumns: key,
+    keyIndexes,
+    ...(chosen === undefined ? { keyless: true as const } : {}),
+  };
+}
+
+/** Types whose `=` is not exact, or that have no `=` at all, on some server. */
+const INEXACT_TYPES =
+  /^(float\d*|double|real|n?clob|long\b|xml|xmltype|geometry|geography|geomcollection|point|line|lseg|box|path|polygon|circle|multi(point|linestring|polygon)|hierarchyid|sql_variant|tsvector|tsquery)/u;
+
+/** Spatial types shown as WKT (MySQL) or EWKB text (PostGIS): not edited as text. */
+const SPATIAL_TYPES =
+  /^(geometry|geography|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection|geomcollection)\b/u;
+
+/** True for a column the grid shows but cannot write back as typed text (V10.2.4). */
+export function isSpatial(dataType: string, driver?: DriverId): boolean {
+  const type = dataType.trim().toLowerCase();
+  // PostgreSQL's own point, line and polygon are text types; only PostGIS's are spatial.
+  return driver === 'postgres' ? /^(geometry|geography)\b/u.test(type) : SPATIAL_TYPES.test(type);
+}
+
+/** Old large types of SQL Server, which cannot be compared at all. */
+const MSSQL_LOBS = /^(n?text|image|timestamp|rowversion)$/u;
+
+/** True when `column = <its value as read>` finds the row the value came from. */
+export function comparesExactly(dataType: string, driver?: DriverId): boolean {
+  const kind = inputKindOf(dataType, driver);
+  if (kind === 'binary' || kind === 'json') {
+    return false;
+  }
+  const type = dataType.trim().toLowerCase();
+  return !INEXACT_TYPES.test(type) && !(driver === 'mssql' && MSSQL_LOBS.test(type));
+}
+
+/**
+ * Without a key, the row is found by its values: possible when the result shows every
+ * column of the table, by the columns that compare exactly (at least one).
+ */
+function valueKey(
+  columns: readonly ColumnInfo[],
+  columnMap: readonly (string | null)[],
+  driver: DriverId | undefined,
+): string[] | undefined {
+  if (!columns.every((column) => columnMap.includes(column.name))) {
+    return undefined;
+  }
+  const exact = columns
+    .filter((column) => comparesExactly(column.dataType, driver))
+    .map((column) => column.name);
+  return exact.length === 0 ? undefined : exact;
 }

@@ -33,6 +33,7 @@ export function buildState(
         ? {
             edit: {
               editable: true,
+              ...(summary.edit.keyless === true ? { keyless: true } : {}),
               columns: summary.edit.columns.map((column) =>
                 column === null
                   ? null

@@ -105,6 +105,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
 - Edit cells in place with editors that know the column type, set `NULL` or `DEFAULT`,
   add, duplicate and delete rows.
 - Changes wait in a queue: preview the SQL, undo, and save them in one transaction.
+- Tables without a key are edited by the values of the whole row; a cell loads from a file.
+- Totals of the selected cells: count, sum, average, minimum and maximum.
 - A record card shows one row as a form; a foreign key cell opens the row it points at.
 - Tables filter, sort and page on the server, with a fast estimated row count.
 

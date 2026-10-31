@@ -1,3 +1,4 @@
+import type { EditableResult } from '../../../src/core/model/editability';
 import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_KEPT_CELLS,
@@ -773,6 +774,104 @@ describe('ResultStore', () => {
       store.add(result({ documentUri: 'other', rows: rows(15) }));
       expect(store.forDocument(DOC).map((summary) => summary.id)).toEqual([second.id]);
       expect(store.get(first.id)).toBeUndefined();
+    });
+  });
+
+  describe('summarize (V10.2.4)', () => {
+    const rows = [
+      [1, { kind: 'decimal', text: '1.10' }, 'a'],
+      [2, { kind: 'decimal', text: '2.20' }, null],
+      [3, null, 'c'],
+    ] as const;
+
+    it('totals a rectangle of the shown cells', async () => {
+      const store = new ResultStore();
+      const { id } = store.add(
+        result({
+          columns: [{ name: 'a' }, { name: 'b' }, { name: 'c' }],
+          rows: rows.map((row) => [...row]),
+        }),
+      );
+      expect(await store.summarize(id, 0, 2, [0, 1])).toEqual({
+        cells: 6,
+        values: 5,
+        numbers: 5,
+        sum: '9.30',
+        average: '1.86',
+        min: '1',
+        max: '3',
+      });
+      expect(await store.summarize(id, 1, 1, [2])).toEqual({ cells: 1, values: 0, numbers: 0 });
+    });
+
+    it('totals what is shown: sorted, edited and new rows included', async () => {
+      const store = new ResultStore();
+      const edit: EditableResult = {
+        editable: true,
+        table: { name: 't' },
+        columnMap: ['a'],
+        columns: [{ name: 'a', dataType: 'int', nullable: true, kind: 'integer' }],
+        keyColumns: ['a'],
+        keyIndexes: [0],
+      };
+      const { id } = store.add(result({ columns: [{ name: 'a' }], rows: [[5], [1], [3]], edit }));
+      await store.sort(id, 0, 'asc');
+      expect(await store.summarize(id, 0, 0, [0])).toMatchObject({ min: '1', max: '1' });
+      store.setChange(id, 0, 0, { kind: 'value', value: 10 });
+      const added = store.addRow(id, new Map([[0, { kind: 'value', value: 100 }]]));
+      expect(added).toBe(3);
+      expect(await store.summarize(id, 0, 3, [0])).toMatchObject({ sum: '118', max: '100' });
+    });
+
+    it('ignores columns that are not there and answers nothing for an unknown result', async () => {
+      const store = new ResultStore();
+      const { id } = store.add(result({ rows: [[1], [2]] }));
+      expect(await store.summarize(id, 0, 1, [0, 7])).toMatchObject({ cells: 2, sum: '3' });
+      expect(await store.summarize('result-404', 0, 1, [0])).toBeUndefined();
+      expect(await store.summarize(id, 1, 0, [0])).toBeUndefined();
+    });
+
+    const many = Array.from({ length: 5000 }, (_, index) => [index]);
+
+    it('stops a summary that a newer one overtook', async () => {
+      const { store, release } = heldStore();
+      const { id } = store.add(result({ rows: many }));
+      const first = store.summarize(id, 0, 4999, [0]);
+      const second = store.summarize(id, 0, 9, [0]);
+      await release();
+      expect(await first).toBeUndefined();
+      expect(await second).toMatchObject({ sum: '45' });
+    });
+
+    it('stops a summary when the rows are replaced or edited, or the result goes away', async () => {
+      const replaced = heldStore();
+      const two = replaced.store.add(result({ rows: many }));
+      const again = replaced.store.summarize(two.id, 0, 4999, [0]);
+      replaced.store.replaceRows(two.id, [{ name: 'one' }], [[1]], false);
+      await replaced.release();
+      expect(await again).toBeUndefined();
+
+      const edited = heldStore();
+      const edit: EditableResult = {
+        editable: true,
+        table: { name: 't' },
+        columnMap: ['one'],
+        columns: [{ name: 'one', dataType: 'int', nullable: true, kind: 'integer' }],
+        keyColumns: ['one'],
+        keyIndexes: [0],
+      };
+      const four = edited.store.add(result({ rows: many, edit }));
+      const before = edited.store.summarize(four.id, 0, 4999, [0]);
+      edited.store.setChange(four.id, 4000, 0, { kind: 'value', value: 1 });
+      await edited.release();
+      expect(await before).toBeUndefined();
+
+      const cleared = heldStore();
+      const three = cleared.store.add(result({ rows: many }));
+      const gone = cleared.store.summarize(three.id, 0, 4999, [0]);
+      cleared.store.clear();
+      await cleared.release();
+      expect(await gone).toBeUndefined();
     });
   });
 

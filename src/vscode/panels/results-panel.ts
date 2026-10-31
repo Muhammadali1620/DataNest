@@ -13,6 +13,14 @@ import type { ResultSaver } from '../../services/result-saver';
 import type { TableChange } from '../../services/table-view';
 import type { ResultStore } from '../../services/result-store';
 import { retainedBytes } from '../../shared/binary-bytes';
+import { homedir } from 'node:os';
+import { errorMessage } from '../../core/errors';
+import {
+  cellFileBytes,
+  cellFileExtension,
+  fileNameFor,
+  MAX_CELL_FILE_BYTES,
+} from '../../services/cell-file';
 import {
   LOAD_ALL_WARNING_ROWS,
   MAX_PAGE_SIZE,
@@ -140,6 +148,50 @@ export class ResultsPanel implements vscode.Disposable {
         ? { size: cell.size }
         : { size: cell.size, data: Buffer.from(bytes).toString('base64') };
     });
+    this.rpc.handle('saveValue', async ({ resultId, row, column }) => {
+      const cell = this.deps.results.window(resultId, row, 1)?.rows[0]?.[column];
+      const bytes = cellFileBytes(cell);
+      if (typeof bytes === 'string') {
+        return { ok: false, error: bytes };
+      }
+      const name = this.deps.results.get(resultId)?.columns[column]?.name ?? 'value';
+      const target = await vscode.window.showSaveDialog({
+        title: vscode.l10n.t('Save the Value to a File'),
+        defaultUri: vscode.Uri.joinPath(
+          vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(homedir()),
+          `${fileNameFor(name)}.${cellFileExtension(cell)}`,
+        ),
+      });
+      if (target === undefined) {
+        return { ok: false, error: 'cancelled' };
+      }
+      try {
+        await vscode.workspace.fs.writeFile(target, bytes);
+        return { ok: true };
+      } catch (error) {
+        this.deps.logger.warn('Could not save a value to a file', error);
+        void vscode.window.showErrorMessage(
+          vscode.l10n.t('Could not save the file: {0}', errorMessage(error)),
+        );
+        return { ok: false, error: 'failed' };
+      }
+    });
+    this.rpc.handle('loadValue', async ({ resultId, row, column }) => {
+      const [source] =
+        (await vscode.window.showOpenDialog({
+          title: vscode.l10n.t('Load a File into the Cell'),
+          canSelectMany: false,
+        })) ?? [];
+      if (source === undefined) {
+        return { ok: false, cancelled: true };
+      }
+      const { size } = await vscode.workspace.fs.stat(source);
+      if (size > MAX_CELL_FILE_BYTES) {
+        return { ok: false, error: 'too-large' };
+      }
+      const bytes = await vscode.workspace.fs.readFile(source);
+      return this.deps.editor.setFromFile(resultId, row, column, bytes);
+    });
     this.rpc.handle('saveChanges', async ({ resultId }) => {
       const refusal = await this.guardSave(resultId);
       if (refusal !== undefined) {
@@ -235,6 +287,10 @@ export class ResultsPanel implements vscode.Disposable {
       }
       await vscode.env.clipboard.writeText(outcome.text);
       return { ok: true, rows: outcome.rows };
+    });
+    this.rpc.handle('summarize', async ({ resultId, top, bottom, columns }) => {
+      const summary = await this.deps.results.summarize(resultId, top, bottom, columns);
+      return summary === undefined ? { stale: true } : { ...summary };
     });
     this.rpc.handle('pageSize', async ({ resultId, pageSize }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { pageSize })) ?? false;

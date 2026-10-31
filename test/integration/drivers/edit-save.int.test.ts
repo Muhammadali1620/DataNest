@@ -2,6 +2,7 @@
 // and look at the table. Everything from the SELECT parser to the transaction is the
 // production code; only the editor UI is missing.
 
+import { retainedBytes } from '../../../src/shared/binary-bytes';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -278,6 +279,101 @@ describe('editing a result and saving it', () => {
       expect(rows.map((row) => row[0])).toEqual(['bob', 'carol']);
       // The changes stay queued for another try.
       expect(results.get(id)?.changedCells).toBe(2);
+    });
+
+    it('loads a file into a binary column and saves every byte (V10.2.4)', async () => {
+      const type =
+        target.driver === 'postgres' ? 'BYTEA' : target.driver === 'sqlite' ? 'BLOB' : 'MEDIUMBLOB';
+      await sql('DROP TABLE IF EXISTS edit_files');
+      await sql(`CREATE TABLE edit_files (id INT PRIMARY KEY, data ${type} NULL)`);
+      try {
+        await sql('INSERT INTO edit_files (id, data) VALUES (1, NULL)');
+        const id = await load('SELECT * FROM edit_files');
+        // Past the preview and with every byte value, so nothing is lost on the way.
+        const bytes = Uint8Array.from({ length: 70_000 }, (_, index) => (index * 7) % 256);
+        expect(editor.setFromFile(id, 0, 1, bytes)).toEqual({ ok: true });
+        expect(await saver.save(id)).toMatchObject({ ok: true, statements: 1 });
+        const [row] = await rowsOf('SELECT data FROM edit_files');
+        const saved = row?.[0];
+        expect(saved).toMatchObject({ kind: 'binary', size: 70_000 });
+        const kept =
+          typeof saved === 'object' && saved !== null && saved.kind === 'binary'
+            ? retainedBytes(saved)
+            : undefined;
+        expect(kept !== undefined && Buffer.from(kept).equals(Buffer.from(bytes))).toBe(true);
+      } finally {
+        await sql('DROP TABLE IF EXISTS edit_files');
+      }
+    });
+
+    describe('a table without a key (V10.2.4)', () => {
+      async function resetLoose(): Promise<void> {
+        await sql('DROP TABLE IF EXISTS edit_loose');
+        await sql(
+          `CREATE TABLE edit_loose (name VARCHAR(50) NULL, qty INT NULL, price ${target.driver === 'postgres' ? 'DOUBLE PRECISION' : target.driver === 'sqlite' ? 'REAL' : 'DOUBLE'} NULL)`,
+        );
+        await sql(
+          "INSERT INTO edit_loose (name, qty, price) VALUES ('pen', 1, 0.1), ('cup', NULL, 2.5), ('pen', 2, 0.1)",
+        );
+      }
+
+      afterAll(async () => {
+        await sql('DROP TABLE IF EXISTS edit_loose');
+      });
+
+      it('is edited by the values of the whole row, leaving floats out of the match', async () => {
+        await resetLoose();
+        const id = await load('SELECT * FROM edit_loose ORDER BY name, qty');
+        expect(results.get(id)?.edit).toMatchObject({
+          editable: true,
+          keyless: true,
+          keyColumns: ['name', 'qty'],
+        });
+        // cup, NULL — a NULL in the match is found with IS NULL.
+        editor.editCell(id, 0, 1, { kind: 'text', text: '7' });
+        editor.editCell(id, 2, 0, { kind: 'text', text: 'pencil' });
+        expect(await saver.save(id)).toMatchObject({ ok: true, statements: 2 });
+        const rows = await rowsOf('SELECT name, qty FROM edit_loose ORDER BY name, qty');
+        expect(rows).toEqual([
+          ['cup', 7],
+          ['pen', 1],
+          ['pencil', 2],
+        ]);
+      });
+
+      it('saves nothing when the values match more than one row', async () => {
+        await resetLoose();
+        await sql("INSERT INTO edit_loose (name, qty, price) VALUES ('cup', NULL, 9)");
+        const id = await load('SELECT * FROM edit_loose ORDER BY name, qty, price');
+        editor.editCell(id, 2, 0, { kind: 'text', text: 'first' });
+        // Both cup rows have the same name and qty; their prices are left out of the match.
+        editor.editCell(id, 0, 0, { kind: 'text', text: 'mug' });
+        const outcome = await saver.save(id);
+        expect(outcome).toMatchObject({ ok: false, code: 'row-missing' });
+        expect(outcome.ok ? '' : outcome.message).toContain('2 rows have exactly these values');
+        const rows = await rowsOf('SELECT name FROM edit_loose ORDER BY name');
+        expect(rows.map((row) => row[0])).toEqual(['cup', 'cup', 'pen', 'pen']);
+      });
+
+      it('deletes and duplicates a row found by its values', async () => {
+        await resetLoose();
+        const id = await load('SELECT * FROM edit_loose ORDER BY name, qty');
+        editor.rowAction(id, 'delete', [0]);
+        editor.rowAction(id, 'duplicate', [1]);
+        expect(await saver.save(id)).toMatchObject({ ok: true, statements: 2 });
+        const rows = await rowsOf('SELECT name, qty FROM edit_loose ORDER BY name, qty');
+        expect(rows).toEqual([
+          ['pen', 1],
+          ['pen', 1],
+          ['pen', 2],
+        ]);
+      });
+
+      it('stays read-only when the result does not show the whole row', async () => {
+        await resetLoose();
+        const id = await load('SELECT name, qty FROM edit_loose');
+        expect(results.get(id)?.edit).toEqual({ editable: false, reason: 'no-key' });
+      });
     });
 
     it('edits a table opened through a filter and ordering', async () => {

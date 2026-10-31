@@ -8,9 +8,10 @@ import type { SessionTarget } from './connection-manager';
 import type { ResultColumn } from '../drivers/driver';
 import type { ChangePlan } from './change-sql';
 import { type SortDirection, sortRows, sortRowsPaused } from '../shared/cell-compare';
-import type { PauseOptions } from '../shared/merge-sort';
+import { type PauseOptions, runStepsPaused } from '../shared/merge-sort';
 import type { TableFilter } from '../shared/table-filter';
 import { findRowsPaused, type SearchHits } from '../shared/cell-search';
+import { type CellSummary, summarySteps } from '../shared/cell-summary';
 import {
   type CellChange,
   type ChangedCell,
@@ -117,6 +118,8 @@ interface StoredResult extends Omit<
   sortTicket: number;
   /** Grows with every search, so a newer one stops the one still running. */
   searchTicket: number;
+  /** Grows with every summary of a selection, for the same reason (V10.2.4). */
+  summaryTicket: number;
 }
 
 export interface ResultWindow {
@@ -201,6 +204,7 @@ export class ResultStore {
       pending: new PendingEdits(),
       sortTicket: 0,
       searchTicket: 0,
+      summaryTicket: 0,
       rowCount: result.rows.length,
       truncated: result.truncated,
       ...(result.affectedRows === undefined ? {} : { affectedRows: result.affectedRows }),
@@ -554,6 +558,40 @@ export class ResultStore {
     return hits === undefined || stale() ? undefined : hits;
   }
 
+  /**
+   * The totals of a rectangle of cells as shown — pending changes and new rows included
+   * (V10.2.4). Worked out in slices like a search; a newer summary of the same result,
+   * a sort, an edit or fresh rows end this one early, and give undefined.
+   */
+  async summarize(
+    id: string,
+    top: number,
+    bottom: number,
+    columns: readonly number[],
+  ): Promise<CellSummary | undefined> {
+    const stored = this.results.get(id);
+    if (stored === undefined || bottom < top) {
+      return undefined;
+    }
+    const ticket = ++stored.summaryTicket;
+    const { rows } = stored;
+    const revision = stored.pending.revision;
+    const stale = (): boolean =>
+      this.results.get(id) !== stored ||
+      stored.summaryTicket !== ticket ||
+      stored.rows !== rows ||
+      stored.pending.revision !== revision;
+    const valid = columns.filter((column) => column >= 0 && column < stored.columns.length);
+    const steps = summarySteps(
+      (offset, count) => (stale() ? undefined : this.window(id, offset, count)?.rows),
+      Math.max(0, top),
+      bottom,
+      valid,
+    );
+    const summary = await runStepsPaused(steps, this.sortPause);
+    return summary === undefined || stale() ? undefined : summary;
+  }
+
   /** Every row of a result, for exporting it to a file. */
   allRows(id: string): ResultRow[] | undefined {
     const stored = this.results.get(id);
@@ -611,6 +649,7 @@ function summaryOf(stored: StoredResult): ResultSummary {
     pending,
     sortTicket: _sort,
     searchTicket: _search,
+    summaryTicket: _summary,
     ...summary
   } = stored;
   return {

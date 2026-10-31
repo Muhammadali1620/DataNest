@@ -5,6 +5,7 @@
 import type { EditableColumn, EditableResult } from '../core/model/editability';
 import type { Dialect } from '../drivers/driver';
 import type { CellChange, PendingRow, ResultRow } from './pending-edits';
+import { exactLiteralOf } from './sql-literal';
 
 export type ChangeKind = 'delete' | 'update' | 'insert';
 
@@ -100,7 +101,8 @@ function columnAt(columns: readonly (EditableColumn | null)[], index: number): E
 
 function valueSql(change: CellChange, info: EditableColumn, dialect: Dialect): string {
   if (change.kind === 'value') {
-    return dialect.literal(change.value);
+    // A binary value from a file carries its bytes; never write just its preview.
+    return exactLiteralOf(dialect, change.value);
   }
   if (dialect.defaultKeyword) {
     return 'DEFAULT';

@@ -140,7 +140,9 @@ function update(input: CopyInput, dialect: Dialect, indexes: readonly number[]):
     return { ok: false, error: 'no-key' };
   }
   const settable = indexes.filter(
-    (index) => !edit.keyIndexes.includes(index) && writableName(input, index) !== undefined,
+    (index) =>
+      (edit.keyless === true || !edit.keyIndexes.includes(index)) &&
+      writableName(input, index) !== undefined,
   );
   if (settable.length === 0 || input.rows.length === 0) {
     return { ok: false, error: 'nothing-to-write' };

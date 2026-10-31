@@ -90,6 +90,8 @@ const tabSchema = object({
     object({
       editable: boolean(),
       reason: optional(literal(...READ_ONLY_REASONS)),
+      /** The table has no key: rows are found by all their values (V10.2.4). */
+      keyless: optional(boolean()),
       /** Per result column how to edit it; null for a computed column. */
       columns: optional(
         array(
@@ -189,7 +191,22 @@ export const EDIT_ERRORS = [
   'invalid-json',
   'invalid-enum',
   'unsupported',
+  'too-large',
+  'not-text',
 ] as const;
+
+/** The totals of selected cells (V10.2.4); numbers are exact text, as the cells hold them. */
+const totalsSchema = object({
+  stale: optional(boolean()),
+  cells: optional(number({ integer: true, min: 0 })),
+  values: optional(number({ integer: true, min: 0 })),
+  numbers: optional(number({ integer: true, min: 0 })),
+  sum: optional(string({ maxLength: 400 })),
+  average: optional(string({ maxLength: 400 })),
+  min: optional(string({ maxLength: 400 })),
+  max: optional(string({ maxLength: 400 })),
+  approximate: optional(boolean()),
+});
 
 export const resultGridProtocol = defineProtocol({
   host: {
@@ -270,6 +287,50 @@ export const resultGridProtocol = defineProtocol({
           /** Rows that were copied. */
           rows: optional(number({ integer: true, min: 0 })),
         }),
+      },
+      /**
+       * Page → host: save the value of a cell to a file the user picks (V10.2.4); the
+       * host asks where. `cancelled` when they closed the dialog.
+       */
+      saveValue: {
+        params: object({
+          resultId,
+          row: number({ integer: true, min: 0 }),
+          column: number({ integer: true, min: 0 }),
+        }),
+        result: object({
+          ok: boolean(),
+          error: optional(literal('no-value', 'too-large', 'cancelled', 'failed')),
+        }),
+      },
+      /**
+       * Page → host: load a file the user picks into a cell; queued like an edit.
+       */
+      loadValue: {
+        params: object({
+          resultId,
+          row: number({ integer: true, min: 0 }),
+          column: number({ integer: true, min: 0 }),
+        }),
+        result: object({
+          ok: boolean(),
+          cancelled: optional(boolean()),
+          error: optional(literal(...EDIT_ERRORS)),
+        }),
+      },
+      /**
+       * Page → host: the totals of a rectangle of cells — count, and for numbers sum,
+       * average, minimum and maximum (V10.2.4). `stale` when a newer request, a sort or
+       * an edit overtook it.
+       */
+      summarize: {
+        params: object({
+          resultId,
+          top: number({ integer: true, min: 0 }),
+          bottom: number({ integer: true, min: 0 }),
+          columns: array(number({ integer: true, min: 0 }), { maxLength: MAX_COLUMNS }),
+        }),
+        result: totalsSchema,
       },
       /**
        * Page → host: open the row a foreign key cell points at, in the target table's own
@@ -390,6 +451,7 @@ export const resultGridProtocol = defineProtocol({
 });
 
 export type ResultGridProtocol = typeof resultGridProtocol;
+export type SelectionTotals = Infer<typeof totalsSchema>;
 export type ResultTab = Infer<typeof tabSchema>;
 export type ResultGridState = Infer<typeof stateSchema>;
 export type RowWindow = Infer<typeof windowSchema>;

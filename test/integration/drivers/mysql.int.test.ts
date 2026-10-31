@@ -234,6 +234,26 @@ describe.each(['mysql', 'mariadb'] as const)('mysql driver on %s', (serverId) =>
       }
     });
 
+    it('shows spatial values as WKT with their SRID (V10.2.4)', async () => {
+      const result = await runAll(
+        session,
+        `SELECT ST_GeomFromText('POINT(1.5 -2)', 4326) AS p,
+                ST_GeomFromText('LINESTRING(0 0, 1 1, 2 0)') AS l,
+                ST_GeomFromText('POLYGON((0 0, 4 0, 4 4, 0 0))') AS g,
+                ST_GeomFromText('GEOMETRYCOLLECTION(POINT(1 2), LINESTRING(0 0, 1 1))') AS c,
+                CAST(NULL AS CHAR) AS n`,
+      );
+      expect(result.rows[0]).toEqual([
+        // MySQL 8 keeps axis order for a geographic SRID: latitude first in its text, but the
+        // stored bytes hold what was given.
+        expect.stringMatching(/^SRID=4326;POINT\((1\.5 -2|-2 1\.5)\)$/u),
+        'LINESTRING(0 0, 1 1, 2 0)',
+        'POLYGON((0 0, 4 0, 4 4, 0 0))',
+        'GEOMETRYCOLLECTION(POINT(1 2), LINESTRING(0 0, 1 1))',
+        null,
+      ]);
+    });
+
     it('lists tables of an explicit database and an empty database', async () => {
       const tables = await session.metadata.listTables({ database: 'datanest_test' });
       expect(tables.length).toBeGreaterThanOrEqual(6);

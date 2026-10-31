@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { EditableResult } from '../../../src/core/model/editability';
 import { ResultEditor, sameValue } from '../../../src/services/result-editor';
 import { type NewResult, ResultStore } from '../../../src/services/result-store';
+import { MAX_CELL_FILE_BYTES } from '../../../src/services/cell-file';
+import { retainedBytes } from '../../../src/shared/binary-bytes';
+import type { BinaryValue } from '../../../src/shared/cell-value';
 
 const DOC = 'untitled:Query-1.sql';
 
@@ -280,5 +283,75 @@ describe('ResultEditor', () => {
     editor.editCell(id, 0, 1, { kind: 'text', text: 'zed' });
     expect(store.rowAt(id, 0)?.[0]).toBe(2);
     expect(store.window(id, 0, 2)?.rows.map((row) => row[1])).toEqual(['zed', 'alice']);
+  });
+});
+
+describe('ResultEditor.setFromFile (V10.2.4)', () => {
+  const bytes = (...values: number[]): Uint8Array => Uint8Array.from(values);
+  const text = (value: string): Uint8Array => new TextEncoder().encode(value);
+
+  it('loads a file into a binary column, the bytes kept whole for saving', () => {
+    const { store, id, editor } = setup();
+    expect(editor.setFromFile(id, 0, 4, bytes(0x89, 0x50, 0x4e, 0x47))).toEqual({ ok: true });
+    const change = store.changeAt(id, 0, 4);
+    expect(change).toMatchObject({ kind: 'value', value: { kind: 'binary', size: 4 } });
+    const value = change?.kind === 'value' ? change.value : null;
+    expect(
+      value !== null && typeof value === 'object' && retainedBytes(value as BinaryValue),
+    ).toEqual(bytes(0x89, 0x50, 0x4e, 0x47));
+  });
+
+  it('loads UTF-8 text into a text column, without a byte order mark', () => {
+    const { store, id, editor } = setup();
+    expect(editor.setFromFile(id, 1, 1, text('﻿Здравствуй'))).toEqual({ ok: true });
+    expect(store.changeAt(id, 1, 1)).toEqual({ kind: 'value', value: 'Здравствуй' });
+  });
+
+  it('loads into a new row too', () => {
+    const { store, id, editor } = setup();
+    const added = editor.rowAction(id, 'add', []);
+    const row = added.ok ? (added.row ?? -1) : -1;
+    expect(editor.setFromFile(id, row, 1, text('new'))).toEqual({ ok: true });
+    expect(store.window(id, row, 1)?.rows[0]?.[1]).toBe('new');
+  });
+
+  it('refuses a text file that is not UTF-8', () => {
+    const { id, editor } = setup();
+    expect(editor.setFromFile(id, 0, 1, bytes(0xff, 0xfe, 0x41))).toEqual({
+      ok: false,
+      error: 'not-text',
+    });
+  });
+
+  it('refuses columns that are typed rather than loaded, and computed ones', () => {
+    const { id, editor } = setup();
+    expect(editor.setFromFile(id, 0, 2, text('42'))).toEqual({
+      ok: false,
+      error: 'read-only-column',
+    });
+    expect(editor.setFromFile(id, 0, 5, text('1'))).toEqual({
+      ok: false,
+      error: 'read-only-column',
+    });
+  });
+
+  it('refuses a read-only result, a missing row and a row marked for deletion', () => {
+    const readOnly = setup({ edit: { editable: false, reason: 'no-key' } });
+    expect(readOnly.editor.setFromFile(readOnly.id, 0, 4, bytes(1))).toEqual({
+      ok: false,
+      error: 'not-editable',
+    });
+    const { id, editor } = setup();
+    expect(editor.setFromFile(id, 9, 4, bytes(1))).toEqual({ ok: false, error: 'no-such-row' });
+    editor.rowAction(id, 'delete', [0]);
+    expect(editor.setFromFile(id, 0, 4, bytes(1))).toEqual({ ok: false, error: 'row-deleted' });
+  });
+
+  it('refuses a file larger than a value can be', () => {
+    const { id, editor } = setup();
+    expect(editor.setFromFile(id, 0, 4, new Uint8Array(MAX_CELL_FILE_BYTES + 1))).toEqual({
+      ok: false,
+      error: 'too-large',
+    });
   });
 });

@@ -23,6 +23,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   copies the rows, and keys, indexes and numbering follow the copy.
 - **Open SQLite Database…** on `.db`, `.sqlite`, `.sqlite3` and `.db3` files in the Explorer.
 
+- Totals of the selected cells above the grid: count, and for numbers sum, average, minimum
+  and maximum — exact for integers and decimals.
+- Tables without a key can be edited when the result shows all their columns: rows are found
+  by their values, and nothing is saved when those match more than one row.
+- The value panel saves a cell to a file and loads a file into a cell — a BLOB, a long text,
+  a JSON document.
+- MySQL and MariaDB spatial values show as WKT (`SRID=4326;POINT(1 2)`) instead of JSON.
+
 ### Changed
 
 - Copying tables between schemas of one database now runs on one session and lets the

@@ -72,6 +72,28 @@ describe('buildState', () => {
     expect(() => resultGridProtocol.webview.events.state.parse(state)).not.toThrow();
   });
 
+  it('tells the page when rows are found by their values, the table having no key (V10.2.4)', () => {
+    const state = buildState(
+      [
+        summary({
+          edit: {
+            editable: true,
+            table: { name: 't' },
+            columnMap: ['a'],
+            columns: [null],
+            keyColumns: ['a'],
+            keyIndexes: [0],
+            keyless: true,
+          },
+        }),
+      ],
+      undefined,
+      false,
+    );
+    expect(state.tabs[0]?.edit).toEqual({ editable: true, keyless: true, columns: [null] });
+    expect(() => resultGridProtocol.webview.events.state.parse(state)).not.toThrow();
+  });
+
   it('is valid for the protocol, including the awkward cases', () => {
     const state = buildState(
       [

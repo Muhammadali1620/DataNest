@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   chooseKey,
+  comparesExactly,
   findByName,
+  isSpatial,
   readOnlyResult,
   resolveEditability,
   type EditabilityInput,
@@ -144,12 +146,52 @@ describe('resolveEditability', () => {
     );
   });
 
-  it('is read-only without any usable key', () => {
+  it('finds rows of a table without a usable key by all their values (V10.2.4)', () => {
     const columns = [column('a'), column('b', { nullable: true })];
     const result = resolveEditability(
       input({ columns, uniqueKeys: [['b']], resultColumns: ['a', 'b'] }),
     );
+    expect(result).toMatchObject({
+      editable: true,
+      keyColumns: ['a', 'b'],
+      keyIndexes: [0, 1],
+      keyless: true,
+    });
+  });
+
+  it('leaves out of that "key" the columns whose values do not compare exactly', () => {
+    const columns = [
+      column('id'),
+      column('price', { dataType: 'double precision' }),
+      column('photo', { dataType: 'blob' }),
+      column('doc', { dataType: 'jsonb' }),
+      column('note', { dataType: 'clob' }),
+      column('name', { dataType: 'varchar(20)' }),
+    ];
+    const result = resolveEditability(
+      input({ columns, resultColumns: ['id', 'price', 'photo', 'doc', 'note', 'name'] }),
+    );
+    expect(result).toMatchObject({ keyColumns: ['id', 'name'], keyIndexes: [0, 5] });
+  });
+
+  it('is read-only without a key when the result does not show the whole row', () => {
+    const columns = [column('a'), column('b')];
+    const result = resolveEditability(
+      input({ columns, items: [{ kind: 'column', name: 'a', output: 'a' }], resultColumns: ['a'] }),
+    );
     expect(result).toEqual(readOnlyResult('no-key'));
+  });
+
+  it('is read-only without a key when no column compares exactly', () => {
+    const columns = [column('x', { dataType: 'real' }), column('y', { dataType: 'json' })];
+    const result = resolveEditability(input({ columns, resultColumns: ['x', 'y'] }));
+    expect(result).toEqual(readOnlyResult('no-key'));
+  });
+
+  it('marks only a result found by its values as keyless', () => {
+    const result = resolveEditability(input());
+    expect(result).toMatchObject({ editable: true, keyColumns: ['id'] });
+    expect(result.editable && result.keyless).toBe(undefined);
   });
 
   it('is read-only when the key is binary, since it cannot be written back exactly', () => {
@@ -209,5 +251,88 @@ describe('resolveEditability', () => {
       }),
     );
     expect(result).toMatchObject({ editable: true, keyIndexes: [0] });
+  });
+});
+
+describe('comparesExactly', () => {
+  it('trusts = on whole numbers, decimals, text, dates and booleans', () => {
+    for (const type of [
+      'int',
+      'bigint',
+      'decimal(10,2)',
+      'numeric',
+      'varchar(5)',
+      'text',
+      'date',
+      'timestamp with time zone',
+      'boolean',
+      "enum('a','b')",
+      'uuid',
+    ]) {
+      expect(comparesExactly(type), type).toBe(true);
+    }
+  });
+
+  it('does not trust = on floats, binaries, JSON, large objects and shapes', () => {
+    for (const type of [
+      'float',
+      'double',
+      'real',
+      'float8',
+      'bytea',
+      'varbinary(16)',
+      'json',
+      'jsonb',
+      'clob',
+      'nclob',
+      'long',
+      'xml',
+      'geometry',
+      'point',
+      'tsvector',
+    ]) {
+      expect(comparesExactly(type), type).toBe(false);
+    }
+  });
+
+  it('knows the large types SQL Server cannot compare, and only there', () => {
+    for (const type of ['text', 'ntext', 'image', 'timestamp']) {
+      expect(comparesExactly(type, 'mssql'), type).toBe(false);
+    }
+    expect(comparesExactly('text', 'postgres')).toBe(true);
+    expect(comparesExactly('timestamp', 'mysql')).toBe(true);
+  });
+});
+
+describe('spatial columns (V10.2.4)', () => {
+  it('shows them but does not edit them as text, on MySQL', () => {
+    const columns = [
+      column('id', { primaryKey: true }),
+      column('place', { dataType: 'point' }),
+      column('area', { dataType: 'polygon' }),
+    ];
+    const result = resolveEditability(
+      input({ columns, resultColumns: ['id', 'place', 'area'], driver: 'mysql' }),
+    );
+    expect(result).toMatchObject({ editable: true, columnMap: ['id', 'place', 'area'] });
+    expect(result.editable && result.columns).toEqual([expect.anything(), null, null]);
+  });
+
+  it('knows PostgreSQL’s own geometric types from PostGIS ones', () => {
+    expect(isSpatial('point', 'postgres')).toBe(false);
+    expect(isSpatial('polygon', 'postgres')).toBe(false);
+    expect(isSpatial('geometry(Point,4326)', 'postgres')).toBe(true);
+    expect(isSpatial('geography', 'postgres')).toBe(true);
+    for (const type of ['geometry', 'POINT', 'linestring', 'multipolygon', 'geomcollection']) {
+      expect(isSpatial(type, 'mysql'), type).toBe(true);
+    }
+    expect(isSpatial('varchar(10)', 'mysql')).toBe(false);
+    expect(isSpatial('pointer', 'mysql')).toBe(false);
+  });
+
+  it('never puts them in the match of a keyless row', () => {
+    for (const type of ['geometry', 'point', 'multipoint', 'geomcollection', 'multilinestring']) {
+      expect(comparesExactly(type, 'mysql'), type).toBe(false);
+    }
   });
 });

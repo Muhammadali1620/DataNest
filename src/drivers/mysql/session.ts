@@ -81,6 +81,8 @@ export function connectionOptions(
     bigNumberStrings: true,
     decimalNumbers: false,
     jsonStrings: true,
+    // Spatial values stay bytes, which become text a person can read (V10.2.4).
+    typeCast: (field, next) => (field.type === 'GEOMETRY' ? field.buffer() : next()),
   };
 }
 

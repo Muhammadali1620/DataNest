@@ -958,5 +958,9 @@
   "Copying {0} to {1}": "Копирование {0} в {1}",
   "Open a SQLite Database": "Открыть базу SQLite",
   "SQLite databases": "Базы SQLite",
-  "DataNest opens SQLite files on this computer only": "DataNest открывает только файлы SQLite на этом компьютере"
+  "DataNest opens SQLite files on this computer only": "DataNest открывает только файлы SQLite на этом компьютере",
+  "{0} rows have exactly these values, and the table has no key to tell them apart. Nothing was saved.": "Строк с точно такими значениями — {0}, а ключа, чтобы их различить, у таблицы нет. Ничего не сохранено.",
+  "Save the Value to a File": "Сохранить значение в файл",
+  "Load a File into the Cell": "Загрузить файл в ячейку",
+  "Could not save the file: {0}": "Не удалось сохранить файл: {0}"
 }

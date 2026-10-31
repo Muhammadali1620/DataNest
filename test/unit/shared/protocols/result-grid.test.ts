@@ -134,6 +134,34 @@ describe('state event', () => {
 });
 
 describe('protocol shape', () => {
+  it('checks the totals, save-value and load-value requests (V10.2.4)', () => {
+    const { summarize, saveValue, loadValue } = resultGridProtocol.host.requests;
+    expect(
+      summarize.params.parse({ resultId: 'result-1', top: 0, bottom: 9, columns: [0, 2] }),
+    ).toEqual({ resultId: 'result-1', top: 0, bottom: 9, columns: [0, 2] });
+    expect(() =>
+      summarize.params.parse({ resultId: 'result-1', top: -1, bottom: 9, columns: [] }),
+    ).toThrow();
+    expect(summarize.result.parse({ stale: true })).toEqual({ stale: true });
+    expect(
+      summarize.result.parse({ cells: 2, values: 2, numbers: 2, sum: '3', approximate: true }),
+    ).toMatchObject({ sum: '3' });
+    expect(() => summarize.result.parse({ sum: 'x'.repeat(401) })).toThrow();
+    expect(saveValue.result.parse({ ok: false, error: 'cancelled' })).toEqual({
+      ok: false,
+      error: 'cancelled',
+    });
+    expect(() => saveValue.result.parse({ ok: false, error: 'oops' })).toThrow();
+    expect(loadValue.result.parse({ ok: false, error: 'not-text' })).toEqual({
+      ok: false,
+      error: 'not-text',
+    });
+    expect(loadValue.result.parse({ ok: false, cancelled: true })).toEqual({
+      ok: false,
+      cancelled: true,
+    });
+  });
+
   it('lets the host answer rows, paging, sorting and searching', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
       'binaryBytes',
@@ -144,14 +172,17 @@ describe('protocol shape', () => {
       'filterTable',
       'followLink',
       'loadAll',
+      'loadValue',
       'pageSize',
       'pageTo',
       'previewChanges',
       'rowAction',
       'rows',
       'saveChanges',
+      'saveValue',
       'search',
       'sort',
+      'summarize',
     ]);
     expect(Object.keys(resultGridProtocol.host.events).sort()).toEqual([
       'cancel',

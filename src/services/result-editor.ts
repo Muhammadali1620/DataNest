@@ -7,6 +7,7 @@ import type { RowAction } from '../shared/row-action';
 import { type EditInput, type InputProblem, parseCellInput } from '../shared/cell-input';
 import type { CellValue } from '../shared/cell-value';
 import type { EditableResult } from '../core/model/editability';
+import { fileCellValue } from './cell-file';
 import type { CellChange, PendingRow, ResultStore } from './result-store';
 
 export type EditError =
@@ -19,6 +20,10 @@ export type EditError =
   /** The cell is computed or of a kind the grid cannot edit as text. */
   | 'read-only-column'
   | 'not-null'
+  /** A file loaded into a cell is larger than a value can be (V10.2.4). */
+  | 'too-large'
+  /** A file loaded into a text column is not UTF-8 text. */
+  | 'not-text'
   | InputProblem;
 
 export type RowActionOutcome =
@@ -85,6 +90,35 @@ export class ResultEditor {
       }
     }
     return this.results.setChange(resultId, row, column, change)
+      ? { ok: true }
+      : fail('no-such-row');
+  }
+
+  /**
+   * Loads a file into a cell (V10.2.4): its bytes into a binary column — the one kind
+   * that cannot be typed — or its text into a text or JSON column.
+   */
+  setFromFile(resultId: string, row: number, column: number, bytes: Uint8Array): EditOutcome {
+    const edit = this.results.get(resultId)?.edit;
+    if (edit?.editable !== true) {
+      return fail('not-editable');
+    }
+    if (this.results.isDeletedRow(resultId, row)) {
+      return fail('row-deleted');
+    }
+    const inserted = this.results.isInsertedRow(resultId, row);
+    if (!inserted && this.results.rowAt(resultId, row) === undefined) {
+      return fail('no-such-row');
+    }
+    const info = edit.columns[column];
+    if (info === undefined || info === null) {
+      return fail('read-only-column');
+    }
+    const loaded = fileCellValue(info.kind, bytes);
+    if (!loaded.ok) {
+      return fail(loaded.error);
+    }
+    return this.results.setChange(resultId, row, column, { kind: 'value', value: loaded.value })
       ? { ok: true }
       : fail('no-such-row');
   }
@@ -156,7 +190,7 @@ export class ResultEditor {
         info === null ||
         info.kind === 'binary' ||
         defaults.has(column) ||
-        edit.keyIndexes.includes(column)
+        (edit.keyless !== true && edit.keyIndexes.includes(column))
       ) {
         return;
       }

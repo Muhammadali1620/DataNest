@@ -25,10 +25,25 @@
     loadBytes: () => Promise<{ size: number; data?: string | undefined }>;
     onCopy: (text: string) => void;
     onClose: () => void;
+    /** Saves the value to a file (V10.2.4); absent when there is nothing to save. */
+    onSaveFile?: (() => void) | undefined;
+    /** Loads a file into the cell; absent when the cell cannot take one. */
+    onLoadFile?: (() => void) | undefined;
     t: Translate;
   }
 
-  const { cell, cellKey, columnName, dataType, loadBytes, onCopy, onClose, t }: Props = $props();
+  const {
+    cell,
+    cellKey,
+    columnName,
+    dataType,
+    loadBytes,
+    onCopy,
+    onClose,
+    onSaveFile,
+    onLoadFile,
+    t,
+  }: Props = $props();
 
   /** Hex dump shows this many bytes at a time; a whole megabyte of rows would stall the page. */
   const HEX_PAGE_BYTES = 4096;
@@ -145,6 +160,16 @@
       <span class="type">{dataType}</span>
     {/if}
     <span class="spacer"></span>
+    {#if onSaveFile !== undefined && view !== undefined && view.kind !== 'null'}
+      <button type="button" class="mode" data-testid="value-save-file" onclick={onSaveFile}>
+        {t('value.saveFile')}
+      </button>
+    {/if}
+    {#if onLoadFile !== undefined}
+      <button type="button" class="mode" data-testid="value-load-file" onclick={onLoadFile}>
+        {t('value.loadFile')}
+      </button>
+    {/if}
     <button
       type="button"
       class="close"

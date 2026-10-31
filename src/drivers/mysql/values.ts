@@ -2,6 +2,7 @@
 // dateStrings, bigNumberStrings and jsonStrings, so precision-critical types arrive
 // as text and only need tagging by column type.
 
+import { mysqlGeometryText } from '../../core/geo/wkb';
 import { BINARY_PREVIEW_BYTES, binaryValue, safeIntOrTag } from '../common/values';
 import type { CellValue } from '../../shared/cell-value';
 
@@ -112,7 +113,8 @@ export function toCellValue(value: unknown, columnType?: number): CellValue {
     return safeIntOrTag(value.toString());
   }
   if (value instanceof Uint8Array) {
-    return binaryValue(value);
+    const geometry = columnType === MYSQL_TYPE.GEOMETRY ? mysqlGeometryText(value) : undefined;
+    return geometry ?? binaryValue(value);
   }
   if (value instanceof Date) {
     // Defensive: dateStrings should prevent this; render without timezone math.

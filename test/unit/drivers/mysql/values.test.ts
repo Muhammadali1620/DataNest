@@ -96,3 +96,34 @@ describe('mysqlTypeName', () => {
     expect(mysqlTypeName(9999)).toBeUndefined();
   });
 });
+
+describe('toCellValue of spatial values (V10.2.4)', () => {
+  /** MySQL's storage: a little-endian SRID, then WKB of a point. */
+  function storedPoint(srid: number, x: number, y: number): Uint8Array {
+    const view = new DataView(new ArrayBuffer(25));
+    view.setUint32(0, srid, true);
+    view.setUint8(4, 1);
+    view.setUint32(5, 1, true);
+    view.setFloat64(9, x, true);
+    view.setFloat64(17, y, true);
+    return new Uint8Array(view.buffer);
+  }
+
+  it('shows a geometry as WKT with its SRID', () => {
+    expect(toCellValue(storedPoint(4326, 1.5, -2), MYSQL_TYPE.GEOMETRY)).toBe(
+      'SRID=4326;POINT(1.5 -2)',
+    );
+    expect(toCellValue(storedPoint(0, 3, 4), MYSQL_TYPE.GEOMETRY)).toBe('POINT(3 4)');
+  });
+
+  it('keeps bytes that do not read as a geometry as binary', () => {
+    expect(toCellValue(Uint8Array.from([1, 2, 3]), MYSQL_TYPE.GEOMETRY)).toMatchObject({
+      kind: 'binary',
+      size: 3,
+    });
+  });
+
+  it('keeps the bytes of other columns as binary, even when they look like a point', () => {
+    expect(toCellValue(storedPoint(0, 3, 4), MYSQL_TYPE.BLOB)).toMatchObject({ kind: 'binary' });
+  });
+});

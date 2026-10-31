@@ -2,7 +2,7 @@
   "name": "datanest",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "publisher": "datanest",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -1771,6 +1771,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%configuration.tree.showSizes.description%"
+        },
+        "datanest.tree.expandOnlyByArrow": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.tree.expandOnlyByArrow.description%"
         },
         "datanest.tree.tableStats": {
           "type": "boolean",

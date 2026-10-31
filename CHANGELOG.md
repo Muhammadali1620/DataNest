@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.1] - 2026-10-31
+
+### Changed
+
+- The server version comes first in a connection's description, also while it is not connected.
+- Tools → Settings has a section menu and aligned rows; setting texts render code and bold.
+- A table expands only by its arrow: the toggle a double click causes is undone at once (`datanest.tree.expandOnlyByArrow`).
+
 ## [1.6.0] - 2026-10-31
 
 ### Added

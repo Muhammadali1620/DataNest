@@ -198,3 +198,41 @@ export function knownIds(properties: Readonly<Record<string, ConfigProperty>>): 
     .filter(([id, property]) => groupOf(id) !== undefined && kindOf(property) !== undefined)
     .map(([id]) => id);
 }
+
+/** A run of text of a setting's description: plain, **bold** or `code`. */
+export interface InlineSpan {
+  readonly text: string;
+  readonly style: 'plain' | 'bold' | 'code';
+}
+
+/**
+ * The inline markdown of a description as spans the page draws with its own elements, so
+ * nothing is ever put into the page as HTML. Only `code` and **bold** are read; an
+ * unclosed mark stays as typed.
+ */
+export function inlineSpans(text: string): InlineSpan[] {
+  const spans: InlineSpan[] = [];
+  const pattern = /`([^`]+)`|\*\*([^*]+)\*\*/gu;
+  let from = 0;
+  for (const found of text.matchAll(pattern)) {
+    if (found.index > from) {
+      spans.push({ text: text.slice(from, found.index), style: 'plain' });
+    }
+    const code = found[1];
+    spans.push(
+      code === undefined ? { text: found[2] ?? '', style: 'bold' } : { text: code, style: 'code' },
+    );
+    from = found.index + found[0].length;
+  }
+  if (from < text.length) {
+    spans.push({ text: text.slice(from), style: 'plain' });
+  }
+  return spans;
+}
+
+/** What a description says after its first sentence (the label); empty when it is one sentence. */
+export function detailOf(description: string): string {
+  const flat = description.replace(/\s+/gu, ' ').trim();
+  const end = flat.search(/[.!?](?=\s+[\p{Lu}\p{N}"'«([]|\s*$)/u);
+  return end === -1 ? '' : flat.slice(end + 1).trim();
+}

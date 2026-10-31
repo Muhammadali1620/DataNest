@@ -35,7 +35,7 @@ import type { DocumentBinding } from './editor/document-bindings';
 import { schemaTexts, schemaUi } from './tree/schema-ui';
 import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
-import { COMMAND_IDS, type CommandId } from './command-ids';
+import { COMMAND_IDS, CONFIG_KEYS, CONFIG_SECTION, type CommandId } from './command-ids';
 import { guardCommand } from './command-runner';
 import { connectionCommandHandlers } from './connection-commands';
 import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
@@ -471,15 +471,24 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
   });
   // A double click on a table opens it and leaves its row as it was (V11.12).
-  const expansion = new ExpansionKeeper<TreeNode>({
-    idOf: nodeId,
-    expand: (node) => {
-      void deps.treeView.reveal(node, { select: false, focus: false, expand: true });
+  const expansion = new ExpansionKeeper<TreeNode>(
+    {
+      idOf: nodeId,
+      expand: (node) => {
+        void deps.treeView.reveal(node, { select: false, focus: false, expand: true });
+      },
+      collapse: () => {
+        void vscode.commands.executeCommand('list.collapse');
+      },
     },
-    collapse: () => {
-      void vscode.commands.executeCommand('list.collapse');
-    },
-  });
+    undefined,
+    undefined,
+    undefined,
+    () =>
+      vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<boolean>(CONFIG_KEYS.treeExpandOnlyByArrow, true),
+  );
   deps.tree.holdChildren = async (node) => {
     await expansion.quiet(node);
   };

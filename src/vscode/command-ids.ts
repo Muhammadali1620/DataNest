@@ -230,6 +230,8 @@ export const CONFIG_KEYS = {
   /** Rows, size and comment of tables in the tree (V10.2.3). */
   treeTableStats: 'tree.tableStats',
   treeShowSizes: 'tree.showSizes',
+  /** A table opens and closes by its arrow only, a double click on its name just opens it (D121). */
+  treeExpandOnlyByArrow: 'tree.expandOnlyByArrow',
   /** Largest number of rows one statement brings back. */
   rowLimit: 'rowLimit',
   /** Rows one page of a table view holds. */

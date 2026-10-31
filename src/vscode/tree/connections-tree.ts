@@ -5,6 +5,7 @@ import type { ConnectionStore } from '../../services/connection-store';
 import type { MetadataCache } from '../../services/metadata-cache';
 import type { RedisKeyBrowser } from '../../services/redis/key-browser';
 import { PROJECT_FILE_PATH } from '../../services/project-connections';
+import type { VersionMemory } from '../../services/version-memory';
 import {
   LabelCache,
   readServerVersion,
@@ -65,6 +66,8 @@ export interface ConnectionsTreeDeps {
   readonly settings: TreeSettings;
   readonly logger: Logger;
   readonly projects?: ProjectSource;
+  /** The last version seen behind each connection, shown while it is closed (V11.15). */
+  readonly versionMemory?: VersionMemory;
   /** The accounts of a server, for the Security folder (V11.12). */
   readonly accounts?: TreeModelDeps['accounts'];
   /** The saved queries of a scope, for the Query folder (V11.12). */
@@ -497,19 +500,30 @@ export class ConnectionsTreeProvider
     this.subscriptions.length = 0;
   }
 
-  /** The version of a connected server, read once in the background. */
+  /**
+   * The version of the server behind a connection. A connected one is read once in the
+   * background (and remembered); a closed one shows the version seen last time.
+   */
   private versionText(
     connectionId: string,
-    driver: ConnectionConfig['driver'] | undefined,
+    config: ConnectionConfig | undefined,
     connected: boolean,
   ): string | undefined {
-    if (!connected || driver === undefined || this.deps.settings.showSizes?.() === false) {
+    if (config === undefined) {
       return undefined;
     }
+    const remembered = this.deps.versionMemory?.recall(connectionId, config);
+    if (!connected) {
+      return remembered;
+    }
     this.versions.ask(connectionId, async () => {
-      return await readServerVersion(this.deps.manager, connectionId, driver);
+      return await readServerVersion(this.deps.manager, connectionId, config.driver);
     });
-    return this.versions.peek(connectionId);
+    const live = this.versions.peek(connectionId);
+    if (live !== undefined && live !== remembered) {
+      void this.deps.versionMemory?.remember(connectionId, config, live);
+    }
+    return live ?? remembered;
   }
 
   /** The size of a database or schema node, read once in the background; `2.4M`. */
@@ -549,7 +563,7 @@ export class ConnectionsTreeProvider
     const tags = tagsOf(config).map(tagText);
     const target = config === undefined ? '' : describeTarget(config);
     // The marks come first, so they stay visible when the description is cut.
-    const version = this.versionText(connectionId, config?.driver, connectedNow(state.status));
+    const version = this.versionText(connectionId, config, connectedNow(state.status));
     const rest = tags.length === 0 ? target : `${tags.join(' · ')} · ${target}`;
     item.description = version === undefined ? rest : `${version} · ${rest}`;
     const project = this.deps.store.projectOf(connectionId);
@@ -563,6 +577,7 @@ export class ConnectionsTreeProvider
       [
         `**${config?.name ?? connectionId}**`,
         config === undefined ? '' : `\n\n${describeTarget(config)}`,
+        version === undefined ? '' : `\n\n${vscode.l10n.t('Server version {0}', version)}`,
         tunnelLine(config),
         filterLine(config),
         project === undefined

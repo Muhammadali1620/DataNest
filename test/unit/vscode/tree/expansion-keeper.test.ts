@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ExpansionKeeper, SETTLE_MS } from '../../../../src/vscode/tree/expansion-keeper';
+import {
+  CLICK_SYNC_MS,
+  ExpansionKeeper,
+  JUDGE_MS,
+} from '../../../../src/vscode/tree/expansion-keeper';
 
-function setup() {
+function setup(options: { enabled?: () => boolean; onWait?: (ms: number) => void } = {}) {
   const log: string[] = [];
   const timers: { run: () => void; ms: number }[] = [];
-  let now = 0;
+  let now = 1000;
   const keeper = new ExpansionKeeper<string>(
     {
       idOf: (node) => node,
@@ -13,12 +17,18 @@ function setup() {
     },
     (run, ms) => timers.push({ run, ms }),
     () => now,
+    (ms) => {
+      now += ms;
+      options.onWait?.(ms);
+      return Promise.resolve();
+    },
+    options.enabled,
   );
   return {
     keeper,
     log,
     timers,
-    wait: (ms: number) => {
+    advance: (ms: number) => {
       now += ms;
     },
     flush: () => {
@@ -26,166 +36,224 @@ function setup() {
         timer.run();
       }
     },
+    flushJudging: () => {
+      for (const timer of timers.splice(0).filter((item) => item.ms === JUDGE_MS)) {
+        timer.run();
+      }
+    },
   };
 }
 
-describe('ExpansionKeeper', () => {
-  it('collapses a table the double click expanded', () => {
-    const { keeper, log, flush, timers } = setup();
+describe('ExpansionKeeper: a table opens and closes by its arrow only', () => {
+  it('closes at once a table the double click expanded (command first)', () => {
+    const { keeper, log, advance } = setup();
+    keeper.clicked('t');
+    advance(120);
     keeper.clicked('t');
     keeper.expanded('t');
-    keeper.clicked('t');
-    keeper.settle('t');
-    expect(timers.map((timer) => timer.ms)).toEqual([SETTLE_MS]);
-    flush();
     expect(log).toEqual(['collapse t']);
   });
 
-  it('expands again a table that was open and got closed', () => {
-    const { keeper, log, flush } = setup();
+  it('closes at once a table the double click expanded (toggle first)', () => {
+    const { keeper, log, advance } = setup();
+    keeper.clicked('t');
+    advance(120);
     keeper.expanded('t');
-    keeper.clicked('t');
-    keeper.collapsed('t');
-    keeper.clicked('t');
-    keeper.settle('t');
-    flush();
-    expect(log).toEqual(['expand t']);
-  });
-
-  it('does nothing when the row ended up as it was', () => {
-    const { keeper, log, flush } = setup();
-    keeper.clicked('t');
-    keeper.clicked('t');
-    keeper.settle('t');
-    flush();
     expect(log).toEqual([]);
-    keeper.expanded('u');
-    keeper.clicked('u');
-    keeper.clicked('u');
-    keeper.settle('u');
-    flush();
-    expect(log).toEqual([]);
-  });
-
-  it('judges the row by its state when the timer fires, not when it was set', () => {
-    const { keeper, log, flush } = setup();
     keeper.clicked('t');
-    keeper.expanded('t');
-    keeper.settle('t');
-    keeper.collapsed('t');
-    flush();
-    expect(log).toEqual([]);
-  });
-
-  it('remembers the state before the first click of a pair, not the second', () => {
-    const { keeper, log, flush, wait } = setup();
-    keeper.clicked('t');
-    wait(100);
-    keeper.expanded('t');
-    keeper.clicked('t');
-    keeper.settle('t');
-    flush();
     expect(log).toEqual(['collapse t']);
   });
 
-  it('forgets a single click after the double click window', () => {
-    const { keeper, log, flush, wait } = setup();
-    keeper.clicked('t');
+  it('opens again at once a table the double click collapsed', () => {
+    const { keeper, log, advance } = setup();
     keeper.expanded('t');
-    wait(2000);
+    advance(1000);
+    keeper.clicked('t');
+    advance(120);
     keeper.clicked('t');
     keeper.collapsed('t');
-    keeper.clicked('t');
-    keeper.settle('t');
-    flush();
-    // The pair began with the row open, and the row ended closed: it opens again.
     expect(log).toEqual(['expand t']);
   });
 
-  it('ignores a settle with no click before it, and keeps rows apart', () => {
-    const { keeper, log, flush } = setup();
-    keeper.settle('t');
+  it('opens again a collapsed table when the toggle comes before the second click', () => {
+    const { keeper, log, advance } = setup();
+    keeper.expanded('t');
+    advance(1000);
+    keeper.clicked('t');
+    advance(80);
+    keeper.collapsed('t');
+    keeper.clicked('t');
+    expect(log).toEqual(['expand t']);
+  });
+
+  it('never touches a toggle by the arrow, which has no click before it', () => {
+    const { keeper, log, timers } = setup();
+    keeper.expanded('t');
+    keeper.collapsed('t');
+    keeper.expanded('t');
+    expect(log).toEqual([]);
+    expect(timers).toEqual([]);
+  });
+
+  it('leaves the arrow click that follows one click on the name alone', () => {
+    const { keeper, log, advance, flushJudging } = setup();
+    keeper.clicked('t');
+    advance(100);
+    keeper.expanded('t');
+    advance(JUDGE_MS);
+    flushJudging();
+    advance(200);
+    // A late second click does not undo a toggle that was taken as the user's own.
+    keeper.clicked('t');
+    expect(log).toEqual([]);
+  });
+
+  it('does not take the editor’s echo of an undo for a toggle of the user', () => {
+    const { keeper, log, advance } = setup();
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    expect(log).toEqual(['collapse t']);
+    keeper.collapsed('t');
+    expect(log).toEqual(['collapse t']);
+    // The next toggle by the arrow is the user's own again.
+    keeper.expanded('t');
+    expect(log).toEqual(['collapse t']);
+  });
+
+  it('forgets an echo that never came', () => {
+    const { keeper, log, advance, flush } = setup();
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    flush();
+    advance(5000);
+    // Without the echo, a later double click is judged on its own.
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.collapsed('t');
+    expect(log).toEqual(['collapse t', 'expand t']);
+  });
+
+  it('counts two clicks far apart as two single clicks', () => {
+    const { keeper, log, advance, flushJudging } = setup();
+    keeper.clicked('t');
+    advance(700);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    advance(JUDGE_MS);
+    flushJudging();
+    expect(log).toEqual([]);
+  });
+
+  it('takes a third click for the start of a new pair', () => {
+    const { keeper, log, advance } = setup();
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    keeper.collapsed('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    // Only the first pair was undone: the third click alone is not a double click.
+    expect(log).toEqual(['collapse t']);
+  });
+
+  it('keeps the rows apart', () => {
+    const { keeper, log, advance } = setup();
     keeper.clicked('a');
+    advance(100);
+    keeper.clicked('b');
     keeper.expanded('b');
-    keeper.settle('b');
-    flush();
     expect(log).toEqual([]);
+  });
+
+  it('ignores a toggle that changes nothing', () => {
+    const { keeper, log, advance } = setup();
+    keeper.expanded('t');
+    advance(1000);
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    expect(log).toEqual([]);
+  });
+
+  it('leaves the editor alone when the setting is off', async () => {
+    const { keeper, log, advance } = setup({ enabled: () => false });
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    await keeper.quiet('t');
+    expect(log).toEqual([]);
+  });
+
+  it('follows the setting at every call', () => {
+    let on = false;
+    const { keeper, log, advance } = setup({ enabled: () => on });
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    expect(log).toEqual([]);
+    on = true;
+    advance(1000);
+    keeper.collapsed('t');
+    advance(1000);
+    keeper.clicked('t');
+    advance(100);
+    keeper.clicked('t');
+    keeper.expanded('t');
+    expect(log).toEqual(['collapse t']);
   });
 });
 
 describe('ExpansionKeeper.quiet', () => {
-  /** A fake clock: `wait` moves time and runs what the test queued for that moment. */
-  function clocked() {
-    let now = 1000;
+  it('lets an arrow click have its children at once', async () => {
     const waits: number[] = [];
-    const between: (() => void)[] = [];
-    const keeper = new ExpansionKeeper<string>(
-      { idOf: (node) => node, expand: () => undefined, collapse: () => undefined },
-      () => undefined,
-      () => now,
-      (ms) => {
+    const { keeper } = setup({ onWait: (ms) => waits.push(ms) });
+    await keeper.quiet('t');
+    expect(waits).toEqual([CLICK_SYNC_MS]);
+  });
+
+  it('holds the children while the second click may still come, but not beyond the judging time', async () => {
+    const waits: number[] = [];
+    const { keeper } = setup({ onWait: (ms) => waits.push(ms) });
+    keeper.clicked('t');
+    await keeper.quiet('t');
+    const total = waits.reduce((sum, ms) => sum + ms, 0);
+    expect(total).toBeGreaterThanOrEqual(JUDGE_MS);
+    expect(total).toBeLessThanOrEqual(JUDGE_MS + CLICK_SYNC_MS + 1);
+  });
+
+  it('lets go as soon as the second click came', async () => {
+    const waits: number[] = [];
+    const ref: { keeper?: ExpansionKeeper<string> } = {};
+    const { keeper } = setup({
+      onWait: (ms) => {
         waits.push(ms);
-        now += ms;
-        between.shift()?.();
-        return Promise.resolve();
+        if (waits.length === 1) {
+          ref.keeper?.clicked('t');
+        }
       },
-    );
-    return {
-      keeper,
-      waits,
-      between,
-      at: () => now,
-      advance: (ms: number) => {
-        now += ms;
-      },
-    };
-  }
-
-  it('gives the children of an arrow click at once, after the short sync wait', async () => {
-    const { keeper, waits } = clocked();
-    await keeper.quiet('t');
-    expect(waits).toEqual([60]);
-  });
-
-  it('holds the children of a click on the label until the double-click window is over', async () => {
-    const { keeper, waits, at } = clocked();
+    });
+    ref.keeper = keeper;
     keeper.clicked('t');
-    const clickedAt = at();
     await keeper.quiet('t');
-    // 60 ms to sync, then the rest of the 500 ms window and the grace.
-    expect(waits).toEqual([60, 480]);
-    expect(at()).toBe(clickedAt + 540);
+    expect(waits).toEqual([CLICK_SYNC_MS]);
   });
 
-  it('waits out the window of a second click too', async () => {
-    const { keeper, waits, between, at } = clocked();
-    keeper.clicked('t');
-    // The second click lands while the first window is still running.
-    between.push(
-      () => undefined,
-      () => {
-        keeper.clicked('t');
-      },
-    );
-    await keeper.quiet('t');
-    const last = at() - 40;
-    expect(waits.length).toBe(3);
-    expect(waits[2]).toBeGreaterThan(400);
-    expect(last).toBeGreaterThan(1000 + 500);
-  });
-
-  it('does not hold children for a click that was long ago', async () => {
-    const { keeper, waits, advance } = clocked();
+  it('does not hold the children of a row clicked long ago', async () => {
+    const waits: number[] = [];
+    const { keeper, advance } = setup({ onWait: (ms) => waits.push(ms) });
     keeper.clicked('t');
     advance(2000);
     await keeper.quiet('t');
-    expect(waits).toEqual([60]);
-  });
-
-  it('does not hold the children of another row', async () => {
-    const { keeper, waits } = clocked();
-    keeper.clicked('other');
-    await keeper.quiet('t');
-    expect(waits).toEqual([60]);
+    expect(waits).toEqual([CLICK_SYNC_MS]);
   });
 });

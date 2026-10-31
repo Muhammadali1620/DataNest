@@ -5,7 +5,9 @@ import {
   buildGroups,
   type ConfigProperty,
   checkSetting,
+  detailOf,
   groupOf,
+  inlineSpans,
   knownIds,
   labelOf,
   SETTING_GROUPS,
@@ -231,5 +233,52 @@ describe("the extension's own package.json", () => {
         value: entry.default,
       });
     }
+  });
+});
+
+describe('inlineSpans', () => {
+  it('splits plain text, `code` and **bold** in order', () => {
+    expect(inlineSpans('Show **Run** above `Ctrl+Enter` runs')).toEqual([
+      { text: 'Show ', style: 'plain' },
+      { text: 'Run', style: 'bold' },
+      { text: ' above ', style: 'plain' },
+      { text: 'Ctrl+Enter', style: 'code' },
+      { text: ' runs', style: 'plain' },
+    ]);
+  });
+
+  it('keeps an unclosed mark as typed and never makes markup out of angle brackets', () => {
+    expect(inlineSpans('a `b and **c <b>x</b>')).toEqual([
+      { text: 'a `b and **c <b>x</b>', style: 'plain' },
+    ]);
+  });
+
+  it('is empty for an empty text and one plain span for plain text', () => {
+    expect(inlineSpans('')).toEqual([]);
+    expect(inlineSpans('plain')).toEqual([{ text: 'plain', style: 'plain' }]);
+  });
+
+  it('reads two marks side by side and a mark at the very start or end', () => {
+    expect(inlineSpans('`a`**b**')).toEqual([
+      { text: 'a', style: 'code' },
+      { text: 'b', style: 'bold' },
+    ]);
+  });
+});
+
+describe('detailOf', () => {
+  it('is what follows the first sentence', () => {
+    expect(detailOf('Rows per page. A table opens with this many. More.')).toBe(
+      'A table opens with this many. More.',
+    );
+  });
+
+  it('is empty for one sentence, with or without the stop', () => {
+    expect(detailOf('Rows per page.')).toBe('');
+    expect(detailOf('Rows per page')).toBe('');
+  });
+
+  it('does not cut at e.g. before a lower-case word', () => {
+    expect(detailOf('Splits names, e.g. user:1 into folders. Then more.')).toBe('Then more.');
   });
 });

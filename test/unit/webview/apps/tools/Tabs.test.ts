@@ -672,6 +672,49 @@ describe('Settings', () => {
     expect(inputOf('item-datanest.editor.codeLens').checked).toBe(true);
   });
 
+  it('draws `code` and **bold** of a description as elements, not as raw marks', async () => {
+    const groups: SettingGroup[] = [
+      {
+        id: 'editor',
+        items: [
+          {
+            id: 'datanest.editor.codeLens',
+            kind: 'boolean',
+            label: 'Show **Run** above a statement',
+            description: 'Show **Run** above a statement. Press `Ctrl+Enter` to run <b>one</b>.',
+            value: true,
+            default: true,
+          },
+        ],
+      },
+    ];
+    await open((host) => host.handle('settingsList', () => ({ groups })));
+    await goTo('Settings');
+    const row = await waitFor(() => byId('item-datanest.editor.codeLens'));
+    expect(row.querySelector('.label strong')?.textContent).toBe('Run');
+    expect(row.querySelector('.detail code')?.textContent).toBe('Ctrl+Enter');
+    expect(row.textContent).not.toContain('**');
+    expect(row.textContent).not.toContain('`');
+    // Angle brackets are text, never markup.
+    expect(row.querySelector('.detail b')).toBeNull();
+    expect(row.textContent).toContain('<b>one</b>');
+  });
+
+  it('lists every section in a nav, marks the chosen one and remembers it', async () => {
+    await open((host) => host.handle('settingsList', () => ({ groups: GROUPS })));
+    await goTo('Settings');
+    await waitFor(() => {
+      expect(byId('nav-sql')).toBeTruthy();
+    });
+    for (const id of ['connections', 'other', 'editor', 'sql', 'result', 'redis']) {
+      expect(byId(`nav-${id}`), id).toBeTruthy();
+    }
+    expect(byId('nav-connections').getAttribute('aria-current')).toBe('true');
+    await fireEvent.click(byId('nav-sql'));
+    expect(byId('nav-sql').getAttribute('aria-current')).toBe('true');
+    expect(byId('nav-connections').getAttribute('aria-current')).toBeNull();
+  });
+
   it('writes a toggle, a choice, a number and a text when they change', async () => {
     const settingsSet = vi.fn((_params: { id: string; value: unknown }) => {
       return { ok: true };

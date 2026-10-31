@@ -409,7 +409,7 @@ describe('disconnect with open transactions (V4.8)', () => {
 });
 
 describe('clickTable and the row it leaves as it was (V11.12)', () => {
-  it('tells the expansion keeper about every click and settles the double one', async () => {
+  it('tells the expansion keeper about every click and opens on the second', async () => {
     const calls: string[] = [];
     let now = 0;
     const handlers = treeCommandHandlers({
@@ -423,13 +423,12 @@ describe('clickTable and the row it leaves as it was (V11.12)', () => {
       doubleClick: new DoubleClickDetector(() => now, 500),
       expansion: {
         clicked: () => calls.push('clicked'),
-        settle: () => calls.push('settle'),
       },
     });
     await handlers.clickTable(tableNode);
     now += 100;
     await handlers.clickTable(tableNode);
-    expect(calls).toEqual(['clicked', 'clicked', 'settle']);
+    expect(calls).toEqual(['clicked', 'clicked']);
   });
 });
 

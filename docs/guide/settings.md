@@ -29,7 +29,8 @@ once, without a restart.
 |---|---|---|---|
 | `datanest.showSystemObjects` | `false` | | Show the databases and schemas the server keeps for itself, such as `information_schema` and `pg_catalog`. |
 | `datanest.connections.sync` | `false` | | Share the connection list between your computers through the editor's Settings Sync. Passwords never travel. |
-| `datanest.tree.showSizes` | `true` | | Show the server version after a connection and the size of a database or schema after its name (`gamezone.dev 15.19`, `public 2.4M`). Each is read lazily with one small query and never blocks the tree. |
+| `datanest.tree.expandOnlyByArrow` | `true` | | A table in the tree opens and closes only by its arrow; a double click on its name opens its data and leaves the row as it was. The editor toggles a row on a double click by itself and cannot be told otherwise for one view, so DataNest puts the row back at once (one blink at most). Turn it off to keep the editor's own behaviour. |
+| `datanest.tree.showSizes` | `true` | | Show the size of a database or schema after its name (`public 2.4M`). It is read lazily with one small query and never blocks the tree. The server version after a connection (`15.19 · user@host:5432`) is always shown, and kept for the next start, so it is there before you connect. |
 | `datanest.tree.tableStats` | `true` | | Show each table's estimated rows in the tree, and its size and comment in the tooltip, from the server's statistics. |
 | `datanest.redis.keySeparator` | `:` | | What splits Redis key names into folders, e.g. `user:1:name` → `user` → `1`. Empty: no folders. |
 | `datanest.redis.keysPerLoad` | `5000` | 100 – 100 000 | How many Redis keys are loaded at a time with `SCAN`; **Load More Keys** brings the next portion. |

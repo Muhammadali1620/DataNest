@@ -51,7 +51,7 @@ export interface TreeCommandDeps {
   /** Tells a double click from two single ones; tests pass a clock they control. */
   readonly doubleClick?: DoubleClickDetector;
   /** Puts a row back as it was after a double click toggled it (V11.12). */
-  readonly expansion?: Pick<ExpansionKeeper<TreeNode>, 'clicked' | 'settle'>;
+  readonly expansion?: Pick<ExpansionKeeper<TreeNode>, 'clicked'>;
   /** Opens the editable SQL of a column, index, key or routine (V11.12). */
   readonly openNodeSql?: (connectionId: string, target: NodeSqlTarget) => Promise<void>;
   /** Shows the actions of a node as a list (V11.12). */
@@ -141,7 +141,6 @@ export function treeCommandHandlers(
       }
       deps.expansion?.clicked(target);
       if (doubleClick.click(nodeId(target))) {
-        deps.expansion?.settle(target);
         await deps.openTable(target);
       }
       return undefined;

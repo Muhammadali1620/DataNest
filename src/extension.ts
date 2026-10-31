@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { join } from 'node:path';
 import { SavedQueryStore } from './services/saved-queries';
+import { VersionMemory } from './services/version-memory';
 import { listAccounts } from './services/users/account-list';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
 import { ConnectionManager, type SessionTarget } from './services/connection-manager';
@@ -323,9 +324,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const redisKeys = new RedisKeyBrowser({ manager, settings: redisKeySettings, logger });
   // Saved queries are plain files, kept in the extension's global storage (V11.12).
   const savedQueries = new SavedQueryStore(join(context.globalStorageUri.fsPath, 'queries'));
+  const versionMemory = new VersionMemory(context.globalState);
   const tree = new ConnectionsTreeProvider({
     extensionUri: context.extensionUri,
     store,
+    versionMemory,
     projects,
     manager,
     cache,
@@ -344,10 +347,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     canSelectMany: true,
     dragAndDropController: new ConnectionsDragAndDrop(store, logger),
   });
+  // A removed connection, or one that now points elsewhere, loses its remembered version.
+  const pruneVersions = (): void => {
+    void versionMemory.prune(new Map(store.list().map((config) => [config.id, config])));
+  };
+  pruneVersions();
   context.subscriptions.push(
     tree,
     treeView,
     vscode.window.registerFileDecorationProvider(decorations),
+    store.onDidChange(pruneVersions),
   );
 
   const objectEdits = new ObjectEditRegistry();

@@ -6,6 +6,7 @@ import {
   rangeOf,
   rowGeometry,
   ROW_OVERSCAN,
+  rowTop,
 } from '../../../../../webview/src/apps/result-grid/virtual';
 
 describe('rowGeometry', () => {
@@ -167,5 +168,49 @@ describe('the largest result', () => {
       const geometry = rowGeometry(scrollTop, 600, 22, MAX_PAGE_SIZE);
       expect(geometry.lastIndex - geometry.firstIndex + 1).toBeLessThanOrEqual(50);
     }
+  });
+});
+
+describe('rows with one row open', () => {
+  const gap = { row: 5, extra: 100 };
+
+  it('moves the rows after the open one down by its room, and none before it', () => {
+    expect(rowTop(5, 20, gap)).toBe(100);
+    expect(rowTop(6, 20, gap)).toBe(120 + 100);
+    expect(rowTop(2, 20, gap)).toBe(40);
+    expect(rowTop(6, 20)).toBe(120);
+  });
+
+  it('makes the whole result taller by the room', () => {
+    expect(rowGeometry(0, 400, 20, 1000, ROW_OVERSCAN, gap).totalHeight).toBe(20_100);
+  });
+
+  it('is the plain geometry when nothing is open or the open row does not exist', () => {
+    const plain = rowGeometry(300, 400, 20, 1000);
+    expect(rowGeometry(300, 400, 20, 1000, ROW_OVERSCAN, undefined)).toEqual(plain);
+    expect(rowGeometry(300, 400, 20, 1000, ROW_OVERSCAN, { row: 5000, extra: 100 })).toEqual(plain);
+    expect(rowGeometry(300, 400, 20, 1000, ROW_OVERSCAN, { row: -1, extra: 100 })).toEqual(plain);
+    expect(rowGeometry(300, 400, 20, 1000, ROW_OVERSCAN, { row: 3, extra: 0 })).toEqual(plain);
+  });
+
+  it('renders the rows that are really on screen below the open one', () => {
+    // Scrolled 1000 px down: the rows after the open one start 100 px later than usual.
+    const geometry = rowGeometry(1000, 400, 20, 1000, 0, gap);
+    expect(geometry.firstIndex).toBe(45);
+    expect(rowTop(geometry.firstIndex, 20, gap)).toBe(geometry.topPadding);
+    expect(geometry.lastIndex).toBeGreaterThan(geometry.firstIndex + 18);
+  });
+
+  it('keeps the open row rendered while its details are on screen', () => {
+    // Row 5 ends at 120 px; its room runs to 220 px. Scrolled to 150 px, row 5 is still the one.
+    const geometry = rowGeometry(150, 200, 20, 1000, 0, gap);
+    expect(geometry.firstIndex).toBe(5);
+  });
+
+  it('works for the last row', () => {
+    const last = { row: 9, extra: 60 };
+    const geometry = rowGeometry(10_000, 100, 20, 10, 0, last);
+    expect(geometry.lastIndex).toBe(9);
+    expect(geometry.totalHeight).toBe(260);
   });
 });

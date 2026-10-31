@@ -6,28 +6,36 @@
     DEFAULT_VIEW,
     FONT_SIZES,
     GRID_ALIGNS,
+    GRID_FONTS,
+    GRID_LAYOUTS,
     GRID_LINES,
     type GridView,
-    ROW_HEIGHTS,
+    MAX_ROW_HEIGHT,
+    MIN_ROW_HEIGHT,
+    ROW_HEIGHT_STEP,
   } from './grid-view';
 
   interface Props {
     view: GridView;
     onChange: (next: GridView) => void;
+    /** Opens the columns menu (hide, pin, fit). */
+    onColumns: () => void;
     onClose: () => void;
     t: Translate;
   }
 
-  const { view, onChange, onClose, t }: Props = $props();
+  const { view, onChange, onColumns, onClose, t }: Props = $props();
 
   function set<K extends keyof GridView>(key: K, value: GridView[K]): void {
     onChange({ ...view, [key]: value });
   }
 
-  const HEIGHT_NAMES = ['compact', 'normal', 'roomy'] as const;
+  function step(delta: number): void {
+    set('rowHeight', Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, view.rowHeight + delta)));
+  }
 </script>
 
-<div class="popover fade-in" role="dialog" aria-label={t('view.title')} data-testid="view-settings">
+<div class="popover fade-in" role="dialog" aria-label={t('view.title')} data-testid="view-settings" tabindex="-1">
   <div class="head">
     <Icon name="eye" size={16} />
     <h2>{t('view.title')}</h2>
@@ -44,52 +52,75 @@
   </div>
 
   <div class="row">
-    <span>{t('view.rowNumbers')}</span>
-    <input
-      type="checkbox"
-      class="switch"
-      checked={view.rowNumbers}
-      aria-label={t('view.rowNumbers')}
-      onchange={(event) => {
-        set('rowNumbers', event.currentTarget.checked);
-      }}
-    />
-  </div>
-  <div class="row">
-    <span>{t('view.checkboxes')}</span>
-    <input
-      type="checkbox"
-      class="switch"
-      checked={view.checkboxes}
-      aria-label={t('view.checkboxes')}
-      onchange={(event) => {
-        set('checkboxes', event.currentTarget.checked);
-      }}
-    />
-  </div>
-
-  <div class="row">
-    <span>{t('view.rowHeight')}</span>
-    <div class="seg" role="group" aria-label={t('view.rowHeight')}>
-      {#each ROW_HEIGHTS as height, index (height)}
-        <button type="button" aria-pressed={view.rowHeight === height} onclick={() => { set('rowHeight', height); }}>
-          {t(`view.height.${HEIGHT_NAMES[index] ?? 'normal'}`)}
+    <span>{t('view.layout')}</span>
+    <div class="seg" role="group" aria-label={t('view.layout')}>
+      {#each GRID_LAYOUTS as layout (layout)}
+        <button type="button" aria-pressed={view.layout === layout} onclick={() => { set('layout', layout); }}>
+          {t(`view.layout.${layout}`)}
         </button>
       {/each}
     </div>
   </div>
 
+  <h3>{t('view.cells')}</h3>
+  <div class="row">
+    <span>{t('view.rowNumbers')}</span>
+    <input type="checkbox" class="switch" checked={view.rowNumbers} aria-label={t('view.rowNumbers')}
+      onchange={(event) => { set('rowNumbers', event.currentTarget.checked); }} />
+  </div>
+  <div class="row">
+    <span>{t('view.checkboxes')}</span>
+    <input type="checkbox" class="switch" checked={view.checkboxes} aria-label={t('view.checkboxes')}
+      onchange={(event) => { set('checkboxes', event.currentTarget.checked); }} />
+  </div>
+  <div class="row">
+    <span>{t('view.rowHeight')}</span>
+    <div class="stepper" role="group" aria-label={t('view.rowHeight')}>
+      <IconButton icon="chevron-down" label={t('view.lower')} disabled={view.rowHeight <= MIN_ROW_HEIGHT}
+        onclick={() => { step(-ROW_HEIGHT_STEP); }} />
+      <output data-testid="row-height">{view.rowHeight}</output>
+      <IconButton icon="chevron-up" label={t('view.taller')} disabled={view.rowHeight >= MAX_ROW_HEIGHT}
+        onclick={() => { step(ROW_HEIGHT_STEP); }} />
+    </div>
+  </div>
+  <div class="row">
+    <span>{t('view.columns')}</span>
+    <button type="button" class="button secondary" data-testid="view-columns" onclick={() => { onClose(); onColumns(); }}>
+      <Icon name="list-selection" />{t('view.columnsButton')}
+    </button>
+  </div>
+
+  <h3>{t('view.tools')}</h3>
+  <div class="row">
+    <span>{t('view.draggable')}</span>
+    <input type="checkbox" class="switch" checked={view.draggableColumns} aria-label={t('view.draggable')}
+      onchange={(event) => { set('draggableColumns', event.currentTarget.checked); }} />
+  </div>
+  <div class="row">
+    <span>{t('view.showTime')}</span>
+    <input type="checkbox" class="switch" checked={view.showTime} aria-label={t('view.showTime')}
+      onchange={(event) => { set('showTime', event.currentTarget.checked); }} />
+  </div>
+
+  <h3>{t('view.style')}</h3>
   <div class="row">
     <span>{t('view.fontSize')}</span>
     <div class="seg" role="group" aria-label={t('view.fontSize')}>
       {#each FONT_SIZES as size (size)}
-        <button type="button" aria-pressed={view.fontSize === size} onclick={() => { set('fontSize', size); }}>
-          {size}
+        <button type="button" aria-pressed={view.fontSize === size} onclick={() => { set('fontSize', size); }}>{size}</button>
+      {/each}
+    </div>
+  </div>
+  <div class="row">
+    <span>{t('view.font')}</span>
+    <div class="seg" role="group" aria-label={t('view.font')}>
+      {#each GRID_FONTS as font (font)}
+        <button type="button" aria-pressed={view.font === font} onclick={() => { set('font', font); }}>
+          {t(`view.font.${font}`)}
         </button>
       {/each}
     </div>
   </div>
-
   <div class="row">
     <span>{t('view.align')}</span>
     <div class="seg" role="group" aria-label={t('view.align')}>
@@ -100,7 +131,6 @@
       {/each}
     </div>
   </div>
-
   <div class="row">
     <span>{t('view.lines')}</span>
     <div class="seg" role="group" aria-label={t('view.lines')}>
@@ -122,7 +152,9 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: min(420px, 90vw);
+    width: min(460px, 92vw);
+    max-height: 80vh;
+    overflow: auto;
     padding: 12px 14px;
     background: var(--dn-surface);
     border: 1px solid var(--dn-border);
@@ -139,6 +171,26 @@
   h2 {
     margin: 0;
     font-size: 13px;
+  }
+
+  h3 {
+    margin: 4px 0 -2px;
+    color: var(--dn-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .stepper {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .stepper output {
+    min-width: 28px;
+    text-align: center;
   }
 
   .grow {

@@ -29,8 +29,8 @@ import {
   type ResultGridProtocol,
 } from '../../shared/protocols/result-grid';
 import { RpcPeer } from '../../shared/rpc';
-import { revealColumn, type SqlTextOutcome } from '../../services/sql-text-outcome';
-import { buildState, errorOffsetOf } from './results-state';
+import { replacementFor, revealColumn, type SqlTextOutcome } from '../../services/sql-text-outcome';
+import { buildState, errorOffsetOf, followActive } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 import { formatCount } from '../../core/number-format';
 
@@ -65,6 +65,7 @@ export interface ResultsPanelDeps {
     documentUri: string;
     target: SessionTarget;
     sql: string;
+    replace?: { resultId: string } | { all: true };
   }) => Promise<SqlTextOutcome>;
   /** The connection a document runs on: its table view's, or its editor's binding. */
   readonly targetOf?: (documentUri: string) => SessionTarget | undefined;
@@ -293,7 +294,10 @@ export class ResultsPanel implements vscode.Disposable {
       if (summary === undefined || target === undefined || this.deps.runSql === undefined) {
         return { ok: false, error: vscode.l10n.t('This result is no longer available') };
       }
-      return await this.deps.runSql({ documentUri: this.documentUri, target, sql });
+      // The statement was edited on this tab, so its results take this tab's place; a table
+      // view has a single result, whatever it becomes.
+      const replace = replacementFor(this.deps.tableOf?.(this.documentUri) !== undefined, resultId);
+      return await this.deps.runSql({ documentUri: this.documentUri, target, sql, replace });
     });
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
@@ -408,6 +412,9 @@ export class ResultsPanel implements vscode.Disposable {
           : {}),
       });
     });
+    this.rpc.on('openTools', () => {
+      void vscode.commands.executeCommand('datanest.tools.open');
+    });
     this.rpc.on('chartResult', ({ resultId }) => {
       this.deps.chartResult?.(resultId);
     });
@@ -448,11 +455,11 @@ export class ResultsPanel implements vscode.Disposable {
       return;
     }
     const summaries = this.deps.results.forDocument(this.documentUri);
-    const state = buildState(
-      summaries,
-      this.activeId,
-      this.deps.runner.isRunning(this.documentUri),
+    // A replaced active tab is followed to its replacement, so the user stays where they were.
+    const followed = followActive(summaries, this.activeId, (id) =>
+      this.deps.results.successorOf(id),
     );
+    const state = buildState(summaries, followed, this.deps.runner.isRunning(this.documentUri));
     this.activeId = state.activeId;
     this.rpc.emit('state', state);
   }

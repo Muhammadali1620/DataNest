@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
+  import type { FilterOperator } from '../../../../src/shared/table-filter';
   import { type EditInput, isTextEditable } from '../../../../src/shared/cell-input';
 import type { RowAction } from '../../../../src/shared/row-action';
   import {
@@ -24,6 +25,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
     isCustomized,
     isHidden,
     isPinned,
+    moveColumn,
     NO_VIEW,
     showAll,
     toggleHidden,
@@ -47,7 +49,16 @@ import type { RowAction } from '../../../../src/shared/row-action';
     pageCount,
     pageSizeChoices,
   } from './pager-model';
+  import ColumnFilter from './ColumnFilter.svelte';
+  import {
+    conditionOn,
+    distinctValues,
+    filteredColumnNames,
+    withColumnCondition,
+  } from './column-filter';
   import ExportDialog from './ExportDialog.svelte';
+  import ResultLayout from './ResultLayout.svelte';
+  import InsertDialog from './InsertDialog.svelte';
   import {
     type ExportFormatId,
     type ExportScope,
@@ -96,10 +107,13 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let view = $state<GridView>(loadView(safeStorage()));
   let viewOpen = $state(false);
   let exportOpen = $state(false);
+  let insertOpen = $state(false);
   /** The cell whose value is open in the dialog. */
   let dialog = $state<{ row: number; column: number } | undefined>(undefined);
   /** Seconds between automatic refreshes of the result; 0 is off. */
   let refreshSeconds = $state<RefreshSeconds>(0);
+  /** The column whose header funnel is open, and where it is. */
+  let columnFilter = $state<{ column: number; left: number; bottom: number } | undefined>(undefined);
 
   function safeStorage(): Storage | undefined {
     try {
@@ -312,8 +326,16 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   async function onSave(): Promise<void> {
+    await saveChanges(false);
+  }
+
+  /**
+   * Saves the pending changes. `force` skips the check that there are some: a row the
+   * insert form has just added is pending on the host before the page has heard of it.
+   */
+  async function saveChanges(force: boolean): Promise<void> {
     const tab = activeTab;
-    if (tab === undefined || saving || pendingCount(tab) === 0) {
+    if (tab === undefined || saving || (!force && pendingCount(tab) === 0)) {
       return;
     }
     saving = true;
@@ -418,6 +440,53 @@ import type { RowAction } from '../../../../src/shared/row-action';
     } catch (error) {
       failure = error instanceof Error ? error.message : t('grid.copyFailed');
     }
+  }
+
+  /** An arrow in a header: that direction, or the server's own order when it is on already. */
+  async function onSortDirection(column: number, direction: 'asc' | 'desc'): Promise<void> {
+    const tab = activeTab;
+    if (tab === undefined || tab.error !== undefined) {
+      return;
+    }
+    const on = tab.sort?.column === column && tab.sort.direction === direction;
+    try {
+      await rpc.request('sort', {
+        resultId: tab.id,
+        column,
+        ...(on ? {} : { direction }),
+      });
+    } catch (error) {
+      failure = error instanceof Error ? error.message : t('grid.sortFailed');
+    }
+  }
+
+  const filteredColumns = $derived<ReadonlySet<number>>(
+    new Set(
+      activeTab === undefined
+        ? []
+        : activeTab.columns.flatMap((column, index) =>
+            filteredColumnNames(activeTab.filter).has(column.name) ? [index] : [],
+          ),
+    ),
+  );
+
+  function openColumnFilter(column: number, anchor: HTMLElement): void {
+    const box = anchor.getBoundingClientRect();
+    columnFilter =
+      columnFilter?.column === column ? undefined : { column, left: box.right, bottom: box.bottom };
+  }
+
+  function applyColumnFilter(
+    column: number,
+    condition: { operator: FilterOperator; value?: string } | undefined,
+  ): void {
+    const tab = activeTab;
+    const name = tab?.columns[column]?.name;
+    columnFilter = undefined;
+    if (tab === undefined || name === undefined) {
+      return;
+    }
+    void onApplyFilter(withColumnCondition(tab.filter, name, condition));
   }
 
   async function onApplyFilter(filter: TableFilter | null): Promise<void> {
@@ -672,6 +741,40 @@ import type { RowAction } from '../../../../src/shared/row-action';
       // rows and re-runs the search, because sorting moved every row index.
     } catch (error) {
       failure = error instanceof Error ? error.message : t('grid.sortFailed');
+    }
+  }
+
+  /** The message of the failure the last save left, read after the save has finished. */
+  function lastSaveMessage(): string | undefined {
+    return saveProblem?.message;
+  }
+
+  /**
+   * Adds a row, fills the fields the user typed and saves it, like a form would. The
+   * row is a pending one until the save: when a field or the save fails the message goes
+   * back to the dialog and the row stays pending for the user to fix or revert.
+   */
+  async function insertRow(values: ReadonlyMap<number, string>): Promise<string | undefined> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return t('grid.editFailed');
+    }
+    try {
+      const added = await rpc.request('rowAction', { resultId: tab.id, action: 'add', rows: [] });
+      if (!added.ok || added.row === undefined) {
+        return t(`grid.editError.${added.error ?? 'not-editable'}`);
+      }
+      for (const [column, text] of values) {
+        const problem = await onEdit(added.row, column, { kind: 'text', text });
+        if (problem !== undefined) {
+          return `${tab.columns[column]?.name ?? ''}: ${problem}`;
+        }
+      }
+      saveProblem = undefined;
+      await saveChanges(true);
+      return lastSaveMessage();
+    } catch (error) {
+      return error instanceof Error ? error.message : t('grid.editFailed');
     }
   }
 
@@ -1216,6 +1319,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
                 <ViewSettings
                   {view}
                   onChange={changeGridView}
+                  onColumns={() => {
+                    columnsOpen = true;
+                  }}
                   onClose={() => {
                     viewOpen = false;
                   }}
@@ -1381,6 +1487,16 @@ import type { RowAction } from '../../../../src/shared/row-action';
         {/if}
         <div class="body">
           <div class="grid-area">
+            {#if view.layout !== 'table'}
+              <ResultLayout
+                mode={view.layout}
+                columns={activeTab.columns}
+                rowCount={displayCount(activeTab)}
+                {rowAt}
+                {t}
+              />
+            {/if}
+            <div class="grid-wrap" class:hidden={view.layout !== 'table'}>
             <Grid
               resetKey={`${activeTab.id}:${activeTab.rowCount}:${activeTab.columns.length}:${display.order.join(',')}`}
               order={display.order}
@@ -1388,6 +1504,14 @@ import type { RowAction } from '../../../../src/shared/row-action';
               onFit={fit}
               sort={activeTab.sort}
               {onSort}
+              onMoveColumn={(from: number, before: number | undefined) => {
+                changeView(moveColumn(columnView, activeTab.columns.length, from, before));
+              }}
+              onSortDirection={(column: number, direction: 'asc' | 'desc') => {
+                void onSortDirection(column, direction);
+              }}
+              onFilterColumn={activeTab.page === undefined ? undefined : openColumnFilter}
+              {filteredColumns}
               {revealRow}
               label={activeTab.title}
               columns={activeTab.columns}
@@ -1414,6 +1538,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
               onToggleValue={toggleValue}
               onToggleRecord={toggleRecord}
               {view}
+              onInsertDialog={() => {
+                insertOpen = true;
+              }}
               onOpenDialog={(row: number, column: number) => {
                 dialog = { row, column };
               }}
@@ -1424,6 +1551,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
               }}
               {t}
             />
+            </div>
           </div>
           {#if recordOpen}
             <RecordPanel
@@ -1514,9 +1642,13 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {/if}
           <span class="stat">
             {#if activeTab.affectedRows !== undefined}
-              {t('grid.affected', activeTab.affectedRows, activeTab.durationMs)}
+              {view.showTime
+                ? t('grid.affected', activeTab.affectedRows, activeTab.durationMs)
+                : t('grid.affectedOnly', activeTab.affectedRows)}
             {:else}
-              {t('grid.rows', activeTab.rowCount, activeTab.durationMs)}
+              {view.showTime
+                ? t('grid.rows', activeTab.rowCount, activeTab.durationMs)
+                : t('grid.rowsOnly', activeTab.rowCount)}
             {/if}
           </span>
           {#if activeTab.truncated}
@@ -1552,6 +1684,38 @@ import type { RowAction } from '../../../../src/shared/row-action';
         void saveValueFile(target);
       }}
       onLoadFile={canLoadFile(activeTab, target) ? () => void loadValueFile(target) : undefined}
+      {t}
+    />
+  {/if}
+  {#if insertOpen && activeTab !== undefined && editColumns !== undefined}
+    <InsertDialog
+      title={activeTab.title}
+      columns={activeTab.columns}
+      {editColumns}
+      onInsert={insertRow}
+      onClose={() => {
+        insertOpen = false;
+      }}
+      {t}
+    />
+  {/if}
+  {#if columnFilter !== undefined && activeTab !== undefined}
+    {@const target = columnFilter}
+    {@const name = activeTab.columns[target.column]?.name ?? ''}
+    <ColumnFilter
+      columnName={name}
+      anchor={{ left: target.left, bottom: target.bottom }}
+      values={distinctValues(
+        Array.from({ length: Math.min(displayCount(activeTab), 1000) }, (_, row) => rowAt(row)),
+        target.column,
+      )}
+      current={conditionOn(activeTab.filter, name)}
+      onApply={(condition: { operator: FilterOperator; value?: string } | undefined) => {
+        applyColumnFilter(target.column, condition);
+      }}
+      onClose={() => {
+        columnFilter = undefined;
+      }}
       {t}
     />
   {/if}
@@ -1659,6 +1823,17 @@ import type { RowAction } from '../../../../src/shared/row-action';
 
   .tab-icon.fail {
     color: var(--dn-danger);
+  }
+
+  .grid-wrap {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .grid-wrap.hidden {
+    display: none;
   }
 
   .view-anchor {

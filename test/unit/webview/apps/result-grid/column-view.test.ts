@@ -5,6 +5,7 @@ import {
   isCustomized,
   isHidden,
   isPinned,
+  moveColumn,
   NO_VIEW,
   showAll,
   toggleHidden,
@@ -102,5 +103,54 @@ describe('viewKey', () => {
     expect(viewKey(['a', 'b'])).not.toBe(viewKey(['b', 'a']));
     expect(viewKey(['ab', 'c'])).not.toBe(viewKey(['a', 'bc']));
     expect(viewKey([])).toBe('');
+  });
+});
+
+describe('dragging columns', () => {
+  it('moves a column before another one', () => {
+    const moved = moveColumn(NO_VIEW, 4, 3, 1);
+    expect(displayOrder(4, moved).order).toEqual([0, 3, 1, 2]);
+  });
+
+  it('moves a column to the end when there is nothing to stand before', () => {
+    expect(displayOrder(4, moveColumn(NO_VIEW, 4, 0, undefined)).order).toEqual([1, 2, 3, 0]);
+  });
+
+  it('keeps earlier moves', () => {
+    const once = moveColumn(NO_VIEW, 4, 3, 0);
+    const twice = moveColumn(once, 4, 2, 0);
+    expect(displayOrder(4, twice).order).toEqual([3, 2, 0, 1]);
+  });
+
+  it('leaves the view alone for a column that is not there or a move onto itself', () => {
+    expect(moveColumn(NO_VIEW, 3, 7, 0)).toBe(NO_VIEW);
+    expect(moveColumn(NO_VIEW, 3, 1, 1)).toBe(NO_VIEW);
+  });
+
+  it('appends to the end when the target is unknown', () => {
+    expect(displayOrder(3, moveColumn(NO_VIEW, 3, 0, 9)).order).toEqual([1, 2, 0]);
+  });
+
+  it('keeps pinned columns first whatever the order says', () => {
+    const view = { ...moveColumn(NO_VIEW, 4, 3, 0), pinned: [2] };
+    const { order, pinnedCount } = displayOrder(4, view);
+    expect(order).toEqual([2, 3, 0, 1]);
+    expect(pinnedCount).toBe(1);
+  });
+
+  it('leaves hidden columns out of the dragged order', () => {
+    const view = { ...moveColumn(NO_VIEW, 4, 3, 0), hidden: [0] };
+    expect(displayOrder(4, view).order).toEqual([3, 1, 2]);
+  });
+
+  it('repairs a stale order: unknown, repeated and missing entries', () => {
+    expect(displayOrder(3, { hidden: [], pinned: [], order: [2, 2, 9, -1, 1.5] }).order).toEqual([
+      2, 0, 1,
+    ]);
+  });
+
+  it('counts a changed order as a customized view, and the plain order as none', () => {
+    expect(isCustomized(moveColumn(NO_VIEW, 3, 2, 0))).toBe(true);
+    expect(isCustomized({ hidden: [], pinned: [], order: [0, 1, 2] })).toBe(false);
   });
 });

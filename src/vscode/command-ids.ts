@@ -113,6 +113,8 @@ export const COMMAND_IDS = {
   showUsers: 'datanest.server.users',
   /** Shows the sessions, settings and status of a SQL server (V8.5). */
   showMonitor: 'datanest.server.monitor',
+  /** Opens the Tools page: hashes, encoders, colours, images, network checks (V11.10). */
+  openTools: 'datanest.tools.open',
   /** Compares two schemas and writes the script that makes one like the other (V8.3). */
   compareSchemas: 'datanest.schema.compare',
   /** Draws the tables of a scope and the keys between them (V8.1). */

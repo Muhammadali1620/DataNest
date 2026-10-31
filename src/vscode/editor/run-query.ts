@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
 import { splitStatements, statementsIn, type SqlStatement } from '../../core/sql/split';
-import type { QueryRunner, RunOutcome } from '../../services/query-runner';
+import type { QueryRunner, RunOutcome, RunRequest } from '../../services/query-runner';
 import type { ConnectionStore } from '../../services/connection-store';
 import { type Danger } from '../../core/sql/danger';
 import { commitsImplicitly } from '../../core/sql/transaction-control';
@@ -53,6 +53,8 @@ export interface SqlTextRequest {
   readonly documentUri: string;
   readonly target: SessionTarget;
   readonly sql: string;
+  /** What the new results replace: the result the text was edited on, or all of a table view's. */
+  readonly replace?: RunRequest['replace'];
 }
 
 export type SqlTextRunner = (request: SqlTextRequest) => Promise<SqlTextOutcome>;
@@ -62,7 +64,7 @@ export type SqlTextRunner = (request: SqlTextRequest) => Promise<SqlTextOutcome>
  * transaction questions, same session of the document; its results replace the document's.
  */
 export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
-  return async ({ documentUri, target, sql }) => {
+  return async ({ documentUri, target, sql, replace }) => {
     const driver = deps.store.get(target.connectionId)?.driver;
     const written = splitStatements(sql, driver);
     if (written.length === 0) {
@@ -89,6 +91,7 @@ export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
       target,
       statements,
       manualCommit: deps.isManual?.(documentUri) === true,
+      ...(replace === undefined ? {} : { replace }),
     });
     report(outcome, deps.logger);
     return sqlTextOutcome(outcome.results, outcome.cancelled);

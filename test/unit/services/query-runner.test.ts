@@ -5,7 +5,7 @@ import { QueryHistory } from '../../../src/services/history';
 import { ConnectionManager } from '../../../src/services/connection-manager';
 import { ConnectionStore } from '../../../src/services/connection-store';
 import { MetadataCache } from '../../../src/services/metadata-cache';
-import { QueryRunner } from '../../../src/services/query-runner';
+import { QueryRunner, type RunRequest } from '../../../src/services/query-runner';
 import { ResultStore } from '../../../src/services/result-store';
 import type { ConnectionConfig } from '../../../src/shared/connection';
 import { FakeDriverProvider } from '../../helpers/fake-driver';
@@ -682,6 +682,101 @@ describe('QueryRunner', () => {
         'BEGIN TRANSACTION',
         'UPDATE t SET a = 1',
       ]);
+    });
+  });
+
+  describe('QueryRunner replacing results', () => {
+    let logger: RecordingLogger;
+    let drivers: FakeDriverProvider;
+    let results: ResultStore;
+    let runner: QueryRunner;
+    let connection: ConnectionConfig;
+
+    beforeEach(async () => {
+      logger = new RecordingLogger();
+      const store = new ConnectionStore({
+        state: new FakeMemento(),
+        secrets: new FakeSecretStorage(),
+        logger,
+      });
+      drivers = new FakeDriverProvider();
+      const manager = new ConnectionManager({ store, drivers, logger });
+      results = new ResultStore();
+      runner = new QueryRunner({
+        history: new QueryHistory({
+          state: new FakeMemento(),
+          logger,
+          limit: () => 100,
+          nameOf: () => undefined,
+        }),
+        manager,
+        results,
+        cache: new MetadataCache({ logger }),
+        limits: { rowLimit: () => 1000, timeoutMs: () => 0 },
+        logger,
+      });
+      connection = await store.add({ name: 'Local', driver: 'mysql', host: 'h' });
+    });
+
+    const run = (sql: string, replace?: RunRequest['replace']) =>
+      runner.run({
+        documentUri: DOC,
+        target: { connectionId: connection.id },
+        statements: splitStatements(sql, 'mysql'),
+        ...(replace === undefined ? {} : { replace }),
+      });
+    const statements = (): string[] => results.forDocument(DOC).map((item) => item.statement);
+
+    it('adds a tab per run when nothing is replaced (the Run command)', async () => {
+      await run('SELECT 1');
+      await run('SELECT 2');
+      expect(statements()).toEqual(['SELECT 1', 'SELECT 2']);
+    });
+
+    it('puts the new result where the edited one was, keeping the others', async () => {
+      const first = (await run('SELECT 1')).results[0];
+      await run('SELECT 2');
+      await run('SELECT 3');
+      const outcome = await run('SELECT 10', { resultId: first?.id ?? '' });
+      expect(statements()).toEqual(['SELECT 10', 'SELECT 2', 'SELECT 3']);
+      expect(results.successorOf(first?.id ?? '')).toBe(outcome.results[0]?.id);
+    });
+
+    it('lets several statements take one place, in order', async () => {
+      await run('SELECT 1');
+      const middle = (await run('SELECT 2')).results[0];
+      await run('SELECT 3');
+      await run('SELECT 20; SELECT 21', { resultId: middle?.id ?? '' });
+      expect(statements()).toEqual(['SELECT 1', 'SELECT 20', 'SELECT 21', 'SELECT 3']);
+    });
+
+    it('replaces everything for a table view', async () => {
+      await run('SELECT 1');
+      await run('SELECT 2');
+      await run('SELECT 3', { all: true });
+      expect(statements()).toEqual(['SELECT 3']);
+    });
+
+    it('replaces a failed result with the new one', async () => {
+      drivers.driver('mysql').executeError = new DbError('syntax', 'bad');
+      const failed = (await run('SELEC 1')).results[0];
+      expect(failed?.error).toBeDefined();
+      drivers.driver('mysql').executeError = undefined;
+      await run('SELECT 1', { resultId: failed?.id ?? '' });
+      expect(statements()).toEqual(['SELECT 1']);
+    });
+
+    it('keeps the old result when nothing runs', async () => {
+      const first = (await run('SELECT 1')).results[0];
+      const outcome = await run('', { resultId: first?.id ?? '' });
+      expect(outcome.results).toEqual([]);
+      expect(statements()).toEqual(['SELECT 1']);
+    });
+
+    it('appends when the replaced result is gone', async () => {
+      await run('SELECT 1');
+      await run('SELECT 2', { resultId: 'result-404' });
+      expect(statements()).toEqual(['SELECT 1', 'SELECT 2']);
     });
   });
 });

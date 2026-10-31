@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { revealColumn, sqlTextOutcome } from '../../../src/services/sql-text-outcome';
+import {
+  replacementFor,
+  revealColumn,
+  sqlTextOutcome,
+} from '../../../src/services/sql-text-outcome';
 
 describe('sqlTextOutcome', () => {
   it('is ok when every statement worked', () => {
@@ -36,5 +40,15 @@ describe('revealColumn', () => {
 
   it('opens a panel without a column beside the editor', () => {
     expect(revealColumn(undefined, -2)).toBe(-2);
+  });
+});
+
+describe('replacementFor', () => {
+  it('replaces the edited result of an editor document', () => {
+    expect(replacementFor(false, 'result-4')).toEqual({ resultId: 'result-4' });
+  });
+
+  it('replaces everything of a table view, which has one result', () => {
+    expect(replacementFor(true, 'result-4')).toEqual({ all: true });
   });
 });

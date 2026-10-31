@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup } from '@testing-library/svelte';
 import type { CellValue } from '../../../../../src/shared/cell-value';
 import {
   resultGridProtocol,
@@ -72,12 +73,20 @@ async function open(tab: ResultTab = EDITABLE) {
   }));
   const runSql = vi.fn((_: unknown): { ok: boolean; error?: string } => ({ ok: true }));
   const edits = vi.fn((_: unknown) => ({ ok: true }));
-  const rowActions = vi.fn((_: unknown) => ({ ok: true }));
+  const rowActions = vi.fn((_: unknown) => ({ ok: true, row: 3 }));
   const pageTo = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
   host.handle('runSql', runSql);
   host.handle('editCell', edits);
   host.handle('rowAction', rowActions);
   host.handle('pageTo', pageTo);
+  const sorts = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+  const filters = vi.fn(({ resultId }: { resultId: string }) => ({ resultId, applied: true }));
+  const follows = vi.fn((_: unknown) => ({ ok: true }));
+  const saves = vi.fn((_: unknown) => ({ ok: true, statements: 1, refreshed: true }));
+  host.handle('sort', sorts);
+  host.handle('filterTable', filters);
+  host.handle('followLink', follows);
+  host.handle('saveChanges', saves);
   const exported = vi.fn();
   const imported = vi.fn();
   const copied = vi.fn();
@@ -93,7 +102,20 @@ async function open(tab: ResultTab = EDITABLE) {
         .length,
     ).toBeGreaterThan(0);
   });
-  return { host, runSql, edits, rowActions, pageTo, exported, imported, copied };
+  return {
+    host,
+    runSql,
+    edits,
+    rowActions,
+    pageTo,
+    exported,
+    imported,
+    copied,
+    sorts,
+    filters,
+    follows,
+    saves,
+  };
 }
 
 function cell(row: number, column: number): HTMLElement {
@@ -102,6 +124,22 @@ function cell(row: number, column: number): HTMLElement {
     .filter((item) => item.getAttribute('data-column') === String(column))[row];
   if (found === undefined) {
     throw new Error(`no cell at ${row},${column}`);
+  }
+  return found;
+}
+
+function nth(testId: string, index: number): HTMLElement {
+  const found = screen.getAllByTestId(testId)[index];
+  if (found === undefined) {
+    throw new Error(`no ${testId} at ${index}`);
+  }
+  return found;
+}
+
+function headerButton(index: number): HTMLElement {
+  const found = screen.getAllByRole('columnheader')[index + 1]?.querySelector<HTMLElement>('.name');
+  if (found === null || found === undefined) {
+    throw new Error(`no header button at ${index}`);
   }
   return found;
 }
@@ -452,7 +490,10 @@ describe('the view settings', () => {
   it('change the row height and the text size, and remember them', async () => {
     await open();
     await fireEvent.click(screen.getByTestId('view-toggle'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Roomy' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Taller rows' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Taller rows' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Taller rows' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Taller rows' }));
     await fireEvent.click(screen.getByRole('button', { name: '16' }));
     const grid = screen.getByTestId('grid');
     expect(grid.style.getPropertyValue('--dn-row-height')).toBe('40px');
@@ -551,5 +592,523 @@ describe('the column header', () => {
     await open();
     const headers = screen.getAllByRole('columnheader');
     expect(headers[2]?.textContent.replace(/\s+/g, ' ').trim()).toBe('name jsonb');
+  });
+});
+
+describe('ordering from the header', () => {
+  it('has an up and a down arrow on every column', async () => {
+    await open();
+    expect(screen.getAllByTestId('sort-asc')).toHaveLength(3);
+    expect(screen.getAllByTestId('sort-desc')).toHaveLength(3);
+  });
+
+  it('orders ascending and descending, each on its own button', async () => {
+    const { sorts } = await open();
+    await fireEvent.click(nth('sort-desc', 2));
+    await waitFor(() => {
+      expect(sorts).toHaveBeenCalledWith({ resultId: 'result-1', column: 2, direction: 'desc' });
+    });
+    await fireEvent.click(nth('sort-asc', 0));
+    await waitFor(() => {
+      expect(sorts).toHaveBeenLastCalledWith({ resultId: 'result-1', column: 0, direction: 'asc' });
+    });
+  });
+
+  it('takes the order off when the active arrow is pressed again', async () => {
+    const { sorts } = await open({ ...EDITABLE, sort: { column: 1, direction: 'desc' } });
+    const down = nth('sort-desc', 1);
+    expect(down.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(down);
+    await waitFor(() => {
+      expect(sorts).toHaveBeenCalledWith({ resultId: 'result-1', column: 1 });
+    });
+  });
+
+  it('keeps the header click that cycles through the orders', async () => {
+    const { sorts } = await open();
+    await fireEvent.click(headerButton(1));
+    await waitFor(() => {
+      expect(sorts).toHaveBeenCalledWith({ resultId: 'result-1', column: 1, direction: 'asc' });
+    });
+  });
+});
+
+describe('filtering from the header', () => {
+  async function openFilter(column: number) {
+    const harness = await open();
+    await fireEvent.click(nth('column-filter', column));
+    await screen.findByTestId('column-filter-popover');
+    return harness;
+  }
+
+  it('offers the funnel for a table view only', async () => {
+    const { page: _page, ...query } = EDITABLE;
+    await open(query);
+    expect(screen.queryAllByTestId('column-filter')).toHaveLength(0);
+  });
+
+  it('lists the values in the loaded rows and filters by the one clicked', async () => {
+    const { filters } = await openFilter(2);
+    const list = screen.getByTestId('colfilter-values');
+    expect(
+      within(list)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['first', 'second', 'third']);
+    await fireEvent.click(within(list).getByRole('button', { name: 'second' }));
+    await waitFor(() => {
+      expect(filters).toHaveBeenCalledWith({
+        resultId: 'result-1',
+        filter: { conditions: [{ column: 'note', operator: 'eq', value: 'second' }] },
+      });
+    });
+    expect(screen.queryByTestId('column-filter-popover')).toBeNull();
+  });
+
+  it('filters by a condition typed in, with Enter', async () => {
+    const { filters } = await openFilter(2);
+    await fireEvent.input(screen.getByTestId('colfilter-value'), { target: { value: 'ir' } });
+    await fireEvent.keyDown(screen.getByTestId('column-filter-popover'), { key: 'Enter' });
+    await waitFor(() => {
+      expect(filters).toHaveBeenCalledWith({
+        resultId: 'result-1',
+        filter: { conditions: [{ column: 'note', operator: 'contains', value: 'ir' }] },
+      });
+    });
+  });
+
+  it('needs a value, except for NULL checks', async () => {
+    const { filters } = await openFilter(2);
+    expect(screen.getByTestId<HTMLButtonElement>('colfilter-apply').disabled).toBe(true);
+    await fireEvent.change(screen.getByTestId('colfilter-operator'), {
+      target: { value: 'isNull' },
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('colfilter-value')).toBeNull();
+    });
+    await fireEvent.click(screen.getByTestId('colfilter-apply'));
+    await waitFor(() => {
+      expect(filters).toHaveBeenCalledWith({
+        resultId: 'result-1',
+        filter: { conditions: [{ column: 'note', operator: 'isNull' }] },
+      });
+    });
+  });
+
+  it('narrows the value list by search', async () => {
+    await openFilter(2);
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Search' }), {
+      target: { value: 'sec' },
+    });
+    expect(
+      within(screen.getByTestId('colfilter-values'))
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['second']);
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Search' }), {
+      target: { value: 'zzz' },
+    });
+    expect(screen.getByText('No value matches')).toBeTruthy();
+  });
+
+  it('starts from the column’s present condition and clears only that column', async () => {
+    const tab: ResultTab = {
+      ...EDITABLE,
+      filter: {
+        conditions: [
+          { column: 'note', operator: 'startsWith', value: 'f' },
+          { column: 'id', operator: 'gt', value: '0' },
+        ],
+      },
+    };
+    const harness = await open(tab);
+    // The funnels of the filtered columns are marked.
+    expect(screen.getAllByTestId('column-filter')[2]?.className).toContain('on');
+    expect(screen.getAllByTestId('column-filter')[1]?.className).not.toContain('on');
+    await fireEvent.click(nth('column-filter', 2));
+    expect(screen.getByTestId<HTMLInputElement>('colfilter-value').value).toBe('f');
+    expect(screen.getByTestId<HTMLSelectElement>('colfilter-operator').value).toBe('startsWith');
+    await fireEvent.click(screen.getByTestId('colfilter-clear'));
+    await waitFor(() => {
+      expect(harness.filters).toHaveBeenCalledWith({
+        resultId: 'result-1',
+        filter: { conditions: [{ column: 'id', operator: 'gt', value: '0' }] },
+      });
+    });
+  });
+
+  it('closes with Escape, the close button and a press outside', async () => {
+    await openFilter(1);
+    await fireEvent.keyDown(screen.getByTestId('column-filter-popover'), { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByTestId('column-filter-popover')).toBeNull();
+    });
+    await fireEvent.click(nth('column-filter', 1));
+    await screen.findByTestId('column-filter-popover');
+    await fireEvent.pointerDown(document.body);
+    await waitFor(() => {
+      expect(screen.queryByTestId('column-filter-popover')).toBeNull();
+    });
+  });
+
+  it('closes when the funnel is pressed again', async () => {
+    await openFilter(0);
+    await fireEvent.click(nth('column-filter', 0));
+    await waitFor(() => {
+      expect(screen.queryByTestId('column-filter-popover')).toBeNull();
+    });
+  });
+});
+
+describe('the fields of a row, top to bottom', () => {
+  it('opens under the row with every field, and closes again', async () => {
+    await open();
+    await fireEvent.click(nth('row-expand', 0));
+    const detail = await screen.findByTestId('row-detail');
+    const names = Array.from(detail.querySelectorAll('dt')).map((item) => item.textContent);
+    expect(names).toEqual(['id', 'name', 'note']);
+    const values = Array.from(detail.querySelectorAll('dd')).map((item) => item.textContent);
+    expect(values).toEqual(['1', '{"en":"one"}', 'first']);
+    await fireEvent.click(nth('row-expand', 0));
+    await waitFor(() => {
+      expect(screen.queryByTestId('row-detail')).toBeNull();
+    });
+  });
+
+  it('is open for one row at a time and pushes the rows after it down', async () => {
+    await open();
+    const rowsBefore = screen.getAllByRole('row').slice(1);
+    const topOf = (index: number): string => rowsBefore[index]?.style.top ?? '';
+    const secondBefore = topOf(1);
+    await fireEvent.click(nth('row-expand', 0));
+    await screen.findByTestId('row-detail');
+    const rowsAfter = screen.getAllByRole('row').slice(1);
+    expect(rowsAfter[0]?.style.top).toBe(topOf(0));
+    expect(Number.parseInt(rowsAfter[1]?.style.top ?? '0', 10)).toBeGreaterThan(
+      Number.parseInt(secondBefore, 10),
+    );
+    await fireEvent.click(nth('row-expand', 1));
+    await waitFor(() => {
+      expect(screen.getAllByTestId('row-detail')).toHaveLength(1);
+    });
+    expect(screen.getByTestId('row-detail').textContent).toContain('second');
+  });
+
+  it('marks the arrow as open for screen readers', async () => {
+    await open();
+    const arrow = nth('row-expand', 0);
+    expect(arrow.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(arrow);
+    await waitFor(() => {
+      expect(arrow.getAttribute('aria-expanded')).toBe('true');
+    });
+  });
+
+  it('shows NULL as NULL', async () => {
+    await open();
+    await fireEvent.click(nth('row-expand', 2));
+    const detail = await screen.findByTestId('row-detail');
+    expect(detail.querySelector('dd.null')?.textContent).toBe('NULL');
+  });
+});
+
+describe('inserting a row with a form', () => {
+  async function openForm() {
+    const harness = await open();
+    await fireEvent.click(screen.getByTestId('insert-dialog-open'));
+    await screen.findByTestId('insert-dialog');
+    return harness;
+  }
+
+  it('has a field for every column that can be edited, with its type', async () => {
+    await openForm();
+    const labels = Array.from(document.querySelectorAll('.insert-label, .fields label')).map(
+      (item) => item.textContent.replace(/\s+/g, ' ').trim(),
+    );
+    expect(labels).toEqual(['*id int', 'name jsonb', 'note text']);
+  });
+
+  it('adds the row, fills only what was typed and saves', async () => {
+    const { rowActions, edits, saves } = await openForm();
+    await fireEvent.input(screen.getByLabelText(/^\*id/), { target: { value: '9' } });
+    await fireEvent.input(screen.getByLabelText(/^note/), { target: { value: 'hello' } });
+    await fireEvent.click(screen.getByTestId('insert-run'));
+    await waitFor(() => {
+      expect(saves).toHaveBeenCalledTimes(1);
+    });
+    expect(rowActions).toHaveBeenCalledWith({ resultId: 'result-1', action: 'add', rows: [] });
+    expect(edits.mock.calls.map(([call]) => call)).toEqual([
+      { resultId: 'result-1', row: 3, column: 0, input: { kind: 'text', text: '9' } },
+      { resultId: 'result-1', row: 3, column: 2, input: { kind: 'text', text: 'hello' } },
+    ]);
+    await waitFor(() => {
+      expect(screen.queryByTestId('insert-dialog')).toBeNull();
+    });
+  });
+
+  it('inserts with Ctrl+Enter', async () => {
+    const { saves } = await openForm();
+    await fireEvent.keyDown(screen.getByTestId('insert-dialog'), { key: 'Enter', ctrlKey: true });
+    await waitFor(() => {
+      expect(saves).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('stays open with the reason when a field is refused', async () => {
+    const { edits, saves } = await openForm();
+    edits.mockReturnValueOnce({ ok: false, error: 'invalid-integer' } as never);
+    await fireEvent.input(screen.getByLabelText(/^\*id/), { target: { value: 'x' } });
+    await fireEvent.click(screen.getByTestId('insert-run'));
+    expect((await screen.findByTestId('insert-problem')).textContent).toContain('id');
+    expect(saves).not.toHaveBeenCalled();
+    expect(screen.getByTestId('insert-dialog')).toBeTruthy();
+  });
+
+  it('says so when the row cannot be added', async () => {
+    const { rowActions, saves } = await openForm();
+    rowActions.mockReturnValueOnce({ ok: false } as never);
+    await fireEvent.click(screen.getByTestId('insert-run'));
+    expect(await screen.findByTestId('insert-problem')).toBeTruthy();
+    expect(saves).not.toHaveBeenCalled();
+  });
+
+  it('closes with Escape and its button without adding anything', async () => {
+    const { rowActions } = await openForm();
+    await fireEvent.keyDown(screen.getByTestId('insert-dialog'), { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByTestId('insert-dialog')).toBeNull();
+    });
+    expect(rowActions).not.toHaveBeenCalled();
+  });
+
+  it('has no form for a result that cannot be edited, and keeps Add row for the rest', async () => {
+    await open({ ...EDITABLE, edit: { editable: false, reason: 'no-key' } });
+    expect(screen.queryByTestId('insert-dialog-open')).toBeNull();
+    cleanup();
+    await open();
+    expect(screen.getByRole('button', { name: 'Add row' })).toBeTruthy();
+  });
+
+  it('offers a list for an enum or boolean column', async () => {
+    const tab: ResultTab = {
+      ...EDITABLE,
+      edit: {
+        editable: true,
+        columns: [
+          { dataType: 'int', kind: 'integer', nullable: false },
+          { dataType: 'boolean', kind: 'boolean', nullable: true },
+          { dataType: "enum('a','b')", kind: 'enum', nullable: true, options: ['a', 'b'] },
+        ],
+      },
+    };
+    await open(tab);
+    await fireEvent.click(screen.getByTestId('insert-dialog-open'));
+    const selects = screen.getByTestId('insert-dialog').querySelectorAll('select');
+    expect(Array.from(selects[0]?.options ?? []).map((option) => option.value)).toEqual([
+      '',
+      'true',
+      'false',
+    ]);
+    expect(Array.from(selects[1]?.options ?? []).map((option) => option.value)).toEqual([
+      '',
+      'a',
+      'b',
+    ]);
+  });
+});
+
+describe('the jump to a related row', () => {
+  const LINKED: ResultTab = { ...EDITABLE, links: [{ id: 1, columns: [0], target: 'orders' }] };
+
+  it('is a button on the cell, named after the table', async () => {
+    await open(LINKED);
+    const button = within(cell(0, 0)).getByTestId('cell-link');
+    expect(button.getAttribute('aria-label')).toContain('orders');
+  });
+
+  it('opens the related row when pressed', async () => {
+    const { follows } = await open(LINKED);
+    await fireEvent.click(within(cell(1, 0)).getByTestId('cell-link'));
+    await waitFor(() => {
+      expect(follows).toHaveBeenCalledWith({ resultId: 'result-1', row: 1, link: 1 });
+    });
+  });
+
+  it('still opens with Ctrl+click', async () => {
+    const { follows } = await open(LINKED);
+    await fireEvent.pointerDown(cell(0, 0), { button: 0, ctrlKey: true });
+    await waitFor(() => {
+      expect(follows).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('is absent from cells with nothing to point at, and from other columns', async () => {
+    await open({ ...LINKED, links: [{ id: 1, columns: [1], target: 'orders' }] });
+    expect(within(cell(2, 1)).queryByTestId('cell-link')).toBeNull();
+    expect(within(cell(0, 0)).queryByTestId('cell-link')).toBeNull();
+    expect(within(cell(0, 1)).getByTestId('cell-link')).toBeTruthy();
+  });
+
+  it('sits beside the magnifier on a text key', async () => {
+    await open({ ...LINKED, links: [{ id: 1, columns: [2], target: 'orders' }] });
+    const target = cell(0, 2);
+    expect(within(target).getByTestId('cell-link')).toBeTruthy();
+    expect(within(target).getByTestId('cell-dialog')).toBeTruthy();
+  });
+});
+
+describe('typing JSON in the dialog', () => {
+  async function area() {
+    await open();
+    await fireEvent.click(within(cell(0, 1)).getByTestId('cell-dialog'));
+    const box = await screen.findByTestId<HTMLTextAreaElement>('value-dialog-text');
+    return box;
+  }
+
+  it('closes a bracket and keeps the caret between', async () => {
+    const box = await area();
+    await fireEvent.input(box, { target: { value: '' } });
+    box.setSelectionRange(0, 0);
+    await fireEvent.keyDown(box, { key: '{' });
+    await waitFor(() => {
+      expect(box.value).toBe('{}');
+      expect(box.selectionStart).toBe(1);
+    });
+  });
+
+  it('indents on Enter between brackets', async () => {
+    const box = await area();
+    await fireEvent.input(box, { target: { value: '{}' } });
+    box.setSelectionRange(1, 1);
+    await fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => {
+      expect(box.value).toBe('{\n  \n}');
+      expect(box.selectionStart).toBe(4);
+    });
+  });
+
+  it('leaves the keys alone in text mode and with a modifier', async () => {
+    const box = await area();
+    await fireEvent.click(screen.getByRole('button', { name: 'Text' }));
+    await fireEvent.input(box, { target: { value: '' } });
+    box.setSelectionRange(0, 0);
+    await fireEvent.keyDown(box, { key: '{' });
+    expect(box.value).toBe('');
+    await fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    await fireEvent.input(box, { target: { value: '' } });
+    await fireEvent.keyDown(box, { key: '{', ctrlKey: true });
+    expect(box.value).toBe('');
+  });
+
+  it('does not edit a value that cannot be edited', async () => {
+    await open({ ...EDITABLE, edit: { editable: false, reason: 'no-key' } });
+    await fireEvent.click(within(cell(0, 1)).getByTestId('cell-dialog'));
+    const box = await screen.findByTestId<HTMLTextAreaElement>('value-dialog-text');
+    box.setSelectionRange(0, 0);
+    await fireEvent.keyDown(box, { key: '{' });
+    expect(box.value).toBe('{\n  "en": "one"\n}');
+  });
+});
+
+describe('more ways to look', () => {
+  async function chooseView(name: string) {
+    if (screen.queryByTestId('view-settings') === null) {
+      await fireEvent.click(screen.getByTestId('view-toggle'));
+    }
+    await fireEvent.click(
+      within(screen.getByTestId('view-settings')).getByRole('button', { name }),
+    );
+  }
+
+  it('shows the rows as JSON', async () => {
+    await open();
+    await chooseView('JSON');
+    const json = await screen.findByTestId('layout-json');
+    expect(JSON.parse(json.textContent)).toEqual([
+      { id: 1, name: { en: 'one' }, note: 'first' },
+      { id: 2, name: { en: 'two' }, note: 'second' },
+      { id: 3, name: null, note: 'third' },
+    ]);
+    expect(screen.getByTestId('grid').closest('.grid-wrap')?.className).toContain('hidden');
+  });
+
+  it('shows the fields running down when reversed, and the table again', async () => {
+    await open();
+    await chooseView('Reversed');
+    const table = await screen.findByTestId('layout-transposed');
+    const heads = Array.from(table.querySelectorAll('thead th')).map((item) => item.textContent);
+    expect(heads).toEqual(['Field', 'Row 1', 'Row 2', 'Row 3']);
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(3);
+    await chooseView('Table');
+    await waitFor(() => {
+      expect(screen.queryByTestId('result-layout')).toBeNull();
+    });
+  });
+
+  it('draws only vertical lines, and code font, when asked', async () => {
+    await open();
+    await chooseView('Columns');
+    await chooseView('Code');
+    const grid = screen.getByTestId('grid');
+    expect(grid.classList.contains('lines-columns')).toBe(true);
+    expect(grid.style.fontFamily).toContain('--dn-mono');
+  });
+
+  it('hides the execution time', async () => {
+    await open();
+    expect(screen.getByTestId('summary').textContent).toContain('2 ms');
+    await fireEvent.click(screen.getByTestId('view-toggle'));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Execution time' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('summary').textContent).not.toContain('ms');
+    });
+  });
+
+  it('opens the column settings from the view menu', async () => {
+    await open();
+    await fireEvent.click(screen.getByTestId('view-toggle'));
+    await fireEvent.click(screen.getByTestId('view-columns'));
+    expect(await screen.findByTestId('columns-menu')).toBeTruthy();
+    expect(screen.queryByTestId('view-settings')).toBeNull();
+  });
+
+  it('lowers and raises the rows one step at a time, within limits', async () => {
+    await open();
+    await fireEvent.click(screen.getByTestId('view-toggle'));
+    for (let press = 0; press < 20; press += 1) {
+      await fireEvent.click(screen.getByRole('button', { name: 'Lower rows' }));
+    }
+    expect(screen.getByTestId('row-height').textContent).toBe('20');
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Lower rows' }).disabled).toBe(
+      true,
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Taller rows' }));
+    expect(screen.getByTestId('row-height').textContent).toBe('22');
+  });
+
+  it('reorders columns by dragging a header when that is on', async () => {
+    await open();
+    await fireEvent.click(screen.getByTestId('view-toggle'));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Drag columns by the header' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    const heads = screen.getAllByRole('columnheader').slice(1);
+    const grab = headerButton(2);
+    expect(grab.getAttribute('draggable')).toBe('true');
+    await fireEvent.dragStart(grab);
+    await fireEvent.dragOver(heads[0] ?? grab);
+    await fireEvent.drop(heads[0] ?? grab);
+    await waitFor(() => {
+      const names = screen
+        .getAllByRole('columnheader')
+        .slice(1)
+        .map((item) => item.querySelector('.label')?.textContent);
+      expect(names).toEqual(['note', 'id', 'name']);
+    });
+  });
+
+  it('does not drag columns unless asked', async () => {
+    await open();
+    const grab = headerButton(0);
+    expect(grab.getAttribute('draggable')).toBe('false');
   });
 });

@@ -12,7 +12,7 @@ import type { ConnectionManager, SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import { analyzeEditability } from './result-editability';
 import { buildOrderBy, buildWhere, type TableSort } from './table-filter-sql';
-import type { ResultRow, ResultStore, ResultSummary } from './result-store';
+import type { Placement, ResultRow, ResultStore, ResultSummary } from './result-store';
 import { isEmptyFilter, type TableFilter } from '../shared/table-filter';
 
 /** Limits the user controls through settings (V1.25). */
@@ -66,6 +66,12 @@ export interface TableChange {
   /** `null` restores the table's own order. */
   readonly sort?: TableSort | null;
 }
+
+/**
+ * A table view shows one table, so a new page, filter or order replaces what it showed
+ * (a result with unsaved edits stays, see `Placement`) instead of adding a tab.
+ */
+const REPLACE_VIEW: Placement = { replaceAll: true };
 
 /** A table view is its own "document", so its results never mix with an editor's. */
 export function tableDocumentUri(target: SessionTarget, table: TableRef): string {
@@ -213,42 +219,48 @@ export class TableViewer {
         `SELECT * FROM ${quoted}`,
         columns.map((column) => column.name),
       );
-      return this.deps.results.add({
-        documentUri,
-        statement: sql,
-        statementStart: 0,
-        origin: { target: request.target, owner: TableViewer.owner(documentUri) },
-        columns,
-        rows,
-        truncated: false,
-        durationMs: Date.now() - started,
-        edit,
-        ...(filter === undefined ? {} : { filter }),
-        ...(sortOf(request.sort, columns) === undefined
-          ? {}
-          : { sort: sortOf(request.sort, columns) }),
-        page: {
-          offset,
-          pageSize,
-          ...(totalRows === undefined ? {} : { totalRows }),
-          ...(counted.approximate ? { approximate: true } : {}),
+      return this.deps.results.add(
+        {
+          documentUri,
+          statement: sql,
+          statementStart: 0,
+          origin: { target: request.target, owner: TableViewer.owner(documentUri) },
+          columns,
+          rows,
+          truncated: false,
+          durationMs: Date.now() - started,
+          edit,
+          ...(filter === undefined ? {} : { filter }),
+          ...(sortOf(request.sort, columns) === undefined
+            ? {}
+            : { sort: sortOf(request.sort, columns) }),
+          page: {
+            offset,
+            pageSize,
+            ...(totalRows === undefined ? {} : { totalRows }),
+            ...(counted.approximate ? { approximate: true } : {}),
+          },
         },
-      });
+        REPLACE_VIEW,
+      );
     } catch (error) {
       const dbError = toDbError(error);
       this.logger.warn(`Could not open ${request.table.name}: ${dbError.message}`, dbError);
-      return this.deps.results.add({
-        documentUri,
-        statement: sql,
-        statementStart: 0,
-        columns: [],
-        rows: [],
-        truncated: false,
-        durationMs: Date.now() - started,
-        error: { code: dbError.code, message: dbError.message },
-        ...(filter === undefined ? {} : { filter }),
-        page: { offset, pageSize },
-      });
+      return this.deps.results.add(
+        {
+          documentUri,
+          statement: sql,
+          statementStart: 0,
+          columns: [],
+          rows: [],
+          truncated: false,
+          durationMs: Date.now() - started,
+          error: { code: dbError.code, message: dbError.message },
+          ...(filter === undefined ? {} : { filter }),
+          page: { offset, pageSize },
+        },
+        REPLACE_VIEW,
+      );
     }
   }
 

@@ -167,6 +167,14 @@ export const CODICONS = {
   'word-wrap': 0xeb80,
   'zoom-in': 0xeb81,
   'zoom-out': 0xeb82,
+  'arrow-both': 0xea99,
+  broadcast: 0xeaad,
+  'device-camera': 0xeada,
+  paintcan: 0xeb2a,
+  'radio-tower': 0xeb34,
+  'symbol-color': 0xeb5c,
+  'symbol-ruler': 0xea96,
+  tools: 0xeb6d,
 } as const;
 
 export type CodiconName = keyof typeof CODICONS;

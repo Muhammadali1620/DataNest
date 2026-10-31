@@ -18,20 +18,41 @@ import {
 describe('normalizeView', () => {
   it('keeps a valid view as it is', () => {
     const view = {
+      layout: 'json',
       rowHeight: 40,
       fontSize: 16,
-      lines: 'all',
+      lines: 'columns',
       align: 'center',
       rowNumbers: false,
       checkboxes: false,
+      font: 'mono',
+      showTime: false,
+      draggableColumns: true,
     };
     expect(normalizeView(view)).toEqual(view);
   });
 
   it('falls back field by field for anything unknown or wrong', () => {
     expect(
-      normalizeView({ rowHeight: 7, fontSize: '14', lines: 'dots', align: 1, rowNumbers: 'yes' }),
+      normalizeView({
+        layout: 'cards',
+        rowHeight: 'tall',
+        fontSize: '14',
+        lines: 'dots',
+        align: 1,
+        rowNumbers: 'yes',
+        font: 'serif',
+        showTime: 1,
+        draggableColumns: 'yes',
+      }),
     ).toEqual(DEFAULT_VIEW);
+  });
+
+  it('clamps and rounds a row height instead of refusing it', () => {
+    expect(normalizeView({ rowHeight: 7 }).rowHeight).toBe(20);
+    expect(normalizeView({ rowHeight: 500 }).rowHeight).toBe(64);
+    expect(normalizeView({ rowHeight: 33.4 }).rowHeight).toBe(33);
+    expect(normalizeView({ rowHeight: Number.NaN }).rowHeight).toBe(32);
   });
 
   it.each([null, undefined, 5, 'text', []])('gives the defaults for %s', (raw) => {
@@ -50,7 +71,7 @@ describe('geometry', () => {
     expect(gutterWidth(DEFAULT_VIEW, 6)).toBeGreaterThan(both);
     expect(gutterWidth({ ...DEFAULT_VIEW, checkboxes: false }, 3)).toBeLessThan(both);
     expect(gutterWidth({ ...DEFAULT_VIEW, rowNumbers: false }, 3)).toBeLessThan(both);
-    expect(gutterWidth({ ...DEFAULT_VIEW, rowNumbers: false, checkboxes: false }, 3)).toBe(16);
+    expect(gutterWidth({ ...DEFAULT_VIEW, rowNumbers: false, checkboxes: false }, 3)).toBe(34);
   });
 
   it('never makes the number column narrower than two digits', () => {

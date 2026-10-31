@@ -135,6 +135,7 @@
   "commands.schema.compare.title": "Compare Schemas…",
   "commands.table.compareData.title": "Compare Data…",
   "commands.server.monitor.title": "Server Monitor",
+  "commands.tools.open.title": "Open Tools",
   "commands.server.users.title": "Users and Privileges",
   "commands.results.chart.title": "Chart of Result",
   "configuration.queryVariables.description": "What `:name` and `${name}` in a statement do. DataNest asks for each value before the statement runs and puts it in as a literal: a number, `NULL` or text (in single quotes, `'42'` stays text). Strings, comments and routine or trigger definitions are left alone.",

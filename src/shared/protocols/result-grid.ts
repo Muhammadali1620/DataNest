@@ -456,6 +456,8 @@ export const resultGridProtocol = defineProtocol({
          */
         scope: optional(literal('result', 'table', 'database')),
       }),
+      /** Page → host: open the Tools page (hashes, encoders, colours, images, network). */
+      openTools: object({}),
       /** Page → host: open the import page for the table this result shows (V12.1). */
       importInto: object({ resultId }),
     },

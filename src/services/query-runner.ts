@@ -14,7 +14,7 @@ import { ConnectionManager, type SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import type { HistoryRecorder } from './history';
 import { needsBegin } from './manual-commit';
-import type { ResultStore, ResultSummary, ResultRow } from './result-store';
+import type { Placement, ResultStore, ResultSummary, ResultRow } from './result-store';
 import { msg } from '../core/user-message';
 
 /** Limits the user controls through settings (V1.25). */
@@ -46,6 +46,11 @@ export interface RunRequest {
    * and leave it open for the user to commit or roll back.
    */
   readonly manualCommit?: boolean;
+  /**
+   * The new results take the place of this result (or of all of the document's) instead
+   * of being added after the others; used when the statement was edited on the page.
+   */
+  readonly replace?: { readonly resultId: string } | { readonly all: true };
 }
 
 export interface RunOutcome {
@@ -63,6 +68,20 @@ interface ActiveRun {
   readonly owner: string;
   /** When the run started, so the status bar can show a timer. */
   readonly startedAt: number;
+}
+
+/** Where a statement's result goes: the first takes the replaced place, the rest follow it. */
+function placementOf(
+  request: RunRequest,
+  previous: ResultSummary | undefined,
+): Placement | undefined {
+  if (request.replace === undefined) {
+    return undefined;
+  }
+  if (previous !== undefined) {
+    return { after: previous.id };
+  }
+  return 'all' in request.replace ? { replaceAll: true } : { replace: request.replace.resultId };
 }
 
 /** One run per document: a session executes one statement at a time. */
@@ -117,7 +136,12 @@ export class QueryRunner {
           break;
         }
         index++;
-        const summary = await this.runOne(request, statement, run);
+        const summary = await this.runOne(
+          request,
+          statement,
+          run,
+          placementOf(request, results.at(-1)),
+        );
         results.push(summary);
         if (summary.error !== undefined && stopOnError) {
           break;
@@ -244,6 +268,7 @@ export class QueryRunner {
     request: RunRequest,
     statement: SqlStatement,
     run: ActiveRun,
+    placement: Placement | undefined,
   ): Promise<ResultSummary> {
     const rowLimit = Math.max(1, Math.trunc(this.deps.limits.rowLimit()));
     const started = Date.now();
@@ -307,18 +332,21 @@ export class QueryRunner {
         ...(columns.length > 0 ? { rows: rows.length } : {}),
         ...(affectedRows === undefined ? {} : { affected: affectedRows }),
       });
-      return this.deps.results.add({
-        documentUri: request.documentUri,
-        statement: statement.text,
-        statementStart: statement.start,
-        origin: { target: request.target, owner: run.owner },
-        columns,
-        rows,
-        truncated,
-        ...(affectedRows === undefined ? {} : { affectedRows }),
-        durationMs: Date.now() - started,
-        ...(edit === undefined ? {} : { edit }),
-      });
+      return this.deps.results.add(
+        {
+          documentUri: request.documentUri,
+          statement: statement.text,
+          statementStart: statement.start,
+          origin: { target: request.target, owner: run.owner },
+          columns,
+          rows,
+          truncated,
+          ...(affectedRows === undefined ? {} : { affectedRows }),
+          durationMs: Date.now() - started,
+          ...(edit === undefined ? {} : { edit }),
+        },
+        placement,
+      );
     } catch (error) {
       const dbError = toDbError(error);
       this.logger.warn(`Statement failed: ${dbError.message}`, dbError);
@@ -337,25 +365,28 @@ export class QueryRunner {
         durationMs: Date.now() - started,
         error: timedOut ? msg('Timed out') : dbError.message,
       });
-      return this.deps.results.add({
-        documentUri: request.documentUri,
-        statement: statement.text,
-        statementStart: statement.start,
-        columns,
-        rows,
-        truncated,
-        durationMs: Date.now() - started,
-        error: {
-          code: timedOut ? 'timeout' : dbError.code,
-          message: timedOut
-            ? msg(
-                'Cancelled after {0} s (the query timeout of the connection or datanest.queryTimeout)',
-                Math.round(timeoutMs / 1000),
-              )
-            : dbError.message,
-          ...(position === undefined ? {} : { position }),
+      return this.deps.results.add(
+        {
+          documentUri: request.documentUri,
+          statement: statement.text,
+          statementStart: statement.start,
+          columns,
+          rows,
+          truncated,
+          durationMs: Date.now() - started,
+          error: {
+            code: timedOut ? 'timeout' : dbError.code,
+            message: timedOut
+              ? msg(
+                  'Cancelled after {0} s (the query timeout of the connection or datanest.queryTimeout)',
+                  Math.round(timeoutMs / 1000),
+                )
+              : dbError.message,
+            ...(position === undefined ? {} : { position }),
+          },
         },
-      });
+        placement,
+      );
     } finally {
       if (timer !== undefined) {
         clearTimeout(timer);

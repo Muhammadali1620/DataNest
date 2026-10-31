@@ -151,6 +151,14 @@ export interface NewResult {
   readonly origin?: ResultOrigin;
 }
 
+/**
+ * Where a new result goes among its document's results. Without one it is appended.
+ * A result with unsaved changes is never replaced: dropping it would lose the edits, so
+ * the new result is appended beside it instead.
+ */
+export type Placement =
+  { readonly replace: string } | { readonly replaceAll: true } | { readonly after: string };
+
 /** How many results of one document are kept; older ones are dropped. */
 export const MAX_RESULTS_PER_DOCUMENT = 20;
 
@@ -179,6 +187,8 @@ export class ResultStore {
   private readonly listeners = new Set<(documentUri: string) => void>();
   private readonly maxCells: number;
   private readonly sortPause: PauseOptions | undefined;
+  /** Which result took the place of a replaced one, so a page can follow its active tab. */
+  private readonly successors = new Map<string, string>();
   private nextId = 1;
 
   constructor(options: ResultStoreOptions = {}) {
@@ -191,7 +201,7 @@ export class ResultStore {
   }
 
   /** Stores a result and returns its summary; the id is unique for the session. */
-  add(result: NewResult): ResultSummary {
+  add(result: NewResult, placement?: Placement): ResultSummary {
     const id = `result-${this.nextId++}`;
     const stored: StoredResult = {
       id,
@@ -218,7 +228,7 @@ export class ResultStore {
     };
     this.results.set(id, stored);
     const ids = this.byDocument.get(result.documentUri) ?? [];
-    ids.push(id);
+    this.place(ids, id, placement);
     while (ids.length > MAX_RESULTS_PER_DOCUMENT) {
       const dropped = ids.shift();
       if (dropped !== undefined) {
@@ -234,6 +244,59 @@ export class ResultStore {
       }
     }
     return summaryOf(stored);
+  }
+
+  /** Puts a new id into a document's list, dropping what the placement replaces. */
+  private place(ids: string[], id: string, placement: Placement | undefined): void {
+    const droppable = (other: string): boolean => {
+      const stored = this.results.get(other);
+      return stored !== undefined && !hasPending(stored);
+    };
+    const drop = (other: string): void => {
+      this.results.delete(other);
+      this.rememberSuccessor(other, id);
+    };
+    if (placement !== undefined && 'replaceAll' in placement) {
+      const kept = ids.filter((other) => !droppable(other) || other === id);
+      for (const other of ids) {
+        if (droppable(other) && other !== id) {
+          drop(other);
+        }
+      }
+      ids.splice(0, ids.length, ...kept, id);
+      return;
+    }
+    if (placement !== undefined && 'replace' in placement) {
+      const at = ids.indexOf(placement.replace);
+      if (at !== -1 && droppable(placement.replace)) {
+        drop(placement.replace);
+        ids.splice(at, 1, id);
+        return;
+      }
+    }
+    if (placement !== undefined && 'after' in placement) {
+      const at = ids.indexOf(placement.after);
+      if (at !== -1) {
+        ids.splice(at + 1, 0, id);
+        return;
+      }
+    }
+    ids.push(id);
+  }
+
+  private rememberSuccessor(old: string, replacement: string): void {
+    this.successors.set(old, replacement);
+    if (this.successors.size > 200) {
+      const first = this.successors.keys().next().value;
+      if (first !== undefined) {
+        this.successors.delete(first);
+      }
+    }
+  }
+
+  /** The result that replaced this one in place, if it was replaced. */
+  successorOf(id: string): string | undefined {
+    return this.successors.get(id);
   }
 
   /**

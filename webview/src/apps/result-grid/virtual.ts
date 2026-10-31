@@ -15,25 +15,56 @@ export interface RowGeometry {
 /** Rows kept above and below the viewport, so scrolling does not flash. */
 export const ROW_OVERSCAN = 8;
 
+/** Extra space under one row, where its details are shown; every row after it moves down. */
+export interface RowGap {
+  readonly row: number;
+  readonly extra: number;
+}
+
+/** Distance from the first row's top to this row's top. */
+export function rowTop(index: number, rowHeight: number, gap?: RowGap): number {
+  const height = Math.max(1, rowHeight);
+  return index * height + (gap !== undefined && index > gap.row ? gap.extra : 0);
+}
+
+/** The row that is at this distance from the first row's top (the gap belongs to its row). */
+function indexAt(offset: number, height: number, gap: RowGap | undefined): number {
+  const y = Math.max(0, offset);
+  if (gap === undefined) {
+    return Math.floor(y / height);
+  }
+  const end = (gap.row + 1) * height;
+  if (y < end) {
+    return Math.floor(y / height);
+  }
+  return y < end + gap.extra ? gap.row : Math.floor((y - gap.extra) / height);
+}
+
 export function rowGeometry(
   scrollTop: number,
   viewportHeight: number,
   rowHeight: number,
   rowCount: number,
   overscan = ROW_OVERSCAN,
+  gap?: RowGap,
 ): RowGeometry {
   const height = Math.max(1, rowHeight);
   const total = Math.max(0, Math.trunc(rowCount));
-  const totalHeight = total * height;
+  const open =
+    gap !== undefined && gap.row >= 0 && gap.row < total && gap.extra > 0 ? gap : undefined;
+  const totalHeight = total * height + (open?.extra ?? 0);
   if (total === 0 || viewportHeight <= 0) {
     return { firstIndex: 0, lastIndex: -1, topPadding: 0, totalHeight };
   }
   const top = Math.max(0, Math.min(scrollTop, Math.max(0, totalHeight - viewportHeight)));
-  const firstVisible = Math.floor(top / height);
-  const visibleCount = Math.ceil(viewportHeight / height) + 1;
+  const firstVisible = indexAt(top, height, open);
+  const visibleCount =
+    open === undefined
+      ? Math.ceil(viewportHeight / height) + 1
+      : indexAt(top + viewportHeight, height, open) - firstVisible + 2;
   const firstIndex = Math.max(0, firstVisible - overscan);
   const lastIndex = Math.min(total - 1, firstVisible + visibleCount + overscan);
-  return { firstIndex, lastIndex, topPadding: firstIndex * height, totalHeight };
+  return { firstIndex, lastIndex, topPadding: rowTop(firstIndex, height, open), totalHeight };
 }
 
 export interface ColumnLayout {

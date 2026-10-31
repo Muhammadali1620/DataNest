@@ -3,6 +3,24 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.3.0] - 2026-10-31
+
+### Added
+
+- Results: a form to insert a row (the Add row button stays), an up and a down arrow and
+  a funnel on every column header (filter by a value or a condition), an arrow before
+  every row that opens its fields top to bottom under it, a button on a foreign key cell
+  that opens the related row (Ctrl+click still works), JSON typing like the editor in the
+  value dialog (brackets and quotes pair, Enter indents, Tab), view as JSON or reversed,
+  dragging columns by the header, a font choice, four kinds of lines, a row height stepper
+  and an option to hide the execution time.
+- Tools: a page of small local utilities, opened with "DataNest: Open Tools" (or the
+  tools button in the results toolbar). General: MD5, SHA-1 and SHA-256 of a text, Base64,
+  URL and Unicode encoding, random names, passwords and UUIDs, a Unix time converter.
+  Network: interfaces, a TCP port check, DNS lookup and a TCP ping. Colors: a picker with
+  derived shades and a live preview. Image: resize, to Base64 and an SVG editor. Nothing
+  is sent to any service.
+
 ## [1.2.0] - 2026-10-31
 
 ### Added

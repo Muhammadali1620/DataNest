@@ -77,3 +77,18 @@ export function errorOffsetOf(
   const offset = summary.statementStart + Math.max(0, within);
   return Math.max(0, Math.min(offset, Math.max(0, documentLength)));
 }
+
+/**
+ * The tab to keep selected after the results changed: the same one, or the one that
+ * replaced it in place; undefined (the newest) when it is gone for another reason.
+ */
+export function followActive(
+  summaries: readonly Pick<ResultSummary, 'id'>[],
+  activeId: string | undefined,
+  successorOf: (id: string) => string | undefined,
+): string | undefined {
+  if (activeId === undefined || summaries.some((summary) => summary.id === activeId)) {
+    return activeId;
+  }
+  return successorOf(activeId);
+}

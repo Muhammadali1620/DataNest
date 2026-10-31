@@ -24,7 +24,7 @@
     type Selection,
     type SelectionInfo,
   } from './selection';
-  import { columnGeometry, columnLayout, rangeOf, rowGeometry } from './virtual';
+  import { columnGeometry, columnLayout, rangeOf, type RowGap, rowGeometry, rowTop } from './virtual';
   import {
     DEFAULT_VIEW,
     type GridView,
@@ -96,6 +96,16 @@
     label?: string | undefined;
     /** Row height, text size, lines and the gutter; the defaults when absent. */
     view?: GridView | undefined;
+    /** Called when a header's up or down arrow is pressed; the host orders. */
+    onSortDirection?: ((column: number, direction: 'asc' | 'desc') => void) | undefined;
+    /** Called to filter one column from its header; absent when the result cannot be filtered. */
+    onFilterColumn?: ((column: number, anchor: HTMLElement) => void) | undefined;
+    /** Columns with a condition in the applied filter, for the header's funnel. */
+    filteredColumns?: ReadonlySet<number> | undefined;
+    /** Called when a header is dropped before another column: the host-free column order. */
+    onMoveColumn?: ((from: number, before: number | undefined) => void) | undefined;
+    /** Called to open the form that adds a row with the fields filled in. */
+    onInsertDialog?: (() => void) | undefined;
     /** Called to open a cell's value in the dialog (the magnifier on the cell). */
     onOpenDialog?: ((row: number, column: number) => void) | undefined;
     t: Translate;
@@ -131,7 +141,12 @@
     onFollow,
     label,
     view: viewProp,
+    onSortDirection,
+    onFilterColumn,
+    filteredColumns,
     onOpenDialog,
+    onInsertDialog,
+    onMoveColumn,
     t,
   }: Props = $props();
 
@@ -175,7 +190,17 @@
     return order[position] ?? position;
   }
   const layout = $derived(columnLayout(order.map((index) => widths[index] ?? MIN_COLUMN_WIDTH)));
-  const rows = $derived(rowGeometry(scrollTop, height, ROW_HEIGHT, rowCount));
+  /** The column being dragged by its header, and the one it would land before. */
+  let dragging = $state<number | undefined>(undefined);
+  let dropBefore = $state<number | undefined>(undefined);
+
+  /** The row whose details are open under it (one at a time), and how much room they take. */
+  let expanded = $state<number | undefined>(undefined);
+  const detailHeight = $derived(Math.min(340, order.length * 24 + 24));
+  const gap = $derived<RowGap | undefined>(
+    expanded === undefined ? undefined : { row: expanded, extra: detailHeight },
+  );
+  const rows = $derived(rowGeometry(scrollTop, height, ROW_HEIGHT, rowCount, undefined, gap));
   const visibleColumns = $derived(columnGeometry(scrollLeft, width, layout));
   const rowIndexes = $derived(rangeOf(rows.firstIndex, rows.lastIndex));
   /** Pinned columns are always drawn; the others only while they are near the viewport. */
@@ -248,6 +273,7 @@
   /** A different result means different cells, so the old selection is dropped. */
   function clearSelection(_key: string): void {
     selection = undefined;
+    expanded = undefined;
   }
 
   // Reading only the key (never the selection) keeps this out of a write loop.
@@ -591,7 +617,7 @@
     if (viewport === undefined) {
       return;
     }
-    const top = focus.row * ROW_HEIGHT;
+    const top = rowTop(focus.row, ROW_HEIGHT, gap);
     const bottom = top + ROW_HEIGHT;
     if (top < viewport.scrollTop) {
       viewport.scrollTop = top;
@@ -686,6 +712,15 @@
         rowAction('add');
       }}
     />
+    {#if onInsertDialog !== undefined}
+      <IconButton
+        icon="new-file"
+        tone="green"
+        label={t('grid.insertDialog')}
+        data-testid="insert-dialog-open"
+        onclick={onInsertDialog}
+      />
+    {/if}
     <IconButton
       icon="copy"
       tone="blue"
@@ -736,7 +771,9 @@
 
 <div
   class="viewport lines-{view.lines} align-{view.align}"
-  style="--dn-row-height: {view.rowHeight}px; --dn-grid-font: {view.fontSize}px;"
+  style="--dn-row-height: {view.rowHeight}px; --dn-grid-font: {view.fontSize}px;{view.font === 'mono'
+    ? ' font-family: var(--dn-mono);'
+    : ''}"
   bind:this={viewport}
   onscroll={onScroll}
   onkeydown={onKeyDown}
@@ -757,6 +794,7 @@
   <div class="canvas" style="height: {rows.totalHeight + HEADER_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;">
     <div class="header" role="row" aria-rowindex={1} style="width: {layout.totalWidth + ROW_NUMBER_WIDTH}px; height: {HEADER_HEIGHT}px;">
       <div class="cell rownum head" style="width: {ROW_NUMBER_WIDTH}px;" role="columnheader" aria-colindex={1}>
+        <span class="expander-space"></span>
         {#if view.checkboxes}
           <input
             type="checkbox"
@@ -791,9 +829,24 @@
         class:deleted={stateAt(index) === 'deleted'}
         role="row"
         aria-rowindex={index + 2}
-        style="top: {HEADER_HEIGHT + index * ROW_HEIGHT}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
+        style="top: {HEADER_HEIGHT + rowTop(index, ROW_HEIGHT, gap)}px; width: {layout.totalWidth + ROW_NUMBER_WIDTH}px;"
       >
         <div class="cell rownum" style="width: {ROW_NUMBER_WIDTH}px;" role="rowheader" aria-colindex={1}>
+          <button
+            type="button"
+            class="expander"
+            class:open={expanded === index}
+            tabindex="-1"
+            title={expanded === index ? t('grid.collapseRow') : t('grid.expandRow')}
+            aria-label={expanded === index ? t('grid.collapseRow') : t('grid.expandRow')}
+            aria-expanded={expanded === index}
+            data-testid="row-expand"
+            onclick={() => {
+              expanded = expanded === index ? undefined : index;
+            }}
+          >
+            <Icon name="chevron-right" size={14} />
+          </button>
           {#if view.checkboxes}
             <input
               type="checkbox"
@@ -829,6 +882,26 @@
         {/if}
       </div>
     {/each}
+    {#if expanded !== undefined}
+      {@const cells = rowAt(expanded)}
+      {#if cells !== undefined}
+        <div
+          class="detail"
+          role="group"
+          aria-label={t('grid.rowDetails', expanded + 1)}
+          data-testid="row-detail"
+          style="top: {HEADER_HEIGHT + rowTop(expanded, ROW_HEIGHT) + ROW_HEIGHT}px; left: {scrollLeft}px; width: {width}px; height: {detailHeight}px;"
+        >
+          <dl>
+            {#each order as column (column)}
+              {@const shown = displayOf(cells[column] ?? null)}
+              <dt>{columns[column]?.name ?? ''}</dt>
+              <dd class:null={shown.isNull} title={shown.truncated ? shown.text : undefined}>{shown.text}</dd>
+            {/each}
+          </dl>
+        </div>
+      {/if}
+    {/if}
   </div>
 </div>
 
@@ -837,7 +910,9 @@
   <div
     class="cell head"
     class:pinned={position < pinned}
+    class:drop-target={dropBefore === index}
     role="columnheader"
+    tabindex="-1"
     aria-colindex={position + 2}
     data-column={index}
     aria-sort={sort?.column === index ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
@@ -845,11 +920,45 @@
       ? ` left: ${ROW_NUMBER_WIDTH + (layout.offsets[position] ?? 0)}px;`
       : ''}"
     title={columns[index]?.dataType ?? columns[index]?.name ?? ''}
+    ondragover={(event) => {
+      if (dragging !== undefined && dragging !== index) {
+        event.preventDefault();
+        dropBefore = index;
+      }
+    }}
+    ondragleave={() => {
+      if (dropBefore === index) {
+        dropBefore = undefined;
+      }
+    }}
+    ondrop={(event) => {
+      event.preventDefault();
+      if (dragging !== undefined) {
+        onMoveColumn?.(dragging, index);
+      }
+      dragging = undefined;
+      dropBefore = undefined;
+    }}
   >
     <!-- Out of the tab order: the grid is one stop, and Shift+Alt+↑ sorts from a cell. -->
     <button
       type="button"
       class="name"
+      class:draggable={view.draggableColumns}
+      draggable={view.draggableColumns && onMoveColumn !== undefined}
+      ondragstart={(event) => {
+        dragging = index;
+        const transfer = event.dataTransfer;
+        // A test environment may have no data transfer at all.
+        transfer?.setData('text/plain', columns[index]?.name ?? '');
+        if (transfer) {
+          transfer.effectAllowed = 'move';
+        }
+      }}
+      ondragend={() => {
+        dragging = undefined;
+        dropBefore = undefined;
+      }}
       tabindex="-1"
       onclick={() => {
         onSort(index);
@@ -863,10 +972,57 @@
         <span class="label">{columns[index]?.name ?? ''}</span>
         {#if columns[index]?.dataType !== undefined}<span class="dtype">{columns[index].dataType}</span>{/if}
       </span>
-      <span class="arrow" class:idle={sort?.column !== index}
-        ><Icon name={sort?.column === index && sort.direction === 'desc' ? 'arrow-down' : 'arrow-up'} size={14} /></span
-      >
     </button>
+    <span class="head-tools">
+      <span class="sorter" role="group" aria-label={t('grid.sortBy', columns[index]?.name ?? '')}>
+        <button
+          type="button"
+          class="mini"
+          class:on={sort?.column === index && sort.direction === 'asc'}
+          tabindex="-1"
+          title={t('grid.sortAsc')}
+          aria-label={t('grid.sortAsc')}
+          aria-pressed={sort?.column === index && sort.direction === 'asc'}
+          data-testid="sort-asc"
+          onclick={() => {
+            onSortDirection?.(index, 'asc');
+          }}
+        >
+          <Icon name="chevron-up" size={12} />
+        </button>
+        <button
+          type="button"
+          class="mini"
+          class:on={sort?.column === index && sort.direction === 'desc'}
+          tabindex="-1"
+          title={t('grid.sortDesc')}
+          aria-label={t('grid.sortDesc')}
+          aria-pressed={sort?.column === index && sort.direction === 'desc'}
+          data-testid="sort-desc"
+          onclick={() => {
+            onSortDirection?.(index, 'desc');
+          }}
+        >
+          <Icon name="chevron-down" size={12} />
+        </button>
+      </span>
+      {#if onFilterColumn !== undefined}
+        <button
+          type="button"
+          class="mini funnel"
+          class:on={filteredColumns?.has(index) === true}
+          tabindex="-1"
+          title={t('grid.filterColumn', columns[index]?.name ?? '')}
+          aria-label={t('grid.filterColumn', columns[index]?.name ?? '')}
+          data-testid="column-filter"
+          onclick={(event) => {
+            onFilterColumn(index, event.currentTarget);
+          }}
+        >
+          <Icon name={filteredColumns?.has(index) === true ? 'filter-filled' : 'filter'} size={14} />
+        </button>
+      {/if}
+    </span>
     <span
       class="grip"
       role="separator"
@@ -930,6 +1086,28 @@
     {#if editor === undefined}
       {mark === 'default' ? t('grid.defaultLabel') : cell.text}
       {#if mark !== undefined}<span class="sr-only">{t('grid.cellChanged')}</span>{/if}
+      {#if !cell.isNull && onFollow !== undefined && linkTarget?.(column) !== undefined}
+        <button
+          type="button"
+          class="zoom jump"
+          tabindex="-1"
+          title={t('grid.followLink', linkTarget(column) ?? '')}
+          aria-label={t('grid.followLink', linkTarget(column) ?? '')}
+          data-testid="cell-link"
+          onpointerdown={(event) => {
+            event.stopPropagation();
+          }}
+          ondblclick={(event) => {
+            event.stopPropagation();
+          }}
+          onclick={(event) => {
+            event.stopPropagation();
+            onFollow(index, column);
+          }}
+        >
+          <Icon name="link-external" size={14} />
+        </button>
+      {/if}
       {#if onOpenDialog !== undefined && !cell.isNull && !cell.numeric}
         <button
           type="button"
@@ -1053,8 +1231,21 @@
     border-bottom-color: var(--dn-grid-line);
   }
 
-  .viewport.lines-all .cell {
+  .viewport.lines-all .cell,
+  .viewport.lines-columns .cell {
     border-right: 1px solid var(--dn-grid-line);
+  }
+
+  .viewport.lines-columns .cell:not(.head) {
+    border-bottom-color: transparent;
+  }
+
+  .head.drop-target {
+    box-shadow: inset 3px 0 0 var(--vscode-focusBorder);
+  }
+
+  .name.draggable {
+    cursor: grab;
   }
 
   .viewport.align-left .cell:not(.rownum):not(.head),
@@ -1102,9 +1293,11 @@
 
   .name {
     display: flex;
+    flex: 1;
     gap: 4px;
     align-items: center;
-    width: 100%;
+    min-width: 0;
+    height: 100%;
     padding: 0;
     overflow: hidden;
     color: inherit;
@@ -1165,20 +1358,56 @@
     color: var(--vscode-charts-red, var(--dn-muted));
   }
 
-  /* The arrow is always there, faint until the pointer is over the header. */
-  .arrow.idle {
-    opacity: 0;
-    transition: opacity var(--dn-duration) var(--dn-ease);
-  }
-
-  .head:hover .arrow.idle {
-    opacity: 0.45;
-  }
-
-  .arrow {
-    display: inline-flex;
+  .head-tools {
+    display: flex;
     flex: none;
-    color: var(--dn-accent);
+    gap: 2px;
+    align-items: center;
+    padding-right: 6px;
+  }
+
+  .sorter {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Small round buttons in the header; faint until the header is pointed at. */
+  .mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 16px;
+    padding: 0;
+    color: var(--dn-muted);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0.55;
+    transition:
+      opacity var(--dn-duration) var(--dn-ease),
+      background-color var(--dn-duration) var(--dn-ease);
+  }
+
+  .funnel {
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+  }
+
+  .head:hover .mini,
+  .mini.on {
+    opacity: 1;
+  }
+
+  .mini:hover {
+    color: var(--vscode-foreground);
+    background: var(--dn-hover);
+  }
+
+  .mini.on {
+    color: var(--vscode-focusBorder);
   }
 
   .pin {
@@ -1318,19 +1547,6 @@
     font-style: italic;
   }
 
-  .cell.link::after {
-    float: right;
-    margin-left: 4px;
-    /* The icon font's link-external glyph. */
-    content: '\eb14';
-    font: normal normal normal 12px/18px codicon;
-    opacity: 0.5;
-  }
-
-  .cell.link:hover::after {
-    opacity: 1;
-  }
-
   .cell.editing {
     position: relative;
     overflow: visible;
@@ -1385,6 +1601,70 @@
     border-radius: 50%;
   }
 
+  .expander {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    color: var(--dn-muted);
+    background: none;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: transform var(--dn-duration) var(--dn-ease);
+  }
+
+  .expander:hover {
+    color: var(--vscode-foreground);
+    background: var(--dn-hover);
+  }
+
+  .expander.open {
+    color: var(--vscode-focusBorder);
+    transform: rotate(90deg);
+  }
+
+  .expander-space {
+    flex: none;
+    width: 18px;
+  }
+
+  /* The open row's fields, top to bottom, under the row. */
+  .detail {
+    position: absolute;
+    z-index: 1;
+    overflow: auto;
+    padding: 10px 16px 10px 56px;
+    background: color-mix(in srgb, var(--vscode-focusBorder) 7%, var(--vscode-editor-background));
+    border-bottom: 1px solid var(--dn-grid-line);
+    box-sizing: border-box;
+  }
+
+  .detail dl {
+    display: grid;
+    grid-template-columns: minmax(120px, max-content) 1fr;
+    gap: 2px 20px;
+    margin: 0;
+    font-size: 0.95em;
+    line-height: 20px;
+  }
+
+  .detail dt {
+    color: var(--dn-muted);
+    text-align: right;
+  }
+
+  .detail dd {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
   .tick:checked,
   .tick:indeterminate {
     color: var(--vscode-button-foreground);
@@ -1422,6 +1702,15 @@
   .cell:hover .zoom,
   .cell.focused .zoom {
     display: inline-flex;
+  }
+
+  /* The jump to a related row sits left of the magnifier when a cell has both. */
+  .zoom.jump {
+    color: var(--vscode-charts-blue, var(--vscode-focusBorder));
+  }
+
+  .zoom.jump:has(+ .zoom) {
+    right: 34px;
   }
 
   .zoom:hover {

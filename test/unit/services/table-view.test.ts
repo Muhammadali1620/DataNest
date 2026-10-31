@@ -192,6 +192,65 @@ describe('TableViewer', () => {
     expect(drivers.driver('mysql').sessions).toHaveLength(1);
   });
 
+  describe('one tab per view', () => {
+    const table = { name: 'orders' };
+    const tabs = (): string[] =>
+      results.forDocument(tableDocumentUri(target(), table)).map((item) => item.id);
+
+    it('replaces the page on a filter, a sort and a page change', async () => {
+      const first = await viewer.open({ target: target(), table });
+      await viewer.reload(first.id, {
+        filter: { conditions: [{ column: 'a', operator: 'isNull' }] },
+      });
+      await viewer.reload(results.forDocument(tableDocumentUri(target(), table))[0]?.id ?? '', {
+        sort: { column: 'a', direction: 'desc' },
+      });
+      await viewer.reload(tabs()[0] ?? '', { offset: 100 });
+      await viewer.reload(tabs()[0] ?? '', { pageSize: 50 });
+      await viewer.reload(tabs()[0] ?? '', { exactCount: true });
+      expect(tabs()).toHaveLength(1);
+      expect(tabs()[0]).not.toBe(first.id);
+      expect(results.get(first.id)).toBeUndefined();
+    });
+
+    it('lets the page follow its tab to the new result', async () => {
+      const first = await viewer.open({ target: target(), table });
+      await viewer.reload(first.id, { offset: 100 });
+      expect(results.successorOf(first.id)).toBe(tabs()[0]);
+    });
+
+    it('replaces an error result too, and is replaced by one', async () => {
+      drivers.driver('mysql').failExecuteWhen = () => true;
+      const failed = await viewer.open({ target: target(), table });
+      expect(failed.error).toBeDefined();
+      drivers.driver('mysql').failExecuteWhen = () => false;
+      // A session keeps the failure it was opened with, so the next page gets a fresh one.
+      await manager.release(TableViewer.owner(tableDocumentUri(target(), table)));
+      await viewer.open({ target: target(), table });
+      expect(tabs()).toHaveLength(1);
+      expect(results.get(tabs()[0] ?? '')?.error).toBeUndefined();
+    });
+
+    it('keeps other tables apart', async () => {
+      await viewer.open({ target: target(), table });
+      await viewer.open({ target: target(), table: { name: 'customers' } });
+      await viewer.open({ target: target(), table });
+      expect(results.forDocument(tableDocumentUri(target(), { name: 'customers' }))).toHaveLength(
+        1,
+      );
+      expect(tabs()).toHaveLength(1);
+    });
+
+    it('keeps a page with unsaved edits and adds the new one beside it', async () => {
+      const first = await viewer.open({ target: target(), table });
+      results.addRow(first.id);
+      const next = await viewer.reload(first.id, { offset: 100 });
+      expect(next).toBe(true);
+      expect(results.get(first.id)).toBeDefined();
+      expect(tabs()).toHaveLength(2);
+    });
+  });
+
   describe('filtering and sorting', () => {
     const table = { name: 'orders' };
 

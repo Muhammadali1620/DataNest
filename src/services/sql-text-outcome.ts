@@ -29,3 +29,11 @@ export function sqlTextOutcome(
 export function revealColumn<Column>(current: Column | undefined, beside: Column): Column {
   return current ?? beside;
 }
+
+/** What SQL edited on a result's page replaces: that result, or everything of a table view. */
+export function replacementFor(
+  isTableView: boolean,
+  resultId: string,
+): { readonly resultId: string } | { readonly all: true } {
+  return isTableView ? { all: true } : { resultId };
+}

@@ -1,0 +1,113 @@
+/* Shared by the tabs of the Tools page; the pieces that belong to one component live in it. */
+.tl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.tl-grid.wide {
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+}
+
+.tl-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tl-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--dn-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tl-line {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tl-line > .control {
+  flex: 1;
+  min-width: 0;
+}
+
+.tl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+
+.tl-mono {
+  font-family: var(--dn-mono);
+  font-size: 13px;
+}
+
+/* A hash or a long encoded text wraps instead of running out of its field. */
+textarea.control.tl-wrap {
+  min-height: 0;
+  overflow-wrap: anywhere;
+  resize: none;
+}
+
+/* Fields fill their card; rows that size a field on purpose (.num, .narrow) keep their width. */
+.tool-card textarea.control,
+.tool-card .tl-line > .control {
+  width: 100%;
+  min-width: 0;
+}
+
+textarea.control.tl-area {
+  min-height: 96px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  resize: vertical;
+}
+
+.tl-check {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tl-problem {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  color: var(--dn-danger);
+  font-size: var(--dn-font-small);
+}
+
+.tl-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-height: 24px;
+}
+
+.tl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--dn-font-small);
+}
+
+.tl-table th {
+  padding: 4px 8px;
+  color: var(--dn-muted);
+  font-weight: 600;
+  text-align: left;
+}
+
+.tl-table td {
+  padding: 5px 8px;
+  border-top: 1px solid var(--dn-divider);
+}

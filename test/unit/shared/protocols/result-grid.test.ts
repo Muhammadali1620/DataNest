@@ -191,6 +191,7 @@ describe('protocol shape', () => {
       'copyText',
       'exportResult',
       'importInto',
+      'openTools',
       'ready',
       'revealError',
       'selectTab',
@@ -641,5 +642,13 @@ describe('runSql request (V12.1)', () => {
     expect(runSql.result.parse({ ok: true })).toEqual({ ok: true });
     expect(runSql.result.parse({ ok: false, error: 'boom' })).toEqual({ ok: false, error: 'boom' });
     expect(() => runSql.result.parse({})).toThrow('ok');
+  });
+});
+
+describe('openTools event', () => {
+  it('carries nothing and refuses extra fields', () => {
+    const openTools = resultGridProtocol.host.events.openTools;
+    expect(openTools.parse({})).toEqual({});
+    expect(() => openTools.parse({ page: 'general' })).toThrow();
   });
 });

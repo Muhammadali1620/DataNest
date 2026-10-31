@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ResultSummary } from '../../../../src/services/result-store';
 import { resultGridProtocol } from '../../../../src/shared/protocols/result-grid';
-import { buildState, errorOffsetOf } from '../../../../src/vscode/panels/results-state';
+import {
+  buildState,
+  errorOffsetOf,
+  followActive,
+} from '../../../../src/vscode/panels/results-state';
 
 function summary(overrides: Partial<ResultSummary> = {}): ResultSummary {
   return {
@@ -255,5 +259,28 @@ describe('buildState links', () => {
       buildState([{ ...summary(), edit: { editable: false, reason: 'view' } }], undefined, false)
         .tabs[0],
     ).not.toHaveProperty('links');
+  });
+});
+
+describe('followActive', () => {
+  const tabs = [{ id: 'r2' }, { id: 'r3' }];
+  const successors = new Map([['r1', 'r2']]);
+  const of = (id: string): string | undefined => successors.get(id);
+
+  it('keeps the selected tab while it exists', () => {
+    expect(followActive(tabs, 'r3', of)).toBe('r3');
+  });
+
+  it('follows a tab that was replaced in place', () => {
+    expect(followActive(tabs, 'r1', of)).toBe('r2');
+  });
+
+  it('leaves the choice to the newest tab when it is gone for another reason', () => {
+    expect(followActive(tabs, 'r9', of)).toBeUndefined();
+  });
+
+  it('has nothing to follow before a tab was chosen', () => {
+    expect(followActive(tabs, undefined, of)).toBeUndefined();
+    expect(followActive([], undefined, of)).toBeUndefined();
   });
 });

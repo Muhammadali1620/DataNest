@@ -59,6 +59,8 @@ describe('translations', () => {
 describe('the Russian dictionary', () => {
   // Names of products, file formats and terms that stay as they are in Russian too.
   const UNTRANSLATED = new Set([
+    'tools.kind.base64',
+    'tools.kind.unicode',
     'form.driver.mysql',
     'form.driver.postgres',
     'form.driver.sqlite',

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
+  import { applyKey } from './json-editing';
   import { formatJson, minifyJson } from './json-view';
   import { viewOf } from './value-view';
 
@@ -89,6 +90,36 @@
     }
   }
 
+  /** Typing in JSON mode behaves like the editor: brackets and quotes pair, Enter indents. */
+  function onAreaKey(event: KeyboardEvent): void {
+    const element = area;
+    if (
+      !editable ||
+      mode !== 'json' ||
+      element === undefined ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.isComposing
+    ) {
+      return;
+    }
+    const result = applyKey(
+      { text: element.value, start: element.selectionStart, end: element.selectionEnd },
+      event.key,
+      event.shiftKey,
+    );
+    if (result === undefined) {
+      return;
+    }
+    event.preventDefault();
+    text = result.text;
+    // The caret can only be placed once the new text is in the box.
+    void tick().then(() => {
+      element.setSelectionRange(result.start, result.end);
+    });
+  }
+
   function onKey(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -161,6 +192,7 @@
         spellcheck="false"
         aria-label={t('dialog.valueTitle')}
         data-testid="value-dialog-text"
+        onkeydown={onAreaKey}
       ></textarea>
     {/if}
 

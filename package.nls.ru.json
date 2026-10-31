@@ -135,6 +135,7 @@
   "commands.schema.compare.title": "Сравнить схемы…",
   "commands.table.compareData.title": "Сравнить данные…",
   "commands.server.monitor.title": "Монитор сервера",
+  "commands.tools.open.title": "Открыть инструменты",
   "commands.server.users.title": "Пользователи и права",
   "commands.results.chart.title": "График по результату",
   "configuration.queryVariables.description": "Что делают `:name` и `${name}` в запросе. DataNest спрашивает каждое значение перед выполнением и подставляет его литералом: число, `NULL` или текст (в одинарных кавычках `'42'` остаётся текстом). Строки, комментарии и определения процедур и триггеров не трогаются.",

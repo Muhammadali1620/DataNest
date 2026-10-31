@@ -604,3 +604,58 @@ kbd {
   color: var(--dn-muted);
   font-size: var(--dn-font-small);
 }
+
+/*
+ * Lists drawn by the page (V12): where the webview's engine can style the popup of a
+ * select, it is a rounded card with rounded rows, like the page's other popovers; elsewhere
+ * the system's own list is used and nothing breaks.
+ */
+@supports (appearance: base-select) {
+  select.control,
+  select.control::picker(select) {
+    appearance: base-select;
+  }
+
+  select.control {
+    padding-right: 6px;
+  }
+
+  select.control::picker-icon {
+    color: var(--dn-muted);
+    transition: transform var(--dn-duration) var(--dn-ease);
+  }
+
+  select.control:open::picker-icon {
+    transform: rotate(180deg);
+  }
+
+  select.control::picker(select) {
+    padding: 4px;
+    color: var(--vscode-foreground);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  }
+
+  select.control option {
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  select.control option:hover,
+  select.control option:focus-visible {
+    background: var(--dn-hover);
+    outline: none;
+  }
+
+  select.control option:checked {
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+  }
+
+  select.control option::checkmark {
+    display: none;
+  }
+}

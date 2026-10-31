@@ -54,6 +54,8 @@ import { ErDiagramPanel } from './panels/er-diagram-panel';
 import { diagramCommandHandlers } from './diagram-commands';
 import { schemaCompareCommandHandlers } from './schema-compare-commands';
 import { monitorCommandHandlers } from './monitor-commands';
+import { ToolsPanel } from './panels/tools-panel';
+import { toolsCommandHandlers } from './tools-commands';
 import { userCommandHandlers } from './user-commands';
 import { UserAdminPanel } from './panels/user-admin-panel';
 import { ResultChartPanel } from './panels/result-chart-panel';
@@ -241,6 +243,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     manager: deps.manager,
     logger: deps.logger,
   });
+  const toolPages = toolsCommandHandlers({ extensionUri: deps.extensionUri, logger: deps.logger });
   const users = userCommandHandlers({
     extensionUri: deps.extensionUri,
     store: deps.store,
@@ -638,6 +641,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.compareData]: (target) => dataCompare.compareData(target),
     [COMMAND_IDS.compareSchemas]: (target) => schemaCompare.compareSchemas(target),
     [COMMAND_IDS.showMonitor]: (target) => monitors.showMonitor(target),
+    [COMMAND_IDS.openTools]: () => {
+      toolPages.openTools();
+    },
     [COMMAND_IDS.showUsers]: (target) => users.showUsers(target),
     [COMMAND_IDS.showErDiagram]: (target, ...rest: unknown[]) =>
       diagrams.showErDiagram(target, selectionOf(rest[0])),
@@ -819,6 +825,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         QueryPlanPanel.disposeAll();
         SchemaComparePanel.disposeAll();
         ServerMonitorPanel.disposeAll();
+        ToolsPanel.disposeAll();
         UserAdminPanel.disposeAll();
         ResultChartPanel.disposeAll();
         DataComparePanel.disposeAll();

@@ -1,10 +1,14 @@
 // How the user likes the grid drawn: row height, text size, lines and the gutter.
 // Pure helpers, so the rules for a stored (possibly stale or hand-edited) value are tested.
 
-export type GridLines = 'none' | 'rows' | 'all';
+export type GridLines = 'none' | 'rows' | 'columns' | 'all';
+export type GridLayout = 'table' | 'json' | 'transposed';
+export type GridFont = 'ui' | 'mono';
 export type GridAlign = 'auto' | 'left' | 'center' | 'right';
 
 export interface GridView {
+  /** How the rows are laid out: the table, as JSON, or turned so fields run down. */
+  readonly layout: GridLayout;
   readonly rowHeight: number;
   readonly fontSize: number;
   readonly lines: GridLines;
@@ -13,20 +17,33 @@ export interface GridView {
   readonly rowNumbers: boolean;
   /** Show a check box per row, for actions on several rows at once. */
   readonly checkboxes: boolean;
+  readonly font: GridFont;
+  /** Show how long the statement took in the status bar. */
+  readonly showTime: boolean;
+  /** Columns can be dragged by their header into another place. */
+  readonly draggableColumns: boolean;
 }
 
-export const ROW_HEIGHTS = [26, 32, 40] as const;
+export const MIN_ROW_HEIGHT = 20;
+export const MAX_ROW_HEIGHT = 64;
+export const ROW_HEIGHT_STEP = 2;
+export const GRID_LAYOUTS: readonly GridLayout[] = ['table', 'json', 'transposed'];
+export const GRID_FONTS: readonly GridFont[] = ['ui', 'mono'];
 export const FONT_SIZES = [12, 13, 14, 15, 16] as const;
-export const GRID_LINES: readonly GridLines[] = ['none', 'rows', 'all'];
+export const GRID_LINES: readonly GridLines[] = ['none', 'rows', 'columns', 'all'];
 export const GRID_ALIGNS: readonly GridAlign[] = ['auto', 'left', 'center', 'right'];
 
 export const DEFAULT_VIEW: GridView = {
+  layout: 'table',
   rowHeight: 32,
   fontSize: 14,
   lines: 'rows',
   align: 'auto',
   rowNumbers: true,
   checkboxes: true,
+  font: 'ui',
+  showTime: true,
+  draggableColumns: false,
 };
 
 export const VIEW_STORAGE_KEY = 'datanest.grid.view';
@@ -39,13 +56,22 @@ function oneOf<T>(value: unknown, allowed: readonly T[], fallback: T): T {
 export function normalizeView(raw: unknown): GridView {
   const source: Partial<Record<keyof GridView, unknown>> =
     typeof raw === 'object' && raw !== null ? raw : {};
+  const height = source.rowHeight;
   return {
-    rowHeight: oneOf(source.rowHeight, ROW_HEIGHTS, DEFAULT_VIEW.rowHeight),
+    layout: oneOf(source.layout, GRID_LAYOUTS, DEFAULT_VIEW.layout),
+    rowHeight:
+      typeof height === 'number' && Number.isFinite(height)
+        ? Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, Math.round(height)))
+        : DEFAULT_VIEW.rowHeight,
     fontSize: oneOf(source.fontSize, FONT_SIZES, DEFAULT_VIEW.fontSize),
     lines: oneOf(source.lines, GRID_LINES, DEFAULT_VIEW.lines),
     align: oneOf(source.align, GRID_ALIGNS, DEFAULT_VIEW.align),
     rowNumbers: typeof source.rowNumbers === 'boolean' ? source.rowNumbers : true,
     checkboxes: typeof source.checkboxes === 'boolean' ? source.checkboxes : true,
+    font: oneOf(source.font, GRID_FONTS, DEFAULT_VIEW.font),
+    showTime: typeof source.showTime === 'boolean' ? source.showTime : true,
+    draggableColumns:
+      typeof source.draggableColumns === 'boolean' ? source.draggableColumns : false,
   };
 }
 
@@ -54,11 +80,14 @@ export function headerHeight(view: GridView): number {
   return Math.round(view.fontSize * 3.3);
 }
 
-/** Width of the gutter before the first column: check box and/or row number. */
+const EXPANDER_WIDTH = 24;
+
+/** Width of the gutter before the first column: arrow, check box and/or row number. */
 export function gutterWidth(view: GridView, digits: number): number {
   const number = view.rowNumbers ? 14 + Math.max(2, digits) * 9 : 0;
   const box = view.checkboxes ? 34 : 0;
-  return Math.max(16, box + number + 10);
+  // The arrow that opens a row's details is always there.
+  return Math.max(16, EXPANDER_WIDTH + box + number + 10);
 }
 
 export function loadView(storage: Pick<Storage, 'getItem'> | undefined): GridView {

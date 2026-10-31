@@ -8,6 +8,8 @@ export interface ColumnView {
   readonly hidden: readonly number[];
   /** Pinned columns, in the order they were pinned. */
   readonly pinned: readonly number[];
+  /** The order the user dragged the columns into; the result's own order when absent. */
+  readonly order?: readonly number[];
 }
 
 export const NO_VIEW: ColumnView = { hidden: [], pinned: [] };
@@ -19,13 +21,49 @@ export interface DisplayOrder {
   readonly pinnedCount: number;
 }
 
+/** The dragged order made complete: unknown or repeated entries dropped, missing ones appended. */
+function baseOrder(columnCount: number, order: readonly number[] | undefined): number[] {
+  const count = Math.max(0, columnCount);
+  const seen = new Set<number>();
+  const result: number[] = [];
+  for (const index of order ?? []) {
+    if (Number.isInteger(index) && index >= 0 && index < count && !seen.has(index)) {
+      seen.add(index);
+      result.push(index);
+    }
+  }
+  for (let index = 0; index < count; index += 1) {
+    if (!seen.has(index)) {
+      result.push(index);
+    }
+  }
+  return result;
+}
+
+/** Moves a column to stand just before another one (or last when `before` is undefined). */
+export function moveColumn(
+  view: ColumnView,
+  columnCount: number,
+  from: number,
+  before: number | undefined,
+): ColumnView {
+  const order = baseOrder(columnCount, view.order);
+  if (!order.includes(from) || from === before) {
+    return view;
+  }
+  const without = order.filter((index) => index !== from);
+  const at = before === undefined ? without.length : without.indexOf(before);
+  without.splice(at === -1 ? without.length : at, 0, from);
+  return { ...view, order: without };
+}
+
 export function displayOrder(columnCount: number, view: ColumnView): DisplayOrder {
   const hidden = new Set(view.hidden);
   const valid = (index: number): boolean =>
     Number.isInteger(index) && index >= 0 && index < columnCount && !hidden.has(index);
   const pinned = [...new Set(view.pinned)].filter(valid);
   const pinnedSet = new Set(pinned);
-  const rest = Array.from({ length: Math.max(0, columnCount) }, (_, index) => index).filter(
+  const rest = baseOrder(columnCount, view.order).filter(
     (index) => valid(index) && !pinnedSet.has(index),
   );
   return { order: [...pinned, ...rest], pinnedCount: pinned.length };
@@ -67,7 +105,11 @@ export function showAll(view: ColumnView): ColumnView {
 
 /** True when the view differs from "everything, in order". */
 export function isCustomized(view: ColumnView): boolean {
-  return view.hidden.length > 0 || view.pinned.length > 0;
+  return (
+    view.hidden.length > 0 ||
+    view.pinned.length > 0 ||
+    view.order?.some((index, at) => index !== at) === true
+  );
 }
 
 /**

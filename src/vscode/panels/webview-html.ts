@@ -53,6 +53,7 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'server-monitor': 'pulse',
   'table-designer': 'symbol-structure',
   'test-data': 'beaker',
+  tools: 'tools',
   'user-admin': 'organization',
 };
 

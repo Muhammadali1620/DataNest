@@ -957,4 +957,94 @@ describe('ResultStore', () => {
       expect((await second)?.total).toBe(111);
     });
   });
+
+  describe('placement', () => {
+    const ids = (store: ResultStore): string[] => store.forDocument(DOC).map((item) => item.id);
+
+    it('appends without a placement', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result());
+      expect(ids(store)).toEqual([a.id, b.id]);
+    });
+
+    it('replaces a result in its own place and tells who took it', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result());
+      const c = store.add(result());
+      const fresh = store.add(result({ statement: 'SELECT 2' }), { replace: b.id });
+      expect(ids(store)).toEqual([a.id, fresh.id, c.id]);
+      expect(store.get(b.id)).toBeUndefined();
+      expect(store.successorOf(b.id)).toBe(fresh.id);
+      expect(store.successorOf(a.id)).toBeUndefined();
+    });
+
+    it('puts the rest of a run after the first and keeps the order', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result());
+      const first = store.add(result(), { replace: a.id });
+      const second = store.add(result(), { after: first.id });
+      expect(ids(store)).toEqual([first.id, second.id, b.id]);
+    });
+
+    it('appends after an unknown anchor and for an unknown replaced id', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result(), { after: 'result-404' });
+      const c = store.add(result(), { replace: 'result-404' });
+      expect(ids(store)).toEqual([a.id, b.id, c.id]);
+    });
+
+    it('replaces every result of the document, and only that document', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result());
+      const other = store.add(result({ documentUri: 'untitled:Other.sql' }));
+      const fresh = store.add(result(), { replaceAll: true });
+      expect(ids(store)).toEqual([fresh.id]);
+      expect(store.get(a.id)).toBeUndefined();
+      expect(store.successorOf(a.id)).toBe(fresh.id);
+      expect(store.successorOf(b.id)).toBe(fresh.id);
+      expect(store.get(other.id)).toBeDefined();
+    });
+
+    it('notifies the document once for a replacement', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const seen = vi.fn();
+      store.onDidChange(seen);
+      store.add(result(), { replace: a.id });
+      expect(seen).toHaveBeenCalledTimes(1);
+      expect(seen).toHaveBeenCalledWith(DOC);
+    });
+
+    it('never replaces a result with unsaved changes: the new one is appended', () => {
+      const store = new ResultStore();
+      const edited = store.add(
+        result({ rows: [[1, 'a']], columns: [{ name: 'id' }, { name: 'v' }] }),
+      );
+      store.setChange(edited.id, 0, 1, { kind: 'value', value: 'z' });
+      const plain = store.add(result());
+      const fresh = store.add(result(), { replaceAll: true });
+      expect(ids(store)).toEqual([edited.id, fresh.id]);
+      expect(store.get(plain.id)).toBeUndefined();
+      const again = store.add(result(), { replace: edited.id });
+      expect(ids(store)).toEqual([edited.id, fresh.id, again.id]);
+      expect(store.successorOf(edited.id)).toBeUndefined();
+    });
+
+    it('forgets old successors so the memory stays bounded', () => {
+      const store = new ResultStore();
+      let last = store.add(result());
+      const first = last.id;
+      for (let i = 0; i < 300; i++) {
+        last = store.add(result(), { replace: last.id });
+      }
+      expect(store.successorOf(first)).toBeUndefined();
+      expect(store.successorOf(last.id)).toBeUndefined();
+      expect(ids(store)).toEqual([last.id]);
+    });
+  });
 });

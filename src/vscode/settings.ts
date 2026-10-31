@@ -134,12 +134,19 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback
   return allowed.find((option) => option === value) ?? fallback;
 }
 
-/** The format settings; indentation comes from the editor, not from here. */
-export function readFormatStyle(indent: {
-  readonly tabSize: number;
-  readonly insertSpaces: boolean;
-}): FormatStyle {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+/**
+ * The format settings; indentation comes from the editor, not from here. They are
+ * resource-scoped, so they are read for the document being formatted: a folder of a
+ * multi-root workspace can have its own style.
+ */
+export function readFormatStyle(
+  indent: {
+    readonly tabSize: number;
+    readonly insertSpaces: boolean;
+  },
+  scope: vscode.ConfigurationScope | null,
+): FormatStyle {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION, scope);
   const cases = ['preserve', 'upper', 'lower'] as const;
   const width = config.get<number>(
     CONFIG_KEYS.formatExpressionWidth,

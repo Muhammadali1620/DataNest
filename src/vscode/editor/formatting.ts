@@ -53,7 +53,7 @@ export class SqlFormattingProvider
     const result = formatEdits(
       document.getText(),
       driver,
-      readFormatStyle(options),
+      readFormatStyle(options, document),
       this.deps.loadFormatter(),
       range,
     );

@@ -43,4 +43,38 @@ describe('formatting', () => {
     const text = await format('DELIMITER //\nselect 1//\nDELIMITER ;\nselect (;\n');
     assert.equal(text, 'DELIMITER //\nSELECT\n  1//\nDELIMITER ;\nselect (;\n');
   });
+
+  it('reads the format settings of the folder the document lives in', async () => {
+    // The format settings are resource-scoped: they are read for the document, so a
+    // folder of a multi-root workspace can have its own style.
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, 'the e2e host has no workspace folder');
+    const file = vscode.Uri.joinPath(folder.uri, 'format-scope.sql');
+    await vscode.workspace.fs.writeFile(file, new TextEncoder().encode('SELECT a FROM t;'));
+    const config = vscode.workspace.getConfiguration('datanest.format', file);
+    await config.update('keywordCase', 'lower', vscode.ConfigurationTarget.WorkspaceFolder);
+    try {
+      const document = await vscode.workspace.openTextDocument(file);
+      const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>(
+        'vscode.executeFormatDocumentProvider',
+        document.uri,
+        { tabSize: 2, insertSpaces: true },
+      );
+      assert.ok(edits, 'no formatting provider answered');
+      // Applied to the text, not the document: a dirty file would ask to be saved.
+      let text = document.getText();
+      for (const edit of [...edits].sort(
+        (a, b) => document.offsetAt(b.range.start) - document.offsetAt(a.range.start),
+      )) {
+        text =
+          text.slice(0, document.offsetAt(edit.range.start)) +
+          edit.newText +
+          text.slice(document.offsetAt(edit.range.end));
+      }
+      assert.equal(text, 'select\n  a\nfrom\n  t;');
+    } finally {
+      await config.update('keywordCase', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      await vscode.workspace.fs.delete(file);
+    }
+  });
 });

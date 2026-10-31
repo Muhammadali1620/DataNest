@@ -36,7 +36,9 @@ interface Manifest {
       'view/item/context': MenuEntry[];
       'editor/title': MenuEntry[];
       'editor/context': MenuEntry[];
-    };
+    } & Record<string, MenuEntry[]>;
+    /** Submenus of the tree (V11.6); their entries live under menus[id]. */
+    submenus: { id: string; label: string }[];
     configuration: { properties: Record<string, ConfigProperty> };
   };
 }
@@ -98,7 +100,27 @@ describe('command palette', () => {
 
 describe('tree menus', () => {
   const title = contributes.menus['view/title'];
-  const items = contributes.menus['view/item/context'];
+  /** A submenu entry of the tree, as written: `{ submenu, when, group }` without a command. */
+  interface SubmenuEntry {
+    submenu?: string;
+    when: string;
+  }
+  const entries = contributes.menus['view/item/context'] as (MenuEntry & SubmenuEntry)[];
+  // The commands of the tree's context menu: its own and those of its submenus.
+  const items: MenuEntry[] = [
+    ...entries.filter((entry) => entry.submenu === undefined),
+    ...contributes.submenus.flatMap((submenu) => contributes.menus[submenu.id] ?? []),
+  ];
+  const submenuEntries = entries.filter((entry) => entry.submenu !== undefined);
+
+  it('opens only submenus the manifest declares, each from the tree', () => {
+    const declared = new Set(contributes.submenus.map((submenu) => submenu.id));
+    expect(submenuEntries.length).toBe(declared.size);
+    for (const entry of submenuEntries) {
+      expect(declared.has(entry.submenu ?? '')).toBe(true);
+      expect(entry.when).toContain(`view == ${CONNECTIONS_VIEW_ID}`);
+    }
+  });
   const contributed = new Set(contributes.commands.map((c) => c.command));
   const viewIds = new Set([CONNECTIONS_VIEW_ID]);
   const contextValues = new Set<string>(Object.values(TREE_CONTEXT));
@@ -120,7 +142,7 @@ describe('tree menus', () => {
   });
 
   it('uses only context values the tree actually sets', () => {
-    for (const entry of items) {
+    for (const entry of [...items, ...submenuEntries]) {
       const used = entry.when.match(/viewItem == ([\w.]+)/g) ?? [];
       expect(used.length).toBeGreaterThan(0);
       for (const value of used) {

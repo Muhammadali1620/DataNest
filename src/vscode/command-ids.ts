@@ -99,6 +99,9 @@ export const COMMAND_IDS = {
   transferTables: 'datanest.table.transfer',
   duplicateTable: 'datanest.table.duplicate',
   openSqliteFile: 'datanest.connections.openSqliteFile',
+  findData: 'datanest.data.search',
+  documentSchema: 'datanest.schema.document',
+  openTerminal: 'datanest.connections.openTerminal',
   filterTables: 'datanest.tree.filterTables',
   /** Fills a table with generated rows (V5.5). */
   generateData: 'datanest.table.generateData',

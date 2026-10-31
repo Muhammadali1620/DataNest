@@ -103,6 +103,12 @@
         "category": "DataNest"
       },
       {
+        "command": "datanest.connections.openTerminal",
+        "title": "%commands.connections.openTerminal.title%",
+        "category": "DataNest",
+        "icon": "$(terminal)"
+      },
+      {
         "command": "datanest.connections.import",
         "title": "%commands.connections.import.title%",
         "category": "DataNest"
@@ -349,6 +355,17 @@
       {
         "command": "datanest.table.duplicate",
         "title": "%commands.table.duplicate.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.data.search",
+        "title": "%commands.data.search.title%",
+        "category": "DataNest",
+        "icon": "$(search)"
+      },
+      {
+        "command": "datanest.schema.document",
+        "title": "%commands.schema.document.title%",
         "category": "DataNest"
       },
       {
@@ -1069,6 +1086,16 @@
           "group": "4_structure@5"
         },
         {
+          "command": "datanest.data.search",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables)",
+          "group": "4_structure@5"
+        },
+        {
+          "command": "datanest.schema.document",
+          "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
+          "group": "4_structure@5"
+        },
+        {
           "command": "datanest.schema.compare",
           "when": "view == datanest.connections && (viewItem == datanest.connection.connected || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema)",
           "group": "4_structure@6"
@@ -1322,6 +1349,11 @@
           "command": "datanest.tree.filterTables",
           "when": "view == datanest.connections && (viewItem == datanest.group.tables || viewItem == datanest.group.views)",
           "group": "1_state@4"
+        },
+        {
+          "command": "datanest.connections.openTerminal",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.redisConnection || viewItem == datanest.redisConnection.connected || viewItem == datanest.projectRedisConnection || viewItem == datanest.projectRedisConnection.connected || viewItem == datanest.mongoConnection || viewItem == datanest.mongoConnection.connected || viewItem == datanest.projectMongoConnection || viewItem == datanest.projectMongoConnection.connected)",
+          "group": "0_query@5"
         }
       ],
       "editor/title": [

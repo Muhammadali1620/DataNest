@@ -147,5 +147,8 @@
   "commands.table.duplicate.title": "Дублировать таблицу…",
   "commands.connections.openSqliteFile.title": "Открыть базу SQLite…",
   "commands.tree.filterTables.title": "Фильтр…",
-  "configuration.connections.sync.description": "Передавать список подключений (с папками и настройками) между вашими компьютерами через **Settings Sync** редактора. Пароли не передаются: каждый компьютер хранит свои в защищённом хранилище, введите их один раз на каждом. Пути к файлам SQLite и ключам SSH должны существовать на каждом компьютере."
+  "configuration.connections.sync.description": "Передавать список подключений (с папками и настройками) между вашими компьютерами через **Settings Sync** редактора. Пароли не передаются: каждый компьютер хранит свои в защищённом хранилище, введите их один раз на каждом. Пути к файлам SQLite и ключам SSH должны существовать на каждом компьютере.",
+  "commands.data.search.title": "Найти данные…",
+  "commands.schema.document.title": "Документировать базу…",
+  "commands.connections.openTerminal.title": "Открыть в терминале"
 }

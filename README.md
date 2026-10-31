@@ -122,6 +122,8 @@ or from the `.vsix` attached to a [release](https://github.com/Muhammadali1620/D
   they will be stored, batches, and a report of every row that did not fit.
 - Export a whole table to CSV, JSON, SQL, Markdown or Excel straight from the server,
   however large it is — not just the rows on screen.
+- Find a text in every table of a database, document a database as Markdown, and open the
+  database's own command-line client in a terminal.
 - Generate test data that fits each column: names, emails, cities, prices, dates, keys of
   the referenced table, with a seed that makes it repeatable.
 - Copy tables to another connection, even another database system: types, defaults and

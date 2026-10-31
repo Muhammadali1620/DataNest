@@ -38,6 +38,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - `datanest.connections.sync` lets the connection list travel with Settings Sync; passwords
   stay on each computer.
 
+- **Find Data…**: a text in every text column of every table of a database or schema, by
+  table and column; a hit opens the table filtered to its rows.
+- **Document Database…**: tables, columns, keys, indexes, references and definitions as one
+  Markdown document.
+- **Open in Terminal**: the database's command-line client (`mysql`, `psql`, `sqlite3`,
+  `sqlcmd`, `redis-cli`, `mongosh`, …), through the tunnel or proxy, the password in its
+  environment variable.
+
 ### Changed
 
 - Copying tables between schemas of one database now runs on one session and lets the

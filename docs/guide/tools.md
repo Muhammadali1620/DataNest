@@ -54,6 +54,34 @@ privileges by level and object. Create, change and drop accounts and roles, set 
 lock and unlock, grant and revoke — every change is shown as SQL before it runs, and a
 statement with a password is never written to an editor.
 
+## Finding data
+
+**Find Data…** on a connection, database, schema or **Tables** folder looks for a text in
+every text column of every table, without regard to case — `%`, `_` and the like are taken
+as themselves. Each table is asked once, so you see how many rows hold the text and in
+which columns. Pick a table to open it filtered to exactly those rows. Numbers, dates,
+binary and JSON columns are not searched; tables the server does not let you read are
+listed in the log. **Cancel** stops after the table being read.
+
+## Documenting a database
+
+**Document Database…** on a connection, database or schema writes a Markdown document:
+every table with its columns (type, `NULL`, default, keys, comment), indexes, foreign keys
+— linked to the tables they point at — and the tables that point at it, then the
+definitions of views, routines, triggers and sequences. It opens as a new file to read,
+change and save.
+
+## Command-line clients
+
+**Open in Terminal** on a connection opens the database's own client in a terminal of
+the editor: `mysql` (or `mariadb`), `psql`, `sqlite3`, `sqlcmd`, `clickhouse client`,
+SQLcl or SQL\*Plus, `redis-cli`, `mongosh` — the first one installed on the `PATH`. It
+connects where DataNest does, through the SSH tunnel or proxy when there is one, which
+stays open as long as the terminal. The password goes to the client in its environment
+variable (`MYSQL_PWD`, `PGPASSWORD`, …), never on the command line; Oracle's clients and
+`mongosh` ask for it themselves. `clickhouse client` speaks the native protocol, on the
+server's default port.
+
 ## Charts
 
 See [Results and editing](results.md#charts).

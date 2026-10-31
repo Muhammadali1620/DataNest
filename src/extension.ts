@@ -361,6 +361,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       transactions,
       transactionModes,
       variableMemory,
+      openFiltered: openRelated,
       redisKeys,
       treeView,
       redisKeySeparator: () => redisKeySettings.separator(),

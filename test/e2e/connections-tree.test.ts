@@ -28,6 +28,9 @@ describe('connections view', () => {
       'datanest.table.duplicate',
       'datanest.tree.filterTables',
       'datanest.connections.openSqliteFile',
+      'datanest.data.search',
+      'datanest.schema.document',
+      'datanest.connections.openTerminal',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }

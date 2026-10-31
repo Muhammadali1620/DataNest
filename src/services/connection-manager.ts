@@ -740,6 +740,20 @@ export class ConnectionManager implements Disposable {
     }
   }
 
+  /**
+   * Where a program outside the extension reaches the connection's server (V10.2.6): a
+   * local port of its SSH tunnel or proxy, held until `release`; nothing for a direct one.
+   */
+  async leaseEndpoint(connectionId: string): Promise<{
+    readonly endpoint?: { readonly host: string; readonly port: number };
+    release(): Promise<void>;
+  }> {
+    const lease = await this.leaseTunnel(this.configOf(connectionId));
+    return lease === undefined
+      ? { release: () => Promise.resolve() }
+      : { endpoint: { host: '127.0.0.1', port: lease.port }, release: () => lease.release() };
+  }
+
   private async leaseTunnel(config: ConnectionConfig): Promise<TunnelLease | undefined> {
     const spec = tunnelSpecOf(
       config,

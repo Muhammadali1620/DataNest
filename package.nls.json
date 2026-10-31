@@ -147,5 +147,8 @@
   "commands.table.duplicate.title": "Duplicate Table…",
   "commands.connections.openSqliteFile.title": "Open SQLite Database…",
   "commands.tree.filterTables.title": "Filter…",
-  "configuration.connections.sync.description": "Share your connection list (with its folders and settings) between your computers through the editor's **Settings Sync**. Passwords never travel: each computer keeps its own in its secret storage, so type them once on each. Paths to SQLite files and SSH keys must exist on each computer."
+  "configuration.connections.sync.description": "Share your connection list (with its folders and settings) between your computers through the editor's **Settings Sync**. Passwords never travel: each computer keeps its own in its secret storage, so type them once on each. Paths to SQLite files and SSH keys must exist on each computer.",
+  "commands.data.search.title": "Find Data…",
+  "commands.schema.document.title": "Document Database…",
+  "commands.connections.openTerminal.title": "Open in Terminal"
 }

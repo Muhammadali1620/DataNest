@@ -2,7 +2,8 @@ import { release } from 'node:os';
 import * as vscode from 'vscode';
 import { bugReportUrl } from '../services/issue-report';
 import type { Logger } from '../core/logging/logger';
-import { ConnectionManager } from '../services/connection-manager';
+import { ConnectionManager, type SessionTarget } from '../services/connection-manager';
+import type { TableFilter } from '../shared/table-filter';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
@@ -20,7 +21,7 @@ import type { QueryRunner } from '../services/query-runner';
 import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/result-export';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode, type TreeNode } from './tree/nodes';
 import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
-import type { ObjectRef } from '../core/model/objects';
+import type { ObjectRef, TableRef } from '../core/model/objects';
 import { objectEditHandlers, type ObjectEditRegistry } from './editor/object-edit';
 import type { ErrorDiagnostics } from './editor/error-diagnostics';
 import { SchemaActions } from '../services/schema-actions';
@@ -43,6 +44,7 @@ import { scriptCommandHandlers } from './script-commands';
 import { dumpCommandHandlers } from './dump-commands';
 import { tableTransferCommandHandlers } from './transfer-commands';
 import { openSqliteFileCommand } from './sqlite-file-commands';
+import { toolCommandHandlers } from './tool-commands';
 import { TableTransferService } from '../services/transfer/table-transfer';
 import { importCommandHandlers } from './import-commands';
 import { DataImportPanel } from './panels/data-import-panel';
@@ -126,6 +128,12 @@ export interface CommandDeps {
   readonly transactionModes: TransactionModes;
   /** The values last given to query variables (V10.2.1). */
   readonly variableMemory: QueryVariableMemory;
+  /** Opens a table page by page with a filter (V10.2.6: a hit of Find Data). */
+  readonly openFiltered: (
+    target: SessionTarget,
+    table: TableRef,
+    filter: TableFilter,
+  ) => Promise<void>;
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys: RedisKeyBrowser;
   /** The Connections view, to reveal a key found by a search. */
@@ -172,6 +180,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     cache: deps.cache,
     dumper: new SqlDumper({ manager: deps.manager, logger: deps.logger }),
     logger: deps.logger,
+  });
+  const tools = toolCommandHandlers({
+    store: deps.store,
+    manager: deps.manager,
+    logger: deps.logger,
+    openFiltered: deps.openFiltered,
   });
   const transfers = tableTransferCommandHandlers({
     store: deps.store,
@@ -611,6 +625,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.transferTables]: (target, ...rest: unknown[]) =>
       transfers.transfer(target, selectionOf(rest[0])),
     [COMMAND_IDS.duplicateTable]: (target) => transfers.duplicate(target),
+    [COMMAND_IDS.findData]: (target) => tools.findData(target),
+    [COMMAND_IDS.documentSchema]: (target) => tools.documentSchema(target),
+    [COMMAND_IDS.openTerminal]: (target) => tools.openTerminal(target),
     [COMMAND_IDS.openSqliteFile]: openSqliteFileCommand({
       store: deps.store,
       manager: deps.manager,

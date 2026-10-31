@@ -3,6 +3,7 @@
   import type { CodiconName } from '../lib/codicons';
   import Icon from './Icon.svelte';
   import type { MenuItem } from './menu';
+  import type { Tone } from './tone';
 
   interface Props {
     items: readonly MenuItem<Id>[];
@@ -18,6 +19,8 @@
     /** Which edge of the button the menu lines up with. */
     align?: 'start' | 'end';
     testid?: string;
+    /** The button's colour, as on `IconButton`. */
+    tone?: Tone | undefined;
   }
 
   const {
@@ -30,6 +33,7 @@
     disabled = false,
     align = 'end',
     testid,
+    tone,
   }: Props = $props();
 
   const menuId = $props.id();
@@ -144,7 +148,7 @@
 <button
   bind:this={button}
   type="button"
-  class="icon-button menu-button"
+  class="icon-button menu-button {tone === undefined ? '' : `tone-${tone}`}"
   class:labelled={text !== undefined}
   aria-label={text === undefined ? label : undefined}
   aria-haspopup="menu"

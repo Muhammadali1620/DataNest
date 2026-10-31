@@ -591,6 +591,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,
     [COMMAND_IDS.copyName]: treeCommands.copyName,
     [COMMAND_IDS.openTable]: treeCommands.openTable,
+    [COMMAND_IDS.clickTable]: treeCommands.clickTable,
     [COMMAND_IDS.showDefinition]: treeCommands.showDefinition,
     [COMMAND_IDS.createDatabase]: schemaCommands.createDatabase,
     [COMMAND_IDS.dropDatabase]: schemaCommands.dropDatabase,

@@ -66,6 +66,8 @@ export const COMMAND_IDS = {
   showResults: 'datanest.results.show',
   /** Opens a table or view from the tree as a paged result. */
   openTable: 'datanest.table.open',
+  /** What a click on a table in the tree runs: the second click of a pair opens it. */
+  clickTable: 'datanest.table.click',
   /** Opens the DDL of a tree object in a new SQL editor. */
   showDefinition: 'datanest.object.showDefinition',
   // Structure changes from the tree; each shows its SQL before it runs.

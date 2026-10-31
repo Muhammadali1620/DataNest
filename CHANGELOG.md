@@ -3,10 +3,14 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] - 2026-10-31
 
 ### Changed
 
+- Open a table from the tree with a double click; the button next to its name is gone.
+- Brighter, rounder look: icon buttons in results have their own colours and rounded
+  shapes, result tabs and the search box are pills, column type icons and the tree's
+  icons are coloured by kind.
 - A new look for every page, made to feel like part of the editor in any theme: the
   editor's icons, toolbars of icon buttons with tooltips, menus you can work with the
   keyboard, cards, badges and notices, check boxes like the editor's own, and short

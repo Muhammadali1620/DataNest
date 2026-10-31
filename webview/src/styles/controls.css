@@ -176,13 +176,13 @@ input[type='radio']:disabled {
   gap: 4px;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 4px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
   color: var(--vscode-icon-foreground, var(--vscode-foreground));
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 8px;
   font-family: inherit;
   font-size: inherit;
   white-space: nowrap;
@@ -219,11 +219,68 @@ input[type='radio']:disabled {
   padding: 0 6px;
 }
 
-/* A row of icon buttons with optional separators. */
+/*
+ * Colour tones (V12): an icon button says what it does by its colour and shape, so the
+ * toolbar needs no words. Colours come from the theme's chart palette and stay readable
+ * in every theme; the tint is a mix, never a fixed value.
+ */
+.tone-blue {
+  --tone: var(--vscode-charts-blue, #3794ff);
+}
+
+.tone-green {
+  --tone: var(--vscode-charts-green, #89d185);
+}
+
+.tone-orange {
+  --tone: var(--vscode-charts-orange, #d18616);
+}
+
+.tone-red {
+  --tone: var(--vscode-charts-red, #f14c4c);
+}
+
+.tone-purple {
+  --tone: var(--vscode-charts-purple, #b180d7);
+}
+
+.tone-yellow {
+  --tone: var(--vscode-charts-yellow, #cca700);
+}
+
+.tone-teal {
+  --tone: var(--vscode-terminal-ansiCyan, #29b8db);
+}
+
+.tone-pink {
+  --tone: var(--vscode-terminal-ansiMagenta, #d670d6);
+}
+
+.icon-button[class*='tone-'] {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.icon-button[class*='tone-']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+.icon-button[class*='tone-']:active:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 38%, transparent);
+}
+
+.icon-button[class*='tone-'][aria-pressed='true'],
+.icon-button[class*='tone-'][aria-expanded='true'] {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 34%, transparent);
+  border-color: var(--tone);
+}
+
+/* A row of icon buttons with optional separators, in one rounded capsule. */
 .toolbar {
   display: flex;
   flex: none;
-  gap: 2px;
+  gap: 4px;
   align-items: center;
   min-width: 0;
 }

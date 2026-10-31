@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { treeCommandHandlers } from '../../../../src/vscode/tree/tree-commands';
+import { DoubleClickDetector } from '../../../../src/vscode/tree/double-click';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
 
 const NO_TARGET = 'Pick a connection in the DataNest view first';
@@ -213,6 +214,78 @@ describe('copyName', () => {
     await harness.handlers.copyName();
     await harness.handlers.copyName('c1');
     expect(harness.writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe('clickTable', () => {
+  function clicking() {
+    let now = 1000;
+    const openTable = vi.fn(() => Promise.resolve());
+    const handlers = treeCommandHandlers({
+      manager: { connectAny: () => Promise.resolve(), disconnect: () => Promise.resolve() },
+      tree: { refresh: vi.fn() },
+      cache: { invalidate: vi.fn() },
+      openTable,
+      showDefinition: () => Promise.resolve(),
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+      doubleClick: new DoubleClickDetector(() => now, 500),
+    });
+    return {
+      handlers,
+      openTable,
+      wait: (ms: number) => {
+        now += ms;
+      },
+    };
+  }
+
+  it('does not open on the first click', async () => {
+    const { handlers, openTable } = clicking();
+    await handlers.clickTable(tableNode);
+    expect(openTable).not.toHaveBeenCalled();
+  });
+
+  it('opens on the second click within the window', async () => {
+    const { handlers, openTable, wait } = clicking();
+    await handlers.clickTable(tableNode);
+    wait(200);
+    await handlers.clickTable(tableNode);
+    expect(openTable).toHaveBeenCalledExactlyOnceWith(tableNode);
+  });
+
+  it('treats slow clicks as two single ones', async () => {
+    const { handlers, openTable, wait } = clicking();
+    await handlers.clickTable(tableNode);
+    wait(800);
+    await handlers.clickTable(tableNode);
+    expect(openTable).not.toHaveBeenCalled();
+  });
+
+  it('does not pair clicks on different tables', async () => {
+    const { handlers, openTable, wait } = clicking();
+    await handlers.clickTable(tableNode);
+    wait(100);
+    await handlers.clickTable({ ...tableNode, name: 'other' });
+    expect(openTable).not.toHaveBeenCalled();
+  });
+
+  it('starts a new pair after a double click', async () => {
+    const { handlers, openTable, wait } = clicking();
+    await handlers.clickTable(tableNode);
+    await handlers.clickTable(tableNode);
+    wait(100);
+    await handlers.clickTable(tableNode);
+    expect(openTable).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores nodes that are not tables and empty targets', async () => {
+    const { handlers, openTable } = clicking();
+    await handlers.clickTable(connectionNode);
+    await handlers.clickTable(connectionNode);
+    await handlers.clickTable();
+    await handlers.clickTable('c1');
+    expect(openTable).not.toHaveBeenCalled();
   });
 });
 

@@ -4,10 +4,12 @@
 import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { ConnectionManager } from '../../services/connection-manager';
+import { DoubleClickDetector } from './double-click';
 import {
   connectionIdOf,
   isTreeNode,
   nameOf,
+  nodeId,
   objectRefOf,
   type TableNode,
   type TreeNode,
@@ -43,10 +45,12 @@ export interface TreeCommandDeps {
   readonly reloadProjects?: () => Promise<void>;
   /** Asked before disconnecting; false keeps the connection (open transactions, V4.8). */
   readonly confirmDisconnect?: (connectionId: string) => Promise<boolean>;
+  /** Tells a double click from two single ones; tests pass a clock they control. */
+  readonly doubleClick?: DoubleClickDetector;
 }
 
 export type TreeCommandName =
-  'connect' | 'disconnect' | 'refresh' | 'copyName' | 'openTable' | 'showDefinition';
+  'connect' | 'disconnect' | 'refresh' | 'copyName' | 'openTable' | 'clickTable' | 'showDefinition';
 
 /** What a tree command receives: the clicked node, a bare id, or nothing. */
 export type CommandTarget = TreeNode | string | undefined;
@@ -54,6 +58,7 @@ export type CommandTarget = TreeNode | string | undefined;
 export function treeCommandHandlers(
   deps: TreeCommandDeps,
 ): Record<TreeCommandName, (target?: CommandTarget) => unknown> {
+  const doubleClick = deps.doubleClick ?? new DoubleClickDetector();
   const requireConnectionId = (target: CommandTarget): string => {
     const connectionId = connectionIdOf(target);
     if (connectionId === undefined) {
@@ -98,6 +103,14 @@ export function treeCommandHandlers(
     /** Opens a table or a view; other nodes are ignored. */
     openTable: async (target?: CommandTarget) => {
       if (isTreeNode(target) && target.kind === 'table') {
+        await deps.openTable(target);
+      }
+      return undefined;
+    },
+
+    /** A click on a table: the first only expands the row, the second opens the table. */
+    clickTable: async (target?: CommandTarget) => {
+      if (isTreeNode(target) && target.kind === 'table' && doubleClick.click(nodeId(target))) {
         await deps.openTable(target);
       }
       return undefined;

@@ -2,6 +2,7 @@
   import type { HTMLButtonAttributes } from 'svelte/elements';
   import type { CodiconName } from '../lib/codicons';
   import Icon from './Icon.svelte';
+  import type { Tone } from './tone';
 
   interface Props extends Omit<HTMLButtonAttributes, 'children'> {
     icon: CodiconName;
@@ -14,6 +15,8 @@
     /** A longer tooltip than the name, e.g. with the key that does the same. */
     hint?: string | undefined;
     spin?: boolean;
+    /** The button's colour: its icon and tint, so the action reads without words. */
+    tone?: Tone | undefined;
     /** A small count drawn on the button, e.g. how many filters are on; 0 shows none. */
     count?: number | undefined;
     element?: HTMLButtonElement | undefined;
@@ -29,6 +32,7 @@
     pressed,
     hint,
     spin = false,
+    tone,
     count,
     element = $bindable(),
     class: extra = '',
@@ -40,7 +44,7 @@
 <button
   bind:this={element}
   type="button"
-  class="icon-button {extra}"
+  class="icon-button {tone === undefined ? '' : `tone-${tone}`} {extra}"
   class:labelled={text !== undefined}
   aria-label={text === undefined ? label : undefined}
   aria-pressed={pressed}

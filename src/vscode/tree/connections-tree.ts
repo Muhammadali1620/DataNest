@@ -11,6 +11,7 @@ import {
   describeTunnel,
   driverFamily,
 } from '../../shared/connection';
+import { COMMAND_IDS } from '../command-ids';
 import { affectsDataNest } from '../settings';
 import { connectionUri, tagText } from './connection-decorations';
 import { tagsOf } from './connection-look';
@@ -232,6 +233,12 @@ export class ConnectionsTreeProvider
           node.tableKind === 'view' ? TREE_CONTEXT.view : TREE_CONTEXT.table,
         );
         item.tooltip = tableTooltip(qualifiedName(node.scope, node.name), node.stats);
+        // A double click opens the table's rows; the first click only expands the row.
+        item.command = {
+          command: COMMAND_IDS.clickTable,
+          title: vscode.l10n.t('Open Table'),
+          arguments: [node],
+        };
         if (node.stats?.rows !== undefined && node.tableKind === 'table') {
           item.description = vscode.l10n.t(
             '≈ {0} rows',
@@ -245,7 +252,7 @@ export class ConnectionsTreeProvider
         item.id = nodeId(node);
         item.description = describeColumn(node.column);
         item.tooltip = `${node.column.name} — ${describeColumn(node.column)}`;
-        item.iconPath = new vscode.ThemeIcon(node.column.primaryKey ? 'key' : 'symbol-field');
+        item.iconPath = coloredIcon(node.column.primaryKey ? 'key' : 'symbol-field');
         item.contextValue = TREE_CONTEXT.column;
         return item;
       }
@@ -255,7 +262,7 @@ export class ConnectionsTreeProvider
           vscode.TreeItemCollapsibleState.Collapsed,
         );
         item.id = nodeId(node);
-        item.iconPath = new vscode.ThemeIcon('database');
+        item.iconPath = coloredIcon('database');
         item.contextValue = TREE_CONTEXT.redisDatabase;
         const pattern = this.deps.redisKeys?.patternOf(node.connectionId, node.database);
         const count = this.model.redisKeysText(node.keys);
@@ -473,9 +480,33 @@ function expandable(
 ): vscode.TreeItem {
   const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
   item.id = nodeId(node);
-  item.iconPath = new vscode.ThemeIcon(icon);
+  item.iconPath = coloredIcon(icon);
   item.contextValue = contextValue;
   return item;
+}
+
+/** Each kind of object has its own colour, so the tree reads by colour before text. */
+const ICON_COLORS: Readonly<Record<string, string>> = {
+  table: 'charts.blue',
+  'list-flat': 'charts.blue',
+  eye: 'charts.purple',
+  database: 'charts.orange',
+  key: 'charts.yellow',
+  'symbol-field': 'charts.foreground',
+  'list-ordered': 'charts.green',
+  references: 'terminal.ansiMagenta',
+  zap: 'charts.yellow',
+  'symbol-function': 'terminal.ansiCyan',
+  'symbol-method': 'terminal.ansiCyan',
+  'symbol-number': 'charts.green',
+  calendar: 'charts.red',
+};
+
+function coloredIcon(icon: string): vscode.ThemeIcon {
+  const color = ICON_COLORS[icon];
+  return color === undefined
+    ? new vscode.ThemeIcon(icon)
+    : new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
 }
 
 const GROUP_ICONS: Readonly<Record<ObjectGroup, string>> = {
@@ -540,7 +571,7 @@ function objectItem(node: ObjectNode): vscode.TreeItem {
 function leaf(node: TreeNode, label: string, icon: string): vscode.TreeItem {
   const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
   item.id = nodeId(node);
-  item.iconPath = new vscode.ThemeIcon(icon);
+  item.iconPath = coloredIcon(icon);
   return item;
 }
 

@@ -421,6 +421,7 @@
   "The first field; Redis keeps no empty {0}": "Первое поле: пустой {0} Redis не хранит",
   "The value of \"{0}\"": "Значение «{0}»",
   "Open Key": "Открыть ключ",
+  "Open Table": "Открыть таблицу",
   "({0} more lines)": "(ещё строк: {0})",
   "Redis: {0} db{1}": "Redis: {0} db{1}",
   "Run": "Выполнить",

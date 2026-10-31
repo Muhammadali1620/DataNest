@@ -783,10 +783,16 @@ import type { RowAction } from '../../../../src/shared/row-action';
             selectTab(tab.id);
           }}
         >
-          <Icon
-            name={tab.error !== undefined ? 'error' : tab.affectedRows !== undefined ? 'check' : 'table'}
-            size={14}
-          /><span class="tab-title">{tab.title}</span>
+          <span
+            class="tab-icon"
+            class:ok={tab.error === undefined && tab.affectedRows !== undefined}
+            class:fail={tab.error !== undefined}
+          >
+            <Icon
+              name={tab.error !== undefined ? 'error' : tab.affectedRows !== undefined ? 'check' : 'table'}
+              size={14}
+            />
+          </span><span class="tab-title">{tab.title}</span>
         </button>
       {/each}
     </div>
@@ -845,6 +851,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             {@const count = activeCount(activeTab.filter)}
             <IconButton
               icon={count > 0 ? 'filter-filled' : 'filter'}
+              tone="orange"
               label={count > 0 ? t('filter.titleWithCount', count) : t('filter.title')}
               pressed={filterOpen}
               {count}
@@ -857,6 +864,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {#if hasColumns}
             <IconButton
               icon="list-selection"
+              tone="purple"
               label={columnView.hidden.length > 0
                 ? t('columns.titleHidden', columnView.hidden.length)
                 : t('columns.title')}
@@ -870,6 +878,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             />
             <IconButton
               icon="open-preview"
+              tone="teal"
               label={t('value.title')}
               hint={t('value.toggleHint')}
               pressed={valueOpen}
@@ -878,6 +887,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             />
             <IconButton
               icon="layout-sidebar-right"
+              tone="blue"
               label={t('record.title')}
               hint={t('record.toggleHint')}
               pressed={recordOpen}
@@ -889,6 +899,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           {#if gridState.running}
             <IconButton
               icon="debug-stop"
+              tone="red"
               label={t('grid.cancel')}
               onclick={() => {
                 rpc.emit('cancel', {});
@@ -898,6 +909,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             {#if hasColumns}
               <IconButton
                 icon="graph"
+                tone="pink"
                 label={t('grid.chart')}
                 hint={t('grid.chartHint')}
                 data-testid="chart"
@@ -907,6 +919,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
               />
               <MenuButton
                 icon="copy"
+                tone="blue"
                 label={t('grid.copyAs')}
                 hint={t('grid.copyAsHint')}
                 testid="copy-as"
@@ -922,6 +935,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             {/if}
             <MenuButton
               icon="export"
+              tone="green"
               label={t('grid.export')}
               hint={t('grid.exportHint')}
               testid="export"
@@ -1239,6 +1253,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           <div class="pager" data-testid="pager">
             <IconButton
               icon="chevron-left"
+              tone="teal"
               label={t('grid.previousPage')}
               disabled={page.offset === 0}
               onclick={() => {
@@ -1254,6 +1269,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             </span>
             <IconButton
               icon="chevron-right"
+              tone="teal"
               label={t('grid.nextPage')}
               disabled={!hasNextPage(page, activeTab.rowCount)}
               onclick={() => {
@@ -1318,6 +1334,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             </label>
             <IconButton
               icon="unfold"
+              tone="orange"
               label={t('grid.loadAll')}
               hint={t('grid.loadAllHint')}
               data-testid="load-all"
@@ -1360,17 +1377,17 @@ import type { RowAction } from '../../../../src/shared/row-action';
     flex: 1;
   }
 
-  /* Result tabs, drawn like the editor's panel titles. */
+  /* Result tabs: rounded pills; the active one is tinted with the accent colour. */
   .tabs {
     display: flex;
     flex: none;
-    gap: 2px;
-    align-items: stretch;
-    height: 32px;
-    padding: 0 8px;
+    gap: 6px;
+    align-items: center;
+    height: 40px;
+    padding: 0 10px;
     overflow-x: auto;
     border-bottom: 1px solid var(--dn-divider);
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
 
   .tab {
@@ -1379,30 +1396,52 @@ import type { RowAction } from '../../../../src/shared/row-action';
     gap: 6px;
     align-items: center;
     max-width: 280px;
-    padding: 0 10px;
+    height: 28px;
+    padding: 0 12px 0 10px;
     color: var(--vscode-panelTitle-inactiveForeground, var(--dn-muted));
     background: transparent;
-    border: none;
-    border-bottom: 1px solid transparent;
-    margin-bottom: -1px;
+    border: 1px solid transparent;
+    border-radius: 14px;
     font-family: inherit;
     font-size: inherit;
     white-space: nowrap;
     cursor: pointer;
-    transition: color var(--dn-duration) var(--dn-ease);
+    transition:
+      color var(--dn-duration) var(--dn-ease),
+      background-color var(--dn-duration) var(--dn-ease);
   }
 
   .tab:hover {
     color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
+    background: var(--dn-hover);
   }
 
   .tab.active {
     color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
-    border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--dn-accent));
+    background: color-mix(in srgb, var(--dn-accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--dn-accent) 55%, transparent);
   }
 
   .tab.failed {
     color: var(--vscode-errorForeground);
+  }
+
+  .tab.failed.active {
+    background: color-mix(in srgb, var(--vscode-errorForeground) 16%, transparent);
+    border-color: color-mix(in srgb, var(--vscode-errorForeground) 55%, transparent);
+  }
+
+  .tab-icon {
+    display: inline-flex;
+    color: var(--vscode-charts-blue, var(--dn-info));
+  }
+
+  .tab-icon.ok {
+    color: var(--dn-success);
+  }
+
+  .tab-icon.fail {
+    color: var(--dn-danger);
   }
 
   .tab-title {
@@ -1415,8 +1454,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
     flex: none;
     gap: var(--dn-gap);
     align-items: center;
-    min-height: 34px;
-    padding: 4px 8px;
+    min-height: 42px;
+    padding: 6px 10px;
   }
 
   .find {
@@ -1438,7 +1477,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
   .find-input {
     width: 240px;
     min-width: 120px;
-    padding-left: 26px;
+    height: 28px;
+    padding-left: 28px;
+    border-radius: 14px;
   }
 
   .find-input::-webkit-search-cancel-button {
@@ -1630,8 +1671,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
     gap: 4px 12px;
     align-items: center;
     justify-content: space-between;
-    min-height: 30px;
-    padding: 2px 8px;
+    min-height: 34px;
+    padding: 3px 10px;
     color: var(--dn-muted);
     border-top: 1px solid var(--dn-divider);
     font-size: var(--dn-font-small);

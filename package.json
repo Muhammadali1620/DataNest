@@ -2,7 +2,7 @@
   "name": "datanest",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "datanest",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -291,6 +291,11 @@
         "title": "%commands.table.open.title%",
         "category": "DataNest",
         "icon": "$(table)"
+      },
+      {
+        "command": "datanest.table.click",
+        "title": "%commands.table.open.title%",
+        "category": "DataNest"
       },
       {
         "command": "datanest.script.run",
@@ -690,6 +695,10 @@
           "when": "false"
         },
         {
+          "command": "datanest.table.click",
+          "when": "false"
+        },
+        {
           "command": "datanest.object.showDefinition",
           "when": "false"
         },
@@ -990,11 +999,6 @@
           "command": "datanest.folders.remove",
           "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
           "group": "1_folder@2"
-        },
-        {
-          "command": "datanest.table.open",
-          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
-          "group": "inline@0"
         },
         {
           "command": "datanest.query.new",

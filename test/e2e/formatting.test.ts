@@ -71,7 +71,8 @@ describe('formatting', () => {
           edit.newText +
           text.slice(document.offsetAt(edit.range.end));
       }
-      assert.equal(text, 'select\n  a\nfrom\n  t;');
+      // The formatter keeps the document's line ends: CRLF where the editor uses them (Windows).
+      assert.equal(text.replace(/\r\n/g, '\n'), 'select\n  a\nfrom\n  t;');
     } finally {
       await config.update('keywordCase', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
       await vscode.workspace.fs.delete(file);

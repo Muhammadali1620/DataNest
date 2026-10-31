@@ -17,6 +17,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   clear empty, error and unsaved-changes states.
 - Connection form: pick the database from cards, with compatible servers grouped below;
   the fields are grouped into sections, and Test and Save stay at the bottom of the page.
+- Every page's tab has its own icon, and the tree's context menu groups Generate SQL and
+  the data commands (dump, export, import, test data, copy, compare) into submenus.
+- The empty Connections view also offers to open a SQLite file.
 
 ### Fixed
 

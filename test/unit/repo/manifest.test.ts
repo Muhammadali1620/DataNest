@@ -187,3 +187,96 @@ describe('package.json manifest', () => {
     });
   });
 });
+
+// V11.6: long context menus of the tree are grouped into submenus.
+describe('tree submenus', () => {
+  interface MenuEntry {
+    command?: string;
+    submenu?: string;
+    group?: string;
+    when?: string;
+  }
+  const contributes = (readJson('package.json') as { contributes: Record<string, unknown> })
+    .contributes as {
+    submenus: { id: string; label: string }[];
+    menus: Record<string, MenuEntry[]>;
+    commands: { command: string }[];
+  };
+  const ru = readJson('package.nls.ru.json') as Record<string, string>;
+  const viewItems = (when = ''): string[] => when.match(/viewItem == [\w.]+/g) ?? [];
+
+  it('names every submenu in English and Russian', () => {
+    expect(contributes.submenus.map((menu) => menu.id)).toEqual([
+      'datanest.tree.generate',
+      'datanest.tree.data',
+    ]);
+    for (const menu of contributes.submenus) {
+      const key = /^%(.+)%$/.exec(menu.label)?.[1] ?? '';
+      expect(nls[key], menu.id).toBeTruthy();
+      expect(ru[key], menu.id).toBeTruthy();
+    }
+  });
+
+  it('shows each submenu wherever one of its items applies, and only in the tree', () => {
+    const tree = contributes.menus['view/item/context'] ?? [];
+    for (const { id } of contributes.submenus) {
+      const entry = tree.find((item) => item.submenu === id);
+      expect(entry, id).toBeDefined();
+      expect(entry?.when).toMatch(/^view == datanest\.connections && /);
+      const items = contributes.menus[id] ?? [];
+      expect(items.length, id).toBeGreaterThan(1);
+      for (const item of items) {
+        expect(item.when).toMatch(/^view == datanest\.connections && /);
+        for (const viewItem of viewItems(item.when)) {
+          expect(viewItems(entry?.when), `${id}: ${item.command ?? ''}`).toContain(viewItem);
+        }
+      }
+    }
+  });
+
+  it('lists only known commands in the submenus, and none of them in the menu itself too', () => {
+    const known = new Set(contributes.commands.map((command) => command.command));
+    const tree = contributes.menus['view/item/context'] ?? [];
+    for (const { id } of contributes.submenus) {
+      for (const item of contributes.menus[id] ?? []) {
+        expect(known.has(item.command ?? ''), item.command).toBe(true);
+        expect(tree.some((entry) => entry.command === item.command)).toBe(false);
+      }
+    }
+  });
+
+  it('links only real commands from the welcome view, the same ones in both languages', () => {
+    const known = new Set(contributes.commands.map((command) => command.command));
+    const links = (text = ''): string[] =>
+      [...text.matchAll(/\(command:([\w.]+)\)/g)].map((match) => match[1] ?? '');
+    const en = links(nls['viewsWelcome.connections.empty']);
+    expect(en).toContain('datanest.connections.openSqliteFile');
+    for (const command of en) {
+      expect(known.has(command), command).toBe(true);
+    }
+    expect(links(ru['viewsWelcome.connections.empty'])).toEqual(en);
+  });
+
+  it('keeps Generate SELECT … DELETE and the data commands in their submenus', () => {
+    const commands = (id: string): string[] =>
+      (contributes.menus[id] ?? []).map((item) => item.command ?? '');
+    expect(commands('datanest.tree.generate')).toEqual([
+      'datanest.table.generateSelect',
+      'datanest.table.generateInsert',
+      'datanest.table.generateUpdate',
+      'datanest.table.generateDelete',
+    ]);
+    expect(commands('datanest.tree.data')).toEqual(
+      expect.arrayContaining([
+        'datanest.dump.create',
+        'datanest.table.exportData',
+        'datanest.table.importData',
+        'datanest.table.generateData',
+        'datanest.table.transfer',
+        'datanest.table.compareData',
+        'datanest.mongo.exportCollection',
+        'datanest.mongo.importCollection',
+      ]),
+    );
+  });
+});

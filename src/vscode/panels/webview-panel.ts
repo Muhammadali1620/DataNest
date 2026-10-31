@@ -3,6 +3,7 @@ import type { Logger } from '../../core/logging/logger';
 import type { RpcTransport } from '../../shared/rpc';
 import {
   createNonce,
+  panelIconPaths,
   renderWebviewHtml,
   WEBVIEW_ASSET_DIR,
   webviewAssetPaths,
@@ -36,6 +37,13 @@ export function createWebviewAppPanel(
     },
     { enableScripts: true, localResourceRoots: [root] },
   );
+  const icon = panelIconPaths(options.app);
+  if (icon !== undefined) {
+    panel.iconPath = {
+      light: vscode.Uri.joinPath(extensionUri, ...icon.light),
+      dark: vscode.Uri.joinPath(extensionUri, ...icon.dark),
+    };
+  }
   const { webview } = panel;
   const assets = webviewAssetPaths(options.app);
   const toUri = (path: readonly string[]): string =>

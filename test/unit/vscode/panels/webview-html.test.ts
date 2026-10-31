@@ -1,13 +1,18 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WEBVIEW_OUT_DIR } from '../../../../scripts/build-config.mjs';
+import { findWebviewApps, WEBVIEW_OUT_DIR } from '../../../../scripts/build-config.mjs';
 import {
   buildContentSecurityPolicy,
   createNonce,
+  PANEL_ICONS,
+  panelIconPaths,
   renderWebviewHtml,
   WEBVIEW_ASSET_DIR,
   webviewAssetPaths,
   type WebviewHtmlOptions,
 } from '../../../../src/vscode/panels/webview-html';
+import { ROOT } from '../../../helpers/repo';
 
 const CSP_SOURCE = 'https://file+.vscode-resource.vscode-cdn.net';
 
@@ -177,4 +182,39 @@ describe('webviewAssetPaths', () => {
       expect(() => webviewAssetPaths(app)).toThrow('Invalid webview app name');
     },
   );
+});
+
+describe('panel tab icons', () => {
+  const apps = Object.keys(findWebviewApps(ROOT));
+
+  it('has an icon for every page, and none for an unknown or unsafe name', () => {
+    expect(Object.keys(PANEL_ICONS).sort()).toEqual([...apps].sort());
+    expect(panelIconPaths('nope')).toBeUndefined();
+    expect(panelIconPaths('../result-grid')).toBeUndefined();
+  });
+
+  it('points at light and dark SVGs that exist', () => {
+    for (const app of apps) {
+      const paths = panelIconPaths(app);
+      expect(paths, app).toBeDefined();
+      expect(existsSync(join(ROOT, ...(paths?.light ?? [])))).toBe(true);
+      expect(existsSync(join(ROOT, ...(paths?.dark ?? [])))).toBe(true);
+    }
+  });
+
+  it('draws the shape of the named editor icon in the light and dark icon colours', () => {
+    const shape = (svg: string): string => svg.replace(/fill="[^"]*"/, '').trim();
+    for (const [app, icon] of Object.entries(PANEL_ICONS)) {
+      const source = readFileSync(
+        join(ROOT, 'node_modules/@vscode/codicons/src/icons', `${icon}.svg`),
+        'utf8',
+      );
+      const light = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-light.svg`), 'utf8');
+      const dark = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-dark.svg`), 'utf8');
+      expect(shape(light), app).toBe(shape(source));
+      expect(shape(dark), app).toBe(shape(source));
+      expect(light).toContain('fill="#424242"');
+      expect(dark).toContain('fill="#C5C5C5"');
+    }
+  });
 });

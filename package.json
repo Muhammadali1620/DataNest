@@ -1182,54 +1182,14 @@
           "group": "4_structure@0"
         },
         {
-          "command": "datanest.table.generateSelect",
-          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
-          "group": "6_generate@1"
+          "submenu": "datanest.tree.generate",
+          "group": "6_generate@1",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)"
         },
         {
-          "command": "datanest.table.generateInsert",
-          "when": "view == datanest.connections && viewItem == datanest.table",
-          "group": "6_generate@2"
-        },
-        {
-          "command": "datanest.table.generateUpdate",
-          "when": "view == datanest.connections && viewItem == datanest.table",
-          "group": "6_generate@3"
-        },
-        {
-          "command": "datanest.table.generateDelete",
-          "when": "view == datanest.connections && viewItem == datanest.table",
-          "group": "6_generate@4"
-        },
-        {
-          "command": "datanest.dump.create",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view)",
-          "group": "7_export@1"
-        },
-        {
-          "command": "datanest.table.transfer",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.table)",
-          "group": "7_export@5"
-        },
-        {
-          "command": "datanest.table.exportData",
-          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)",
-          "group": "7_export@2"
-        },
-        {
-          "command": "datanest.table.importData",
-          "when": "view == datanest.connections && viewItem == datanest.table",
-          "group": "7_export@3"
-        },
-        {
-          "command": "datanest.table.generateData",
-          "when": "view == datanest.connections && viewItem == datanest.table",
-          "group": "7_export@4"
-        },
-        {
-          "command": "datanest.table.compareData",
-          "when": "view == datanest.connections && viewItem == datanest.table",
-          "group": "7_export@6"
+          "submenu": "datanest.tree.data",
+          "group": "7_export@1",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view || viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)"
         },
         {
           "command": "datanest.redis.findKey",
@@ -1395,16 +1355,6 @@
           "command": "datanest.elastic.showSettings",
           "when": "view == datanest.connections && viewItem == datanest.elasticIndex",
           "group": "4_structure@2"
-        },
-        {
-          "command": "datanest.mongo.exportCollection",
-          "when": "view == datanest.connections && (viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)",
-          "group": "7_export@1"
-        },
-        {
-          "command": "datanest.mongo.importCollection",
-          "when": "view == datanest.connections && viewItem == datanest.mongoCollection",
-          "group": "7_export@2"
         }
       ],
       "editor/title": [
@@ -1503,6 +1453,70 @@
           "command": "datanest.script.run",
           "when": "resourceExtname == .sql && resourceScheme == file",
           "group": "datanest@1"
+        }
+      ],
+      "datanest.tree.generate": [
+        {
+          "command": "datanest.table.generateSelect",
+          "group": "1_generate@1",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)"
+        },
+        {
+          "command": "datanest.table.generateInsert",
+          "group": "1_generate@2",
+          "when": "view == datanest.connections && viewItem == datanest.table"
+        },
+        {
+          "command": "datanest.table.generateUpdate",
+          "group": "1_generate@3",
+          "when": "view == datanest.connections && viewItem == datanest.table"
+        },
+        {
+          "command": "datanest.table.generateDelete",
+          "group": "1_generate@4",
+          "when": "view == datanest.connections && viewItem == datanest.table"
+        }
+      ],
+      "datanest.tree.data": [
+        {
+          "command": "datanest.dump.create",
+          "group": "1_export@1",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.view)"
+        },
+        {
+          "command": "datanest.table.transfer",
+          "group": "1_export@5",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.connected || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.connected || viewItem == datanest.database || viewItem == datanest.schema || viewItem == datanest.group.tables || viewItem == datanest.table)"
+        },
+        {
+          "command": "datanest.table.exportData",
+          "group": "1_export@2",
+          "when": "view == datanest.connections && (viewItem == datanest.table || viewItem == datanest.view)"
+        },
+        {
+          "command": "datanest.table.importData",
+          "group": "1_export@3",
+          "when": "view == datanest.connections && viewItem == datanest.table"
+        },
+        {
+          "command": "datanest.table.generateData",
+          "group": "1_export@4",
+          "when": "view == datanest.connections && viewItem == datanest.table"
+        },
+        {
+          "command": "datanest.table.compareData",
+          "group": "1_export@6",
+          "when": "view == datanest.connections && viewItem == datanest.table"
+        },
+        {
+          "command": "datanest.mongo.exportCollection",
+          "group": "1_export@1",
+          "when": "view == datanest.connections && (viewItem == datanest.mongoCollection || viewItem == datanest.mongoView)"
+        },
+        {
+          "command": "datanest.mongo.importCollection",
+          "group": "1_export@2",
+          "when": "view == datanest.connections && viewItem == datanest.mongoCollection"
         }
       ]
     },
@@ -1821,6 +1835,16 @@
         "language": "datanest-es",
         "scopeName": "source.datanest-es",
         "path": "./resources/syntaxes/datanest-es.tmLanguage.json"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "datanest.tree.generate",
+        "label": "%submenu.generate%"
+      },
+      {
+        "id": "datanest.tree.data",
+        "label": "%submenu.data%"
       }
     ]
   },

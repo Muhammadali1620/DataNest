@@ -127,6 +127,34 @@ async function pick(label: string): Promise<void> {
   );
 }
 
+describe('the account the tree asked for (V11.12)', () => {
+  it('opens on that account, with its privileges', async () => {
+    await setup({ ...STATE, focus: { name: 'app', host: '%' } });
+    const table = await screen.findByTestId('grants');
+    expect(within(table).getAllByRole('row').length).toBeGreaterThan(1);
+    expect(screen.getByText('Member of: reader')).toBeTruthy();
+  });
+
+  it('keeps the first screen when the account is not on the list', async () => {
+    await setup({ ...STATE, focus: { name: 'gone', host: '%' } });
+    await screen.findByText('app@%');
+    expect(screen.getByText('Pick a user, or make a new one.')).toBeTruthy();
+  });
+
+  it('moves to another account when the tree opens the page again', async () => {
+    const { host } = await setup({ ...STATE, focus: { name: 'app', host: '%' } });
+    await screen.findByTestId('grants');
+    host.emit('state', { ...STATE, focus: { name: 'old', host: 'localhost' } });
+    await flush();
+    await waitFor(() => {
+      expect(screen.queryByText('Member of: reader')).toBeNull();
+    });
+    expect(
+      screen.getByRole('button', { name: /^old@localhost/u }).getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+});
+
 describe('users and privileges page', () => {
   it('lists accounts with their marks and shows where it works', async () => {
     await setup();

@@ -7,7 +7,7 @@ import { identifierLimit, identifierProblem } from '../../core/sql/identifiers';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { SchemaAction, SchemaActions } from '../../services/schema-actions';
 import { actionDatabase, actionScript } from '../../services/schema-actions';
-import type { ObjectScope } from '../../core/model/objects';
+import type { ObjectScope, TableRef } from '../../core/model/objects';
 import type { DriverId } from '../../shared/connection';
 import { changeVerdict, NO_POLICY, type WritePolicy } from '../../services/write-policy';
 import type { DocumentBinding } from '../editor/document-bindings';
@@ -58,6 +58,8 @@ export interface SchemaTexts {
   createTable(name: string): string;
   alterTable(name: string): string;
   readonly apply: string;
+  /** Said when a column cannot move further up or down. */
+  columnAtEdge(name: string, direction: 'up' | 'down'): string;
   dropRelation(name: string): string;
   rename(from: string, to: string): string;
   truncate(name: string): string;
@@ -89,6 +91,13 @@ export interface SchemaCommandDeps {
     scope: ObjectScope,
     table?: string,
   ) => Promise<unknown>;
+  /** The action that moves a column; undefined when it is at the edge already (V11.12). */
+  readonly planMove?: (
+    connectionId: string,
+    table: TableRef,
+    column: string,
+    direction: 'up' | 'down',
+  ) => Promise<SchemaAction | undefined>;
 }
 
 export type SchemaCommandName =
@@ -101,7 +110,9 @@ export type SchemaCommandName =
   | 'dropTable'
   | 'renameTable'
   | 'truncateTable'
-  | 'dropObject';
+  | 'dropObject'
+  | 'moveColumnUp'
+  | 'moveColumnDown';
 
 /** What became of an action the user was shown. */
 export type PerformOutcome = 'ran' | 'opened' | 'cancelled' | 'unsupported' | 'refused';
@@ -214,6 +225,19 @@ export function schemaCommandHandlers(
     isTreeNode(target) && (kinds as readonly string[]).includes(target.kind)
       ? (target as Extract<TreeNode, { kind: K }>)
       : undefined;
+
+  const moveColumn = async (target: CommandTarget, direction: 'up' | 'down'): Promise<void> => {
+    const node = nodeOf(target, ['column']);
+    if (node === undefined || deps.planMove === undefined) {
+      return;
+    }
+    const action = await deps.planMove(node.connectionId, node.table, node.column.name, direction);
+    if (action === undefined) {
+      ui.info(texts.columnAtEdge(node.column.name, direction));
+      return;
+    }
+    await perform(node.connectionId, action, texts.alterTable(node.table.name), texts.apply);
+  };
 
   return {
     createDatabase: async (target) => {
@@ -367,6 +391,14 @@ export function schemaCommandHandlers(
         texts.truncate(node.name),
         texts.truncateLabel,
       );
+    },
+
+    moveColumnUp: async (target) => {
+      await moveColumn(target, 'up');
+    },
+
+    moveColumnDown: async (target) => {
+      await moveColumn(target, 'down');
     },
 
     dropObject: async (target) => {

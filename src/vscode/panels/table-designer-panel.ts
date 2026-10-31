@@ -38,6 +38,9 @@ export class TableDesignerPanel implements vscode.Disposable {
     );
     if (existing !== undefined) {
       existing.panel.reveal();
+      if (deps.tab !== undefined) {
+        existing.rpc.emit('tab', { tab: deps.tab });
+      }
       return existing;
     }
     const panel = new TableDesignerPanel(deps);
@@ -71,6 +74,22 @@ export class TableDesignerPanel implements vscode.Disposable {
     this.rpc.handle('preview', (design) => this.model.preview(design));
     this.rpc.handle('tables', async () => await this.model.tables());
     this.rpc.handle('columns', async ({ table }) => await this.model.columns(table));
+    this.rpc.handle('definition', async () => await this.model.definition());
+    this.rpc.handle('triggers', async () => await this.model.triggers());
+    this.rpc.handle(
+      'triggerAction',
+      async ({ action, name }) => await this.model.triggerAction(action, name),
+    );
+    this.rpc.handle('checks', async () => await this.model.checks());
+    this.rpc.handle(
+      'checkAction',
+      async ({ action, name, expression }) =>
+        await this.model.checkAction(action, name, expression),
+    );
+    this.rpc.handle('textAction', async ({ action, text }) => {
+      await this.model.textAction(action, text);
+      return {};
+    });
     this.rpc.handle('save', async (design) => {
       const result = await this.model.save(design);
       if (result.outcome === 'ran') {
@@ -97,7 +116,7 @@ export class TableDesignerPanel implements vscode.Disposable {
     const scope = this.model.scopeLabel;
     const name = this.model.tableName;
     if (name !== undefined) {
-      return vscode.l10n.t('Table {0}', scope === '' ? name : `${scope}.${name}`);
+      return vscode.l10n.t('Properties {0}', scope === '' ? name : `${scope}.${name}`);
     }
     return scope === '' ? vscode.l10n.t('New Table') : vscode.l10n.t('New Table in {0}', scope);
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CodeArea from '../../components/CodeArea.svelte';
   import type { ToolsProtocol } from '../../../../src/shared/protocols/tools';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import { formatSize } from '../../../../src/shared/byte-size';
@@ -285,7 +286,7 @@
           </button>
           <IconButton icon="copy" tone="blue" label={t('tools.copyNamed', 'SVG')} onclick={() => { copy(svg); }} />
         {/snippet}
-        <textarea class="control tl-area tl-mono svg-text" rows="12" spellcheck="false" aria-label="SVG" bind:value={svg} data-testid="svg-text"></textarea>
+        <CodeArea bind:value={svg} mode="xml" label="SVG" testid="svg-text" rows={12} />
         {#if !svgValid}
           <p class="tl-problem" role="alert" data-testid="svg-invalid"><Icon name="warning" size={14} />{t('tools.svg.notSvg')}</p>
         {/if}
@@ -357,11 +358,6 @@
 
   .grow {
     flex: 1;
-  }
-
-  .svg-text {
-    min-height: 260px;
-    white-space: pre;
   }
 
   .color {

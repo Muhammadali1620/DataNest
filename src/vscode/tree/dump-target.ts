@@ -73,6 +73,11 @@ export function dumpStartOf(
     case 'object':
     case 'index':
     case 'foreignKey':
+    case 'queryFolder':
+    case 'savedQuery':
+    case 'security':
+    case 'securityGroup':
+    case 'account':
     case 'redisDatabase':
     case 'mongoDatabase':
     case 'mongoCollection':

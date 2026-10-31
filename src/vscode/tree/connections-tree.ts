@@ -17,7 +17,15 @@ import { connectionUri, tagText } from './connection-decorations';
 import { tagsOf } from './connection-look';
 import { elasticFieldItem, elasticIndexItem } from './elastic-items';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
-import { describeColumn, describeForeignKey, describeIndex, objectLabel } from './node-text';
+import {
+  columnKind,
+  describeAccount,
+  describeColumn,
+  describeForeignKey,
+  describeIndex,
+  objectLabel,
+  type ColumnKind,
+} from './node-text';
 import {
   CONNECTIONS_VIEW_ID,
   connectionContext,
@@ -29,7 +37,7 @@ import {
   type TableFolder,
   type TreeNode,
 } from './nodes';
-import { type ProjectSource, TreeModel, type TreeSettings } from './tree-model';
+import { type ProjectSource, TreeModel, type TreeModelDeps, type TreeSettings } from './tree-model';
 import { formatCount } from '../../core/number-format';
 import type { TableStats } from '../../core/model/objects';
 import { formatSize } from '../../shared/byte-size';
@@ -49,6 +57,10 @@ export interface ConnectionsTreeDeps {
   readonly settings: TreeSettings;
   readonly logger: Logger;
   readonly projects?: ProjectSource;
+  /** The accounts of a server, for the Security folder (V11.12). */
+  readonly accounts?: TreeModelDeps['accounts'];
+  /** The saved queries of a scope, for the Query folder (V11.12). */
+  readonly savedQueries?: TreeModelDeps['savedQueries'];
 }
 
 /** The Connections view: connections → databases/schemas → tables/views → columns. */
@@ -73,9 +85,14 @@ export class ConnectionsTreeProvider
       ...(deps.redisKeySeparator === undefined
         ? {}
         : { redisKeySeparator: deps.redisKeySeparator }),
+      ...(deps.accounts === undefined ? {} : { accounts: deps.accounts }),
+      ...(deps.savedQueries === undefined ? {} : { savedQueries: deps.savedQueries }),
       settings: deps.settings,
       logger: deps.logger,
       texts: {
+        noQueries: vscode.l10n.t('No saved queries'),
+        noAccounts: (group) =>
+          group === 'users' ? vscode.l10n.t('No users') : vscode.l10n.t('No roles'),
         project: {
           untrusted: (count) =>
             vscode.l10n.t(
@@ -199,18 +216,76 @@ export class ConnectionsTreeProvider
               : TREE_CONTEXT.group,
         );
         const filter = this.model.groupFilter(node);
-        if (filter !== undefined) {
-          item.description = vscode.l10n.t('filter: {0}', filter);
-        }
+        item.description = withCount(
+          this.model.countOf(node),
+          filter === undefined ? undefined : vscode.l10n.t('filter: {0}', filter),
+        );
         return item;
       }
-      case 'folder':
-        return expandable(
+      case 'folder': {
+        const item = expandable(
           node,
           folderLabel(node.folder),
           FOLDER_ICONS[node.folder],
           TREE_CONTEXT.folder,
         );
+        // The columns open with the table; the other folders wait for their arrow.
+        if (node.folder === 'columns') {
+          item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+        }
+        item.description = withCount(this.model.countOf(node));
+        return item;
+      }
+      case 'queryFolder': {
+        const item = expandable(
+          node,
+          vscode.l10n.t('Query'),
+          'database-query',
+          TREE_CONTEXT.queryFolder,
+        );
+        item.description = withCount(this.model.countOf(node));
+        return item;
+      }
+      case 'savedQuery': {
+        const item = leaf(node, node.name, 'file-code');
+        item.contextValue = TREE_CONTEXT.savedQuery;
+        item.tooltip = vscode.l10n.t('Saved query "{0}"', node.name);
+        item.command = {
+          command: COMMAND_IDS.openSavedQuery,
+          title: vscode.l10n.t('Open Query'),
+          arguments: [node],
+        };
+        return item;
+      }
+      case 'security':
+        return expandable(node, vscode.l10n.t('Security'), 'shield', TREE_CONTEXT.security);
+      case 'securityGroup': {
+        const item = expandable(
+          node,
+          node.group === 'users' ? vscode.l10n.t('Users') : vscode.l10n.t('Roles'),
+          node.group === 'users' ? 'account' : 'organization',
+          TREE_CONTEXT.securityGroup,
+        );
+        item.description = withCount(this.model.countOf(node));
+        return item;
+      }
+      case 'account': {
+        const item = leaf(
+          node,
+          accountLabel(node.user),
+          node.user.role || !node.user.login ? 'organization' : 'person',
+        );
+        item.description = describeAccount(node.user);
+        item.tooltip = `${accountLabel(node.user)} — ${describeAccount(node.user)}`;
+        item.contextValue =
+          node.user.role || !node.user.login ? TREE_CONTEXT.role : TREE_CONTEXT.account;
+        item.command = {
+          command: COMMAND_IDS.openAccount,
+          title: vscode.l10n.t('Open in Users and Privileges'),
+          arguments: [node],
+        };
+        return item;
+      }
       case 'object':
         return objectItem(node);
       case 'index': {
@@ -218,6 +293,7 @@ export class ConnectionsTreeProvider
         item.description = describeIndex(node.index);
         item.tooltip = `${node.index.name} — ${describeIndex(node.index)}`;
         item.contextValue = TREE_CONTEXT.index;
+        item.command = nodeClickCommand(node);
         return item;
       }
       case 'foreignKey': {
@@ -225,6 +301,7 @@ export class ConnectionsTreeProvider
         item.description = describeForeignKey(node.key);
         item.tooltip = `${node.key.name} — ${describeForeignKey(node.key)}`;
         item.contextValue = TREE_CONTEXT.foreignKey;
+        item.command = nodeClickCommand(node);
         return item;
       }
       case 'table': {
@@ -263,8 +340,14 @@ export class ConnectionsTreeProvider
         item.id = nodeId(node);
         item.description = describeColumn(node.column);
         item.tooltip = `${node.column.name} — ${describeColumn(node.column)}`;
-        item.iconPath = coloredIcon(node.column.primaryKey ? 'key' : 'symbol-field');
-        item.contextValue = TREE_CONTEXT.column;
+        item.iconPath = columnIcon(
+          node.column.primaryKey,
+          node.link === true,
+          columnKind(node.column.dataType),
+        );
+        item.contextValue =
+          node.movable === true ? TREE_CONTEXT.columnMovable : TREE_CONTEXT.column;
+        item.command = nodeClickCommand(node);
         return item;
       }
       case 'redisDatabase': {
@@ -530,6 +613,7 @@ const GROUP_ICONS: Readonly<Record<ObjectGroup, string>> = {
 };
 
 const FOLDER_ICONS: Readonly<Record<TableFolder, string>> = {
+  columns: 'symbol-field',
   indexes: 'list-ordered',
   foreignKeys: 'references',
   triggers: 'zap',
@@ -562,6 +646,8 @@ function groupLabel(group: ObjectGroup): string {
 
 function folderLabel(folder: TableFolder): string {
   switch (folder) {
+    case 'columns':
+      return vscode.l10n.t('Columns');
     case 'indexes':
       return vscode.l10n.t('Indexes');
     case 'foreignKeys':
@@ -576,8 +662,55 @@ function objectItem(node: ObjectNode): vscode.TreeItem {
   const item = leaf(node, objectLabel(object), OBJECT_ICONS[object.kind]);
   item.tooltip = qualifiedName(object, objectLabel(object));
   item.contextValue = TREE_CONTEXT[object.kind];
+  item.command = nodeClickCommand(node);
   return item;
 }
+
+/** What a click on a column, index, key or routine runs: the second click opens its SQL. */
+function nodeClickCommand(node: TreeNode): vscode.Command {
+  return {
+    command: COMMAND_IDS.clickNode,
+    title: vscode.l10n.t('Open SQL'),
+    arguments: [node],
+  };
+}
+
+/** `(40)` after a folder's name, with a note (a filter) behind it when there is one. */
+function withCount(count: number | undefined, note?: string): string | undefined {
+  const parts = [count === undefined ? undefined : `(${count})`, note].filter(
+    (part): part is string => part !== undefined,
+  );
+  return parts.length === 0 ? undefined : parts.join(' ');
+}
+
+function accountLabel(user: { name: string; host?: string }): string {
+  return user.host === undefined ? user.name : `${user.name}@${user.host}`;
+}
+
+/** Key, link, then the kind of the type: every column kind has its own shape and colour. */
+function columnIcon(primary: boolean, link: boolean, kind: ColumnKind): vscode.ThemeIcon {
+  if (primary) {
+    return new vscode.ThemeIcon('key', new vscode.ThemeColor('charts.yellow'));
+  }
+  if (link) {
+    return new vscode.ThemeIcon('references', new vscode.ThemeColor('terminal.ansiMagenta'));
+  }
+  const [icon, color] = COLUMN_KIND_ICONS[kind];
+  return new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
+}
+
+const COLUMN_KIND_ICONS: Readonly<Record<ColumnKind, readonly [string, string]>> = {
+  number: ['symbol-number', 'charts.green'],
+  text: ['symbol-string', 'charts.orange'],
+  datetime: ['calendar', 'charts.red'],
+  boolean: ['symbol-boolean', 'charts.purple'],
+  json: ['json', 'terminal.ansiCyan'],
+  binary: ['file-binary', 'descriptionForeground'],
+  uuid: ['fingerprint', 'charts.blue'],
+  choice: ['list-selection', 'charts.purple'],
+  geometry: ['globe', 'charts.green'],
+  other: ['symbol-field', 'charts.foreground'],
+};
 
 function leaf(node: TreeNode, label: string, icon: string): vscode.TreeItem {
   const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);

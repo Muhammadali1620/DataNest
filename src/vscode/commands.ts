@@ -22,7 +22,9 @@ import { EXPORT_FORMATS, type ExportFormat, isExportFormat } from '../services/r
 import type { ExportScope } from './export-commands';
 import { connectionIdOf, isTreeNode, scopeOf, type TableNode, type TreeNode } from './tree/nodes';
 import { definitionDocument, readDefinitionDocument } from '../services/object-definitions';
-import type { ObjectRef, TableRef } from '../core/model/objects';
+import type { ObjectRef, ObjectScope, TableRef } from '../core/model/objects';
+import type { TableTab } from '../shared/protocols/table-designer';
+import { propertiesTarget } from './panels/table-properties-target';
 import { objectEditHandlers, type ObjectEditRegistry } from './editor/object-edit';
 import type { ErrorDiagnostics } from './editor/error-diagnostics';
 import { SchemaActions } from '../services/schema-actions';
@@ -57,6 +59,13 @@ import { monitorCommandHandlers } from './monitor-commands';
 import { ToolsPanel } from './panels/tools-panel';
 import { toolsCommandHandlers } from './tools-commands';
 import { userCommandHandlers } from './user-commands';
+import { ExpansionKeeper } from './tree/expansion-keeper';
+import { showNodeActions } from './tree/node-actions-ui';
+import { savedQueryCommandHandlers } from './tree/saved-query-commands';
+import { readNodeSql, nodeSqlDatabase } from '../services/node-sql';
+import { planColumnMove } from '../services/column-move';
+import type { SavedQueryStore } from '../services/saved-queries';
+import { nodeId } from './tree/nodes';
 import { UserAdminPanel } from './panels/user-admin-panel';
 import { ResultChartPanel } from './panels/result-chart-panel';
 import { ServerMonitorPanel } from './panels/server-monitor-panel';
@@ -68,7 +77,7 @@ import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import type { QueryHistory } from '../services/history';
-import { showHistory } from './history/history-picker';
+import { historyScopeOf, showHistory } from './history/history-picker';
 import { showObjectSearch } from './search/object-search';
 import { templateCommandHandlers } from './tree/template-commands';
 import {
@@ -148,6 +157,8 @@ export interface CommandDeps {
   /** The Connections view, to reveal a key found by a search. */
   readonly treeView: vscode.TreeView<TreeNode>;
   readonly redisKeySeparator: () => string;
+  /** The saved queries of the tree's "Query" folders (V11.12). */
+  readonly savedQueries: SavedQueryStore;
 }
 
 /** The items selected in the tree, which VS Code passes after the clicked one. */
@@ -440,8 +451,36 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
     },
   });
+  // A double click on a table opens it and leaves its row as it was (V11.12).
+  const expansion = new ExpansionKeeper<TreeNode>({
+    idOf: nodeId,
+    expand: (node) => {
+      void deps.treeView.reveal(node, { select: false, focus: false, expand: true });
+    },
+    collapse: () => {
+      void vscode.commands.executeCommand('list.collapse');
+    },
+  });
+  const expansionEvents = [
+    deps.treeView.onDidExpandElement((event) => {
+      expansion.expanded(event.element);
+    }),
+    deps.treeView.onDidCollapseElement((event) => {
+      expansion.collapsed(event.element);
+    }),
+  ];
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
+    expansion,
+    openNodeSql: async (connectionId, target) => {
+      const text = await readNodeSql(deps.manager, connectionId, target);
+      const database = nodeSqlDatabase(target);
+      await deps.editors.newQuery(
+        database === undefined ? { connectionId } : { connectionId, database },
+        text,
+      );
+    },
+    showActions: showNodeActions,
     tree: deps.tree,
     // Refresh means "ask the server again", for SQL structure and Redis keys alike.
     cache: {
@@ -482,30 +521,92 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     policy: (connectionId: string) => policyOf(deps.store.get(connectionId)),
   };
   const perform = schemaPerformer(schemaDeps);
+  const openDesigner = async (
+    connectionId: string,
+    scope: ObjectScope,
+    table?: string,
+    tab?: TableTab,
+  ): Promise<unknown> =>
+    TableDesignerPanel.show({
+      extensionUri: deps.extensionUri,
+      logger: deps.logger,
+      connectionId,
+      scope,
+      ...(table === undefined ? {} : { table }),
+      ...(tab === undefined ? {} : { tab }),
+      driver: await deps.manager.driverOf(connectionId),
+      metadata: async () =>
+        deps.cache.wrap(
+          connectionId,
+          (await browseSession(deps.manager, connectionId, scope.database)).metadata,
+        ),
+      openSql: async (sql) => {
+        await deps.editors.newQuery(
+          scope.database === undefined
+            ? { connectionId }
+            : { connectionId, database: scope.database },
+          sql,
+        );
+      },
+      copyText: async (text) => {
+        await vscode.env.clipboard.writeText(text);
+      },
+      editObject: async (object) => {
+        await objectEdits.editObject(connectionId, object);
+      },
+      texts: {
+        createTable: (name) => schemaDeps.texts.createTable(name),
+        create: schemaDeps.texts.create,
+        alterTable: (name) => schemaDeps.texts.alterTable(name),
+        apply: schemaDeps.texts.apply,
+        dropObject: (name) => schemaDeps.texts.dropObject(name),
+        drop: schemaDeps.texts.drop,
+      },
+      perform,
+    });
   const schemaCommands = schemaCommandHandlers({
     ...schemaDeps,
     manager: deps.manager,
     openDesigner: async (connectionId, scope, table) =>
-      TableDesignerPanel.show({
-        extensionUri: deps.extensionUri,
-        logger: deps.logger,
-        connectionId,
-        scope,
-        ...(table === undefined ? {} : { table }),
-        driver: await deps.manager.driverOf(connectionId),
-        metadata: async () =>
-          deps.cache.wrap(
-            connectionId,
-            (await browseSession(deps.manager, connectionId, scope.database)).metadata,
-          ),
-        texts: {
-          createTable: (name) => schemaDeps.texts.createTable(name),
-          create: schemaDeps.texts.create,
-          alterTable: (name) => schemaDeps.texts.alterTable(name),
-          apply: schemaDeps.texts.apply,
-        },
-        perform,
+      await openDesigner(connectionId, scope, table),
+    planMove: async (connectionId, table, column, direction) => {
+      const { metadata } = await browseSession(deps.manager, connectionId, table.database);
+      return planColumnMove(table, await metadata.describeTable(table), column, direction);
+    },
+  });
+  const savedQueryCommands = savedQueryCommandHandlers({
+    store: deps.savedQueries,
+    tree: deps.tree,
+    open: async (connectionId, scope, path) => {
+      const uri = vscode.Uri.file(path);
+      const document = await vscode.workspace.openTextDocument(uri);
+      deps.editors.bindings.bind(
+        uri.toString(),
+        scope.database === undefined
+          ? { connectionId }
+          : { connectionId, database: scope.database },
+      );
+      await vscode.window.showTextDocument(document, { preview: false });
+    },
+    askName: async ({ title, value, validate }) =>
+      await vscode.window.showInputBox({
+        title,
+        value,
+        validateInput: validate,
+        ignoreFocusOut: true,
       }),
+    confirmDelete: async (title, deleteLabel) =>
+      (await vscode.window.showWarningMessage(title, { modal: true }, deleteLabel)) === deleteLabel,
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    texts: {
+      newName: vscode.l10n.t('Name of the new query'),
+      renameTo: (name) => vscode.l10n.t('New name for "{0}"', name),
+      deleteQuery: (name) => vscode.l10n.t('Delete the saved query "{0}"?', name),
+      delete: vscode.l10n.t('Delete'),
+      failed: (message) => vscode.l10n.t('DataNest: {0}', message),
+    },
   });
   const objectEdits = objectEditHandlers({
     manager: deps.manager,
@@ -613,6 +714,16 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.copyName]: treeCommands.copyName,
     [COMMAND_IDS.openTable]: treeCommands.openTable,
     [COMMAND_IDS.clickTable]: treeCommands.clickTable,
+    [COMMAND_IDS.clickNode]: treeCommands.clickNode,
+    [COMMAND_IDS.openNodeSql]: treeCommands.openNodeSql,
+    [COMMAND_IDS.nodeActions]: treeCommands.nodeActions,
+    [COMMAND_IDS.moveColumnUp]: schemaCommands.moveColumnUp,
+    [COMMAND_IDS.moveColumnDown]: schemaCommands.moveColumnDown,
+    [COMMAND_IDS.newSavedQuery]: savedQueryCommands.newSavedQuery,
+    [COMMAND_IDS.openSavedQuery]: savedQueryCommands.openSavedQuery,
+    [COMMAND_IDS.renameSavedQuery]: savedQueryCommands.renameSavedQuery,
+    [COMMAND_IDS.deleteSavedQuery]: savedQueryCommands.deleteSavedQuery,
+    [COMMAND_IDS.openAccount]: (target) => users.showUsers(target),
     [COMMAND_IDS.showDefinition]: treeCommands.showDefinition,
     [COMMAND_IDS.createDatabase]: schemaCommands.createDatabase,
     [COMMAND_IDS.dropDatabase]: schemaCommands.dropDatabase,
@@ -620,6 +731,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.dropSchema]: schemaCommands.dropSchema,
     [COMMAND_IDS.createTable]: schemaCommands.createTable,
     [COMMAND_IDS.designTable]: schemaCommands.designTable,
+    [COMMAND_IDS.tableProperties]: async (arg: unknown) => {
+      const open = propertiesTarget(arg);
+      if (open !== undefined) {
+        await openDesigner(open.connectionId, open.scope, open.table, open.tab);
+      }
+    },
     [COMMAND_IDS.generateSelect]: generate('select'),
     [COMMAND_IDS.generateInsert]: generate('insert'),
     [COMMAND_IDS.generateUpdate]: generate('update'),
@@ -712,8 +829,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       deps.chartResult(resultId);
       return undefined;
     },
-    [COMMAND_IDS.showHistory]: () => {
-      showHistory({ history: deps.history, store: deps.store, editors: deps.editors });
+    [COMMAND_IDS.showHistory]: (scope) => {
+      showHistory(
+        { history: deps.history, store: deps.store, editors: deps.editors },
+        historyScopeOf(scope),
+      );
     },
     [COMMAND_IDS.searchObjects]: () => {
       const settings = createSettings();
@@ -809,6 +929,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   );
   return [
     ...commands,
+    ...expansionEvents,
     mongoEditors,
     elasticEditors,
     {

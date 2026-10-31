@@ -75,6 +75,8 @@ export const TREE_CONTEXT = {
   table: 'datanest.table',
   view: 'datanest.view',
   column: 'datanest.column',
+  /** A column the driver can move: it gets the up and down buttons (V11.12). */
+  columnMovable: 'datanest.column.movable',
   /** Indexes, Foreign Keys and Triggers inside a table. */
   folder: 'datanest.folder',
   function: 'datanest.function',
@@ -85,6 +87,14 @@ export const TREE_CONTEXT = {
   index: 'datanest.index',
   foreignKey: 'datanest.foreignKey',
   message: 'datanest.message',
+  /** The "Query" folder of saved queries in a database or schema (V11.12). */
+  queryFolder: 'datanest.queryFolder',
+  savedQuery: 'datanest.savedQuery',
+  /** The "Security" folder of a connection with its Users and Roles (V11.12). */
+  security: 'datanest.security',
+  securityGroup: 'datanest.securityGroup',
+  account: 'datanest.account',
+  role: 'datanest.role',
 } as const;
 
 /** Folders of a database or schema. */
@@ -109,8 +119,8 @@ export const KIND_OF_GROUP: Readonly<Record<ObjectFolder, ListedObjectKind>> = {
   events: 'event',
 };
 
-/** Folders inside a table, after its columns. */
-export type TableFolder = 'indexes' | 'foreignKeys' | 'triggers';
+/** Folders inside a table; Columns comes first and is open, the others are closed. */
+export type TableFolder = 'columns' | 'indexes' | 'foreignKeys' | 'triggers';
 
 /** A folder the user keeps connections in; it has no connection of its own. */
 export interface ConnectionFolderNode {
@@ -169,9 +179,13 @@ export interface ColumnNode {
   readonly connectionId: string;
   readonly table: TableRef;
   readonly column: ColumnInfo;
+  /** The driver can change the place of the column (MySQL, SQLite, ClickHouse tables). */
+  readonly movable?: boolean;
+  /** The column is (part of) a foreign key. */
+  readonly link?: boolean;
 }
 
-/** "Indexes", "Foreign Keys" or "Triggers" of one table. */
+/** "Columns", "Indexes", "Foreign Keys" or "Triggers" of one table. */
 export interface FolderNode {
   readonly kind: 'folder';
   readonly folder: TableFolder;
@@ -198,6 +212,52 @@ export interface ForeignKeyNode {
   readonly connectionId: string;
   readonly table: TableRef;
   readonly key: ForeignKey;
+}
+
+/** The "Query" folder of a database or schema: its saved SQL files (V11.12). */
+export interface QueryFolderNode {
+  readonly kind: 'queryFolder';
+  readonly connectionId: string;
+  readonly scope: ObjectScope;
+}
+
+/** One saved query; `name` is the file name without `.sql`. */
+export interface SavedQueryNode {
+  readonly kind: 'savedQuery';
+  readonly connectionId: string;
+  readonly scope: ObjectScope;
+  readonly name: string;
+}
+
+/** The "Security" folder of a connection: its accounts and roles (V11.12). */
+export interface SecurityNode {
+  readonly kind: 'security';
+  readonly connectionId: string;
+}
+
+export type SecurityGroup = 'users' | 'roles';
+
+export interface SecurityGroupNode {
+  readonly kind: 'securityGroup';
+  readonly connectionId: string;
+  readonly group: SecurityGroup;
+}
+
+/** An account or a role as the tree lists it. */
+export interface AccountInfo {
+  readonly name: string;
+  /** MySQL accounts are `name@host`. */
+  readonly host?: string;
+  readonly login: boolean;
+  readonly role: boolean;
+  readonly flags: readonly string[];
+}
+
+export interface AccountNode {
+  readonly kind: 'account';
+  readonly connectionId: string;
+  readonly group: SecurityGroup;
+  readonly user: AccountInfo;
 }
 
 /** A numbered database of a Redis connection (V7.1). */
@@ -312,6 +372,11 @@ export type TreeNode =
   | ObjectNode
   | IndexNode
   | ForeignKeyNode
+  | QueryFolderNode
+  | SavedQueryNode
+  | SecurityNode
+  | SecurityGroupNode
+  | AccountNode
   | RedisDatabaseNode
   | RedisFolderNode
   | RedisKeyNode
@@ -335,6 +400,8 @@ export function scopeOf(node: TreeNode): ObjectScope {
       };
     case 'group':
     case 'table':
+    case 'queryFolder':
+    case 'savedQuery':
       return node.scope;
     case 'column':
     case 'folder':
@@ -346,6 +413,9 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'project':
     case 'connectionFolder':
     case 'connection':
+    case 'security':
+    case 'securityGroup':
+    case 'account':
     case 'redisDatabase':
     case 'redisFolder':
     case 'redisKey':
@@ -435,6 +505,16 @@ export function nodeId(node: TreeNode): string {
         node.table.name,
         node.key.name,
       ]);
+    case 'queryFolder':
+      return join(['queryFolder', node.connectionId, scopeKey(node.scope)]);
+    case 'savedQuery':
+      return join(['savedQuery', node.connectionId, scopeKey(node.scope), node.name]);
+    case 'security':
+      return join(['security', node.connectionId]);
+    case 'securityGroup':
+      return join(['securityGroup', node.connectionId, node.group]);
+    case 'account':
+      return join(['account', node.connectionId, node.group, node.user.name, node.user.host ?? '']);
     case 'redisDatabase':
       return join(['redisDatabase', node.connectionId, String(node.database)]);
     case 'redisFolder':
@@ -501,6 +581,11 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'object' ||
     kind === 'index' ||
     kind === 'foreignKey' ||
+    kind === 'queryFolder' ||
+    kind === 'savedQuery' ||
+    kind === 'security' ||
+    kind === 'securityGroup' ||
+    kind === 'account' ||
     kind === 'redisDatabase' ||
     kind === 'redisFolder' ||
     kind === 'redisKey' ||
@@ -531,6 +616,10 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.index.name;
     case 'foreignKey':
       return node.key.name;
+    case 'savedQuery':
+      return node.name;
+    case 'account':
+      return node.user.name;
     case 'connectionFolder':
       return node.folder;
     case 'redisKey':
@@ -551,6 +640,9 @@ export function nameOf(node: TreeNode): string | undefined {
     case 'connection':
     case 'group':
     case 'folder':
+    case 'queryFolder':
+    case 'security':
+    case 'securityGroup':
     case 'redisDatabase':
     case 'redisMore':
     case 'message':
@@ -593,6 +685,11 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'folder':
     case 'index':
     case 'foreignKey':
+    case 'queryFolder':
+    case 'savedQuery':
+    case 'security':
+    case 'securityGroup':
+    case 'account':
     case 'redisDatabase':
     case 'redisFolder':
     case 'redisKey':

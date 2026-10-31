@@ -137,6 +137,14 @@
     }
   }
 
+  /** Shows the account the tree asked for, once the list has it. */
+  function focusUser(wanted: Pick<AdminUser, 'name' | 'host'>): void {
+    const user = users.find((candidate) => userKey(candidate) === userKey(wanted));
+    if (user !== undefined) {
+      choose(user);
+    }
+  }
+
   function choose(user: AdminUser): void {
     chosenKey = userKey(user);
     mode = 'none';
@@ -248,10 +256,18 @@
   onMount(() => {
     const subscription = rpc.on('state', (next) => {
       const first = page?.features === undefined && next.features !== undefined;
+      const focus = next.focus;
       page = next;
       if (first) {
         create.options = next.features?.createOptions.includes('login') === true ? ['login'] : [];
-        void loadUsers();
+        void loadUsers().then(() => {
+          if (focus !== undefined) {
+            focusUser(focus);
+          }
+        });
+      } else if (focus !== undefined && userKey(focus) !== chosenKey) {
+        // The tree opened this page again, on another account.
+        focusUser(focus);
       }
     });
     rpc.emit('ready', {});

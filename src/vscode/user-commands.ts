@@ -28,6 +28,14 @@ export function userCommandHandlers(deps: UserCommandDeps): {
   const showUsers = async (target?: unknown): Promise<void> => {
     let connectionId: string | undefined;
     let database: string | undefined;
+    // An account of the Security folder opens the page on that account.
+    const focus =
+      isTreeNode(target) && target.kind === 'account'
+        ? {
+            name: target.user.name,
+            ...(target.user.host === undefined ? {} : { host: target.user.host }),
+          }
+        : undefined;
     if (isTreeNode(target) && 'connectionId' in target) {
       connectionId = target.connectionId;
       database = target.kind === 'database' ? target.database : undefined;
@@ -58,31 +66,35 @@ export function userCommandHandlers(deps: UserCommandDeps): {
     const driver = await deps.manager.driverOf(connectionId);
     const owner = ConnectionManager.taskOwner(`users-${connectionId}-${database ?? ''}`);
     const binding = database === undefined ? { connectionId } : { connectionId, database };
-    UserAdminPanel.show({
-      extensionUri: deps.extensionUri,
-      logger: deps.logger,
-      key: JSON.stringify([connectionId, database ?? null]),
-      title:
-        database === undefined
-          ? vscode.l10n.t('Users: {0}', config.name)
-          : vscode.l10n.t('Users: {0} · {1}', config.name, database),
-      connectionName: config.name,
-      production: config.production === true,
-      model: new UserAdminModel({
+    UserAdminPanel.show(
+      {
+        extensionUri: deps.extensionUri,
+        logger: deps.logger,
+        key: JSON.stringify([connectionId, database ?? null]),
+        title:
+          database === undefined
+            ? vscode.l10n.t('Users: {0}', config.name)
+            : vscode.l10n.t('Users: {0} · {1}', config.name, database),
         connectionName: config.name,
-        ...(database === undefined ? {} : { database }),
-        driver: config.driver,
-        dialect: driver.dialect,
-        readOnly: config.readOnly === true,
-        session: async () => await deps.manager.acquire(owner, binding),
-      }),
-      openEditor: async (sql) => {
-        await deps.openEditor(binding, sql);
+        production: config.production === true,
+        model: new UserAdminModel({
+          connectionName: config.name,
+          ...(database === undefined ? {} : { database }),
+          driver: config.driver,
+          dialect: driver.dialect,
+          readOnly: config.readOnly === true,
+          session: async () => await deps.manager.acquire(owner, binding),
+          ...(focus === undefined ? {} : { focus }),
+        }),
+        openEditor: async (sql) => {
+          await deps.openEditor(binding, sql);
+        },
+        release: async () => {
+          await deps.manager.release(owner);
+        },
       },
-      release: async () => {
-        await deps.manager.release(owner);
-      },
-    });
+      focus,
+    );
   };
   return { showUsers };
 }

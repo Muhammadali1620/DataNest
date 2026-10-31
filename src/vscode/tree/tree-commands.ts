@@ -5,6 +5,9 @@ import { DbError } from '../../core/errors';
 import type { ObjectRef } from '../../core/model/objects';
 import type { ConnectionManager } from '../../services/connection-manager';
 import { DoubleClickDetector } from './double-click';
+import type { ExpansionKeeper } from './expansion-keeper';
+import { nodeSqlTargetOf } from './node-actions';
+import type { NodeSqlTarget } from '../../services/node-sql';
 import {
   connectionIdOf,
   isTreeNode,
@@ -47,10 +50,25 @@ export interface TreeCommandDeps {
   readonly confirmDisconnect?: (connectionId: string) => Promise<boolean>;
   /** Tells a double click from two single ones; tests pass a clock they control. */
   readonly doubleClick?: DoubleClickDetector;
+  /** Puts a row back as it was after a double click toggled it (V11.12). */
+  readonly expansion?: Pick<ExpansionKeeper<TreeNode>, 'clicked' | 'settle'>;
+  /** Opens the editable SQL of a column, index, key or routine (V11.12). */
+  readonly openNodeSql?: (connectionId: string, target: NodeSqlTarget) => Promise<void>;
+  /** Shows the actions of a node as a list (V11.12). */
+  readonly showActions?: (node: TreeNode) => Promise<void>;
 }
 
 export type TreeCommandName =
-  'connect' | 'disconnect' | 'refresh' | 'copyName' | 'openTable' | 'clickTable' | 'showDefinition';
+  | 'connect'
+  | 'disconnect'
+  | 'refresh'
+  | 'copyName'
+  | 'openTable'
+  | 'clickTable'
+  | 'clickNode'
+  | 'openNodeSql'
+  | 'nodeActions'
+  | 'showDefinition';
 
 /** What a tree command receives: the clicked node, a bare id, or nothing. */
 export type CommandTarget = TreeNode | string | undefined;
@@ -65,6 +83,14 @@ export function treeCommandHandlers(
       throw new DbError('not-found', deps.noTargetMessage);
     }
     return connectionId;
+  };
+
+  const openNodeSql = async (node: TreeNode): Promise<void> => {
+    const sql = nodeSqlTargetOf(node);
+    const connectionId = connectionIdOf(node);
+    if (sql !== undefined && connectionId !== undefined) {
+      await deps.openNodeSql?.(connectionId, sql);
+    }
   };
 
   return {
@@ -108,10 +134,42 @@ export function treeCommandHandlers(
       return undefined;
     },
 
-    /** A click on a table: the first only expands the row, the second opens the table. */
+    /** A click on a table: the second of a pair opens it, and the row stays as it was. */
     clickTable: async (target?: CommandTarget) => {
-      if (isTreeNode(target) && target.kind === 'table' && doubleClick.click(nodeId(target))) {
+      if (!isTreeNode(target) || target.kind !== 'table') {
+        return undefined;
+      }
+      deps.expansion?.clicked(target);
+      if (doubleClick.click(nodeId(target))) {
+        deps.expansion?.settle(target);
         await deps.openTable(target);
+      }
+      return undefined;
+    },
+
+    /** A click on a column, index, key or routine: the second of a pair opens its SQL. */
+    clickNode: async (target?: CommandTarget) => {
+      if (!isTreeNode(target) || nodeSqlTargetOf(target) === undefined) {
+        return undefined;
+      }
+      if (doubleClick.click(nodeId(target))) {
+        await openNodeSql(target);
+      }
+      return undefined;
+    },
+
+    /** Opens the editable SQL of the node: its ALTER, CREATE or DROP statements. */
+    openNodeSql: async (target?: CommandTarget) => {
+      if (isTreeNode(target)) {
+        await openNodeSql(target);
+      }
+      return undefined;
+    },
+
+    /** The actions of the node as a list: what its right-click menu offers. */
+    nodeActions: async (target?: CommandTarget) => {
+      if (isTreeNode(target)) {
+        await deps.showActions?.(target);
       }
       return undefined;
     },

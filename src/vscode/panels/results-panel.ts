@@ -23,6 +23,7 @@ import {
 } from '../../services/cell-file';
 import {
   LOAD_ALL_WARNING_ROWS,
+  MAX_CLIPBOARD_CHARS,
   MAX_PAGE_SIZE,
   MAX_SEARCH_HITS,
   resultGridProtocol,
@@ -33,6 +34,7 @@ import { replacementFor, revealColumn, type SqlTextOutcome } from '../../service
 import { buildState, errorOffsetOf, followActive } from './results-state';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
 import { formatCount } from '../../core/number-format';
+import { tableActionCall } from './table-action';
 
 export interface ResultsPanelDeps {
   readonly extensionUri: vscode.Uri;
@@ -299,6 +301,10 @@ export class ResultsPanel implements vscode.Disposable {
       const replace = replacementFor(this.deps.tableOf?.(this.documentUri) !== undefined, resultId);
       return await this.deps.runSql({ documentUri: this.documentUri, target, sql, replace });
     });
+    this.rpc.handle('clipboardText', async () => {
+      const text = await vscode.env.clipboard.readText();
+      return { text: text.slice(0, MAX_CLIPBOARD_CHARS) };
+    });
     this.rpc.handle('pageTo', async ({ resultId, offset }) => {
       const applied = (await this.deps.reloadTable?.(resultId, { offset })) ?? false;
       return { resultId, applied };
@@ -414,6 +420,20 @@ export class ResultsPanel implements vscode.Disposable {
     });
     this.rpc.on('openTools', () => {
       void vscode.commands.executeCommand('datanest.tools.open');
+    });
+    this.rpc.on('tableAction', ({ resultId, action }) => {
+      const view =
+        this.deps.results.get(resultId) === undefined
+          ? undefined
+          : this.deps.tableOf?.(this.documentUri);
+      if (view === undefined) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Only a table opened from the tree has these tools'),
+        );
+        return;
+      }
+      const call = tableActionCall(action, view);
+      void vscode.commands.executeCommand(call.command, ...call.args);
     });
     this.rpc.on('chartResult', ({ resultId }) => {
       this.deps.chartResult?.(resultId);

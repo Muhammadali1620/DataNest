@@ -17,6 +17,8 @@ export interface DraftCondition {
   readonly column: string;
   readonly operator: FilterOperator;
   readonly value: string;
+  /** How the condition joins the one above it; the first one's is never used. */
+  readonly join: 'and' | 'or';
 }
 
 export interface Draft {
@@ -31,6 +33,7 @@ export function draftOf(filter: TableFilter | undefined): Draft {
       column: condition.column,
       operator: condition.operator,
       value: condition.value ?? '',
+      join: condition.join ?? 'and',
     })),
     where: filter?.where ?? '',
   };
@@ -48,7 +51,10 @@ export function addCondition(draft: Draft, column: string): Draft {
   }
   return {
     ...draft,
-    conditions: [...draft.conditions, { id: nextId(draft), column, operator: 'eq', value: '' }],
+    conditions: [
+      ...draft.conditions,
+      { id: nextId(draft), column, operator: 'eq', value: '', join: 'and' },
+    ],
   };
 }
 
@@ -73,10 +79,11 @@ export function removeCondition(draft: Draft, id: number): Draft {
 export function filterOf(draft: Draft): TableFilter {
   const where = draft.where.trim();
   return {
-    conditions: draft.conditions.map((condition) => ({
+    conditions: draft.conditions.map((condition, index) => ({
       column: condition.column,
       operator: condition.operator,
       ...(needsValue(condition.operator) ? { value: condition.value } : {}),
+      ...(index > 0 && condition.join === 'or' ? { join: 'or' as const } : {}),
     })),
     ...(where === '' ? {} : { where }),
   };
@@ -107,10 +114,11 @@ export function isUnchanged(draft: Draft, applied: TableFilter | undefined): boo
 
 function normalize(filter: TableFilter | undefined): unknown {
   return {
-    conditions: (filter?.conditions ?? []).map((condition) => [
+    conditions: (filter?.conditions ?? []).map((condition, index) => [
       condition.column,
       condition.operator,
       condition.value ?? null,
+      index > 0 && condition.join === 'or' ? 'or' : 'and',
     ]),
     where: (filter?.where ?? '').trim(),
   };
@@ -122,4 +130,10 @@ export function activeCount(filter: TableFilter | undefined): number {
     return 0;
   }
   return filter.conditions.length + ((filter.where ?? '').trim() === '' ? 0 : 1);
+}
+
+/** Flips how a condition joins the one above it. */
+export function toggleJoin(draft: Draft, id: number): Draft {
+  const current = draft.conditions.find((condition) => condition.id === id)?.join;
+  return updateCondition(draft, id, { join: current === 'or' ? 'and' : 'or' });
 }

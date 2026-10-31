@@ -108,8 +108,43 @@ export async function readMysqlStructure(
     primaryKey: indexes.find((index) => index.primary)?.columns ?? [],
     indexes,
     foreignKeys: await reader.listForeignKeys(table),
+    checks: await readMysqlChecks(read, scope, mariaDb),
     ...(comment === '' ? {} : { comment }),
   };
+}
+
+/**
+ * CHECK constraints: MySQL 8.0.16+ and MariaDB 10.2+ keep them in information_schema.
+ * An older server has no such table; it simply has no checks to show.
+ */
+async function readMysqlChecks(
+  read: MysqlRowReader,
+  scope: (string | null)[],
+  mariaDb: boolean,
+): Promise<{ name: string; expression: string }[]> {
+  try {
+    const rows = mariaDb
+      ? await read(
+          `SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS
+           WHERE CONSTRAINT_SCHEMA = COALESCE(?, DATABASE()) AND TABLE_NAME = ?
+           ORDER BY CONSTRAINT_NAME`,
+          scope,
+        )
+      : await read(
+          `SELECT c.CONSTRAINT_NAME, c.CHECK_CLAUSE
+           FROM information_schema.CHECK_CONSTRAINTS c
+           JOIN information_schema.TABLE_CONSTRAINTS t
+             ON t.CONSTRAINT_SCHEMA = c.CONSTRAINT_SCHEMA AND t.CONSTRAINT_NAME = c.CONSTRAINT_NAME
+           WHERE t.TABLE_SCHEMA = COALESCE(?, DATABASE()) AND t.TABLE_NAME = ?
+             AND t.CONSTRAINT_TYPE = 'CHECK'
+           ORDER BY c.CONSTRAINT_NAME`,
+          scope,
+        );
+    return rows.map((row) => ({ name: text(row[0]), expression: text(row[1]) }));
+  } catch {
+    // Servers without the view: no checks to list.
+    return [];
+  }
 }
 
 function text(value: unknown): string {

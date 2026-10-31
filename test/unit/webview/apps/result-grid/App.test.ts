@@ -92,7 +92,7 @@ async function withState(state: ResultGridState, lang = 'en') {
   // ("Loading…" is no good as a signal: a row awaiting its cells says the same.)
   if (state.tabs.length > 0) {
     await waitFor(() => {
-      expect(screen.queryByRole('tablist')).not.toBeNull();
+      expect(screen.queryByTestId('sql-bar')).not.toBeNull();
     });
   }
   return { ...harness, handler };
@@ -1042,13 +1042,24 @@ describe('result grid App', () => {
 
     it('keeps the statement in the tab tooltip', async () => {
       await withState({
-        tabs: [tab({ title: 'SELECT a, b…', statement: 'SELECT a, b FROM customers' })],
+        tabs: [
+          tab({ title: 'SELECT a, b…', statement: 'SELECT a, b FROM customers' }),
+          tab({ id: 'result-2', title: 'SELECT 2', statement: 'SELECT 2' }),
+        ],
         activeId: 'result-1',
         running: false,
       });
       await waitFor(() => {
-        expect(screen.getByRole('tab').getAttribute('title')).toBe('SELECT a, b FROM customers');
+        expect(screen.getByRole('tab', { name: 'SELECT a, b…' }).getAttribute('title')).toBe(
+          'SELECT a, b FROM customers',
+        );
       });
+    });
+
+    it('hides the tab row while there is a single result', async () => {
+      await withState({ tabs: [tab()], activeId: 'result-1', running: false });
+      expect(screen.queryByRole('tablist')).toBeNull();
+      expect(screen.queryByRole('tab')).toBeNull();
     });
   });
 

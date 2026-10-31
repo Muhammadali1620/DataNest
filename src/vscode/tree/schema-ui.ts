@@ -55,6 +55,10 @@ export function schemaTexts(): SchemaTexts {
     createTable: (name) => vscode.l10n.t('Create table "{0}"?', name),
     alterTable: (name) => vscode.l10n.t('Apply the changes to table "{0}"?', name),
     apply: vscode.l10n.t('Apply'),
+    columnAtEdge: (name, direction) =>
+      direction === 'up'
+        ? vscode.l10n.t('"{0}" is the first column already', name)
+        : vscode.l10n.t('"{0}" is the last column already', name),
     dropRelation: (name) => vscode.l10n.t('Drop "{0}"?', name),
     rename: (from, to) => vscode.l10n.t('Rename "{0}" to "{1}"?', from, to),
     truncate: (name) => vscode.l10n.t('Delete every row of "{0}"?', name),

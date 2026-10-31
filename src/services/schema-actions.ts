@@ -4,7 +4,7 @@
 
 import { DbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
-import type { ObjectRef, RelationKind, TableRef } from '../core/model/objects';
+import type { ObjectRef, ObjectScope, RelationKind, TableRef } from '../core/model/objects';
 import type { SchemaDdl, Session } from '../drivers/driver';
 import type { TableBackground, TableDesign } from '../shared/table-design';
 import { browseSession } from './browse-session';
@@ -46,7 +46,13 @@ export type SchemaAction =
       readonly newName: string;
     }
   | { readonly kind: 'truncateTable'; readonly table: TableRef }
-  | { readonly kind: 'dropObject'; readonly object: ObjectRef };
+  | { readonly kind: 'dropObject'; readonly object: ObjectRef }
+  /** Statements built elsewhere (a CHECK constraint of the table page), run in `scope`. */
+  | {
+      readonly kind: 'runStatements';
+      readonly scope: ObjectScope;
+      readonly statements: readonly string[];
+    };
 
 /** The statements of an action; `unsupported` when this database has no such thing. */
 export function actionSql(action: SchemaAction, ddl: SchemaDdl): string[] {
@@ -55,6 +61,9 @@ export function actionSql(action: SchemaAction, ddl: SchemaDdl): string[] {
   }
   if (action.kind === 'alterTable') {
     return [...alterPlan(action, ddl).statements];
+  }
+  if (action.kind === 'runStatements') {
+    return [...action.statements];
   }
   if (action.kind === 'replaceObject') {
     // The checks run first and are shown too: everything that runs is shown (§8).
@@ -91,7 +100,10 @@ export function actionScript(statements: readonly string[]): string {
 }
 
 function singleStatement(
-  action: Exclude<SchemaAction, { kind: 'createTable' | 'alterTable' | 'replaceObject' }>,
+  action: Exclude<
+    SchemaAction,
+    { kind: 'createTable' | 'alterTable' | 'replaceObject' | 'runStatements' }
+  >,
   ddl: SchemaDdl,
 ): string {
   switch (action.kind) {
@@ -151,6 +163,8 @@ export function actionDatabase(action: SchemaAction): string | undefined {
     case 'dropObject':
     case 'replaceObject':
       return action.object.database;
+    case 'runStatements':
+      return action.scope.database;
   }
 }
 

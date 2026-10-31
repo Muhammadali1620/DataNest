@@ -151,12 +151,13 @@ describe('tree menus', () => {
     }
   });
 
-  it('offers new connection, refresh, new query and object search in the view title', () => {
+  it('offers new connection, refresh, new query, object search and history in the view title', () => {
     expect(title.map((entry) => entry.command)).toEqual([
       COMMAND_IDS.addConnection,
       COMMAND_IDS.refreshTree,
       COMMAND_IDS.newQuery,
       COMMAND_IDS.searchObjects,
+      COMMAND_IDS.showHistory,
       COMMAND_IDS.addConnectionFromUrl,
       COMMAND_IDS.importEnvConnections,
       COMMAND_IDS.openProjectFile,

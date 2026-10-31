@@ -4,6 +4,7 @@
     DesignPreview,
     TableDesignerProtocol,
     TableDesignerState,
+    TableTab,
   } from '../../../../src/shared/protocols/table-designer';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import {
@@ -16,10 +17,13 @@
   import type { MessageKey } from '../../l10n/en';
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
+  import ChecksPanel from './ChecksPanel.svelte';
   import ColumnsEditor from './ColumnsEditor.svelte';
+  import DdlPanel from './DdlPanel.svelte';
   import { problemPlace } from './design-model';
   import ForeignKeysEditor from './ForeignKeysEditor.svelte';
   import IndexesEditor from './IndexesEditor.svelte';
+  import TriggersPanel from './TriggersPanel.svelte';
 
   interface Props {
     rpc: RpcPeer<TableDesignerProtocol['webview'], TableDesignerProtocol['host']>;
@@ -30,13 +34,16 @@
 
   const { rpc, t, previewDelay = 250 }: Props = $props();
 
-  type Tab = 'columns' | 'indexes' | 'keys' | 'sql';
+  type Tab = TableTab;
 
   const TABS: readonly { readonly id: Tab; readonly label: MessageKey; readonly icon: CodiconName }[] =
     [
+      { id: 'ddl', label: 'designer.tabDdl', icon: 'file-code' },
       { id: 'columns', label: 'designer.tabColumns', icon: 'symbol-field' },
       { id: 'indexes', label: 'designer.tabIndexes', icon: 'list-ordered' },
       { id: 'keys', label: 'designer.tabKeys', icon: 'references' },
+      { id: 'triggers', label: 'designer.tabTriggers', icon: 'symbol-event' },
+      { id: 'checks', label: 'designer.tabChecks', icon: 'checklist' },
       { id: 'sql', label: 'designer.tabSql', icon: 'code' },
     ];
 
@@ -65,6 +72,13 @@
   /** Plain, not reactive: only remembers what was already asked for. */
   const requested: string[] = [];
   let tablesRequested = false;
+  /** Parts of a stored table the host reads on demand; undefined until they arrive. */
+  let ddlText = $state<string | undefined>(undefined);
+  let ddlError = $state<string | undefined>(undefined);
+  let triggerNames = $state<string[] | undefined>(undefined);
+  let triggerError = $state<string | undefined>(undefined);
+  let checkList = $state<{ name: string; expression: string }[] | undefined>(undefined);
+  let checkError = $state<string | undefined>(undefined);
   let tabList = $state<HTMLDivElement | undefined>(undefined);
 
   const problems = $derived(
@@ -74,7 +88,22 @@
   );
   const tableProblems = $derived(problems.filter((problem) => !('column' in problem)));
   const shownTabs = $derived(
-    TABS.filter((item) => item.id !== 'keys' || designerState?.features.foreignKeys !== false),
+    TABS.filter((item) => {
+      switch (item.id) {
+        case 'keys':
+          return designerState?.features.foreignKeys !== false;
+        case 'ddl':
+          return designerState?.mode === 'edit';
+        case 'triggers':
+          return designerState?.features.triggers === true;
+        case 'checks':
+          return designerState?.features.checks === true;
+        case 'columns':
+        case 'indexes':
+        case 'sql':
+          return true;
+      }
+    }),
   );
   /** Tabs with a problem to fix, marked once problems are shown. */
   const troubled = $derived(
@@ -88,10 +117,25 @@
       original = next.design;
       notice = undefined;
       showProblems = false;
+      // The table may have changed (a save ran): what was read about it is stale.
+      ddlText = undefined;
+      ddlError = undefined;
+      triggerNames = undefined;
+      checkList = undefined;
+      if (next.tab !== undefined) {
+        openTab(next.tab);
+      } else if (tab === 'ddl' || tab === 'triggers' || tab === 'checks') {
+        openTab(tab);
+      }
+      loadCounts();
+    });
+    const shown = rpc.on('tab', ({ tab: next }) => {
+      openTab(next);
     });
     rpc.emit('ready', {});
     return () => {
       subscription.dispose();
+      shown.dispose();
     };
   });
 
@@ -151,9 +195,116 @@
   }
 
   function openTab(next: Tab): void {
+    // A tab the table does not have (a new table, a database without triggers) is not opened.
+    if (shownTabs.length > 0 && !shownTabs.some((item) => item.id === next)) {
+      return;
+    }
     tab = next;
     if (next === 'keys') {
       void loadTables();
+    } else if (next === 'ddl' && ddlText === undefined) {
+      void loadDdl();
+    } else if (next === 'triggers' && triggerNames === undefined) {
+      void loadTriggers();
+    } else if (next === 'checks' && checkList === undefined) {
+      void loadChecks();
+    }
+  }
+
+  /** The counts on the tabs of a stored table, without waiting for the tab to open. */
+  function loadCounts(): void {
+    if (designerState?.features.triggers === true) {
+      void loadTriggers();
+    }
+    if (designerState?.features.checks === true) {
+      void loadChecks();
+    }
+  }
+
+  async function loadDdl(): Promise<void> {
+    ddlError = undefined;
+    try {
+      ddlText = (await rpc.request('definition', {})).text;
+    } catch (error) {
+      ddlError = messageOf(error);
+    }
+  }
+
+  async function loadTriggers(): Promise<void> {
+    triggerError = undefined;
+    try {
+      triggerNames = (await rpc.request('triggers', {})).triggers;
+    } catch (error) {
+      triggerError = messageOf(error);
+    }
+  }
+
+  async function loadChecks(): Promise<void> {
+    checkError = undefined;
+    try {
+      checkList = (await rpc.request('checks', {})).checks;
+    } catch (error) {
+      checkError = messageOf(error);
+    }
+  }
+
+  async function triggerAction(
+    action: 'view' | 'edit' | 'drop' | 'new',
+    name?: string,
+  ): Promise<void> {
+    try {
+      const { outcome } = await rpc.request('triggerAction', {
+        action,
+        ...(name === undefined ? {} : { name }),
+      });
+      if (outcome === 'ran') {
+        await loadTriggers();
+      }
+    } catch (error) {
+      triggerError = messageOf(error);
+    }
+  }
+
+  /** True when the check went in, so the form can be cleared. */
+  async function addCheck(name: string, expression: string): Promise<boolean> {
+    checkError = undefined;
+    try {
+      const result = await rpc.request('checkAction', { action: 'add', name, expression });
+      if (result.error !== undefined) {
+        checkError = result.error;
+        return false;
+      }
+      if (result.outcome === 'ran') {
+        await loadChecks();
+        return true;
+      }
+    } catch (error) {
+      checkError = messageOf(error);
+    }
+    return false;
+  }
+
+  async function dropCheck(name: string): Promise<void> {
+    checkError = undefined;
+    try {
+      const result = await rpc.request('checkAction', { action: 'drop', name });
+      checkError = result.error;
+      if (result.outcome === 'ran') {
+        await loadChecks();
+      }
+    } catch (error) {
+      checkError = messageOf(error);
+    }
+  }
+
+  async function textAction(action: 'copy' | 'open', text: string): Promise<void> {
+    try {
+      await rpc.request('textAction', { action, text });
+      if (action === 'copy') {
+        notice = { kind: 'info', text: t('designer.ddl.copied') };
+      }
+    } catch (error) {
+      notice = { kind: 'error', text: messageOf(error) };
     }
   }
 
@@ -190,9 +341,14 @@
       case 'columns':
         return design.columns.length;
       case 'indexes':
-        return design.indexes.length;
+        return design.indexes.length + (designerState?.kept.indexes.length ?? 0);
       case 'keys':
         return design.foreignKeys.length;
+      case 'triggers':
+        return triggerNames?.length;
+      case 'checks':
+        return checkList?.length;
+      case 'ddl':
       case 'sql':
         return undefined;
     }
@@ -330,18 +486,6 @@
             >
           </p>
         {/if}
-        {#if designerState.kept.indexes.length > 0}
-          <p class="notice info">
-            <Icon name="info" /><span
-              >{t(
-                'designer.keptIndexes',
-                designerState.kept.indexes
-                  .map((index) => `${index.name} ${index.description}`)
-                  .join('; '),
-              )}</span
-            >
-          </p>
-        {/if}
       </section>
 
       <section class="card editor">
@@ -411,6 +555,48 @@
               {showProblems}
               {t}
               onchange={setColumns}
+            />
+            {#if designerState.kept.indexes.length > 0}
+              <div class="kept" data-testid="kept-indexes">
+                <h3 class="kept-title">
+                  <Icon name="lock" size={14} />{t('designer.keptIndexesTitle')}
+                </h3>
+                <ul class="kept-list">
+                  {#each designerState.kept.indexes as index (index.name)}
+                    <li>
+                      <span class="kept-name">{index.name}</span>
+                      <code class="kept-text">{index.description}</code>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+          {:else if tab === 'ddl'}
+            <DdlPanel
+              text={ddlText}
+              error={ddlError}
+              {t}
+              oncopy={(text: string) => void textAction('copy', text)}
+              onopen={(text: string) => void textAction('open', text)}
+              onrefresh={() => void loadDdl()}
+            />
+          {:else if tab === 'triggers'}
+            <TriggersPanel
+              triggers={triggerNames}
+              error={triggerError}
+              {t}
+              onaction={(action: 'view' | 'edit' | 'drop' | 'new', name?: string) =>
+                void triggerAction(action, name)}
+              onrefresh={() => void loadTriggers()}
+            />
+          {:else if tab === 'checks'}
+            <ChecksPanel
+              checks={checkList}
+              error={checkError}
+              {t}
+              onadd={addCheck}
+              ondrop={(name: string) => void dropCheck(name)}
+              onrefresh={() => void loadChecks()}
             />
           {:else if tab === 'keys'}
             <ForeignKeysEditor
@@ -654,6 +840,53 @@
     line-height: 1.5;
     white-space: pre-wrap;
     user-select: text;
+  }
+
+  .kept {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dn-gap-s);
+    padding-top: var(--dn-gap);
+    border-top: 1px solid var(--dn-divider);
+  }
+
+  .kept-title {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin: 0;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    font-weight: 600;
+  }
+
+  .kept-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .kept-list li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap);
+    align-items: baseline;
+    padding: 3px var(--dn-gap);
+    background: var(--dn-surface);
+    border-radius: var(--dn-radius);
+  }
+
+  .kept-name {
+    font-weight: 600;
+  }
+
+  .kept-text {
+    color: var(--dn-muted);
+    font-family: var(--dn-mono);
+    overflow-wrap: anywhere;
   }
 
   .sql-hint {

@@ -70,6 +70,22 @@ export const COMMAND_IDS = {
   clickTable: 'datanest.table.click',
   /** Opens the DDL of a tree object in a new SQL editor. */
   showDefinition: 'datanest.object.showDefinition',
+  /** What a click on a column, index, key or routine runs: the second click opens its SQL (V11.12). */
+  clickNode: 'datanest.node.click',
+  /** Opens the editable SQL of a column, index, key or routine in a new editor (V11.12). */
+  openNodeSql: 'datanest.node.openSql',
+  /** The actions of a tree item as a list: what the right-click menu offers (V11.12). */
+  nodeActions: 'datanest.node.actions',
+  /** Moves a column one place up or down, after showing the ALTER (V11.12). */
+  moveColumnUp: 'datanest.column.moveUp',
+  moveColumnDown: 'datanest.column.moveDown',
+  // Saved queries of the "Query" folder of a database or schema (V11.12).
+  newSavedQuery: 'datanest.savedQuery.new',
+  openSavedQuery: 'datanest.savedQuery.open',
+  renameSavedQuery: 'datanest.savedQuery.rename',
+  deleteSavedQuery: 'datanest.savedQuery.delete',
+  /** Opens the users page on an account or role of the "Security" folder (V11.12). */
+  openAccount: 'datanest.account.open',
   // Structure changes from the tree; each shows its SQL before it runs.
   createDatabase: 'datanest.database.create',
   dropDatabase: 'datanest.database.drop',
@@ -78,6 +94,12 @@ export const COMMAND_IDS = {
   createTable: 'datanest.table.create',
   /** Opens an existing table in the table designer. */
   designTable: 'datanest.table.design',
+  /**
+   * Opens a table's properties page on a tab. Argument:
+   * `{ connectionId, scope: { database?, schema? }, table, tab? }`, where `tab` is one of
+   * `ddl | columns | indexes | keys | triggers | checks | sql`. Used by other pages.
+   */
+  tableProperties: 'datanest.table.properties',
   // Statement templates for a table, opened in a new editor.
   generateSelect: 'datanest.table.generateSelect',
   generateInsert: 'datanest.table.generateInsert',

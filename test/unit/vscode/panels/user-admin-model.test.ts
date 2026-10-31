@@ -254,3 +254,24 @@ describe('UserAdminModel', () => {
     ).rejects.toThrow('nothing to run');
   });
 });
+
+describe('the account the tree asked for (V11.12)', () => {
+  it('is in the state from the start, with its host when it has one', async () => {
+    const { users } = model(postgres, { focus: { name: 'app', host: '%' } });
+    await users.start();
+    expect(users.state().focus).toEqual({ name: 'app', host: '%' });
+  });
+
+  it('leaves the state alone when the page was opened from a connection', async () => {
+    const { users } = model(postgres);
+    await users.start();
+    expect(users.state()).not.toHaveProperty('focus');
+  });
+
+  it('changes when the tree opens another account on the same page', async () => {
+    const { users } = model(postgres, { focus: { name: 'app' } });
+    await users.start();
+    users.focus({ name: 'zed' });
+    expect(users.state().focus).toEqual({ name: 'zed' });
+  });
+});

@@ -382,3 +382,13 @@ export function newTableDesign(driver: DriverId, name = ''): TableDesign {
     foreignKeys: [],
   };
 }
+
+/**
+ * Drivers whose existing columns can change places (`DesignerFeatures.reorder`): MySQL
+ * with AFTER, SQLite by a rebuild, ClickHouse with MODIFY … AFTER. The tree decides
+ * the move buttons from it before any connection is asked; a test keeps it in line
+ * with the drivers.
+ */
+export function canReorderColumns(driver: DriverId): boolean {
+  return driver === 'mysql' || driver === 'sqlite' || driver === 'clickhouse';
+}

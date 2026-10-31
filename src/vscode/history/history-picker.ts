@@ -90,21 +90,45 @@ async function reuse(deps: HistoryPickerDeps, entry: HistoryEntry, run: boolean)
   await vscode.commands.executeCommand(COMMAND_IDS.runAll);
 }
 
+/** Narrows the history to one connection and/or one table, e.g. from a table's own bar. */
+export interface HistoryScope {
+  readonly connectionId?: string;
+  readonly table?: string;
+}
+
+/** The scope a command was given, if it is one: anything else (a tree node) means all. */
+export function historyScopeOf(value: unknown): HistoryScope {
+  if (typeof value !== 'object' || value === null || 'kind' in value) {
+    return {};
+  }
+  const { connectionId, table } = value as { connectionId?: unknown; table?: unknown };
+  return {
+    ...(typeof connectionId === 'string' ? { connectionId } : {}),
+    ...(typeof table === 'string' ? { table } : {}),
+  };
+}
+
 /** The query history: search as you type, filter by connection, reopen or rerun. */
-export function showHistory(deps: HistoryPickerDeps): void {
+export function showHistory(deps: HistoryPickerDeps, only: HistoryScope = {}): void {
   const pick = vscode.window.createQuickPick<HistoryItem>();
-  let connectionId: string | undefined;
+  let connectionId: string | undefined = only.connectionId;
+  const table = only.table;
   const subscriptions: vscode.Disposable[] = [pick];
 
   const refresh = (): void => {
     const filter = deps.store.get(connectionId ?? '')?.name;
+    const where = [filter ?? connectionId, table].filter((part) => part !== undefined);
     pick.title =
-      connectionId === undefined
+      where.length === 0
         ? vscode.l10n.t('Query History')
-        : vscode.l10n.t('Query History · {0}', filter ?? connectionId);
+        : vscode.l10n.t('Query History · {0}', where.join(' · '));
     pick.placeholder = vscode.l10n.t('Search the SQL of past queries');
     pick.items = deps.history
-      .list({ text: pick.value, ...(connectionId === undefined ? {} : { connectionId }) })
+      .list({
+        text: pick.value,
+        ...(connectionId === undefined ? {} : { connectionId }),
+        ...(table === undefined ? {} : { table }),
+      })
       .map((entry) => describe(entry, deps.store));
   };
 

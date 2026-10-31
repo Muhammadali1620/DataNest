@@ -40,3 +40,62 @@ export function describeColumn(column: ColumnInfo): string {
   }
   return parts.join(', ');
 }
+
+/** What a column holds, for the icon in the tree. */
+export type ColumnKind =
+  | 'number'
+  | 'text'
+  | 'datetime'
+  | 'boolean'
+  | 'json'
+  | 'binary'
+  | 'uuid'
+  | 'choice'
+  | 'geometry'
+  | 'other';
+
+/** The kind of a type as a server prints it (`varchar(100)`, `timestamp without time zone`). */
+export function columnKind(dataType: string): ColumnKind {
+  const type = dataType.trim().toLowerCase();
+  const word = /^[a-z_ ]+/u.exec(type)?.[0]?.trim() ?? '';
+  if (/^(bool|boolean|bit)$/u.test(word) && !/\bvarying\b/u.test(type)) {
+    return 'boolean';
+  }
+  if (type.startsWith('tinyint(1)')) {
+    return 'boolean';
+  }
+  if (word.includes('uuid') || word.includes('uniqueidentifier')) {
+    return 'uuid';
+  }
+  if (word.includes('json')) {
+    return 'json';
+  }
+  if (/^(enum|set)\b/u.test(word)) {
+    return 'choice';
+  }
+  if (/geometry|geography|point|polygon|linestring/u.test(word)) {
+    return 'geometry';
+  }
+  if (/date|time|interval|year/u.test(word)) {
+    return 'datetime';
+  }
+  if (/blob|binary|bytea|image|raw/u.test(word)) {
+    return 'binary';
+  }
+  if (/char|text|string|clob|xml|name\b/u.test(word)) {
+    return 'text';
+  }
+  if (/int|serial|numeric|decimal|number|float|double|real|money|dec\b/u.test(word)) {
+    return 'number';
+  }
+  return 'other';
+}
+
+/** One-line summary of an account or role: its flags, and the roles it is in. */
+export function describeAccount(user: {
+  readonly flags: readonly string[];
+  readonly login: boolean;
+  readonly role: boolean;
+}): string {
+  return [...user.flags, ...(user.login || user.role ? [] : ['no login'])].join(', ');
+}

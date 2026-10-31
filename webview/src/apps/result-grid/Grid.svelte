@@ -6,7 +6,11 @@
   import type { ResultColumnInfo } from '../../../../src/shared/protocols/result-grid';
   import type { Translate } from '../../lib/i18n';
   import Icon from '../../components/Icon.svelte';
+  import ContextMenu from '../../components/ContextMenu.svelte';
   import IconButton from '../../components/IconButton.svelte';
+  import type { ContextEntry } from '../../components/menu';
+  import type { FilterOperator } from '../../../../src/shared/table-filter';
+  import { cellText } from '../../../../src/shared/cell-text';
   import { displayOf } from './cells';
   import { typeIcon } from './column-type';
   import { controlFor, type EditColumn, type EditorControl, initialText, isEditableColumn } from './edit-model';
@@ -108,6 +112,12 @@
     onInsertDialog?: (() => void) | undefined;
     /** Called to open a cell's value in the dialog (the magnifier on the cell). */
     onOpenDialog?: ((row: number, column: number) => void) | undefined;
+    /** Called to load a file into a cell or save its value to a file (the cell menu). */
+    onCellFile?: ((action: 'load' | 'save', cell: CellRef) => void) | undefined;
+    /** Called to filter the table by what a cell holds; absent when it cannot be filtered. */
+    onFilterValue?:
+      | ((column: number, condition: { operator: FilterOperator; value?: string }) => void)
+      | undefined;
     t: Translate;
   }
 
@@ -145,6 +155,8 @@
     onFilterColumn,
     filteredColumns,
     onOpenDialog,
+    onCellFile,
+    onFilterValue,
     onInsertDialog,
     onMoveColumn,
     t,
@@ -417,6 +429,165 @@
       return;
     }
     void onRowAction(action, rows);
+  }
+
+  type CellAction =
+    | 'copy'
+    | 'edit'
+    | 'duplicate'
+    | 'dialog'
+    | 'setNull'
+    | 'setEmpty'
+    | 'loadFile'
+    | 'saveFile'
+    | 'filterEq'
+    | 'filterNe'
+    | 'filterMenu'
+    | 'filterNull'
+    | 'filterNotNull'
+    | 'filterContains'
+    | 'filterNotContains';
+
+  /** The right-click menu of a cell: where it is, and which cell it belongs to. */
+  let cellMenu = $state<{ x: number; y: number; row: number; column: number } | undefined>(
+    undefined,
+  );
+
+  function openCellMenu(event: MouseEvent, row: number, position: number): void {
+    if (editing !== undefined) {
+      return;
+    }
+    event.preventDefault();
+    // A click outside the selection moves the selection to the cell, as in a file manager.
+    if (!isSelected(selection, row, position)) {
+      selection = selectCell({ row, column: position }, bounds);
+    }
+    viewport?.focus();
+    cellMenu = { x: event.clientX, y: event.clientY, row, column: orig(position) };
+  }
+
+  /** A value short enough to sit in a menu line. */
+  function shortValue(value: CellValue | undefined): string {
+    const text = cellText(value ?? null).replace(/\s+/gu, ' ');
+    return text.length > 24 ? `${text.slice(0, 24)}…` : text;
+  }
+
+  const cellEntries = $derived.by((): ContextEntry<CellAction>[] => {
+    const menu = cellMenu;
+    if (menu === undefined) {
+      return [];
+    }
+    const value = rowAt(menu.row)?.[menu.column];
+    const info = editColumn(menu.column);
+    const editable = info !== undefined && stateAt(menu.row) !== 'deleted';
+    const isNull = value === null || value === undefined;
+    const name = columns[menu.column]?.name ?? '';
+    const entries: ContextEntry<CellAction>[] = [
+      { id: 'copy', label: t('cellMenu.copy'), icon: 'copy', tone: 'blue', keys: 'Ctrl+C' },
+      { id: 'edit', label: t('cellMenu.edit'), icon: 'edit', tone: 'orange', disabled: !editable, keys: 'F2' },
+      { id: 'duplicate', label: t('cellMenu.duplicate'), icon: 'files', tone: 'green', disabled: editColumns === undefined },
+    ];
+    if (onOpenDialog !== undefined) {
+      entries.push({ id: 'dialog', label: t('cellMenu.dialog'), icon: 'open-preview', tone: 'teal' });
+    }
+    entries.push(
+      { id: 'setNull', label: t('cellMenu.setNull'), icon: 'circle-slash', tone: 'purple', separated: true, disabled: !editable || !info.nullable },
+      { id: 'setEmpty', label: t('cellMenu.setEmpty'), icon: 'symbol-string', tone: 'purple', disabled: !editable },
+    );
+    if (onCellFile !== undefined) {
+      entries.push(
+        { id: 'loadFile', label: t('cellMenu.loadFile'), icon: 'cloud-upload', tone: 'teal', separated: true, disabled: !editable },
+        { id: 'saveFile', label: t('cellMenu.saveFile'), icon: 'save', tone: 'green', disabled: isNull },
+      );
+    }
+    if (onFilterValue !== undefined) {
+      const quoted = shortValue(value);
+      entries.push(
+        {
+          id: 'filterEq',
+          label: isNull ? t('cellMenu.filterNull', name) : t('cellMenu.filterEq', name, quoted),
+          icon: 'filter',
+          tone: 'orange',
+          separated: true,
+        },
+        {
+          id: 'filterNe',
+          label: isNull ? t('cellMenu.filterNotNull', name) : t('cellMenu.filterNe', name, quoted),
+          icon: 'filter-filled',
+          tone: 'orange',
+        },
+        {
+          id: 'filterMenu',
+          label: t('cellMenu.filterBy'),
+          icon: 'target',
+          tone: 'pink',
+          children: [
+            { id: 'filterNull', label: t('cellMenu.isNull', name), icon: 'circle-slash' },
+            { id: 'filterNotNull', label: t('cellMenu.isNotNull', name), icon: 'circle-filled' },
+            { id: 'filterContains', label: t('cellMenu.contains', name, quoted), icon: 'whole-word', disabled: isNull },
+            { id: 'filterNotContains', label: t('cellMenu.notContains', name, quoted), icon: 'case-sensitive', disabled: isNull },
+          ],
+        },
+      );
+    }
+    return entries;
+  });
+
+  function runCellAction(action: CellAction): void {
+    const menu = cellMenu;
+    if (menu === undefined) {
+      return;
+    }
+    const value = rowAt(menu.row)?.[menu.column];
+    const text = cellText(value ?? null);
+    switch (action) {
+      case 'copy':
+        if (selection !== undefined) {
+          onCopy(infoOf(selection));
+        }
+        break;
+      case 'edit':
+        startEdit(menu.row, menu.column);
+        break;
+      case 'duplicate':
+        rowAction('duplicate');
+        break;
+      case 'dialog':
+        onOpenDialog?.(menu.row, menu.column);
+        break;
+      case 'setNull':
+        void setFocused({ kind: 'null' });
+        break;
+      case 'setEmpty':
+        void setFocused({ kind: 'text', text: '' });
+        break;
+      case 'loadFile':
+        onCellFile?.('load', { row: menu.row, column: menu.column });
+        break;
+      case 'saveFile':
+        onCellFile?.('save', { row: menu.row, column: menu.column });
+        break;
+      case 'filterEq':
+        onFilterValue?.(menu.column, value === null || value === undefined ? { operator: 'isNull' } : { operator: 'eq', value: text });
+        break;
+      case 'filterNe':
+        onFilterValue?.(menu.column, value === null || value === undefined ? { operator: 'notNull' } : { operator: 'ne', value: text });
+        break;
+      case 'filterNull':
+        onFilterValue?.(menu.column, { operator: 'isNull' });
+        break;
+      case 'filterNotNull':
+        onFilterValue?.(menu.column, { operator: 'notNull' });
+        break;
+      case 'filterContains':
+        onFilterValue?.(menu.column, { operator: 'contains', value: text });
+        break;
+      case 'filterMenu':
+        break;
+      case 'filterNotContains':
+        onFilterValue?.(menu.column, { operator: 'notContains', value: text });
+        break;
+    }
   }
 
   function startEdit(row: number, column: number): void {
@@ -1082,6 +1253,9 @@
     ondblclick={() => {
       startEdit(index, column);
     }}
+    oncontextmenu={(event) => {
+      openCellMenu(event, index, position);
+    }}
   >
     {#if editor === undefined}
       {mark === 'default' ? t('grid.defaultLabel') : cell.text}
@@ -1165,6 +1339,20 @@
     {/if}
   </div>
 {/snippet}
+
+{#if cellMenu !== undefined}
+  <ContextMenu
+    x={cellMenu.x}
+    y={cellMenu.y}
+    items={cellEntries}
+    label={t('cellMenu.title')}
+    onSelect={runCellAction}
+    onClose={() => {
+      cellMenu = undefined;
+      viewport?.focus();
+    }}
+  />
+{/if}
 
 <style>
   .viewport {

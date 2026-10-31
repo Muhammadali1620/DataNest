@@ -28,6 +28,8 @@ function state(overrides: Partial<TableDesignerState> = {}): TableDesignerState 
       autoIncrement: true,
       foreignKeys: true,
       uniqueIndexes: true,
+      triggers: false,
+      checks: false,
     },
     design: newTableDesign('mysql'),
     kept: { indexes: [], columns: [] },
@@ -68,6 +70,42 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     saves.push(design);
     return { outcome: saveOutcome };
   });
+  const parts = {
+    definition: 'CREATE TABLE orders (id int);',
+    triggers: ['trg_a', 'trg_b'],
+    checks: [{ name: 'ck_pos', expression: 'id > 0' }],
+    checkError: undefined as string | undefined,
+    triggerCalls: [] as { action: string; name?: string | undefined }[],
+    checkCalls: [] as { action: string; name: string; expression?: string | undefined }[],
+    textCalls: [] as { action: string; text: string }[],
+  };
+  host.handle('definition', () => ({ text: parts.definition }));
+  host.handle('triggers', () => ({ triggers: [...parts.triggers] }));
+  host.handle('triggerAction', (call) => {
+    parts.triggerCalls.push(call);
+    if (call.action === 'drop') {
+      parts.triggers = parts.triggers.filter((name) => name !== call.name);
+      return { outcome: 'ran' as const };
+    }
+    return { outcome: 'opened' as const };
+  });
+  host.handle('checks', () => ({ checks: parts.checks.map((check) => ({ ...check })) }));
+  host.handle('checkAction', (call) => {
+    parts.checkCalls.push(call);
+    if (parts.checkError !== undefined) {
+      return { outcome: 'unsupported' as const, error: parts.checkError };
+    }
+    if (call.action === 'add') {
+      parts.checks.push({ name: call.name, expression: call.expression ?? '' });
+    } else {
+      parts.checks = parts.checks.filter((check) => check.name !== call.name);
+    }
+    return { outcome: 'ran' as const };
+  });
+  host.handle('textAction', (call) => {
+    parts.textCalls.push(call);
+    return {};
+  });
   const ready = vi.fn();
   const closed = vi.fn();
   host.on('ready', ready);
@@ -85,6 +123,7 @@ async function setup(initial: TableDesignerState = state(), lang = 'en') {
     previews,
     saves,
     askedColumns,
+    parts,
     setOutcome: (outcome: typeof saveOutcome) => {
       saveOutcome = outcome;
     },
@@ -118,6 +157,8 @@ describe('table designer App', () => {
           autoIncrement: true,
           foreignKeys: true,
           uniqueIndexes: true,
+          triggers: false,
+          checks: false,
         },
         design: newTableDesign('sqlite'),
       }),
@@ -411,6 +452,8 @@ describe('table designer App', () => {
           autoIncrement: true,
           foreignKeys: true,
           uniqueIndexes: true,
+          triggers: false,
+          checks: false,
         },
         design: {
           ...newTableDesign('postgres', 'orders'),
@@ -453,11 +496,8 @@ describe('table designer App', () => {
         'Table shop.public.orders',
       );
       expect(screen.getByText('Computed columns, kept as they are: twice')).toBeTruthy();
-      expect(
-        screen.getByText(
-          'Indexes the designer does not edit, kept as they are: ix_lower (lower(note))',
-        ),
-      ).toBeTruthy();
+      // Indexes the designer cannot edit are not a text blob any more: they are rows.
+      expect(screen.queryByText(/does not edit, kept as they are/)).toBeNull();
     });
 
     it('offers no moving of columns where the database cannot move them', async () => {
@@ -574,6 +614,8 @@ describe('table designer App: what the database cannot do (V6.3)', () => {
           autoIncrement: false,
           foreignKeys: false,
           uniqueIndexes: false,
+          triggers: false,
+          checks: false,
         },
         design: indexed,
       }),
@@ -596,5 +638,173 @@ describe('table designer App: what the database cannot do (V6.3)', () => {
     expect(screen.queryByLabelText('Auto of column id')).not.toBeNull();
     await fireEvent.click(screen.getByRole('tab', { name: 'Indexes' }));
     expect(screen.queryByLabelText('Unique of ix_id')).not.toBeNull();
+  });
+});
+
+describe('table designer App: the properties tabs', () => {
+  const stored = (overrides: Partial<TableDesignerState> = {}): TableDesignerState => {
+    const base = state();
+    return state({
+      mode: 'edit',
+      driver: 'postgres',
+      scope: 'shop.public',
+      features: { ...base.features, triggers: true, checks: true },
+      design: { ...newTableDesign('postgres', 'orders') },
+      ...overrides,
+    });
+  };
+
+  it('has no DDL, trigger or check tabs for a new table', async () => {
+    await setup();
+    const names = screen.getAllByRole('tab').map((tab) => tab.textContent.trim());
+    expect(names.some((name) => /DDL|Triggers|Checks/.test(name))).toBe(false);
+  });
+
+  it('shows DDL, columns, indexes, keys, triggers, checks and SQL of a stored table', async () => {
+    await setup(stored());
+    const names = screen.getAllByRole('tab').map((tab) => tab.textContent.trim());
+    expect(names.map((name) => name.replace(/\d+$/, ''))).toEqual([
+      'DDL',
+      'Columns',
+      'Indexes',
+      'Foreign keys',
+      'Triggers',
+      'Checks',
+      'SQL',
+    ]);
+  });
+
+  it('puts the number of triggers and checks on their tabs', async () => {
+    await setup(stored());
+    await waitFor(() => {
+      const counts = (name: RegExp): string | null | undefined =>
+        screen.getByRole('tab', { name }).querySelector('[data-count]')?.getAttribute('data-count');
+      expect(counts(/Triggers/)).toBe('2');
+      expect(counts(/Checks/)).toBe('1');
+    });
+  });
+
+  it('opens on the tab the state names and reads the DDL when shown', async () => {
+    await setup(stored({ tab: 'ddl' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('ddl').textContent).toBe('CREATE TABLE orders (id int);');
+    });
+  });
+
+  it('copies the DDL and opens it in an editor through the host', async () => {
+    const { parts } = await setup(stored({ tab: 'ddl' }));
+    await waitFor(() => screen.getByTestId('ddl'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy DDL' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Open in SQL editor' }));
+    await waitFor(() => {
+      expect(parts.textCalls).toEqual([
+        { action: 'copy', text: 'CREATE TABLE orders (id int);' },
+        { action: 'open', text: 'CREATE TABLE orders (id int);' },
+      ]);
+    });
+  });
+
+  it('switches tab when the host asks (the results page opens the checks)', async () => {
+    const { host } = await setup(stored());
+    host.emit('tab', { tab: 'checks' });
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Checks/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    expect(screen.getByText('id > 0')).toBeTruthy();
+  });
+
+  it('ignores a request for a tab this table does not have', async () => {
+    const { host } = await setup(state());
+    host.emit('tab', { tab: 'triggers' });
+    await flush();
+    expect(screen.getByRole('tab', { name: /Columns/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('lists the triggers and views, edits, starts and drops them', async () => {
+    const { parts } = await setup(stored({ tab: 'triggers' }));
+    await waitFor(() => screen.getByText('trg_a'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show definition of trigger trg_a' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit trigger trg_b' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'New trigger' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Drop trigger trg_a' }));
+    await waitFor(() => {
+      expect(screen.queryByText('trg_a')).toBeNull();
+    });
+    expect(parts.triggerCalls).toEqual([
+      { action: 'view', name: 'trg_a' },
+      { action: 'edit', name: 'trg_b' },
+      { action: 'new' },
+      { action: 'drop', name: 'trg_a' },
+    ]);
+    expect(screen.getByText('trg_b')).toBeTruthy();
+  });
+
+  it('says there are no triggers', async () => {
+    const { parts } = await setup(stored());
+    parts.triggers = [];
+    await fireEvent.click(screen.getByRole('tab', { name: /Triggers/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => screen.getByText('No triggers'));
+  });
+
+  it('adds a check, clears the form and shows the new row', async () => {
+    const { parts } = await setup(stored({ tab: 'checks' }));
+    await waitFor(() => screen.getByText('id > 0'));
+    const add = screen.getByRole('button', { name: 'Add check' });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.input(input('Name'), { target: { value: 'ck_two' } });
+    await fireEvent.input(input('Condition'), { target: { value: 'id < 100' } });
+    await fireEvent.click(add);
+    await waitFor(() => screen.getByText('id < 100'));
+    expect(parts.checkCalls).toEqual([{ action: 'add', name: 'ck_two', expression: 'id < 100' }]);
+    expect(input('Name').value).toBe('');
+  });
+
+  it('keeps the form and shows the message when the host refuses a check', async () => {
+    const { parts } = await setup(stored({ tab: 'checks' }));
+    await waitFor(() => screen.getByText('id > 0'));
+    parts.checkError = 'Enter the condition of the check';
+    await fireEvent.input(input('Name'), { target: { value: 'x' } });
+    await fireEvent.input(input('Condition'), { target: { value: 'y' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add check' }));
+    await waitFor(() => screen.getByRole('alert'));
+    expect(screen.getByRole('alert').textContent).toContain('Enter the condition of the check');
+    expect(input('Name').value).toBe('x');
+  });
+
+  it('drops a check', async () => {
+    const { parts } = await setup(stored({ tab: 'checks' }));
+    await waitFor(() => screen.getByText('id > 0'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Drop check ck_pos' }));
+    await waitFor(() => {
+      expect(screen.queryByText('id > 0')).toBeNull();
+    });
+    expect(parts.checkCalls).toEqual([{ action: 'drop', name: 'ck_pos' }]);
+  });
+
+  it('shows the indexes the designer cannot edit as locked rows, counted on the tab', async () => {
+    await setup(
+      stored({
+        kept: { indexes: [{ name: 'ix_lower', description: '(lower(note))' }], columns: [] },
+      }),
+    );
+    await fireEvent.click(screen.getByRole('tab', { name: /Indexes/ }));
+    const block = screen.getByTestId('kept-indexes');
+    expect(block.textContent).toContain('ix_lower');
+    expect(block.textContent).toContain('(lower(note))');
+    expect(
+      screen
+        .getByRole('tab', { name: /Indexes/ })
+        .querySelector('[data-count]')
+        ?.getAttribute('data-count'),
+    ).toBe('1');
+  });
+
+  it('speaks Russian on the new tabs', async () => {
+    await setup(stored(), 'ru');
+    expect(screen.getByRole('tab', { name: /Триггеры/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Проверки/ })).toBeTruthy();
   });
 });

@@ -48,6 +48,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
     offsetOfPage,
     pageCount,
     pageSizeChoices,
+    MAX_PAGE_ROWS,
+    parsePageSize,
   } from './pager-model';
   import ColumnFilter from './ColumnFilter.svelte';
   import {
@@ -69,6 +71,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import { type GridView, loadView, saveView } from './grid-view';
   import RecordPanel from './RecordPanel.svelte';
   import SqlBar from './SqlBar.svelte';
+  import type { TableAction } from '../../../../src/shared/table-actions';
+  import TableBar from './TableBar.svelte';
+  import TextContextMenu from '../../components/TextContextMenu.svelte';
   import ValueDialog from './ValueDialog.svelte';
   import ViewSettings from './ViewSettings.svelte';
   import ValuePanel from './ValuePanel.svelte';
@@ -399,6 +404,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
    */
   /** True while a page-size, load-all or count request is out. */
   let paging = $state(false);
+  const CUSTOM_SIZE = 'custom';
+  /** The user picked "Custom…" and types the page size themselves. */
+  let customSize = $state(false);
+
+  /** Re-reads the table with this many rows a page; a size that is no number is ignored. */
+  function applyPageSize(typed: number): void {
+    const size = parsePageSize(typed);
+    const tab = activeTab;
+    if (size === undefined || tab === undefined) {
+      return;
+    }
+    customSize = false;
+    void runPaging(() => rpc.request('pageSize', { resultId: tab.id, pageSize: size }));
+  }
 
   async function runPaging(request: () => Promise<unknown>): Promise<void> {
     if (paging) {
@@ -935,6 +954,19 @@ import type { RowAction } from '../../../../src/shared/row-action';
 </script>
 
 <main>
+  <TextContextMenu
+    onCopy={(text: string) => {
+      rpc.emit('copyText', { text });
+    }}
+    readClipboard={async () => {
+      try {
+        return (await rpc.request('clipboardText', {})).text;
+      } catch {
+        return undefined;
+      }
+    }}
+    {t}
+  />
   {#if gridState?.running === true}
     <div class="progress-bar" role="progressbar" aria-label={t('grid.running')}></div>
   {/if}
@@ -963,6 +995,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
       {/if}
     </div>
   {:else}
+    {#if gridState.tabs.length > 1}
     <div class="tabs" role="tablist">
       {#each gridState.tabs as tab (tab.id)}
         <button
@@ -990,6 +1023,16 @@ import type { RowAction } from '../../../../src/shared/row-action';
         </button>
       {/each}
     </div>
+    {/if}
+
+    {#if activeTab?.page !== undefined}
+      <TableBar
+        {t}
+        onAction={(action: TableAction) => {
+          rpc.emit('tableAction', { resultId: activeTab.id, action });
+        }}
+      />
+    {/if}
 
     {#if activeTab !== undefined}
       {#key `${activeTab.id}:${activeTab.statement}`}
@@ -1056,6 +1099,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
           <div class="pager" data-testid="pager">
             <IconButton
               icon="chevron-left"
+              class="round"
               tone="teal"
               label={t('grid.previousPage')}
               disabled={page.offset === 0}
@@ -1072,6 +1116,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             </span>
             <IconButton
               icon="chevron-right"
+              class="round"
               tone="teal"
               label={t('grid.nextPage')}
               disabled={!hasNextPage(page, activeTab.rowCount)}
@@ -1097,7 +1142,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
             <label class="field">
               {t('grid.pageNumber')}
               <input
-                class="control number"
+                class="control number plain-number"
                 type="number"
                 min="1"
                 max={pages}
@@ -1124,16 +1169,39 @@ import type { RowAction } from '../../../../src/shared/row-action';
                 title={t('grid.pageSize')}
                 data-testid="page-size"
                 disabled={paging}
-                value={page.pageSize}
+                value={customSize ? CUSTOM_SIZE : String(page.pageSize)}
                 onchange={(event) => {
-                  const size = Number(event.currentTarget.value);
-                  void runPaging(() => rpc.request('pageSize', { resultId: activeTab.id, pageSize: size }));
+                  if (event.currentTarget.value === CUSTOM_SIZE) {
+                    customSize = true;
+                    return;
+                  }
+                  customSize = false;
+                  applyPageSize(Number(event.currentTarget.value));
                 }}
               >
                 {#each pageSizeChoices(page.pageSize) as size (size)}
-                  <option value={size}>{t('grid.perPage', size)}</option>
+                  <option value={String(size)}>{t('grid.perPage', size)}</option>
                 {/each}
+                <option value={CUSTOM_SIZE}>{t('grid.customPageSize')}</option>
               </select>
+              {#if customSize}
+                <input
+                  class="control number plain-number"
+                  type="number"
+                  min="1"
+                  max={MAX_PAGE_ROWS}
+                  placeholder={t('grid.rowsPerPage')}
+                  aria-label={t('grid.rowsPerPage')}
+                  data-testid="page-size-custom"
+                  disabled={paging}
+                  onkeydown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      applyPageSize(event.currentTarget.valueAsNumber);
+                    }
+                  }}
+                />
+              {/if}
             </label>
             <IconButton
               icon="unfold"
@@ -1281,6 +1349,15 @@ import type { RowAction } from '../../../../src/shared/row-action';
                 }}
               />
             {/if}
+            <IconButton
+              icon="refresh"
+              tone="green"
+              label={t('grid.refresh')}
+              hint={t('grid.refreshHint')}
+              data-testid="refresh"
+              disabled={paging || saving || pendingCount(activeTab) > 0}
+              onclick={refreshNow}
+            />
             <MenuButton
               icon="sync"
               tone={refreshSeconds === 0 ? 'blue' : 'green'}
@@ -1330,6 +1407,17 @@ import type { RowAction } from '../../../../src/shared/row-action';
               {/if}
             </span>
           {/if}
+          <span class="toolbar-separator"></span>
+          <IconButton
+            icon="tools"
+            class="tools-button"
+            label={t('grid.tools')}
+            hint={t('grid.toolsHint')}
+            data-testid="open-tools"
+            onclick={() => {
+              rpc.emit('openTools', {});
+            }}
+          />
         </div>
       </div>
     {/if}
@@ -1544,6 +1632,20 @@ import type { RowAction } from '../../../../src/shared/row-action';
               onOpenDialog={(row: number, column: number) => {
                 dialog = { row, column };
               }}
+              onCellFile={(action: 'load' | 'save', cell: CellRef) => {
+                if (action === 'load') {
+                  if (canLoadFile(activeTab, cell)) {
+                    void loadValueFile(cell);
+                  }
+                } else {
+                  void saveValueFile(cell);
+                }
+              }}
+              onFilterValue={activeTab.page === undefined
+                ? undefined
+                                : (column: number, condition: { operator: FilterOperator; value?: string }) => {
+                    applyColumnFilter(column, condition);
+                  }}
               {revealColumn}
               {linkTarget}
               onFollow={(row: number, column: number) => {
@@ -2132,5 +2234,38 @@ import type { RowAction } from '../../../../src/shared/row-action';
 
   .control.number {
     width: 4.5em;
+  }
+
+  /* The browser's square spin arrows do not fit the rounded page; the pager has its own. */
+  .plain-number {
+    border-radius: 12px;
+    text-align: center;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .plain-number::-webkit-inner-spin-button,
+  .plain-number::-webkit-outer-spin-button {
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  :global(.icon-button.round) {
+    border-radius: 50%;
+  }
+
+  /* Tools sit apart from the table's own buttons: a little larger and tinted with the accent. */
+  :global(.icon-button.tools-button) {
+    width: 32px;
+    height: 32px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-radius: 16px;
+  }
+
+  :global(.icon-button.tools-button:hover:not(:disabled)) {
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
   }
 </style>

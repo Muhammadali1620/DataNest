@@ -2,7 +2,10 @@
   import { untrack } from 'svelte';
   import { hasAllBytes } from '../../../../src/shared/cell-text';
   import type { CellValue } from '../../../../src/shared/cell-value';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
+  import { looksLikeMarkup, tokenizeXml } from '../../lib/xml-view';
   import {
     bytesFromBase64,
     bytesFromHex,
@@ -70,7 +73,33 @@
       ? tokenizeJson(shownText)
       : undefined,
   );
+  const markup = $derived(
+    view?.kind === 'text' && !view.json && looksLikeMarkup(view.text),
+  );
+  const markupTokens = $derived(
+    markup && shownText.length <= MAX_HIGHLIGHT_CHARS ? tokenizeXml(shownText) : undefined,
+  );
   const stats = $derived(view?.kind === 'text' ? textStats(view.text) : undefined);
+  /** What the value is, as a badge in the bar. */
+  const kindLabel = $derived(
+    view?.kind !== 'text' ? '' : view.json ? 'JSON' : markup ? 'XML' : t('value.kindText'),
+  );
+
+  // ---- width: the handle on the left edge drags, and the arrow keys nudge ----
+  const MIN_WIDTH = 260;
+  const MAX_WIDTH = 760;
+  const DEFAULT_WIDTH = 380;
+  const WIDE_WIDTH = 600;
+  let width = $state(DEFAULT_WIDTH);
+  let dragFrom: { x: number; width: number } | undefined;
+
+  function clampWidth(next: number): number {
+    return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(next)));
+  }
+
+  /** Brief "copied" feedback on the copy button. */
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ---- binary ----
   let fetched = $state<{ key: string; size: number; data: string | undefined } | undefined>(
@@ -149,36 +178,77 @@
       onCopy(shownText);
     } else if (view?.kind === 'binary') {
       onCopy(`0x${hexOf(shownBytes)}`);
+    } else {
+      return;
     }
+    copied = true;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => {
+      copied = false;
+    }, 1500);
   }
 </script>
 
-<aside class="panel" aria-label={t('value.title')} data-testid="value-panel">
+<aside class="panel" aria-label={t('value.title')} data-testid="value-panel" style="width: {width}px">
+  <span
+    class="resizer"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label={t('value.resize')}
+    data-testid="value-resizer"
+    onpointerdown={(event) => {
+      dragFrom = { x: event.clientX, width };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }}
+    onpointermove={(event) => {
+      if (dragFrom !== undefined) {
+        // The panel is at the right edge: dragging left makes it wider.
+        width = clampWidth(dragFrom.width + (dragFrom.x - event.clientX));
+      }
+    }}
+    onpointerup={() => {
+      dragFrom = undefined;
+    }}
+    onpointercancel={() => {
+      dragFrom = undefined;
+    }}
+  ></span>
   <header class="head">
-    <strong class="title">{columnName ?? t('value.title')}</strong>
+    <span class="head-icon"><Icon name="open-preview" size={16} /></span>
+    <strong class="title" title={columnName ?? t('value.title')}>{columnName ?? t('value.title')}</strong>
     {#if dataType !== undefined && dataType !== ''}
-      <span class="type">{dataType}</span>
+      <span class="type badge outline">{dataType}</span>
     {/if}
     <span class="spacer"></span>
     {#if onSaveFile !== undefined && view !== undefined && view.kind !== 'null'}
-      <button type="button" class="mode" data-testid="value-save-file" onclick={onSaveFile}>
-        {t('value.saveFile')}
-      </button>
+      <IconButton
+        icon="save"
+        tone="green"
+        label={t('value.saveFile')}
+        data-testid="value-save-file"
+        onclick={onSaveFile}
+      />
     {/if}
     {#if onLoadFile !== undefined}
-      <button type="button" class="mode" data-testid="value-load-file" onclick={onLoadFile}>
-        {t('value.loadFile')}
-      </button>
+      <IconButton
+        icon="cloud-upload"
+        tone="teal"
+        label={t('value.loadFile')}
+        data-testid="value-load-file"
+        onclick={onLoadFile}
+      />
     {/if}
-    <button
-      type="button"
-      class="close"
-      aria-label={t('value.close')}
-      title={t('value.close')}
-      onclick={onClose}
-    >
-      ×
-    </button>
+    <!-- The keyboard's way to the same thing the handle does: toggle a wide panel. -->
+    <IconButton
+      icon="screen-full"
+      label={t('value.widen')}
+      pressed={width >= WIDE_WIDTH}
+      data-testid="value-widen"
+      onclick={() => {
+        width = width >= WIDE_WIDTH ? DEFAULT_WIDTH : WIDE_WIDTH;
+      }}
+    />
+    <IconButton icon="close" label={t('value.close')} onclick={onClose} />
   </header>
 
   {#if view === undefined}
@@ -188,6 +258,7 @@
   {:else if view.kind === 'text'}
     <div class="bar">
       <span class="meta" data-testid="value-meta">
+        {#if kindLabel !== ''}<span class="badge">{kindLabel}</span>{/if}
         {t('value.textStats', stats?.chars ?? 0, stats?.lines ?? 1)}
         {#if view.json && !view.valid}
           <span class="warn" data-testid="value-invalid">{t('value.invalidJson')}</span>
@@ -195,33 +266,37 @@
       </span>
       <span class="spacer"></span>
       {#if view.json && view.valid}
-        <button
-          type="button"
-          class="mode"
-          aria-pressed={!raw}
+        <IconButton
+          icon="json"
+          tone="purple"
+          label={raw ? t('value.formatted') : t('value.raw')}
+          hint={raw ? t('value.formattedHint') : t('value.rawHint')}
+          pressed={!raw}
           data-testid="value-format"
           onclick={() => {
             raw = !raw;
           }}
-        >
-          {raw ? t('value.formatted') : t('value.raw')}
-        </button>
-      {/if}
-      <label class="wrap">
-        <input
-          type="checkbox"
-          checked={wrap}
-          onchange={(event) => {
-            wrap = event.currentTarget.checked;
-          }}
         />
-        {t('value.wrap')}
-      </label>
-      <button type="button" class="mode" data-testid="value-copy" onclick={copy}>
-        {t('value.copy')}
-      </button>
+      {/if}
+      <IconButton
+        icon="word-wrap"
+        tone="orange"
+        label={t('value.wrap')}
+        pressed={wrap}
+        data-testid="value-wrap"
+        onclick={() => {
+          wrap = !wrap;
+        }}
+      />
+      <IconButton
+        icon={copied ? 'check' : 'copy'}
+        tone={copied ? 'green' : 'blue'}
+        label={copied ? t('value.copied') : t('value.copy')}
+        data-testid="value-copy"
+        onclick={copy}
+      />
     </div>
-    <pre class="text" class:nowrap={!wrap} data-testid="value-text">{#if tokens !== undefined}{#each tokens as token, index (index)}<span class={token.type}>{token.text}</span>{/each}{:else}{shownText}{/if}</pre>
+    <pre class="text" class:nowrap={!wrap} data-testid="value-text">{#if tokens !== undefined}{#each tokens as token, index (index)}<span class={token.type}>{token.text}</span>{/each}{:else if markupTokens !== undefined}{#each markupTokens as token, index (index)}<span class={`x-${token.type}`}>{token.text}</span>{/each}{:else}{shownText}{/if}</pre>
   {:else}
     <div class="bar">
       <span class="meta" data-testid="value-meta">
@@ -229,21 +304,24 @@
       </span>
       <span class="spacer"></span>
       {#if mime !== undefined}
-        <button
-          type="button"
-          class="mode"
-          aria-pressed={showImage}
+        <IconButton
+          icon={showImage ? 'symbol-numeric' : 'file-media'}
+          tone="purple"
+          label={showImage ? t('value.showHex') : t('value.showImage')}
+          pressed={showImage}
           data-testid="value-binary-mode"
           onclick={() => {
             binaryMode = binaryMode === 'auto' ? 'hex' : 'auto';
           }}
-        >
-          {showImage ? t('value.showHex') : t('value.showImage')}
-        </button>
+        />
       {/if}
-      <button type="button" class="mode" data-testid="value-copy" onclick={copy}>
-        {t('value.copyHex')}
-      </button>
+      <IconButton
+        icon={copied ? 'check' : 'copy'}
+        tone={copied ? 'green' : 'blue'}
+        label={copied ? t('value.copied') : t('value.copyHex')}
+        data-testid="value-copy"
+        onclick={copy}
+      />
     </div>
     {#if waiting}
       <p class="hint" data-testid="value-loading">{t('value.loading')}</p>
@@ -295,13 +373,36 @@
 
 <style>
   .panel {
+    position: relative;
     display: flex;
     flex: none;
     flex-direction: column;
-    width: 360px;
     min-width: 0;
     overflow: hidden;
-    border-left: 1px solid var(--vscode-panel-border);
+    border-left: 1px solid var(--dn-divider);
+  }
+
+  /* A strip on the left edge to drag; it lights up on hover and keyboard focus. */
+  .resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    z-index: 2;
+    width: 7px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .resizer:hover,
+  .resizer:focus-visible {
+    background: color-mix(in srgb, var(--dn-accent) 55%, transparent);
+    outline: none;
+  }
+
+  .head-icon {
+    display: inline-flex;
+    color: var(--vscode-charts-teal, var(--dn-info));
   }
 
   .head,
@@ -310,7 +411,18 @@
     flex: none;
     gap: 6px;
     align-items: center;
-    padding: 4px 8px;
+    padding: 6px 10px;
+  }
+
+  .head {
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .meta {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: var(--dn-font-small);
   }
 
   .title {
@@ -352,11 +464,6 @@
     border: none;
     border-radius: 2px;
     cursor: pointer;
-  }
-
-  .mode[aria-pressed='true'] {
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
   }
 
   .mode:disabled {
@@ -420,6 +527,33 @@
   }
 
   .invalid {
+    color: var(--vscode-errorForeground);
+    text-decoration: underline wavy;
+  }
+
+  .x-tag {
+    color: var(--vscode-terminal-ansiBlue, var(--dn-info));
+  }
+
+  .x-attr {
+    color: var(--vscode-debugTokenExpression-name, inherit);
+  }
+
+  .x-string {
+    color: var(--vscode-debugTokenExpression-string, inherit);
+  }
+
+  .x-punct {
+    color: var(--dn-muted);
+  }
+
+  .x-comment,
+  .x-decl {
+    color: var(--vscode-editorLineNumber-foreground, var(--dn-muted));
+    font-style: italic;
+  }
+
+  .x-invalid {
     color: var(--vscode-errorForeground);
     text-decoration: underline wavy;
   }

@@ -160,3 +160,58 @@ describe('buildOrderBy', () => {
     expect(buildOrderBy(sqliteDialect, undefined)).toBeUndefined();
   });
 });
+
+describe('buildWhere with OR', () => {
+  const eq = (column: string, value: string, join?: 'and' | 'or') => ({
+    column,
+    operator: 'eq' as const,
+    value,
+    ...(join === undefined ? {} : { join }),
+  });
+
+  it('groups the conditions that follow an OR, as SQL reads them', () => {
+    const sql = buildWhere(
+      postgresDialect,
+      'postgres',
+      filter(eq('a', '1'), eq('b', '2'), eq('c', '3', 'or')),
+    );
+    expect(sql).toBe(`(("a" = '1' AND "b" = '2') OR "c" = '3')`);
+  });
+
+  it('joins single conditions with OR and keeps AND for the rest', () => {
+    expect(
+      buildWhere(
+        mysqlDialect,
+        'mysql',
+        filter(eq('a', '1'), eq('b', '2', 'or'), eq('c', '3', 'or')),
+      ),
+    ).toBe("(`a` = '1' OR `b` = '2' OR `c` = '3')");
+    expect(buildWhere(mysqlDialect, 'mysql', filter(eq('a', '1'), eq('b', '2', 'and')))).toBe(
+      "`a` = '1' AND `b` = '2'",
+    );
+  });
+
+  it('ignores the join of the first condition', () => {
+    expect(buildWhere(sqliteDialect, 'sqlite', filter(eq('a', '1', 'or'), eq('b', '2')))).toBe(
+      `"a" = '1' AND "b" = '2'`,
+    );
+  });
+
+  it('keeps a hand-written WHERE ANDed to the whole OR group', () => {
+    const sql = buildWhere(postgresDialect, 'postgres', {
+      conditions: [eq('a', '1'), eq('b', '2', 'or')],
+      where: 'c > 3',
+    });
+    expect(sql).toBe(`("a" = '1' OR "b" = '2') AND (\nc > 3\n)`);
+  });
+
+  it('quotes values and names inside an OR just the same', () => {
+    expect(
+      buildWhere(
+        postgresDialect,
+        'postgres',
+        filter(eq('a"b', "o'k"), eq('c', "x'; DROP TABLE t; --", 'or')),
+      ),
+    ).toBe(`("a""b" = 'o''k' OR "c" = 'x''; DROP TABLE t; --')`);
+  });
+});

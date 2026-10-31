@@ -93,6 +93,29 @@ export interface HistoryQuery {
   readonly text?: string;
   readonly connectionId?: string;
   readonly onlyFailed?: boolean;
+  /** Only statements that mention this table, whatever the quoting around its name. */
+  readonly table?: string;
+}
+
+/** True when the statement names the table as a whole word, quoted or not. */
+export function mentionsTable(sql: string, table: string): boolean {
+  const name = table.trim().toLowerCase();
+  if (name === '') {
+    return true;
+  }
+  const text = sql.toLowerCase();
+  let from = text.indexOf(name);
+  while (from >= 0) {
+    const before = text[from - 1];
+    const after = text[from + name.length];
+    const isWord = (char: string | undefined): boolean =>
+      char !== undefined && /[\p{L}\p{N}_$]/u.test(char);
+    if (!isWord(before) && !isWord(after)) {
+      return true;
+    }
+    from = text.indexOf(name, from + 1);
+  }
+  return false;
 }
 
 export interface QueryHistoryDeps {
@@ -128,6 +151,9 @@ export class QueryHistory implements HistoryRecorder {
           return false;
         }
         if (query.onlyFailed === true && entry.ok) {
+          return false;
+        }
+        if (query.table !== undefined && !mentionsTable(entry.sql, query.table)) {
           return false;
         }
         const haystack = entry.sql.toLowerCase();

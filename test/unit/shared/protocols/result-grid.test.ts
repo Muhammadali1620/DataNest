@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TABLE_ACTIONS } from '../../../../src/shared/table-actions';
 import {
   MAX_ACTION_ROWS,
   MAX_CLIPBOARD_CHARS,
@@ -165,6 +166,7 @@ describe('protocol shape', () => {
   it('lets the host answer rows, paging, sorting and searching', () => {
     expect(Object.keys(resultGridProtocol.host.requests).sort()).toEqual([
       'binaryBytes',
+      'clipboardText',
       'copyAs',
       'countRows',
       'discardChanges',
@@ -195,6 +197,7 @@ describe('protocol shape', () => {
       'ready',
       'revealError',
       'selectTab',
+      'tableAction',
     ]);
   });
 
@@ -650,5 +653,51 @@ describe('openTools event', () => {
     const openTools = resultGridProtocol.host.events.openTools;
     expect(openTools.parse({})).toEqual({});
     expect(() => openTools.parse({ page: 'general' })).toThrow();
+  });
+});
+
+describe('tableAction event', () => {
+  const tableAction = resultGridProtocol.host.events.tableAction;
+
+  it('takes a result and any action of the table bar', () => {
+    for (const action of TABLE_ACTIONS) {
+      expect(tableAction.parse({ resultId: 'r', action })).toEqual({ resultId: 'r', action });
+    }
+  });
+
+  it('refuses an unknown action, a missing result and extra keys', () => {
+    expect(() => tableAction.parse({ resultId: 'r', action: 'drop' })).toThrow();
+    expect(() => tableAction.parse({ action: 'er' })).toThrow();
+    expect(() => tableAction.parse({ resultId: 'r', action: 'er', command: 'x' })).toThrow();
+  });
+});
+
+describe('clipboardText request', () => {
+  const clipboard = resultGridProtocol.host.requests.clipboardText;
+
+  it('asks for nothing and answers with text', () => {
+    expect(clipboard.params.parse({})).toEqual({});
+    expect(() => clipboard.params.parse({ extra: 1 })).toThrow();
+    expect(clipboard.result.parse({ text: 'x' })).toEqual({ text: 'x' });
+    expect(() => clipboard.result.parse({})).toThrow();
+  });
+});
+
+describe('a filter condition with OR', () => {
+  it('passes through filterTable', () => {
+    const filterTable = resultGridProtocol.host.requests.filterTable;
+    const filter = {
+      conditions: [
+        { column: 'a', operator: 'isNull' },
+        { column: 'b', operator: 'isNull', join: 'or' },
+      ],
+    };
+    expect(filterTable.params.parse({ resultId: 'r', filter })).toEqual({ resultId: 'r', filter });
+    expect(() =>
+      filterTable.params.parse({
+        resultId: 'r',
+        filter: { conditions: [{ column: 'a', operator: 'isNull', join: 'nand' }] },
+      }),
+    ).toThrow();
   });
 });

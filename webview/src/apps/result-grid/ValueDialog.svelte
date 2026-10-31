@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { CellValue } from '../../../../src/shared/cell-value';
   import Icon from '../../components/Icon.svelte';
+  import CodeArea from '../../components/CodeArea.svelte';
+  import type { CodeMode } from '../../components/code-mode';
   import IconButton from '../../components/IconButton.svelte';
+  import { looksLikeMarkup } from '../../lib/xml-view';
   import type { Translate } from '../../lib/i18n';
-  import { applyKey } from './json-editing';
   import { formatJson, minifyJson } from './json-view';
   import { viewOf } from './value-view';
 
@@ -32,7 +34,9 @@
   const original =
     view.kind !== 'text' ? '' : view.json ? (formatJson(view.text) ?? view.text) : view.text;
   let text = $state(original);
-  let mode = $state<'text' | 'json'>(view.kind === 'text' && view.json ? 'json' : 'text');
+  let mode = $state<CodeMode>(
+    view.kind === 'text' && view.json ? 'json' : looksLikeMarkup(original) ? 'xml' : 'text',
+  );
   let problem = $state<string | undefined>(undefined);
   let saving = $state(false);
   let area = $state<HTMLTextAreaElement | undefined>(undefined);
@@ -64,7 +68,7 @@
     text = flat;
   }
 
-  function chooseMode(next: 'text' | 'json'): void {
+  function chooseMode(next: CodeMode): void {
     mode = next;
     problem = undefined;
     if (next === 'json') {
@@ -88,36 +92,6 @@
     } else {
       problem = reason;
     }
-  }
-
-  /** Typing in JSON mode behaves like the editor: brackets and quotes pair, Enter indents. */
-  function onAreaKey(event: KeyboardEvent): void {
-    const element = area;
-    if (
-      !editable ||
-      mode !== 'json' ||
-      element === undefined ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.altKey ||
-      event.isComposing
-    ) {
-      return;
-    }
-    const result = applyKey(
-      { text: element.value, start: element.selectionStart, end: element.selectionEnd },
-      event.key,
-      event.shiftKey,
-    );
-    if (result === undefined) {
-      return;
-    }
-    event.preventDefault();
-    text = result.text;
-    // The caret can only be placed once the new text is in the box.
-    void tick().then(() => {
-      element.setSelectionRange(result.start, result.end);
-    });
   }
 
   function onKey(event: KeyboardEvent): void {
@@ -162,6 +136,9 @@
           <button type="button" aria-pressed={mode === 'json'} onclick={() => { chooseMode('json'); }}>
             JSON
           </button>
+          <button type="button" aria-pressed={mode === 'xml'} onclick={() => { chooseMode('xml'); }}>
+            XML
+          </button>
         </div>
         <span class="grow"></span>
         <IconButton
@@ -183,17 +160,16 @@
           <IconButton icon="export" tone="green" label={t('dialog.saveFile')} onclick={onSaveFile} />
         {/if}
       </div>
-      <textarea
-        bind:this={area}
+      <CodeArea
         bind:value={text}
-        class="control area"
-        class:invalid={jsonProblem}
+        bind:element={area}
+        {mode}
         readonly={!editable}
-        spellcheck="false"
-        aria-label={t('dialog.valueTitle')}
-        data-testid="value-dialog-text"
-        onkeydown={onAreaKey}
-      ></textarea>
+        invalid={jsonProblem}
+        label={t('dialog.valueTitle')}
+        testid="value-dialog-text"
+        rows={14}
+      />
     {/if}
 
     {#if problem !== undefined}
@@ -237,21 +213,6 @@
 
   .grow {
     flex: 1;
-  }
-
-  .area {
-    min-height: 260px;
-    padding: 10px 12px;
-    font-family: var(--dn-mono);
-    font-size: 13px;
-    line-height: 1.5;
-    border-radius: 10px;
-    resize: vertical;
-    white-space: pre;
-  }
-
-  .area.invalid {
-    border-color: var(--dn-warning);
   }
 
   .problem {

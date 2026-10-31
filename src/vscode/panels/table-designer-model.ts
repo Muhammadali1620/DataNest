@@ -3,15 +3,24 @@
 // The panel only wires this to a webview.
 
 import { errorMessage } from '../../core/errors';
-import type { ObjectScope, TableRef } from '../../core/model/objects';
+import type { CheckConstraint, ObjectRef, ObjectScope, TableRef } from '../../core/model/objects';
 import type { AlterNote, Driver, MetadataReader } from '../../drivers/driver';
 import type {
   DesignPreview,
   SaveOutcome,
   TableDesignerState,
+  TableTab,
 } from '../../shared/protocols/table-designer';
 import { designProblems, newTableDesign, type TableDesign } from '../../shared/table-design';
-import { actionSql, type SchemaAction } from '../../services/schema-actions';
+import { actionScript, actionSql, type SchemaAction } from '../../services/schema-actions';
+import {
+  addCheckSql,
+  checksSupported,
+  dropCheckSql,
+  triggerRef,
+  triggersSupported,
+  triggerTemplate,
+} from '../../services/table-checks';
 import { designFromStructure, type LoadedTable } from '../../services/table-structure';
 import type { PerformOutcome } from '../tree/schema-commands';
 
@@ -20,7 +29,11 @@ export interface TableDesignerTexts {
   readonly create: string;
   alterTable(name: string): string;
   readonly apply: string;
+  dropObject(name: string): string;
+  readonly drop: string;
 }
+
+export type ActionOutcome = 'ran' | 'opened' | 'cancelled' | 'unsupported';
 
 export interface TableDesignerModelDeps {
   readonly connectionId: string;
@@ -31,8 +44,18 @@ export interface TableDesignerModelDeps {
   readonly texts: TableDesignerTexts;
   /** The structure of the table's scope, read through the metadata cache. */
   readonly metadata: () => Promise<
-    Pick<MetadataReader, 'listTables' | 'listColumns' | 'describeTable'>
+    Pick<
+      MetadataReader,
+      'listTables' | 'listColumns' | 'describeTable' | 'listObjects' | 'getDefinition'
+    >
   >;
+  /** Opens SQL in a new editor on the table's connection and database. */
+  readonly openSql: (sql: string) => Promise<void>;
+  readonly copyText: (text: string) => Promise<void>;
+  /** Opens the definition of an object in an editor whose "Apply" replaces the object. */
+  readonly editObject: (object: ObjectRef) => Promise<void>;
+  /** The tab to show first. */
+  readonly tab?: TableTab;
   readonly perform: (
     connectionId: string,
     action: SchemaAction,
@@ -45,6 +68,7 @@ export class TableDesignerModel {
   /** The table being edited as it is now; undefined while designing a new one. */
   private table: string | undefined;
   private loaded: LoadedTable | undefined;
+  private checkList: readonly CheckConstraint[] = [];
 
   constructor(private readonly deps: TableDesignerModelDeps) {
     this.table = deps.table;
@@ -72,6 +96,8 @@ export class TableDesignerModel {
       autoIncrement: designer.autoIncrement,
       foreignKeys: designer.foreignKeys,
       uniqueIndexes: designer.uniqueIndexes,
+      triggers: this.table !== undefined && triggersSupported(driver.id),
+      checks: this.table !== undefined && checksSupported(driver.id),
     };
     if (this.table === undefined) {
       return {
@@ -79,6 +105,7 @@ export class TableDesignerModel {
         driver: driver.id,
         scope: this.scopeLabel,
         features,
+        ...(this.deps.tab === undefined ? {} : { tab: this.deps.tab }),
         design: newTableDesign(driver.id),
         kept: { indexes: [], columns: [] },
       };
@@ -89,12 +116,101 @@ export class TableDesignerModel {
       driver: driver.id,
       scope: this.scopeLabel,
       features,
+      ...(this.deps.tab === undefined ? {} : { tab: this.deps.tab }),
       design: loaded.design,
       kept: {
         indexes: loaded.background.fixedIndexes.map((index) => ({ ...index })),
         columns: [...loaded.background.generatedColumns],
       },
     };
+  }
+
+  /** The CREATE statements of the stored table, as a script. */
+  async definition(): Promise<{ text: string }> {
+    const metadata = await this.deps.metadata();
+    const statements = await metadata.getDefinition({ ...this.ref(), kind: 'table' });
+    return { text: actionScript(statements) };
+  }
+
+  /** Triggers that belong to the stored table. */
+  async triggers(): Promise<{ triggers: string[] }> {
+    const metadata = await this.deps.metadata();
+    const found = await metadata.listObjects(this.deps.scope, 'trigger');
+    return {
+      triggers: found.filter((object) => object.table === this.table).map((object) => object.name),
+    };
+  }
+
+  async triggerAction(
+    action: 'view' | 'edit' | 'drop' | 'new',
+    name: string | undefined,
+  ): Promise<{ outcome: ActionOutcome }> {
+    const table = this.ref();
+    const { driver, texts } = this.deps;
+    if (action === 'new') {
+      await this.deps.openSql(triggerTemplate(driver.id, driver.dialect, table));
+      return { outcome: 'opened' };
+    }
+    if (name === undefined) {
+      return { outcome: 'unsupported' };
+    }
+    const object = triggerRef(table, name);
+    if (action === 'view') {
+      const metadata = await this.deps.metadata();
+      await this.deps.openSql(actionScript(await metadata.getDefinition(object)));
+      return { outcome: 'opened' };
+    }
+    if (action === 'edit') {
+      await this.deps.editObject(object);
+      return { outcome: 'opened' };
+    }
+    const outcome = await this.deps.perform(
+      this.deps.connectionId,
+      { kind: 'dropObject', object },
+      texts.dropObject(name),
+      texts.drop,
+    );
+    return { outcome: outcome === 'refused' ? 'cancelled' : outcome };
+  }
+
+  /** CHECK constraints of the stored table, read afresh. */
+  async checks(): Promise<{ checks: CheckConstraint[] }> {
+    if (this.table !== undefined) {
+      await this.load(this.table);
+    }
+    return { checks: [...this.checkList] };
+  }
+
+  async checkAction(
+    action: 'add' | 'drop',
+    name: string,
+    expression: string | undefined,
+  ): Promise<{ outcome: ActionOutcome; error?: string }> {
+    const { driver, texts } = this.deps;
+    const table = this.ref();
+    let statement: string;
+    try {
+      statement =
+        action === 'add'
+          ? addCheckSql(driver.dialect, table, name, expression ?? '')
+          : dropCheckSql(driver.dialect, table, name);
+    } catch (error) {
+      return { outcome: 'unsupported', error: errorMessage(error) };
+    }
+    const outcome = await this.deps.perform(
+      this.deps.connectionId,
+      { kind: 'runStatements', scope: this.deps.scope, statements: [statement] },
+      texts.alterTable(table.name),
+      texts.apply,
+    );
+    if (outcome === 'ran') {
+      this.loaded = undefined;
+    }
+    return { outcome: outcome === 'refused' ? 'cancelled' : outcome };
+  }
+
+  async textAction(action: 'copy' | 'open', text: string): Promise<void> {
+    await (action === 'copy' ? this.deps.copyText(text) : this.deps.openSql(text));
   }
 
   /** The SQL of a design; nothing while it has problems or changes nothing. */
@@ -198,7 +314,9 @@ export class TableDesignerModel {
   private async load(table: string): Promise<LoadedTable> {
     const metadata = await this.deps.metadata();
     const ref = { ...this.deps.scope, name: table };
-    this.loaded = designFromStructure(ref, await metadata.describeTable(ref));
+    const structure = await metadata.describeTable(ref);
+    this.checkList = structure.checks ?? [];
+    this.loaded = designFromStructure(ref, structure);
     return this.loaded;
   }
 }

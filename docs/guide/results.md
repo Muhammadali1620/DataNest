@@ -62,6 +62,20 @@ values match more than one row, nothing is saved, and you are told why.
 Sorting and the filter bar (`column`, operator, value — or your own `WHERE` text) run on
 the server, over the whole table. The row count is the server's fast estimate until you
 press **Count**; **Load all** reads every row (after a question when there are many).
+The page size menu has **Custom…** for any number of rows. Filter conditions are joined by
+**AND**; click the word between two conditions to make it **OR** (`a AND b OR c` reads
+`(a AND b) OR c`, as in SQL; the free `WHERE` text is always ANDed to the whole filter).
+
+A bar above the SQL line of a table opens its other pages: **Properties**, **ER diagram**,
+**Test data**, **Compare**, **⋯** (DDL, dump to SQL, copy to another connection) and the
+table's **history**. The **Tools** button at the right of the toolbar opens the Tools page,
+**Refresh** reads the rows again at once, and the clock in the Connections view title opens the
+history of every statement.
+
+Right-click a cell for copy, edit, duplicate, set NULL or empty, load from or save to a file,
+and filters built from the cell's value; right-click inside any text box for cut, copy, paste,
+select all, undo and redo. The value dialog colours JSON and XML/SVG and closes `{ [ ( < " '`
+as you type, like an editor.
 
 ## Charts
 

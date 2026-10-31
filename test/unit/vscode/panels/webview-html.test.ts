@@ -5,6 +5,7 @@ import { findWebviewApps, WEBVIEW_OUT_DIR } from '../../../../scripts/build-conf
 import {
   buildContentSecurityPolicy,
   createNonce,
+  OWN_ICON,
   PANEL_ICONS,
   panelIconPaths,
   renderWebviewHtml,
@@ -202,9 +203,27 @@ describe('panel tab icons', () => {
     }
   });
 
+  it('draws our own icons in the light and dark icon colours', () => {
+    const own = Object.entries(PANEL_ICONS)
+      .filter(([, icon]) => icon === OWN_ICON)
+      .map(([app]) => app);
+    // The Tools tab wears the extension's logo, the results tab our own grid.
+    expect(own.sort()).toEqual(['result-grid', 'tools']);
+    for (const app of own) {
+      const light = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-light.svg`), 'utf8');
+      const dark = readFileSync(join(ROOT, 'resources/icons/panels', `${app}-dark.svg`), 'utf8');
+      expect(light).toContain('fill="#424242"');
+      expect(dark).toContain('fill="#C5C5C5"');
+      expect(light.replace(/#424242/g, '#C5C5C5'), app).toBe(dark);
+    }
+  });
+
   it('draws the shape of the named editor icon in the light and dark icon colours', () => {
     const shape = (svg: string): string => svg.replace(/fill="[^"]*"/, '').trim();
     for (const [app, icon] of Object.entries(PANEL_ICONS)) {
+      if (icon === OWN_ICON) {
+        continue;
+      }
       const source = readFileSync(
         join(ROOT, 'node_modules/@vscode/codicons/src/icons', `${icon}.svg`),
         'utf8',

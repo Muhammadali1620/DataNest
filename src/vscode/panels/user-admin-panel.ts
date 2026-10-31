@@ -36,10 +36,14 @@ export class UserAdminPanel implements vscode.Disposable {
   private starting: Promise<void> | undefined;
   private disposed = false;
 
-  static show(deps: UserAdminPanelDeps): UserAdminPanel {
+  static show(deps: UserAdminPanelDeps, focus?: { name: string; host?: string }): UserAdminPanel {
     const existing = UserAdminPanel.open.get(deps.key);
     if (existing !== undefined) {
       existing.panel.reveal();
+      if (focus !== undefined) {
+        existing.deps.model.focus(focus);
+        void existing.sendState();
+      }
       return existing;
     }
     const panel = new UserAdminPanel(deps);

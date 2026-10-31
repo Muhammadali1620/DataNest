@@ -139,3 +139,57 @@ describe('FilterBar', () => {
     expect(screen.getByLabelText<HTMLSelectElement>('Column').value).toBe('gone');
   });
 });
+
+describe('FilterBar AND / OR', () => {
+  const two: TableFilter = {
+    conditions: [
+      { column: 'id', operator: 'isNull' },
+      { column: 'name', operator: 'isNull' },
+    ],
+  };
+
+  it('labels the first row "Where" and gives the others a join button', () => {
+    bar({ applied: two });
+    expect(screen.getAllByTestId('filter-join')).toHaveLength(1);
+    expect(screen.getByTestId('filter-join').textContent.trim()).toBe('AND');
+  });
+
+  it('flips a join to OR, and sends it', async () => {
+    const { onApply } = bar({ applied: two });
+    await fireEvent.click(screen.getByTestId('filter-join'));
+    expect(screen.getByTestId('filter-join').textContent.trim()).toBe('OR');
+    expect(apply().disabled).toBe(false);
+    await fireEvent.click(apply());
+    expect(onApply).toHaveBeenCalledWith({
+      conditions: [
+        { column: 'id', operator: 'isNull' },
+        { column: 'name', operator: 'isNull', join: 'or' },
+      ],
+    });
+  });
+
+  it('flips back to AND and has nothing to apply again', async () => {
+    bar({ applied: two });
+    await fireEvent.click(screen.getByTestId('filter-join'));
+    await fireEvent.click(screen.getByTestId('filter-join'));
+    expect(screen.getByTestId('filter-join').textContent.trim()).toBe('AND');
+    expect(apply().disabled).toBe(true);
+  });
+
+  it('shows a stored OR as OR', () => {
+    bar({
+      applied: {
+        conditions: [
+          { column: 'id', operator: 'isNull' },
+          { column: 'name', operator: 'isNull', join: 'or' },
+        ],
+      },
+    });
+    expect(screen.getByTestId('filter-join').textContent.trim()).toBe('OR');
+  });
+
+  it('has no join button for a single condition', () => {
+    bar({ applied: { conditions: [{ column: 'id', operator: 'isNull' }] } });
+    expect(screen.queryByTestId('filter-join')).toBeNull();
+  });
+});

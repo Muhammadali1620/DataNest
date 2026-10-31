@@ -53,7 +53,8 @@
   "commands.table.rename.title": "Переименовать…",
   "commands.table.truncate.title": "Очистить таблицу (TRUNCATE)…",
   "commands.object.drop.title": "Удалить…",
-  "commands.table.design.title": "Изменить таблицу…",
+  "commands.table.design.title": "Свойства таблицы…",
+  "commands.table.properties.title": "Свойства таблицы",
   "commands.object.edit.title": "Изменить определение…",
   "commands.object.apply.title": "Применить определение",
   "configuration.format.keywordCase.description": "Регистр ключевых слов SQL (`SELECT`, `FROM`, …) при форматировании.",
@@ -157,5 +158,15 @@
   "commands.elastic.copyAsCurl.title": "Копировать как cURL",
   "commands.elastic.showSettings.title": "Показать настройки",
   "commands.mongo.exportCollection.title": "Выгрузить документы…",
-  "commands.mongo.importCollection.title": "Загрузить документы…"
+  "commands.mongo.importCollection.title": "Загрузить документы…",
+  "commands.node.click.title": "Открыть SQL",
+  "commands.node.openSql.title": "Открыть SQL",
+  "commands.node.actions.title": "Действия…",
+  "commands.column.moveUp.title": "Переместить столбец вверх",
+  "commands.column.moveDown.title": "Переместить столбец вниз",
+  "commands.savedQuery.new.title": "Новый сохранённый запрос",
+  "commands.savedQuery.open.title": "Открыть сохранённый запрос",
+  "commands.savedQuery.rename.title": "Переименовать сохранённый запрос",
+  "commands.savedQuery.delete.title": "Удалить сохранённый запрос",
+  "commands.account.open.title": "Открыть в «Пользователях и правах»"
 }

@@ -87,6 +87,8 @@ const stateSchema = object({
   /** The connection refuses changes: the page previews but never runs. */
   readOnly: boolean(),
   error: optional(string({ maxLength: 100_000 })),
+  /** The account to show first, when the page was opened from the tree (V11.12). */
+  focus: optional(userRefSchema),
 });
 
 export const userAdminProtocol = defineProtocol({

@@ -156,3 +156,24 @@ describe('ticks', () => {
     expect(tickedRows(toggleAllTicks(NO_TICKS, 0), 0)).toEqual([]);
   });
 });
+
+describe('default look', () => {
+  it('aligns text to the left and draws a full grid', () => {
+    expect(DEFAULT_VIEW.align).toBe('left');
+    expect(DEFAULT_VIEW.lines).toBe('all');
+  });
+
+  it('uses the new defaults for a stored view that never set them', () => {
+    const stored = normalizeView({ rowHeight: 40, fontSize: 15 });
+    expect(stored.align).toBe('left');
+    expect(stored.lines).toBe('all');
+    expect(stored.rowHeight).toBe(40);
+  });
+
+  it('keeps what the user chose before', () => {
+    const stored = normalizeView({ align: 'center', lines: 'rows' });
+    expect(stored.align).toBe('center');
+    expect(stored.lines).toBe('rows');
+    expect(normalizeView({ align: 'auto' }).align).toBe('auto');
+  });
+});

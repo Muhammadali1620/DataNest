@@ -27,7 +27,10 @@ import {
   elasticSubfields,
   type ElasticTreeDeps,
 } from './elastic-tree';
+import { canReorderColumns } from '../../shared/table-design';
+import { hasAccounts } from '../../services/users/account-list';
 import {
+  type AccountInfo,
   GROUP_OF_KIND,
   KIND_OF_GROUP,
   type FolderNode,
@@ -35,6 +38,8 @@ import {
   nodeId,
   type ObjectFolder,
   type ObjectGroup,
+  type SecurityGroup,
+  type SecurityGroupNode,
   type TableFolder,
   type TreeNode,
 } from './nodes';
@@ -72,8 +77,17 @@ export interface TreeTexts {
   readonly noFields?: string;
   /** The leaf after a list the connection's filter shortened (V4.10). */
   readonly hiddenByFilter?: (count: number) => string;
-  /** What an empty folder says, per folder. */
-  readonly empty: Readonly<Record<ObjectFolder | TableFolder, string>>;
+  /** What an empty folder says, per folder; the Columns folder says `noColumns`. */
+  readonly empty: Readonly<Record<ObjectFolder | Exclude<TableFolder, 'columns'>, string>>;
+  /** A "Query" folder without saved queries (V11.12). */
+  readonly noQueries?: string;
+  /** A Users or Roles folder without entries (V11.12). */
+  readonly noAccounts?: (group: SecurityGroup) => string;
+}
+
+/** The saved queries of a scope (V11.12); the tree lists their names. */
+export interface SavedQuerySource {
+  list(connectionId: string, scope: ObjectScope): Promise<readonly string[]>;
 }
 
 /** Settings the tree reads; asked every time, so a change takes effect at once. */
@@ -96,6 +110,10 @@ export interface TreeModelDeps {
   /** `datanest.redis.keySeparator`, for the prefix a folder copies. */
   readonly redisKeySeparator?: () => string;
   readonly projects?: ProjectSource;
+  /** Without it a connection has no "Security" folder (V11.12). */
+  readonly accounts?: (connectionId: string) => Promise<readonly AccountInfo[]>;
+  /** Without it a database and a schema have no "Query" folder (V11.12). */
+  readonly savedQueries?: SavedQuerySource;
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
   readonly settings: TreeSettings;
@@ -110,6 +128,10 @@ export class TreeModel {
   private readonly redisCounts = new Map<string, number>();
   /** The Filter… text of Tables and Views folders, by node id; for this session only. */
   private readonly groupFilters = new Map<string, string>();
+  /** How many children a folder had when it was last listed, by node id (V11.12). */
+  private readonly counts = new Map<string, number>();
+  /** Accounts as last listed, so Users and Roles do not ask the server twice. */
+  private readonly accountLists = new Map<string, readonly AccountInfo[]>();
 
   constructor(deps: TreeModelDeps) {
     this.deps = deps;
@@ -204,6 +226,27 @@ export class TreeModel {
     }
   }
 
+  /** The number of children a folder holds, once it has been listed; undefined before. */
+  countOf(node: TreeNode): number | undefined {
+    return this.counts.get(nodeId(node));
+  }
+
+  private remember(node: TreeNode, count: number | undefined): void {
+    if (count !== undefined) {
+      this.counts.set(nodeId(node), count);
+    }
+  }
+
+  /** A count that is only decoration: a failure leaves it out and is logged. */
+  private async tryCount(count: () => Promise<number>): Promise<number | undefined> {
+    try {
+      return await count();
+    } catch (error) {
+      this.logger.warn('Could not count the children of a folder', error);
+      return undefined;
+    }
+  }
+
   private async listChildren(node: TreeNode): Promise<TreeNode[]> {
     switch (node.kind) {
       case 'project':
@@ -225,6 +268,12 @@ export class TreeModel {
         return await this.tableChildren(node);
       case 'folder':
         return await this.folderChildren(node);
+      case 'queryFolder':
+        return await this.queryChildren(node);
+      case 'security':
+        return await this.securityChildren(node.connectionId);
+      case 'securityGroup':
+        return await this.accountChildren(node);
       case 'redisDatabase':
         return await this.redisKeyChildren(node.connectionId, node.database, []);
       case 'redisFolder':
@@ -244,6 +293,8 @@ export class TreeModel {
       case 'object':
       case 'index':
       case 'foreignKey':
+      case 'savedQuery':
+      case 'account':
       case 'redisKey':
       case 'redisMore':
       case 'mongoIndex':
@@ -303,6 +354,11 @@ export class TreeModel {
       case 'object':
       case 'index':
       case 'foreignKey':
+      case 'queryFolder':
+      case 'savedQuery':
+      case 'security':
+      case 'securityGroup':
+      case 'account':
       case 'mongoDatabase':
       case 'mongoCollection':
       case 'mongoIndex':
@@ -351,7 +407,11 @@ export class TreeModel {
     if (nodes.length === 0 && hidden.length === 0) {
       return [{ kind: 'message', text: this.deps.texts.noDatabases, connectionId }];
     }
-    return [...nodes, ...hidden];
+    const security: TreeNode[] =
+      this.deps.accounts === undefined || !hasAccounts(this.driverIdOf(connectionId))
+        ? []
+        : [{ kind: 'security', connectionId }];
+    return [...security, ...nodes, ...hidden];
   }
 
   private mongoDeps(): MongoTreeDeps {
@@ -463,6 +523,7 @@ export class TreeModel {
     if (!capabilities.schemas) {
       return await this.groups(connectionId, { database });
     }
+    const queries = this.queryNode(connectionId, { database });
     const metadata = await this.metadataOf(connectionId, database);
     const all = await metadata.listSchemas(database);
     const unfiltered = this.deps.settings.showSystemObjects()
@@ -470,9 +531,88 @@ export class TreeModel {
       : withoutSystemSchemas(this.driverIdOf(connectionId), all);
     const schemas = filterNames(unfiltered, this.configOf(connectionId).filter?.schemas ?? []);
     return [
+      ...queries,
       ...schemas.map((schema): TreeNode => ({ kind: 'schema', connectionId, database, schema })),
       ...this.hiddenLeaf(connectionId, unfiltered.length - schemas.length),
     ];
+  }
+
+  /** The "Query" folder of a scope, where saved queries are kept (V11.12). */
+  private queryNode(connectionId: string, scope: ObjectScope): TreeNode[] {
+    return this.deps.savedQueries === undefined
+      ? []
+      : [{ kind: 'queryFolder', connectionId, scope }];
+  }
+
+  private async queryChildren(
+    node: Extract<TreeNode, { kind: 'queryFolder' }>,
+  ): Promise<TreeNode[]> {
+    const names = (await this.deps.savedQueries?.list(node.connectionId, node.scope)) ?? [];
+    this.remember(node, names.length);
+    if (names.length === 0) {
+      return [
+        {
+          kind: 'message',
+          text: this.deps.texts.noQueries ?? this.deps.texts.noTables,
+          connectionId: node.connectionId,
+        },
+      ];
+    }
+    return names.map((name) => ({
+      kind: 'savedQuery',
+      connectionId: node.connectionId,
+      scope: node.scope,
+      name,
+    }));
+  }
+
+  /** The accounts of a server, read once per opening of the Security folder (V11.12). */
+  private async accountsOf(connectionId: string, fresh: boolean): Promise<readonly AccountInfo[]> {
+    const known = fresh ? undefined : this.accountLists.get(connectionId);
+    if (known !== undefined) {
+      return known;
+    }
+    const listed = (await this.deps.accounts?.(connectionId)) ?? [];
+    this.accountLists.set(connectionId, listed);
+    return listed;
+  }
+
+  private async securityChildren(connectionId: string): Promise<TreeNode[]> {
+    const accounts = await this.accountsOf(connectionId, true);
+    const groups: SecurityGroupNode[] = (['users', 'roles'] as const).map((group) => ({
+      kind: 'securityGroup',
+      connectionId,
+      group,
+    }));
+    for (const node of groups) {
+      this.remember(
+        node,
+        accounts.filter((account) => inSecurityGroup(account, node.group)).length,
+      );
+    }
+    return groups;
+  }
+
+  private async accountChildren(node: SecurityGroupNode): Promise<TreeNode[]> {
+    const accounts = (await this.accountsOf(node.connectionId, false))
+      .filter((account) => inSecurityGroup(account, node.group))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    this.remember(node, accounts.length);
+    if (accounts.length === 0) {
+      return [
+        {
+          kind: 'message',
+          text: this.deps.texts.noAccounts?.(node.group) ?? '',
+          connectionId: node.connectionId,
+        },
+      ];
+    }
+    return accounts.map((user) => ({
+      kind: 'account',
+      connectionId: node.connectionId,
+      group: node.group,
+      user,
+    }));
   }
 
   /** Tables and views, then the folders of whatever else this database keeps. */
@@ -483,7 +623,39 @@ export class TreeModel {
       'views',
       ...objectKinds.flatMap((kind) => (kind === 'trigger' ? [] : [GROUP_OF_KIND[kind]])),
     ];
-    return groups.map((group) => ({ kind: 'group', group, connectionId, scope }));
+    const nodes = groups.map((group): GroupNode => ({ kind: 'group', group, connectionId, scope }));
+    await this.countGroups(nodes);
+    return [...this.queryNode(connectionId, scope), ...nodes];
+  }
+
+  /** Fills in "Tables (40)" before the folders are drawn; the lists come from the cache. */
+  private async countGroups(nodes: readonly GroupNode[]): Promise<void> {
+    const [first] = nodes;
+    if (first === undefined) {
+      return;
+    }
+    const { connectionId, scope } = first;
+    try {
+      const metadata = await this.metadataOf(connectionId, scope.database);
+      const listed = await metadata.listTables(scope);
+      await Promise.all(
+        nodes.map(async (node) => {
+          if (node.group === 'tables' || node.group === 'views') {
+            const wanted = node.group === 'tables' ? 'table' : 'view';
+            this.remember(node, listed.filter((table) => table.kind === wanted).length);
+            return;
+          }
+          const kind = KIND_OF_GROUP[node.group];
+          this.remember(
+            node,
+            await this.tryCount(async () => (await metadata.listObjects(scope, kind)).length),
+          );
+        }),
+      );
+    } catch (error) {
+      // The numbers only decorate the folders: without them they are listed all the same.
+      this.logger.warn('Could not count the objects of a scope', error);
+    }
   }
 
   /** The Filter… text of a Tables or Views folder, if it has one. */
@@ -522,13 +694,15 @@ export class TreeModel {
   private async groupChildren(node: GroupNode): Promise<TreeNode[]> {
     const { connectionId, scope, group } = node;
     if (group !== 'tables' && group !== 'views') {
-      return await this.objectChildren(
+      const objects = await this.objectChildren(
         connectionId,
         scope,
         KIND_OF_GROUP[group],
         () => true,
         group,
       );
+      this.remember(node, objects.filter((child) => child.kind === 'object').length);
+      return objects;
     }
     const metadata = await this.metadataOf(connectionId, scope.database);
     const wanted = group === 'tables' ? 'table' : 'view';
@@ -540,6 +714,7 @@ export class TreeModel {
     const filter = this.groupFilter(node);
     const visible = filter === undefined ? undefined : tableFilter(filter);
     const found = visible === undefined ? all : all.filter((table) => visible(table.name));
+    this.remember(node, found.length);
     if (all.length === 0) {
       return [
         {
@@ -592,36 +767,68 @@ export class TreeModel {
     }));
   }
 
-  /** Columns first; a table also gets its Indexes, Foreign Keys and Triggers folders. */
+  /** A table lists its folders: Columns, then (for tables) Indexes, Foreign Keys, Triggers. */
   private async tableChildren(node: Extract<TreeNode, { kind: 'table' }>): Promise<TreeNode[]> {
-    const columns = await this.columnChildren(node);
-    if (node.tableKind !== 'table') {
-      return columns;
-    }
     const table: TableRef = { ...node.scope, name: node.name };
-    const folders: TableFolder[] = ['indexes', 'foreignKeys', 'triggers'];
-    return [
-      ...columns,
-      ...folders.map((folder) => ({
-        kind: 'folder' as const,
-        folder,
-        connectionId: node.connectionId,
-        table,
-      })),
-    ];
+    const folders: TableFolder[] =
+      node.tableKind === 'table' ? ['columns', 'indexes', 'foreignKeys', 'triggers'] : ['columns'];
+    const nodes = folders.map((folder) => ({
+      kind: 'folder' as const,
+      folder,
+      connectionId: node.connectionId,
+      table,
+    }));
+    const metadata = await this.metadataOf(node.connectionId, node.scope.database);
+    await Promise.all(
+      nodes.map(async (folder) => {
+        this.remember(
+          folder,
+          await this.tryCount(async () => await this.folderSize(metadata, folder)),
+        );
+      }),
+    );
+    return nodes;
+  }
+
+  private async folderSize(metadata: MetadataReader, node: FolderNode): Promise<number> {
+    const { table } = node;
+    switch (node.folder) {
+      case 'columns':
+        return (await metadata.listColumns(table)).length;
+      case 'indexes':
+        return (await metadata.listIndexes(table)).length;
+      case 'foreignKeys':
+        return (await metadata.listForeignKeys(table)).length;
+      case 'triggers':
+        return (await metadata.listObjects(scopeOfTable(table), 'trigger')).filter(
+          (object) => object.table === table.name,
+        ).length;
+    }
   }
 
   private async folderChildren(node: FolderNode): Promise<TreeNode[]> {
+    const children = await this.folderContents(node);
+    this.remember(node, children.filter((child) => child.kind !== 'message').length);
+    return children;
+  }
+
+  private async folderContents(node: FolderNode): Promise<TreeNode[]> {
     const { connectionId, table } = node;
-    const scope: ObjectScope = {
-      ...(table.database === undefined ? {} : { database: table.database }),
-      ...(table.schema === undefined ? {} : { schema: table.schema }),
-    };
+    const scope = scopeOfTable(table);
     const empty = (): TreeNode[] => [
-      { kind: 'message', text: this.deps.texts.empty[node.folder], connectionId },
+      {
+        kind: 'message',
+        text:
+          node.folder === 'columns'
+            ? this.deps.texts.noColumns
+            : this.deps.texts.empty[node.folder],
+        connectionId,
+      },
     ];
     const metadata = await this.metadataOf(connectionId, table.database);
     switch (node.folder) {
+      case 'columns':
+        return await this.columnChildren(node);
       case 'indexes': {
         const indexes = await metadata.listIndexes(table);
         return indexes.length === 0
@@ -645,20 +852,43 @@ export class TreeModel {
     }
   }
 
-  private async columnChildren(node: Extract<TreeNode, { kind: 'table' }>): Promise<TreeNode[]> {
-    const metadata = await this.metadataOf(node.connectionId, node.scope.database);
-    const columns = await metadata.listColumns({ ...node.scope, name: node.name });
+  private async columnChildren(node: FolderNode): Promise<TreeNode[]> {
+    const { connectionId, table } = node;
+    const metadata = await this.metadataOf(connectionId, table.database);
+    const [columns, kind, linked] = await Promise.all([
+      metadata.listColumns(table),
+      this.relationKindOf(connectionId, table),
+      this.linkedColumns(metadata, table),
+    ]);
     if (columns.length === 0) {
-      return [
-        { kind: 'message', text: this.deps.texts.noColumns, connectionId: node.connectionId },
-      ];
+      return [{ kind: 'message', text: this.deps.texts.noColumns, connectionId }];
     }
+    const movable = kind === 'table' && canReorderColumns(this.driverIdOf(connectionId));
     return columns.map((column) => ({
       kind: 'column',
-      connectionId: node.connectionId,
-      table: { ...node.scope, name: node.name },
+      connectionId,
+      table,
       column,
+      ...(movable ? { movable: true } : {}),
+      ...(linked.has(column.name) ? { link: true } : {}),
     }));
+  }
+
+  /** Columns that belong to a foreign key; only decoration, so a failure shows none. */
+  private async linkedColumns(metadata: MetadataReader, table: TableRef): Promise<Set<string>> {
+    try {
+      return new Set((await metadata.listForeignKeys(table)).flatMap((key) => key.columns));
+    } catch (error) {
+      this.logger.warn('Could not read the foreign keys of a table', error);
+      return new Set();
+    }
+  }
+
+  /** Tables can have their columns moved; views cannot. */
+  private async relationKindOf(connectionId: string, table: TableRef): Promise<'table' | 'view'> {
+    const metadata = await this.metadataOf(connectionId, table.database);
+    const listed = await metadata.listTables(scopeOfTable(table));
+    return listed.find((entry) => entry.name === table.name)?.kind === 'view' ? 'view' : 'table';
   }
 
   /** The driver of a saved connection; an unknown id cannot reach here. */
@@ -683,4 +913,17 @@ export class TreeModel {
     const session = await browseSession(this.deps.manager, connectionId, database);
     return this.deps.cache.wrap(connectionId, session.metadata);
   }
+}
+
+function scopeOfTable(table: TableRef): ObjectScope {
+  return {
+    ...(table.database === undefined ? {} : { database: table.database }),
+    ...(table.schema === undefined ? {} : { schema: table.schema }),
+  };
+}
+
+/** Users are the accounts that log in; Roles are everything that only groups privileges. */
+export function inSecurityGroup(account: AccountInfo, group: SecurityGroup): boolean {
+  const isRole = account.role || !account.login;
+  return group === 'roles' ? isRole : !isRole;
 }

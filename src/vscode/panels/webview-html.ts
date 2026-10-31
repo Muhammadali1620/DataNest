@@ -35,6 +35,9 @@ export function webviewAssetPaths(app: string): { script: string[]; style: strin
  * tools are told apart at a glance. The SVGs in resources/icons/panels are the
  * package's own shapes in the editor's light and dark icon colours.
  */
+/** Marks a page whose tab icon is drawn by us (the extension's logo, our grid), not an editor icon. */
+export const OWN_ICON = 'own';
+
 export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'connection-form': 'plug',
   'data-compare': 'git-compare',
@@ -48,12 +51,12 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'redis-info': 'info',
   'redis-key': 'key',
   'result-chart': 'graph',
-  'result-grid': 'table',
+  'result-grid': OWN_ICON,
   'schema-compare': 'diff',
   'server-monitor': 'pulse',
   'table-designer': 'symbol-structure',
   'test-data': 'beaker',
-  tools: 'tools',
+  tools: OWN_ICON,
   'user-admin': 'organization',
 };
 

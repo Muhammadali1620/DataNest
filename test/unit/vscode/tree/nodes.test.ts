@@ -500,3 +500,77 @@ describe('Elasticsearch nodes (V7.8)', () => {
     );
   });
 });
+
+describe('Query and Security nodes (V11.12)', () => {
+  const folder: TreeNode = {
+    kind: 'queryFolder',
+    connectionId: 'c1',
+    scope: { database: 'app', schema: 'public' },
+  };
+  const saved: TreeNode = {
+    kind: 'savedQuery',
+    connectionId: 'c1',
+    scope: { database: 'app', schema: 'public' },
+    name: 'report',
+  };
+  const user: TreeNode = {
+    kind: 'account',
+    connectionId: 'c1',
+    group: 'users',
+    user: { name: 'app', host: '%', login: true, role: false, flags: [] },
+  };
+  const nodes: TreeNode[] = [
+    folder,
+    saved,
+    { kind: 'security', connectionId: 'c1' },
+    { kind: 'securityGroup', connectionId: 'c1', group: 'users' },
+    { kind: 'securityGroup', connectionId: 'c1', group: 'roles' },
+    user,
+  ];
+
+  it('are tree nodes with ids of their own, and belong to their connection', () => {
+    expect(new Set(nodes.map((node) => nodeId(node))).size).toBe(nodes.length);
+    for (const node of nodes) {
+      expect(isTreeNode(node)).toBe(true);
+      expect(connectionIdOf(node)).toBe('c1');
+      expect(objectRefOf(node)).toBeUndefined();
+    }
+  });
+
+  it('keeps the scope of queries, and none for accounts', () => {
+    expect(scopeOf(folder)).toEqual({ database: 'app', schema: 'public' });
+    expect(scopeOf(saved)).toEqual({ database: 'app', schema: 'public' });
+    expect(scopeOf(user)).toEqual({});
+  });
+
+  it('tells accounts of different hosts, and queries of different schemas, apart', () => {
+    expect(nodeId(user)).not.toBe(
+      nodeId({
+        ...user,
+        user: { ...(user as { user: object }).user, host: 'localhost' },
+      } as TreeNode),
+    );
+    expect(nodeId(saved)).not.toBe(
+      nodeId({ ...saved, scope: { database: 'app', schema: 'other' } }),
+    );
+  });
+
+  it('copies the name of a query or an account, and of no folder', () => {
+    expect(nameOf(saved)).toBe('report');
+    expect(nameOf(user)).toBe('app');
+    expect(nameOf(folder)).toBeUndefined();
+    expect(nameOf({ kind: 'security', connectionId: 'c1' })).toBeUndefined();
+  });
+
+  it('gives a movable column a context value of its own', () => {
+    expect(TREE_CONTEXT.columnMovable).not.toBe(TREE_CONTEXT.column);
+    expect(TREE_CONTEXT.columnMovable.startsWith(TREE_CONTEXT.column)).toBe(true);
+  });
+
+  it('gives the Columns folder an id that is not the Indexes folder', () => {
+    const table = { database: 'app', name: 'orders' };
+    expect(nodeId({ kind: 'folder', folder: 'columns', connectionId: 'c1', table })).not.toBe(
+      nodeId({ kind: 'folder', folder: 'indexes', connectionId: 'c1', table }),
+    );
+  });
+});

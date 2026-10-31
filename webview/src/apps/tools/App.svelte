@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextContextMenu from '../../components/TextContextMenu.svelte';
   import { onDestroy, onMount } from 'svelte';
   import type { ToolsProtocol } from '../../../../src/shared/protocols/tools';
   import type { RpcPeer } from '../../../../src/shared/rpc';
@@ -111,6 +112,18 @@
       <ImageTab {rpc} {t} {copy} {images} />
     {/if}
   </div>
+
+  <TextContextMenu
+    onCopy={copy}
+    readClipboard={async () => {
+      try {
+        return (await rpc.request('clipboardText', {})).text;
+      } catch {
+        return undefined;
+      }
+    }}
+    {t}
+  />
 
   {#if copied}
     <div class="toast fade-in" role="status" data-testid="copied">

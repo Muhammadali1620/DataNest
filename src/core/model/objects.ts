@@ -130,6 +130,13 @@ export interface TableDependent {
   readonly sql: string;
 }
 
+/** A CHECK constraint of a table, with its condition as the server prints it. */
+export interface CheckConstraint {
+  readonly name: string;
+  /** The condition, as SQL; PostgreSQL prints it as `CHECK (…)` already. */
+  readonly expression: string;
+}
+
 /** Everything the table designer reads about an existing table. */
 export interface TableStructure {
   readonly comment?: string;
@@ -141,6 +148,8 @@ export interface TableStructure {
   /** Every index, the primary key included. */
   readonly indexes: readonly IndexInfo[];
   readonly foreignKeys: readonly ForeignKey[];
+  /** CHECK constraints, where the reader knows them (PostgreSQL, MySQL, SQL Server). */
+  readonly checks?: readonly CheckConstraint[];
   /** SQLite: what disappears with the table and must be recreated after a rebuild. */
   readonly dependents?: readonly TableDependent[];
 }

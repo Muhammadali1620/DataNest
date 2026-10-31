@@ -36,6 +36,8 @@ export interface UserAdminModelDeps {
   readonly dialect: Pick<Dialect, 'quoteIdentifier' | 'literal'>;
   readonly readOnly: boolean;
   readonly session: () => Promise<Session>;
+  /** The account the page shows first (V11.12); changes when the tree opens another. */
+  readonly focus?: UserRef;
 }
 
 /** The order the grant form offers levels in. */
@@ -55,7 +57,16 @@ export class UserAdminModel {
   private error: string | undefined;
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly deps: UserAdminModelDeps) {}
+  private focused: UserRef | undefined;
+
+  constructor(private readonly deps: UserAdminModelDeps) {
+    this.focused = deps.focus;
+  }
+
+  /** The tree opened this page for another account. */
+  focus(user: UserRef): void {
+    this.focused = user;
+  }
 
   get started(): boolean {
     return this.admin !== undefined || this.error !== undefined;
@@ -99,6 +110,14 @@ export class UserAdminModel {
             },
           }),
       ...(this.error === undefined ? {} : { error: this.error }),
+      ...(this.focused === undefined
+        ? {}
+        : {
+            focus:
+              this.focused.host === undefined
+                ? { name: this.focused.name }
+                : { name: this.focused.name, host: this.focused.host },
+          }),
     };
   }
 

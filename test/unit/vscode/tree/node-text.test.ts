@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  columnKind,
+  describeAccount,
   describeColumn,
   describeForeignKey,
   describeIndex,
@@ -93,5 +95,59 @@ describe('objectLabel', () => {
     );
     expect(objectLabel({ kind: 'function', name: 'g', signature: '' })).toBe('g()');
     expect(objectLabel({ kind: 'event', name: 'nightly' })).toBe('nightly');
+  });
+});
+
+describe('columnKind (V11.12)', () => {
+  const cases: [string, string][] = [
+    ['bigint', 'number'],
+    ['int unsigned', 'number'],
+    ['numeric(12,2)', 'number'],
+    ['double precision', 'number'],
+    ['serial', 'number'],
+    ['varchar(100)', 'text'],
+    ['character varying', 'text'],
+    ['text', 'text'],
+    ['nvarchar(max)', 'text'],
+    ['timestamp without time zone', 'datetime'],
+    ['timestamp(3)', 'datetime'],
+    ['date', 'datetime'],
+    ['datetime2', 'datetime'],
+    ['interval', 'datetime'],
+    ['boolean', 'boolean'],
+    ['bool', 'boolean'],
+    ['tinyint(1)', 'boolean'],
+    ['bit', 'boolean'],
+    ['json', 'json'],
+    ['jsonb', 'json'],
+    ['bytea', 'binary'],
+    ['longblob', 'binary'],
+    ['varbinary(16)', 'binary'],
+    ['uuid', 'uuid'],
+    ['uniqueidentifier', 'uuid'],
+    ["enum('a','b')", 'choice'],
+    ['geometry', 'geometry'],
+    ['point', 'geometry'],
+    ['hstore', 'other'],
+    ['', 'other'],
+  ];
+  it.each(cases)('reads %s as %s', (type, kind) => {
+    expect(columnKind(type)).toBe(kind);
+  });
+
+  it('ignores case and surrounding spaces', () => {
+    expect(columnKind('  VARCHAR(20) ')).toBe('text');
+    expect(columnKind('BIGINT')).toBe('number');
+  });
+});
+
+describe('describeAccount (V11.12)', () => {
+  it('lists the flags and says when an account cannot log in', () => {
+    expect(describeAccount({ flags: ['superuser', 'locked'], login: true, role: false })).toBe(
+      'superuser, locked',
+    );
+    expect(describeAccount({ flags: [], login: false, role: false })).toBe('no login');
+    expect(describeAccount({ flags: [], login: false, role: true })).toBe('');
+    expect(describeAccount({ flags: [], login: true, role: false })).toBe('');
   });
 });

@@ -3,6 +3,22 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.4.0] - 2026-10-31
+
+### Added
+
+- Results: table bar (Properties, Data, ER diagram, test data, compare, history), AND/OR filters, Refresh and Tools buttons, custom page size, richer value panel with XML and JSON colouring and paired brackets, own context menus.
+- Tree: Columns/Indexes/Foreign Keys/Triggers folders with counts, DDL on double click of a column, index, key or trigger, Query and Security nodes, column move up/down, per-kind icons.
+- Table properties: DDL, Triggers and Checks tabs with counts.
+
+### Changed
+
+- Double click on a table opens only its data. Defaults: text left, grid lines. The "indexes kept as they are" notice is gone.
+
+### Fixed
+
+- Page arrows did not work on a single page.
+
 ## [1.3.0] - 2026-10-31
 
 ### Added

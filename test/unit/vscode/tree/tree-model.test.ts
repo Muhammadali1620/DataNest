@@ -565,53 +565,369 @@ describe('TreeModel', () => {
       name: 'orders',
       tableKind: 'table',
     };
+    const ref = { database: 'app', name: 'orders' };
 
-    it('lists columns with their details', async () => {
-      drivers.driver('mysql').sessionMetadata.columns = [
-        { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
-        { name: 'note', dataType: 'text', nullable: true, primaryKey: false },
-      ];
+    it('lists the Columns, Indexes, Foreign Keys and Triggers folders', async () => {
       const children = await model.children({ ...table, connectionId: mysql.id });
-      expect(children.slice(0, 2)).toEqual([
-        {
-          kind: 'column',
-          connectionId: mysql.id,
-          table: { database: 'app', name: 'orders' },
-          column: { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
-        },
-        {
-          kind: 'column',
-          connectionId: mysql.id,
-          table: { database: 'app', name: 'orders' },
-          column: { name: 'note', dataType: 'text', nullable: true, primaryKey: false },
-        },
-      ]);
-    });
-
-    it('adds the Indexes, Foreign Keys and Triggers folders after the columns', async () => {
-      const children = await model.children({ ...table, connectionId: mysql.id });
-      const ref = { database: 'app', name: 'orders' };
-      expect(children.slice(1)).toEqual([
+      expect(children).toEqual([
+        { kind: 'folder', folder: 'columns', connectionId: mysql.id, table: ref },
         { kind: 'folder', folder: 'indexes', connectionId: mysql.id, table: ref },
         { kind: 'folder', folder: 'foreignKeys', connectionId: mysql.id, table: ref },
         { kind: 'folder', folder: 'triggers', connectionId: mysql.id, table: ref },
       ]);
     });
 
-    it('gives a view its columns only', async () => {
+    it('gives a view its Columns folder only', async () => {
       const children = await model.children({
         ...table,
         connectionId: mysql.id,
         tableKind: 'view',
       });
-      expect(children.map((child) => child.kind)).toEqual(['column']);
+      expect(children.map((child) => child.kind === 'folder' && child.folder)).toEqual(['columns']);
     });
 
-    it('says when a table has no columns and still offers the folders', async () => {
-      drivers.driver('mysql').sessionMetadata.columns = [];
+    it('counts what every folder holds, before it is opened', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.columns = [
+        { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+        { name: 'note', dataType: 'text', nullable: true, primaryKey: false },
+      ];
+      metadata.indexes = [{ name: 'PRIMARY', columns: ['id'], unique: true, primary: true }];
+      metadata.objects = [
+        { name: 'audit', kind: 'trigger', table: 'orders' },
+        { name: 'other', kind: 'trigger', table: 'customers' },
+      ];
       const children = await model.children({ ...table, connectionId: mysql.id });
-      expect(children[0]).toEqual({ kind: 'message', text: 'No columns', connectionId: mysql.id });
-      expect(children.slice(1).map((child) => child.kind)).toEqual(['folder', 'folder', 'folder']);
+      expect(children.map((child) => model.countOf(child))).toEqual([2, 1, 0, 1]);
+    });
+
+    it('leaves a count out when the server cannot give it', async () => {
+      drivers.driver('mysql').metadataError = new Error('denied');
+      const children = await model.children({ ...table, connectionId: mysql.id });
+      expect(children).toHaveLength(4);
+      expect(children.map((child) => model.countOf(child))).toEqual([
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]);
+    });
+  });
+
+  describe('Columns folder', () => {
+    const ref = { database: 'app', name: 'orders' };
+    const columns: TreeNode = {
+      kind: 'folder',
+      folder: 'columns',
+      connectionId: '',
+      table: ref,
+    };
+
+    it('lists columns with their details, and marks the ones that can move', async () => {
+      drivers.driver('mysql').sessionMetadata.columns = [
+        { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+        { name: 'note', dataType: 'text', nullable: true, primaryKey: false },
+      ];
+      expect(await model.children({ ...columns, connectionId: mysql.id })).toEqual([
+        {
+          kind: 'column',
+          connectionId: mysql.id,
+          table: ref,
+          column: { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+          movable: true,
+        },
+        {
+          kind: 'column',
+          connectionId: mysql.id,
+          table: ref,
+          column: { name: 'note', dataType: 'text', nullable: true, primaryKey: false },
+          movable: true,
+        },
+      ]);
+    });
+
+    it('does not offer to move the columns of a view, or of a driver that cannot', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.tables = [{ name: 'orders', kind: 'view' }];
+      const [first] = await model.children({ ...columns, connectionId: mysql.id });
+      expect(first).not.toHaveProperty('movable');
+      const pg = await store.add({ name: 'Pg', driver: 'postgres', host: 'h' });
+      const [second] = await model.children({
+        ...columns,
+        connectionId: pg.id,
+        table: { schema: 'public', name: 'orders' },
+      });
+      expect(second).toMatchObject({ kind: 'column' });
+      expect(second).not.toHaveProperty('movable');
+    });
+
+    it('marks the columns of a foreign key', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.columns = [
+        { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+        { name: 'customer_id', dataType: 'int', nullable: true, primaryKey: false },
+      ];
+      metadata.foreignKeys = [
+        {
+          name: 'fk',
+          columns: ['customer_id'],
+          target: { database: 'app', name: 'customers' },
+          targetColumns: ['id'],
+        },
+      ];
+      const found = await model.children({ ...columns, connectionId: mysql.id });
+      expect(found.map((child) => child.kind === 'column' && child.link === true)).toEqual([
+        false,
+        true,
+      ]);
+    });
+
+    it('still lists the columns when the foreign keys cannot be read', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.listForeignKeys = () => Promise.reject(new Error('denied'));
+      const found = await model.children({ ...columns, connectionId: mysql.id });
+      expect(found).toHaveLength(1);
+      expect(found[0]).not.toHaveProperty('link');
+    });
+
+    it('says when a table has no columns', async () => {
+      drivers.driver('mysql').sessionMetadata.columns = [];
+      expect(await model.children({ ...columns, connectionId: mysql.id })).toEqual([
+        { kind: 'message', text: 'No columns', connectionId: mysql.id },
+      ]);
+      expect(model.countOf({ ...columns, connectionId: mysql.id })).toBe(0);
+    });
+  });
+
+  describe('counts of the folders of a scope (V11.12)', () => {
+    it('knows how many tables, views and routines a scope holds', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.tables = [
+        { name: 'a', kind: 'table' },
+        { name: 'b', kind: 'table' },
+        { name: 'v', kind: 'view' },
+      ];
+      metadata.objects = [{ name: 'f', kind: 'function' }];
+      drivers.driver('mysql').capabilities = {
+        ...drivers.driver('mysql').capabilities,
+        objectKinds: ['function', 'procedure'],
+      };
+      const groups = await model.children({
+        kind: 'database',
+        connectionId: mysql.id,
+        database: 'app',
+      });
+      const counts = Object.fromEntries(
+        groups.map((group) => [group.kind === 'group' ? group.group : '', model.countOf(group)]),
+      );
+      expect(counts).toMatchObject({ tables: 2, views: 1, functions: 1, procedures: 0 });
+    });
+
+    it('counts a filtered folder by what it shows', async () => {
+      const metadata = drivers.driver('mysql').sessionMetadata;
+      metadata.tables = [
+        { name: 'user_a', kind: 'table' },
+        { name: 'order_a', kind: 'table' },
+      ];
+      const group: TreeNode = {
+        kind: 'group',
+        group: 'tables',
+        connectionId: mysql.id,
+        scope: { database: 'app' },
+      };
+      model.setGroupFilter(group, 'user');
+      await model.children(group);
+      expect(model.countOf(group)).toBe(1);
+    });
+
+    it('still lists the folders when counting fails', async () => {
+      drivers.driver('mysql').metadataError = new Error('denied');
+      const groups = await model.children({
+        kind: 'database',
+        connectionId: mysql.id,
+        database: 'app',
+      });
+      expect(groups.length).toBeGreaterThan(0);
+      expect(groups.map((group) => model.countOf(group))).not.toContain(0);
+      expect(groups.every((group) => model.countOf(group) === undefined)).toBe(true);
+    });
+  });
+
+  describe('Query folders (V11.12)', () => {
+    let queries: Map<string, string[]>;
+    let withQueries: TreeModel;
+
+    beforeEach(() => {
+      queries = new Map();
+      withQueries = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => showSystemObjects },
+        logger,
+        texts: { ...TEXTS, noQueries: 'No saved queries' },
+        savedQueries: {
+          list: (connectionId, scope) =>
+            Promise.resolve(queries.get(`${connectionId}/${scope.database ?? ''}`) ?? []),
+        },
+      });
+    });
+
+    it('puts a Query folder first in a database and a schema', async () => {
+      const [first] = await withQueries.children({
+        kind: 'database',
+        connectionId: mysql.id,
+        database: 'app',
+      });
+      expect(first).toEqual({
+        kind: 'queryFolder',
+        connectionId: mysql.id,
+        scope: { database: 'app' },
+      });
+      const pg = await store.add({ name: 'Pg', driver: 'postgres', host: 'h' });
+      const inDatabase = await withQueries.children({
+        kind: 'database',
+        connectionId: pg.id,
+        database: 'app',
+      });
+      expect(inDatabase[0]).toMatchObject({ kind: 'queryFolder', scope: { database: 'app' } });
+      const inSchema = await withQueries.children({
+        kind: 'schema',
+        connectionId: pg.id,
+        database: 'app',
+        schema: 'public',
+      });
+      expect(inSchema[0]).toEqual({
+        kind: 'queryFolder',
+        connectionId: pg.id,
+        scope: { database: 'app', schema: 'public' },
+      });
+    });
+
+    it('has no Query folder without a source of queries', async () => {
+      const children = await model.children({
+        kind: 'database',
+        connectionId: mysql.id,
+        database: 'app',
+      });
+      expect(children.some((child) => child.kind === 'queryFolder')).toBe(false);
+    });
+
+    it('lists the saved queries and counts them', async () => {
+      queries.set(`${mysql.id}/app`, ['a', 'b']);
+      const folder: TreeNode = {
+        kind: 'queryFolder',
+        connectionId: mysql.id,
+        scope: { database: 'app' },
+      };
+      expect(await withQueries.children(folder)).toEqual([
+        { kind: 'savedQuery', connectionId: mysql.id, scope: { database: 'app' }, name: 'a' },
+        { kind: 'savedQuery', connectionId: mysql.id, scope: { database: 'app' }, name: 'b' },
+      ]);
+      expect(withQueries.countOf(folder)).toBe(2);
+    });
+
+    it('says when there are none', async () => {
+      const folder: TreeNode = {
+        kind: 'queryFolder',
+        connectionId: mysql.id,
+        scope: { database: 'app' },
+      };
+      expect(await withQueries.children(folder)).toEqual([
+        { kind: 'message', text: 'No saved queries', connectionId: mysql.id },
+      ]);
+      expect(withQueries.countOf(folder)).toBe(0);
+    });
+  });
+
+  describe('Security folder (V11.12)', () => {
+    const accounts = [
+      { name: 'app', host: '%', login: true, role: false, flags: [] },
+      { name: 'admin', login: true, role: false, flags: ['superuser'] },
+      { name: 'readers', login: false, role: true, flags: [] },
+    ];
+    let loads: number;
+    let withAccounts: TreeModel;
+
+    beforeEach(() => {
+      loads = 0;
+      drivers.driver('mysql').sessionMetadata.databases = ['app'];
+      withAccounts = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => showSystemObjects },
+        logger,
+        texts: { ...TEXTS, noAccounts: (group) => `no ${group}` },
+        accounts: () => {
+          loads += 1;
+          return Promise.resolve(accounts);
+        },
+      });
+    });
+
+    it('comes first on a connection, before the databases', async () => {
+      const children = await withAccounts.children({ kind: 'connection', connectionId: mysql.id });
+      expect(children.map((child) => child.kind)).toEqual(['security', 'database']);
+    });
+
+    it('is not there without a way to read accounts, or on a SQLite file', async () => {
+      const plain = await model.children({ kind: 'connection', connectionId: mysql.id });
+      expect(plain.some((child) => child.kind === 'security')).toBe(false);
+      const file = await store.add({ name: 'File', driver: 'sqlite', file: '/db' });
+      const children = await withAccounts.children({ kind: 'connection', connectionId: file.id });
+      expect(children.some((child) => child.kind === 'security')).toBe(false);
+    });
+
+    it('splits accounts and roles, counted before they are opened', async () => {
+      const groups = await withAccounts.children({ kind: 'security', connectionId: mysql.id });
+      expect(groups).toEqual([
+        { kind: 'securityGroup', connectionId: mysql.id, group: 'users' },
+        { kind: 'securityGroup', connectionId: mysql.id, group: 'roles' },
+      ]);
+      expect(groups.map((group) => withAccounts.countOf(group))).toEqual([2, 1]);
+    });
+
+    it('lists the accounts of a group by name, from one read', async () => {
+      await withAccounts.children({ kind: 'security', connectionId: mysql.id });
+      const users = await withAccounts.children({
+        kind: 'securityGroup',
+        connectionId: mysql.id,
+        group: 'users',
+      });
+      expect(users.map((node) => node.kind === 'account' && node.user.name)).toEqual([
+        'admin',
+        'app',
+      ]);
+      expect(loads).toBe(1);
+    });
+
+    it('says when a group is empty', async () => {
+      accounts.length = 0;
+      await withAccounts.children({ kind: 'security', connectionId: mysql.id });
+      expect(
+        await withAccounts.children({
+          kind: 'securityGroup',
+          connectionId: mysql.id,
+          group: 'roles',
+        }),
+      ).toEqual([{ kind: 'message', text: 'no roles', connectionId: mysql.id }]);
+    });
+
+    it('reports a server that refuses to list accounts as a leaf', async () => {
+      const refusing = new TreeModel({
+        store,
+        manager,
+        cache,
+        settings: { showSystemObjects: () => showSystemObjects },
+        logger,
+        texts: TEXTS,
+        accounts: () => Promise.reject(new DbError('permission-denied', 'no rights')),
+      });
+      const children = await refusing.children({ kind: 'security', connectionId: mysql.id });
+      expect(children).toEqual([
+        { kind: 'message', text: 'no rights', failed: true, connectionId: mysql.id },
+      ]);
     });
   });
 

@@ -64,6 +64,23 @@ const procedure: TreeNode = {
   object: { database: 'shop', kind: 'procedure', name: 'p' },
 };
 
+describe('editObject', () => {
+  it('opens an object named directly, as the table page does for a trigger', async () => {
+    const { handlers, opened, registry } = setup();
+    const trigger: ObjectRef = { database: 'shop', kind: 'trigger', name: 'trg', table: 'o' };
+    await handlers.editObject('c1', trigger);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]?.binding).toEqual({ connectionId: 'c1', database: 'shop' });
+    expect(registry.get('untitled:1')).toMatchObject({ connectionId: 'c1', object: trigger });
+  });
+
+  it('does nothing for a kind that is not edited as text', async () => {
+    const { handlers, opened } = setup();
+    await handlers.editObject('c1', { kind: 'table', name: 't' });
+    expect(opened).toHaveLength(0);
+  });
+});
+
 describe('edit', () => {
   it('opens the definition on the same connection and remembers the object', async () => {
     const { handlers, opened, registry } = setup();

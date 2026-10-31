@@ -7,6 +7,7 @@ import { LINK_ERRORS } from '../link-error';
 import { MAX_COLUMNS, resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
 import { READ_ONLY_REASONS } from '../read-only-reason';
+import { TABLE_ACTIONS } from '../table-actions';
 import { tableFilterSchema } from '../table-filter';
 import { defineProtocol } from '../rpc';
 import {
@@ -420,6 +421,11 @@ export const resultGridProtocol = defineProtocol({
         params: object({ resultId, sql: string({ maxLength: 1_000_000 }) }),
         result: object({ ok: boolean(), error: optional(string({ maxLength: 10_000 })) }),
       },
+      /** Page → host: the clipboard's text, for a paste a webview may not read itself. */
+      clipboardText: {
+        params: object({}),
+        result: object({ text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
+      },
       /** Page → host: the rows of a visible range. */
       rows: {
         params: object({
@@ -458,6 +464,8 @@ export const resultGridProtocol = defineProtocol({
       }),
       /** Page → host: open the Tools page (hashes, encoders, colours, images, network). */
       openTools: object({}),
+      /** Page → host: run a table tool (properties, ER diagram, history…) on this table view. */
+      tableAction: object({ resultId, action: literal(...TABLE_ACTIONS) }),
       /** Page → host: open the import page for the table this result shows (V12.1). */
       importInto: object({ resultId }),
     },

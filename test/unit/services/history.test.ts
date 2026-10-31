@@ -4,6 +4,7 @@ import {
   HISTORY_STATE_KEY,
   type HistoryRecord,
   MAX_HISTORY_SQL_LENGTH,
+  mentionsTable,
   QueryHistory,
 } from '../../../src/services/history';
 import { FakeMemento, RecordingLogger } from '../../helpers/fakes';
@@ -337,5 +338,42 @@ describe('QueryHistory', () => {
       }).not.toThrow();
       expect(history.size).toBe(1);
     });
+  });
+});
+
+describe('mentionsTable', () => {
+  it('finds the table whatever quotes surround it', () => {
+    expect(mentionsTable('SELECT * FROM orders', 'orders')).toBe(true);
+    expect(mentionsTable('select * from "Orders" where 1', 'orders')).toBe(true);
+    expect(mentionsTable('SELECT * FROM `shop`.`orders`', 'orders')).toBe(true);
+    expect(mentionsTable('UPDATE [orders] SET a = 1', 'orders')).toBe(true);
+  });
+
+  it('wants the whole word', () => {
+    expect(mentionsTable('SELECT * FROM orders_archive', 'orders')).toBe(false);
+    expect(mentionsTable('SELECT * FROM my_orders', 'orders')).toBe(false);
+    expect(mentionsTable('SELECT * FROM old_orders, orders', 'orders')).toBe(true);
+  });
+
+  it('takes any statement when the table has no name', () => {
+    expect(mentionsTable('SELECT 1', '  ')).toBe(true);
+  });
+
+  it('filters the history list by table', () => {
+    const history = new QueryHistory({
+      state: new FakeMemento(),
+      logger: new RecordingLogger(),
+      limit: () => 100,
+      nameOf: () => 'db',
+      now: () => 1,
+    });
+    for (const sql of ['SELECT * FROM orders', 'SELECT * FROM users', 'DELETE FROM orders']) {
+      history.record({ sql, connectionId: 'c1', durationMs: 1 });
+    }
+    expect(history.list({ table: 'orders' }).map((entry) => entry.sql)).toEqual([
+      'DELETE FROM orders',
+      'SELECT * FROM orders',
+    ]);
+    expect(history.list({ table: 'orders', text: 'delete' })).toHaveLength(1);
   });
 });

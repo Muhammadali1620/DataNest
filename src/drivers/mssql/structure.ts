@@ -69,6 +69,13 @@ export async function readMssqlStructure(
     primaryKey: indexes.find((index) => index.primary)?.columns ?? [],
     indexes,
     foreignKeys: await reader.listForeignKeys(table),
+    checks: (
+      await read(
+        `SELECT name, definition FROM sys.check_constraints
+         WHERE parent_object_id = OBJECT_ID(@p1) ORDER BY name`,
+        [objectName(table)],
+      )
+    ).map((row) => ({ name: text(row[0]), expression: text(row[1]) })),
     ...(comment === undefined || comment === '' ? {} : { comment }),
     ...(primaryKeyName === undefined ? {} : { primaryKeyName }),
   };

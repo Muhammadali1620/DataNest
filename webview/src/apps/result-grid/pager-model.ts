@@ -47,6 +47,17 @@ export function hasNextPage(page: PageInfo, rowsOnPage: number): boolean {
   return rowsOnPage >= page.pageSize;
 }
 
+/** Most rows one page may hold; the host refuses more. */
+export const MAX_PAGE_ROWS = 1_000_000;
+
+/** A typed page size as a whole number of rows, or undefined when it is not one. */
+export function parsePageSize(typed: number): number | undefined {
+  if (!Number.isFinite(typed) || typed < 1) {
+    return undefined;
+  }
+  return Math.min(MAX_PAGE_ROWS, Math.trunc(typed));
+}
+
 /** The choices for a size picker, in order, always including the size in use. */
 export function pageSizeChoices(current: number): number[] {
   const all = new Set<number>([...PAGE_SIZE_CHOICES, current]);

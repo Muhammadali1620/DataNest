@@ -36,11 +36,16 @@ export const filterConditionSchema = object({
   column: string({ minLength: 1, maxLength: 1000 }),
   operator: literal(...FILTER_OPERATORS),
   value: optional(string({ maxLength: MAX_FILTER_VALUE_LENGTH })),
+  /**
+   * How this condition joins the one before it (AND when absent). As in SQL, AND binds
+   * tighter than OR: `a, b OR c` reads `(a AND b) OR c`. Ignored on the first condition.
+   */
+  join: optional(literal('and', 'or')),
 });
 
 export const tableFilterSchema = object({
   conditions: array(filterConditionSchema, { maxLength: MAX_FILTER_CONDITIONS }),
-  /** Free-form condition, joined to the others with AND. */
+  /** Free-form condition, joined to all the others with AND. */
   where: optional(string({ maxLength: MAX_FILTER_WHERE_LENGTH })),
 });
 

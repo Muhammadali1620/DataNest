@@ -6,6 +6,7 @@ import {
   offsetOfPage,
   pageCount,
   pageSizeChoices,
+  parsePageSize,
 } from '../../../../../webview/src/apps/result-grid/pager-model';
 
 describe('currentPage', () => {
@@ -101,5 +102,37 @@ describe('isWholeTable', () => {
     expect(isWholeTable({ offset: 0, pageSize: 1000, totalRows: 40 }, 40)).toBe(true);
     expect(isWholeTable({ offset: 0, pageSize: 100, totalRows: 400 }, 100)).toBe(false);
     expect(isWholeTable({ offset: 100, pageSize: 100, totalRows: 150 }, 50)).toBe(false);
+  });
+});
+
+describe('parsePageSize', () => {
+  it('takes a whole number of rows', () => {
+    expect(parsePageSize(50)).toBe(50);
+    expect(parsePageSize(37)).toBe(37);
+    expect(parsePageSize(1)).toBe(1);
+  });
+
+  it('cuts a fraction instead of rounding up', () => {
+    expect(parsePageSize(49.9)).toBe(49);
+  });
+
+  it('caps what the host would refuse', () => {
+    expect(parsePageSize(5_000_000)).toBe(1_000_000);
+  });
+
+  it.each([0, -5, 0.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses %s', (typed) => {
+    expect(parsePageSize(typed)).toBeUndefined();
+  });
+});
+
+describe('moving by page with an arrow', () => {
+  it('can step forward from page 1 whenever rows are left', () => {
+    expect(hasNextPage({ offset: 0, pageSize: 50, totalRows: 56 }, 50)).toBe(true);
+    expect(offsetOfPage(2, { offset: 0, pageSize: 50, totalRows: 56 })).toBe(50);
+  });
+
+  it('stays on page 1 when the whole table fits', () => {
+    expect(hasNextPage({ offset: 0, pageSize: 200, totalRows: 56 }, 56)).toBe(false);
+    expect(offsetOfPage(2, { offset: 0, pageSize: 200, totalRows: 56 })).toBe(0);
   });
 });

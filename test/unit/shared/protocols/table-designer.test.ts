@@ -3,6 +3,7 @@ import {
   columnDesignSchema,
   foreignKeyDesignSchema,
   indexDesignSchema,
+  TABLE_TABS,
   tableDesignerProtocol,
   tableDesignSchema,
 } from '../../../../src/shared/protocols/table-designer';
@@ -58,6 +59,8 @@ describe('tableDesignerProtocol', () => {
         autoIncrement: true,
         foreignKeys: true,
         uniqueIndexes: true,
+        triggers: true,
+        checks: false,
       },
       design: newTableDesign('sqlite'),
       kept: { indexes: [{ name: 'ix', description: '(lower(a))' }], columns: ['twice'] },
@@ -143,12 +146,20 @@ describe('designer features (V6.3)', () => {
         autoIncrement: false,
         foreignKeys: false,
         uniqueIndexes: false,
+        triggers: false,
+        checks: false,
       },
       design: newTableDesign('clickhouse'),
       kept: { indexes: [], columns: [] },
     };
     expect(tableDesignerProtocol.webview.events.state.parse(state)).toEqual(state);
-    for (const flag of ['autoIncrement', 'foreignKeys', 'uniqueIndexes'] as const) {
+    for (const flag of [
+      'autoIncrement',
+      'foreignKeys',
+      'uniqueIndexes',
+      'triggers',
+      'checks',
+    ] as const) {
       const features = Object.fromEntries(
         Object.entries(state.features).filter(([key]) => key !== flag),
       );
@@ -157,5 +168,52 @@ describe('designer features (V6.3)', () => {
         flag,
       ).toThrow();
     }
+  });
+});
+
+describe('table properties requests (V11)', () => {
+  const { requests, events } = {
+    requests: tableDesignerProtocol.host.requests,
+    events: tableDesignerProtocol.webview.events,
+  };
+
+  it('accepts only known tabs, in the state and in the tab event', () => {
+    for (const tab of TABLE_TABS) {
+      expect(events.tab.parse({ tab })).toEqual({ tab });
+    }
+    expect(() => events.tab.parse({ tab: 'nope' })).toThrow();
+  });
+
+  it('takes a trigger action from the known four, with an optional name', () => {
+    expect(requests.triggerAction.params.parse({ action: 'new' })).toEqual({ action: 'new' });
+    expect(requests.triggerAction.params.parse({ action: 'drop', name: 't' })).toEqual({
+      action: 'drop',
+      name: 't',
+    });
+    expect(() => requests.triggerAction.params.parse({ action: 'run' })).toThrow();
+  });
+
+  it('takes a check action with a name and an optional condition', () => {
+    expect(
+      requests.checkAction.params.parse({ action: 'add', name: 'c', expression: 'a > 0' }),
+    ).toEqual({ action: 'add', name: 'c', expression: 'a > 0' });
+    expect(() => requests.checkAction.params.parse({ action: 'add' })).toThrow();
+    expect(() => requests.checkAction.params.parse({ action: 'edit', name: 'c' })).toThrow();
+  });
+
+  it('takes copy and open of a text, and nothing else', () => {
+    expect(requests.textAction.params.parse({ action: 'copy', text: 'x' })).toEqual({
+      action: 'copy',
+      text: 'x',
+    });
+    expect(() => requests.textAction.params.parse({ action: 'run', text: 'x' })).toThrow();
+  });
+
+  it('answers with an outcome from the known set', () => {
+    expect(requests.checkAction.result.parse({ outcome: 'ran' })).toEqual({ outcome: 'ran' });
+    expect(() => requests.checkAction.result.parse({ outcome: 'maybe' })).toThrow();
+    expect(requests.definition.result.parse({ text: 'CREATE TABLE t ()' })).toEqual({
+      text: 'CREATE TABLE t ()',
+    });
   });
 });

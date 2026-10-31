@@ -53,6 +53,13 @@ export async function readPgStructure(
     };
   });
   const indexes = await reader.listIndexes(table);
+  const checks = (
+    await read(
+      `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+       WHERE conrelid = $1::oid AND contype = 'c' ORDER BY conname`,
+      [relation[0]],
+    )
+  ).map((row) => ({ name: text(row[0]), expression: text(row[1]) }));
   const comment = optional(relation[1]);
   const primaryKeyName = optional(relation[2]);
   return {
@@ -60,6 +67,7 @@ export async function readPgStructure(
     primaryKey: indexes.find((index) => index.primary)?.columns ?? [],
     indexes,
     foreignKeys: await reader.listForeignKeys(table),
+    checks,
     ...(comment === undefined ? {} : { comment }),
     ...(primaryKeyName === undefined ? {} : { primaryKeyName }),
   };

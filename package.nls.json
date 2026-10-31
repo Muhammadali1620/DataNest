@@ -53,7 +53,8 @@
   "commands.table.rename.title": "Rename…",
   "commands.table.truncate.title": "Empty Table (TRUNCATE)…",
   "commands.object.drop.title": "Drop…",
-  "commands.table.design.title": "Edit Table…",
+  "commands.table.design.title": "Table Properties…",
+  "commands.table.properties.title": "Table Properties",
   "commands.object.edit.title": "Edit Definition…",
   "commands.object.apply.title": "Apply Definition",
   "configuration.format.keywordCase.description": "Letter case of SQL keywords (`SELECT`, `FROM`, …) when formatting.",
@@ -157,5 +158,15 @@
   "commands.elastic.copyAsCurl.title": "Copy as cURL",
   "commands.elastic.showSettings.title": "Show Settings",
   "commands.mongo.exportCollection.title": "Export Documents…",
-  "commands.mongo.importCollection.title": "Import Documents…"
+  "commands.mongo.importCollection.title": "Import Documents…",
+  "commands.node.click.title": "Open SQL",
+  "commands.node.openSql.title": "Open SQL",
+  "commands.node.actions.title": "Actions…",
+  "commands.column.moveUp.title": "Move Column Up",
+  "commands.column.moveDown.title": "Move Column Down",
+  "commands.savedQuery.new.title": "New Saved Query",
+  "commands.savedQuery.open.title": "Open Saved Query",
+  "commands.savedQuery.rename.title": "Rename Saved Query",
+  "commands.savedQuery.delete.title": "Delete Saved Query",
+  "commands.account.open.title": "Open in Users and Privileges"
 }

@@ -79,13 +79,29 @@ export function buildWhere(
   if (filter === undefined || isEmptyFilter(filter)) {
     return undefined;
   }
-  const parts = filter.conditions.map((condition) => conditionSql(dialect, condition));
+  // OR starts a new group; inside a group the conditions are ANDed, as SQL reads them.
+  const groups: string[][] = [];
+  filter.conditions.forEach((condition, index) => {
+    const sql = conditionSql(dialect, condition);
+    const last = groups.at(-1);
+    if (last === undefined || (index > 0 && condition.join === 'or')) {
+      groups.push([sql]);
+    } else {
+      last.push(sql);
+    }
+  });
+  const alternatives =
+    groups.length > 1
+      ? [
+          `(${groups.map((group) => (group.length > 1 ? `(${group.join(' AND ')})` : group[0])).join(' OR ')})`,
+        ]
+      : (groups[0] ?? []);
   const where = (filter.where ?? '').trim();
   if (where !== '') {
     checkWhere(where, driver);
-    parts.push(`(\n${where}\n)`);
+    alternatives.push(`(\n${where}\n)`);
   }
-  return parts.join(' AND ');
+  return alternatives.join(' AND ');
 }
 
 export interface TableSort {

@@ -139,6 +139,7 @@ export const CODICONS = {
   'symbol-class': 0xeb5b,
   'symbol-constant': 0xeb5d,
   'symbol-enum': 0xea95,
+  'symbol-event': 0xea86,
   'symbol-field': 0xeb5f,
   'symbol-key': 0xea93,
   'symbol-method': 0xea8c,

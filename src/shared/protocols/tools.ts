@@ -47,6 +47,11 @@ export const toolsProtocol = defineProtocol({
           bytes: number({ integer: true, min: 0 }),
         }),
       },
+      /** The clipboard's text, for a paste a webview may not read itself. */
+      clipboardText: {
+        params: object({}),
+        result: object({ text: string({ maxLength: 20_000_000 }) }),
+      },
       /** The network interfaces of this machine. */
       interfaces: {
         params: object({}),

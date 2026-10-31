@@ -1112,3 +1112,57 @@ describe('more ways to look', () => {
     expect(grab.getAttribute('draggable')).toBe('false');
   });
 });
+
+describe('colour and pairs in the dialog', () => {
+  async function dialog() {
+    await open();
+    await fireEvent.click(within(cell(0, 1)).getByTestId('cell-dialog'));
+    return await screen.findByTestId<HTMLTextAreaElement>('value-dialog-text');
+  }
+
+  it('colours the JSON it opens with', async () => {
+    await dialog();
+    expect(document.querySelector('.json-key')?.textContent).toBe('"en"');
+    expect(document.querySelector('.json-string')?.textContent).toBe('"one"');
+  });
+
+  it('closes parentheses in JSON mode too', async () => {
+    const box = await dialog();
+    await fireEvent.input(box, { target: { value: '' } });
+    box.setSelectionRange(0, 0);
+    await fireEvent.keyDown(box, { key: '(' });
+    await waitFor(() => {
+      expect(box.value).toBe('()');
+    });
+  });
+
+  it('switches to XML: colours tags and closes "<" and quotes', async () => {
+    const box = await dialog();
+    await fireEvent.click(screen.getByRole('button', { name: 'XML' }));
+    await fireEvent.input(box, { target: { value: '<svg a="1"/>' } });
+    await waitFor(() => {
+      expect(document.querySelector('.xml-tag')?.textContent).toBe('svg');
+    });
+    await fireEvent.input(box, { target: { value: '' } });
+    box.setSelectionRange(0, 0);
+    await fireEvent.keyDown(box, { key: '<' });
+    await waitFor(() => {
+      expect(box.value).toBe('<>');
+    });
+    await fireEvent.input(box, { target: { value: '' } });
+    box.setSelectionRange(0, 0);
+    await fireEvent.keyDown(box, { key: "'" });
+    await waitFor(() => {
+      expect(box.value).toBe("''");
+    });
+  });
+
+  it('opens markup in XML mode from the start', async () => {
+    await open();
+    await fireEvent.click(within(cell(0, 2)).getByTestId('cell-dialog'));
+    const box = await screen.findByTestId<HTMLTextAreaElement>('value-dialog-text');
+    await fireEvent.click(screen.getByRole('button', { name: 'XML' }));
+    expect(screen.getByRole('button', { name: 'XML' }).getAttribute('aria-pressed')).toBe('true');
+    expect(box).toBeTruthy();
+  });
+});

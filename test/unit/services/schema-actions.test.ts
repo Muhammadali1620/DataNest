@@ -41,6 +41,21 @@ describe('actionSql', () => {
     }
   });
 
+  it('runs statements built elsewhere as they are, in their scope', () => {
+    const action: SchemaAction = {
+      kind: 'runStatements',
+      scope: { database: 'shop' },
+      statements: ['ALTER TABLE a ADD CONSTRAINT c CHECK (x > 0)', 'SELECT 1'],
+    };
+    expect(actionSql(action, mysqlDialect.ddl)).toEqual([
+      'ALTER TABLE a ADD CONSTRAINT c CHECK (x > 0)',
+      'SELECT 1',
+    ]);
+    expect(actionDatabase(action)).toBe('shop');
+    expect(actionChecks(action, mysqlDialect.ddl)).toEqual([]);
+    expect(actionRecovery(action, mysqlDialect.ddl)).toEqual([]);
+  });
+
   it('creates a table from a design, with every statement the dialect needs', () => {
     const design = newTableDesign('postgres', 'invoices');
     const statements = actionSql(

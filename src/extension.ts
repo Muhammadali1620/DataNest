@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+import { join } from 'node:path';
+import { SavedQueryStore } from './services/saved-queries';
+import { listAccounts } from './services/users/account-list';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
 import { ConnectionManager, type SessionTarget } from './services/connection-manager';
 import { CONNECTIONS_STATE_KEY, ConnectionStore } from './services/connection-store';
@@ -318,6 +321,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(decorations);
   const redisKeySettings = createRedisKeySettings();
   const redisKeys = new RedisKeyBrowser({ manager, settings: redisKeySettings, logger });
+  // Saved queries are plain files, kept in the extension's global storage (V11.12).
+  const savedQueries = new SavedQueryStore(join(context.globalStorageUri.fsPath, 'queries'));
   const tree = new ConnectionsTreeProvider({
     extensionUri: context.extensionUri,
     store,
@@ -328,6 +333,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     redisKeys,
     redisKeySeparator: () => redisKeySettings.separator(),
+    savedQueries: {
+      list: async (connectionId, scope) => await savedQueries.list(connectionId, scope),
+    },
+    accounts: async (connectionId) => await listAccounts(manager, connectionId),
   });
   const treeView = vscode.window.createTreeView(CONNECTIONS_VIEW_ID, {
     treeDataProvider: tree,
@@ -375,6 +384,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       redisKeys,
       treeView,
       redisKeySeparator: () => redisKeySettings.separator(),
+      savedQueries,
     }),
   );
 

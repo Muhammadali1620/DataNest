@@ -257,3 +257,77 @@ describe('ValuePanel', () => {
     expect(screen.getByTestId('value-text').textContent).toBe('text now');
   });
 });
+
+describe('ValuePanel layout', () => {
+  it('names the kind of text in the bar', () => {
+    const { unmount } = panel('{"a":1}');
+    expect(screen.getByTestId('value-meta').textContent).toContain('JSON');
+    unmount();
+    const second = panel('<svg viewBox="0 0 1 1"/>');
+    expect(screen.getByTestId('value-meta').textContent).toContain('XML');
+    second.unmount();
+    panel('just words');
+    expect(screen.getByTestId('value-meta').textContent).toContain('Text');
+  });
+
+  it('colours markup tokens', () => {
+    panel('<g id="a">x</g>');
+    const text = screen.getByTestId('value-text');
+    expect(text.querySelector('.x-tag')?.textContent).toBe('g');
+    expect(text.querySelector('.x-attr')?.textContent).toBe('id');
+    expect(text.querySelector('.x-string')?.textContent).toBe('"a"');
+    expect(text.textContent).toBe('<g id="a">x</g>');
+  });
+
+  it('does not take plain text with a "<" for markup', () => {
+    panel('1 < 2');
+    expect(screen.getByTestId('value-text').querySelector('.x-tag')).toBeNull();
+  });
+
+  it('shows that the text was copied for a moment', async () => {
+    const { onCopy } = panel('abc');
+    const button = screen.getByTestId('value-copy');
+    expect(button.getAttribute('aria-label')).toBe('Copy');
+    await fireEvent.click(button);
+    expect(onCopy).toHaveBeenCalledWith('abc');
+    expect(screen.getByTestId('value-copy').getAttribute('aria-label')).toBe('Copied');
+  });
+
+  it('toggles wrapping with a pressed button', async () => {
+    panel('abc');
+    const wrap = screen.getByTestId('value-wrap');
+    expect(wrap.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(wrap);
+    expect(wrap.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('value-text').className).toContain('nowrap');
+  });
+
+  it('can be dragged wider and narrower within limits', async () => {
+    panel('abc');
+    const aside = screen.getByTestId('value-panel');
+    expect(aside.style.width).toBe('380px');
+    const handle = screen.getByTestId('value-resizer');
+    handle.setPointerCapture = vi.fn();
+    await fireEvent.pointerDown(handle, { clientX: 1000, pointerId: 1 });
+    await fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
+    expect(aside.style.width).toBe('480px');
+    await fireEvent.pointerMove(handle, { clientX: 0, pointerId: 1 });
+    expect(aside.style.width).toBe('760px');
+    await fireEvent.pointerMove(handle, { clientX: 5000, pointerId: 1 });
+    expect(aside.style.width).toBe('260px');
+    await fireEvent.pointerUp(handle, { pointerId: 1 });
+    await fireEvent.pointerMove(handle, { clientX: 500, pointerId: 1 });
+    expect(aside.style.width).toBe('260px');
+  });
+
+  it('widens and narrows from the keyboard through a button', async () => {
+    panel('abc');
+    const aside = screen.getByTestId('value-panel');
+    const widen = screen.getByTestId('value-widen');
+    await fireEvent.click(widen);
+    expect(aside.style.width).toBe('600px');
+    expect(widen.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(widen);
+    expect(aside.style.width).toBe('380px');
+  });
+});

@@ -16,6 +16,7 @@
     filterOf,
     isUnchanged,
     removeCondition,
+    toggleJoin,
     updateCondition,
   } from './filter-model';
 
@@ -66,8 +67,25 @@
 </script>
 
 <div class="filter" data-testid="filter-bar" role="group" aria-label={t('filter.title')}>
-  {#each draft.conditions as condition (condition.id)}
+  {#each draft.conditions as condition, index (condition.id)}
     <div class="row" data-testid="filter-row">
+      {#if index === 0}
+        <span class="join first" aria-hidden="true">{t('filter.where.label')}</span>
+      {:else}
+        <button
+          type="button"
+          class="join"
+          class:or={condition.join === 'or'}
+          data-testid="filter-join"
+          aria-label={t('filter.join')}
+          title={t('filter.joinHint')}
+          onclick={() => {
+            draft = toggleJoin(draft, condition.id);
+          }}
+        >
+          {condition.join === 'or' ? t('filter.or') : t('filter.and')}
+        </button>
+      {/if}
       {#if columns.length > 0}
         <select
           class="control"
@@ -216,6 +234,32 @@
   .value {
     flex: 1;
     min-width: 80px;
+  }
+
+  /* AND / OR: a small pill that flips on click; OR is tinted so it stands out. */
+  .join {
+    flex: none;
+    width: 52px;
+    padding: 2px 0;
+    color: var(--dn-muted);
+    background: transparent;
+    border: 1px solid var(--dn-border);
+    border-radius: 12px;
+    font: inherit;
+    font-size: var(--dn-font-small);
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .join.first {
+    border-color: transparent;
+    cursor: default;
+  }
+
+  .join.or {
+    color: var(--vscode-foreground);
+    background: color-mix(in srgb, var(--dn-warning) 22%, transparent);
+    border-color: color-mix(in srgb, var(--dn-warning) 60%, transparent);
   }
 
   .where {

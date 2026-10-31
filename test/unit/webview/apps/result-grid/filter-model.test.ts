@@ -7,6 +7,7 @@ import {
   filterOf,
   isUnchanged,
   removeCondition,
+  toggleJoin,
   updateCondition,
 } from '../../../../../webview/src/apps/result-grid/filter-model';
 import { MAX_FILTER_CONDITIONS } from '../../../../../src/shared/table-filter';
@@ -136,5 +137,51 @@ describe('activeCount', () => {
     expect(activeCount({ conditions: [{ column: 'a', operator: 'isNull' }], where: 'b > 1' })).toBe(
       2,
     );
+  });
+});
+
+describe('AND / OR between conditions', () => {
+  it('reads the join of a stored filter and defaults to AND', () => {
+    const draft = draftOf({
+      conditions: [
+        { column: 'a', operator: 'eq', value: '1' },
+        { column: 'b', operator: 'eq', value: '2', join: 'or' },
+      ],
+    });
+    expect(draft.conditions.map((c) => c.join)).toEqual(['and', 'or']);
+  });
+
+  it('adds a condition that joins with AND', () => {
+    expect(addCondition(draftOf(undefined), 'a').conditions[0]?.join).toBe('and');
+  });
+
+  it('flips a join and back', () => {
+    const draft = addCondition(addCondition(draftOf(undefined), 'a'), 'b');
+    const second = draft.conditions[1]?.id ?? -1;
+    const flipped = toggleJoin(draft, second);
+    expect(flipped.conditions[1]?.join).toBe('or');
+    expect(toggleJoin(flipped, second).conditions[1]?.join).toBe('and');
+  });
+
+  it('sends the join only where it is OR and not on the first condition', () => {
+    let draft = addCondition(addCondition(addCondition(draftOf(undefined), 'a'), 'b'), 'c');
+    const [first, second, third] = draft.conditions.map((c) => c.id);
+    draft = toggleJoin(toggleJoin(draft, first ?? 0), third ?? 0);
+    draft = updateCondition(draft, second ?? 0, { operator: 'isNull' });
+    expect(filterOf(draft).conditions.map((c) => c.join)).toEqual([undefined, undefined, 'or']);
+  });
+
+  it('counts a change of join as a change', () => {
+    const applied = {
+      conditions: [
+        { column: 'a', operator: 'isNull' as const },
+        { column: 'b', operator: 'isNull' as const },
+      ],
+    };
+    const draft = draftOf(applied);
+    expect(isUnchanged(draft, applied)).toBe(true);
+    expect(isUnchanged(toggleJoin(draft, draft.conditions[1]?.id ?? 0), applied)).toBe(false);
+    // The first condition's join never reaches the server, so it is not a change.
+    expect(isUnchanged(toggleJoin(draft, draft.conditions[0]?.id ?? 0), applied)).toBe(true);
   });
 });

@@ -9,8 +9,13 @@ export interface EditState {
 }
 
 const INDENT = '  ';
-const PAIRS: Readonly<Record<string, string>> = { '{': '}', '[': ']', '"': '"' };
-const CLOSERS = new Set(['}', ']', '"']);
+
+/** Opener → closer; a quote is its own closer. Each kind of text has its own set. */
+export type PairSet = Readonly<Record<string, string>>;
+
+export const JSON_PAIRS: PairSet = { '{': '}', '[': ']', '(': ')', '"': '"' };
+/** Markup: tags, attribute quotes and parentheses (in CSS inside `style`). */
+export const XML_PAIRS: PairSet = { '<': '>', '(': ')', '"': '"', "'": "'" };
 
 function lineStart(text: string, at: number): number {
   return text.lastIndexOf('\n', at - 1) + 1;
@@ -45,13 +50,19 @@ function opensString(text: string, at: number): boolean {
  * What typing `key` does, or undefined when the browser's own behaviour is right.
  * `shift` matters for Tab only.
  */
-export function applyKey(state: EditState, key: string, shift = false): EditState | undefined {
+export function applyKey(
+  state: EditState,
+  key: string,
+  shift = false,
+  pairs: PairSet = JSON_PAIRS,
+): EditState | undefined {
   const { text, start, end } = state;
   const selected = start !== end;
   const next = text[end];
+  const closers = new Set(Object.values(pairs));
 
-  if (key in PAIRS) {
-    const closer = PAIRS[key] ?? '';
+  if (key in pairs) {
+    const closer = pairs[key] ?? '';
     if (selected) {
       // A selection is wrapped, and stays selected inside the pair.
       const wrapped = key + text.slice(start, end) + closer;
@@ -61,24 +72,28 @@ export function applyKey(state: EditState, key: string, shift = false): EditStat
         end: end + 1,
       };
     }
-    if (key === '"') {
-      if (next === '"') {
+    if (closer === key) {
+      if (next === key) {
         return { text, start: start + 1, end: start + 1 };
       }
       if (!opensString(text, start)) {
         return undefined;
       }
     }
+    if (key === '<' && next !== undefined && !/[\s>]/u.test(next)) {
+      // A "<" in front of a word is a comparison or a tag being typed before text.
+      return undefined;
+    }
     return replace(state, start, end, key + closer, start + 1);
   }
 
-  if (CLOSERS.has(key) && !selected && next === key) {
+  if (closers.has(key) && !selected && next === key) {
     return { text, start: start + 1, end: start + 1 };
   }
 
   if (key === 'Backspace' && !selected && start > 0) {
     const before = text[start - 1] ?? '';
-    if (PAIRS[before] === next && next !== undefined) {
+    if (pairs[before] === next && next !== undefined) {
       return replace(state, start - 1, start + 1, '', start - 1);
     }
     return undefined;
@@ -88,13 +103,14 @@ export function applyKey(state: EditState, key: string, shift = false): EditStat
     const indent = indentOf(text, start);
     const before = text[start - 1];
     const between =
-      before !== undefined && (before === '{' || before === '[') && PAIRS[before] === next;
+      before !== undefined &&
+      next !== undefined &&
+      ((pairs[before] === next && !'"\'<'.includes(before)) || (before === '>' && next === '<'));
     if (between) {
       const inner = `\n${indent}${INDENT}`;
       return replace(state, start, end, `${inner}\n${indent}`, start + inner.length);
     }
-    const deeper =
-      before === '{' || before === '[' || before === ',' ? (before === ',' ? '' : INDENT) : '';
+    const deeper = before === '{' || before === '[' || before === '(' ? INDENT : '';
     const insert = `\n${indent}${deeper}`;
     return replace(state, start, end, insert, start + insert.length);
   }

@@ -92,28 +92,36 @@ export interface ObjectEditDeps {
 
 export function objectEditHandlers(deps: ObjectEditDeps): {
   edit: (target?: CommandTarget) => Promise<void>;
+  /** Opens the definition of an object, named directly (the table page's triggers). */
+  editObject: (connectionId: string, object: ObjectRef) => Promise<void>;
   apply: (documentUri?: string) => Promise<PerformOutcome | undefined>;
 } {
+  const editObject = async (connectionId: string, object: ObjectRef): Promise<void> => {
+    if (!EDITABLE.has(object.kind)) {
+      return;
+    }
+    const original = await deps.readDefinition(connectionId, object);
+    const text = await deps.renderDefinition(connectionId, original);
+    const documentUri = await deps.openDocument(
+      object.database === undefined
+        ? { connectionId }
+        : { connectionId, database: object.database },
+      text,
+    );
+    deps.registry.set(documentUri, { connectionId, object, original });
+  };
   return {
+    editObject,
     /** Opens the definition of a view, routine, trigger or event for editing. */
     edit: async (target) => {
       if (!isTreeNode(target) || !('connectionId' in target) || target.connectionId === undefined) {
         return;
       }
       const object = objectRefOf(target);
-      if (object === undefined || !EDITABLE.has(object.kind)) {
+      if (object === undefined) {
         return;
       }
-      const { connectionId } = target;
-      const original = await deps.readDefinition(connectionId, object);
-      const text = await deps.renderDefinition(connectionId, original);
-      const documentUri = await deps.openDocument(
-        object.database === undefined
-          ? { connectionId }
-          : { connectionId, database: object.database },
-        text,
-      );
-      deps.registry.set(documentUri, { connectionId, object, original });
+      await editObject(target.connectionId, object);
     },
 
     /** Replaces the object with the text of its editor, after showing what will run. */

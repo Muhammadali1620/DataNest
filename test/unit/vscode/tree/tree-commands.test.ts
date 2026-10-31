@@ -407,3 +407,127 @@ describe('disconnect with open transactions (V4.8)', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 });
+
+describe('clickTable and the row it leaves as it was (V11.12)', () => {
+  it('tells the expansion keeper about every click and settles the double one', async () => {
+    const calls: string[] = [];
+    let now = 0;
+    const handlers = treeCommandHandlers({
+      manager: { connectAny: () => Promise.resolve(), disconnect: () => Promise.resolve() },
+      tree: { refresh: vi.fn() },
+      cache: { invalidate: vi.fn() },
+      openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.resolve(),
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+      doubleClick: new DoubleClickDetector(() => now, 500),
+      expansion: {
+        clicked: () => calls.push('clicked'),
+        settle: () => calls.push('settle'),
+      },
+    });
+    await handlers.clickTable(tableNode);
+    now += 100;
+    await handlers.clickTable(tableNode);
+    expect(calls).toEqual(['clicked', 'clicked', 'settle']);
+  });
+});
+
+describe('clickNode, openNodeSql and nodeActions (V11.12)', () => {
+  const column: TreeNode = {
+    kind: 'column',
+    connectionId: 'c1',
+    table: { database: 'app', name: 'orders' },
+    column: { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+  };
+  const index: TreeNode = {
+    kind: 'index',
+    connectionId: 'c1',
+    table: { database: 'app', name: 'orders' },
+    index: { name: 'ix', columns: ['a'], unique: false, primary: false },
+  };
+
+  function clicking() {
+    let now = 0;
+    const openNodeSql = vi.fn(() => Promise.resolve());
+    const showActions = vi.fn(() => Promise.resolve());
+    const handlers = treeCommandHandlers({
+      manager: { connectAny: () => Promise.resolve(), disconnect: () => Promise.resolve() },
+      tree: { refresh: vi.fn() },
+      cache: { invalidate: vi.fn() },
+      openTable: () => Promise.resolve(),
+      showDefinition: () => Promise.resolve(),
+      clipboard: { writeText: () => Promise.resolve() },
+      noTargetMessage: NO_TARGET,
+      doubleClick: new DoubleClickDetector(() => now, 500),
+      openNodeSql,
+      showActions,
+    });
+    return {
+      handlers,
+      openNodeSql,
+      showActions,
+      wait: (ms: number) => {
+        now += ms;
+      },
+    };
+  }
+
+  it('opens the SQL of a column on the second click only', async () => {
+    const { handlers, openNodeSql, wait } = clicking();
+    await handlers.clickNode(column);
+    expect(openNodeSql).not.toHaveBeenCalled();
+    wait(100);
+    await handlers.clickNode(column);
+    expect(openNodeSql).toHaveBeenCalledExactlyOnceWith('c1', {
+      kind: 'column',
+      table: { database: 'app', name: 'orders' },
+      column: { name: 'id', dataType: 'int', nullable: false, primaryKey: true },
+    });
+  });
+
+  it('does not pair a column with the index next to it, or slow clicks', async () => {
+    const { handlers, openNodeSql, wait } = clicking();
+    await handlers.clickNode(column);
+    wait(100);
+    await handlers.clickNode(index);
+    wait(900);
+    await handlers.clickNode(index);
+    expect(openNodeSql).not.toHaveBeenCalled();
+  });
+
+  it('opens the SQL of a trigger and of a foreign key the same way', async () => {
+    const { handlers, openNodeSql } = clicking();
+    const trigger: TreeNode = {
+      kind: 'object',
+      connectionId: 'c1',
+      object: { database: 'app', kind: 'trigger', name: 'audit', table: 'orders' },
+    };
+    await handlers.clickNode(trigger);
+    await handlers.clickNode(trigger);
+    expect(openNodeSql).toHaveBeenCalledWith('c1', { kind: 'object', object: trigger.object });
+  });
+
+  it('ignores nodes without SQL and empty targets', async () => {
+    const { handlers, openNodeSql } = clicking();
+    for (const target of [connectionNode, tableNode, undefined, 'c1']) {
+      await handlers.clickNode(target);
+      await handlers.clickNode(target);
+      await handlers.openNodeSql(target);
+    }
+    expect(openNodeSql).not.toHaveBeenCalled();
+  });
+
+  it('opens the SQL at once from the menu', async () => {
+    const { handlers, openNodeSql } = clicking();
+    await handlers.openNodeSql(index);
+    expect(openNodeSql).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the actions of a node, and of nothing else', async () => {
+    const { handlers, showActions } = clicking();
+    await handlers.nodeActions(column);
+    await handlers.nodeActions('c1');
+    expect(showActions).toHaveBeenCalledExactlyOnceWith(column);
+  });
+});

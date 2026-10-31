@@ -24,6 +24,18 @@ import {
 
 const ID_LENGTH = 100;
 
+/** The tabs of the table page; the DDL, triggers and checks ones exist for stored tables only. */
+export const TABLE_TABS = [
+  'ddl',
+  'columns',
+  'indexes',
+  'keys',
+  'triggers',
+  'checks',
+  'sql',
+] as const;
+export type TableTab = (typeof TABLE_TABS)[number];
+
 export const columnDesignSchema: Schema<ColumnDesign> = object({
   id: string({ minLength: 1, maxLength: ID_LENGTH }),
   original: optional(string({ maxLength: DESIGN_LIMITS.name })),
@@ -85,6 +97,13 @@ const keptSchema = object({
   columns: array(string({ maxLength: DESIGN_LIMITS.name }), { maxLength: DESIGN_LIMITS.columns }),
 });
 
+const checkSchema = object({
+  name: string({ maxLength: DESIGN_LIMITS.name }),
+  expression: string({ maxLength: 20_000 }),
+});
+
+const actionOutcomeSchema = literal('ran', 'opened', 'cancelled', 'unsupported');
+
 const stateSchema = object({
   /** `create` for a new table; `edit` for an existing one, whose design is as stored. */
   mode: literal('create', 'edit'),
@@ -99,7 +118,13 @@ const stateSchema = object({
     autoIncrement: boolean(),
     foreignKeys: boolean(),
     uniqueIndexes: boolean(),
+    /** Triggers of the table can be listed, created and dropped here. */
+    triggers: boolean(),
+    /** CHECK constraints can be listed, added and dropped here. */
+    checks: boolean(),
   }),
+  /** The tab to show first; the columns when absent. */
+  tab: optional(literal(...TABLE_TABS)),
   design: tableDesignSchema,
   kept: keptSchema,
 });
@@ -131,6 +156,49 @@ export const tableDesignerProtocol = defineProtocol({
           outcome: literal('ran', 'opened', 'cancelled', 'unsupported', 'invalid', 'unchanged'),
         }),
       },
+      /** The CREATE statements of the stored table, as text. */
+      definition: {
+        params: object({}),
+        result: object({ text: string({ maxLength: 5_000_000 }) }),
+      },
+      /** Names of the triggers of the stored table. */
+      triggers: {
+        params: object({}),
+        result: object({ triggers: namesSchema }),
+      },
+      /** View, edit, drop a trigger, or start a new one from a template. */
+      triggerAction: {
+        params: object({
+          action: literal('view', 'edit', 'drop', 'new'),
+          name: optional(string({ maxLength: DESIGN_LIMITS.name })),
+        }),
+        result: object({ outcome: actionOutcomeSchema }),
+      },
+      /** CHECK constraints of the stored table. */
+      checks: {
+        params: object({}),
+        result: object({ checks: array(checkSchema, { maxLength: 10_000 }) }),
+      },
+      /** Adds or drops a CHECK after showing the SQL; `error` when the input is not valid. */
+      checkAction: {
+        params: object({
+          action: literal('add', 'drop'),
+          name: string({ maxLength: DESIGN_LIMITS.name }),
+          expression: optional(string({ maxLength: 20_000 })),
+        }),
+        result: object({
+          outcome: actionOutcomeSchema,
+          error: optional(string({ maxLength: 2000 })),
+        }),
+      },
+      /** Copies text to the clipboard or opens it in a SQL editor. */
+      textAction: {
+        params: object({
+          action: literal('copy', 'open'),
+          text: string({ maxLength: 5_000_000 }),
+        }),
+        result: object({}),
+      },
     },
     events: {
       ready: object({}),
@@ -142,6 +210,8 @@ export const tableDesignerProtocol = defineProtocol({
     events: {
       /** Host → page: everything to render, on every load (D21). */
       state: stateSchema,
+      /** Host → page: show this tab (the page is already open). */
+      tab: object({ tab: literal(...TABLE_TABS) }),
     },
   },
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { applyKey, type EditState } from '../../../../../webview/src/apps/result-grid/json-editing';
+import {
+  applyKey,
+  type EditState,
+  XML_PAIRS,
+} from '../../../../../webview/src/apps/result-grid/json-editing';
 
 /** `|` marks the caret, `[` and `]` a selection, in the notation of the cases below. */
 function at(text: string, start = text.length, end = start): EditState {
@@ -123,5 +127,74 @@ describe('Tab', () => {
 describe('other keys', () => {
   it.each(['a', '1', ':', ',', 'ArrowLeft', 'Delete'])('%s is the browser’s own', (key) => {
     expect(applyKey(at('x'), key)).toBeUndefined();
+  });
+});
+
+describe('markup and parentheses', () => {
+  it('pairs a paren in JSON mode and steps over its closer', () => {
+    expect(applyKey(at('['), '(')).toEqual({ text: '[()', start: 2, end: 2 });
+    expect(applyKey(at('()', 1), ')')).toEqual({ text: '()', start: 2, end: 2 });
+  });
+
+  it('pairs tag brackets, quotes and parens in markup', () => {
+    expect(applyKey(at(''), '<', false, XML_PAIRS)).toEqual({ text: '<>', start: 1, end: 1 });
+    expect(applyKey(at(''), "'", false, XML_PAIRS)).toEqual({ text: "''", start: 1, end: 1 });
+    expect(applyKey(at('<a b='), '"', false, XML_PAIRS)).toEqual({
+      text: '<a b=""',
+      start: 6,
+      end: 6,
+    });
+    expect(applyKey(at(''), '(', false, XML_PAIRS)).toEqual({ text: '()', start: 1, end: 1 });
+  });
+
+  it('steps over a closing bracket that was paired', () => {
+    expect(applyKey(at('<svg>', 4), '>', false, XML_PAIRS)).toEqual({
+      text: '<svg>',
+      start: 5,
+      end: 5,
+    });
+  });
+
+  it('leaves a "<" in front of a word alone', () => {
+    expect(applyKey(at('a<b', 1), '<', false, XML_PAIRS)).toBeUndefined();
+  });
+
+  it('does not pair an apostrophe inside a word', () => {
+    expect(applyKey(at('don'), "'", false, XML_PAIRS)).toBeUndefined();
+  });
+
+  it('wraps a selection in angle brackets and quotes', () => {
+    expect(applyKey(at('tag', 0, 3), '<', false, XML_PAIRS)).toEqual({
+      text: '<tag>',
+      start: 1,
+      end: 4,
+    });
+    expect(applyKey(at('v', 0, 1), "'", false, XML_PAIRS)?.text).toBe("'v'");
+  });
+
+  it('removes an empty tag pair or quote pair with Backspace', () => {
+    expect(applyKey(at('<>', 1), 'Backspace', false, XML_PAIRS)).toEqual({
+      text: '',
+      start: 0,
+      end: 0,
+    });
+    expect(applyKey(at("''", 1), 'Backspace', false, XML_PAIRS)?.text).toBe('');
+  });
+
+  it('opens a new indented line between a tag and its closing tag', () => {
+    const state = at('<g></g>', 3);
+    expect(applyKey(state, 'Enter', false, XML_PAIRS)).toEqual({
+      text: '<g>\n  \n</g>',
+      start: 6,
+      end: 6,
+    });
+  });
+
+  it('does not expand the empty pair "<>" on Enter', () => {
+    expect(applyKey(at('<>', 1), 'Enter', false, XML_PAIRS)?.text).toBe('<\n>');
+  });
+
+  it('indents inside a paren pair', () => {
+    expect(applyKey(at('()', 1), 'Enter')?.text).toBe('(\n  \n)');
   });
 });

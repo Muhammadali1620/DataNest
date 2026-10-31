@@ -34,6 +34,7 @@ describe('readMssqlStructure', () => {
   it('reads columns with unwrapped defaults, identities, computed columns and descriptions', async () => {
     const { read, asked } = catalog({
       [RELATION]: [['42', 'Shop table', 'PK_t']],
+      'FROM sys.check_constraints': [['ck_part', '([part]>=(0))']],
       [COLUMNS]: [
         ['id', 'int', false, null, true, false, null],
         ['part', 'int', false, '((0))', false, false, 'which part'],
@@ -48,6 +49,7 @@ describe('readMssqlStructure', () => {
       primaryKey: ['id', 'part'],
       indexes,
       foreignKeys,
+      checks: [{ name: 'ck_part', expression: '([part]>=(0))' }],
       columns: [
         { name: 'id', dataType: 'int', nullable: false, autoIncrement: true, generated: false },
         {
@@ -73,6 +75,7 @@ describe('readMssqlStructure', () => {
     expect(asked.map((query) => query.params)).toEqual([
       ['[app].[t]', 'MS_Description'],
       ['[app].[t]', 'MS_Description'],
+      ['[app].[t]'],
     ]);
   });
 
@@ -86,7 +89,13 @@ describe('readMssqlStructure', () => {
         listForeignKeys: () => Promise.resolve([]),
       },
     );
-    expect(structure).toEqual({ columns: [], primaryKey: [], indexes: [], foreignKeys: [] });
+    expect(structure).toEqual({
+      columns: [],
+      primaryKey: [],
+      indexes: [],
+      foreignKeys: [],
+      checks: [],
+    });
   });
 
   it('says not-found for a table that does not exist', async () => {

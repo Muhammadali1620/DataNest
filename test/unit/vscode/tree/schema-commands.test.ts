@@ -19,6 +19,7 @@ import {
 
 const TEXTS: SchemaTexts = {
   noDatabases: 'no databases',
+  columnAtEdge: (name, direction) => `${name} ${direction} edge`,
   noSchemas: 'no schemas',
   newDatabaseName: 'database name',
   newSchemaName: 'schema name',

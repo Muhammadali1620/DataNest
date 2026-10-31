@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { mysqlDefaultExpression } from '../../../../src/drivers/mysql/structure';
+import {
+  mysqlDefaultExpression,
+  readMysqlStructure,
+} from '../../../../src/drivers/mysql/structure';
 
 describe('mysqlDefaultExpression', () => {
   it('has no default where the server reports NULL', () => {
@@ -46,5 +49,50 @@ describe('mysqlDefaultExpression', () => {
     expect(
       mysqlDefaultExpression(undefined, 'on update current_timestamp(3)', 'datetime', true),
     ).toBe('NULL ON UPDATE current_timestamp(3)');
+  });
+});
+
+describe('readMysqlStructure: checks', () => {
+  const reader = {
+    listIndexes: () => Promise.resolve([]),
+    listForeignKeys: () => Promise.resolve([]),
+  };
+
+  function server(version: string, checks: unknown[][] | Error) {
+    const asked: string[] = [];
+    const read = (sql: string): Promise<unknown[][]> => {
+      asked.push(sql);
+      if (sql.includes('FROM information_schema.COLUMNS')) {
+        return Promise.resolve([['id', 'int', 'NO', null, '', '', 'int']]);
+      }
+      if (sql.includes('SELECT VERSION()')) {
+        return Promise.resolve([[version]]);
+      }
+      if (sql.includes('CHECK_CONSTRAINTS')) {
+        return checks instanceof Error ? Promise.reject(checks) : Promise.resolve(checks);
+      }
+      return Promise.resolve([]);
+    };
+    return { read, asked };
+  }
+
+  it('reads checks of MySQL through the table constraints', async () => {
+    const { read, asked } = server('8.0.36', [['ck', '(`id` > 0)']]);
+    const structure = await readMysqlStructure(read, { database: 's', name: 't' }, reader);
+    expect(structure.checks).toEqual([{ name: 'ck', expression: '(`id` > 0)' }]);
+    expect(asked.some((sql) => sql.includes('TABLE_CONSTRAINTS'))).toBe(true);
+  });
+
+  it('reads checks of MariaDB straight from its view', async () => {
+    const { read, asked } = server('10.11.2-MariaDB', [['ck', '`id` > 0']]);
+    const structure = await readMysqlStructure(read, { name: 't' }, reader);
+    expect(structure.checks).toEqual([{ name: 'ck', expression: '`id` > 0' }]);
+    expect(asked.some((sql) => sql.includes('TABLE_CONSTRAINTS'))).toBe(false);
+  });
+
+  it('shows no checks on a server that has no such view', async () => {
+    const { read } = server('5.7.40', new Error("Table 'CHECK_CONSTRAINTS' doesn't exist"));
+    const structure = await readMysqlStructure(read, { name: 't' }, reader);
+    expect(structure.checks).toEqual([]);
   });
 });

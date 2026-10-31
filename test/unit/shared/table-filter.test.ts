@@ -69,3 +69,20 @@ describe('tableFilterSchema', () => {
     ).toThrow();
   });
 });
+
+describe('the join of a condition', () => {
+  it('accepts and, or and nothing, and refuses anything else', () => {
+    const check = (join: unknown): boolean => {
+      try {
+        tableFilterSchema.parse({ conditions: [{ column: 'a', operator: 'isNull', join }] });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    expect(check('and')).toBe(true);
+    expect(check('or')).toBe(true);
+    expect(check(undefined)).toBe(true);
+    expect(check('xor')).toBe(false);
+  });
+});

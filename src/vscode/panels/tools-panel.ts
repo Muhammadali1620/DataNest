@@ -71,6 +71,9 @@ export class ToolsPanel implements vscode.Disposable {
       },
     });
     this.rpc.handle('hash', (params) => model.hash(params));
+    this.rpc.handle('clipboardText', async () => ({
+      text: (await vscode.env.clipboard.readText()).slice(0, 20_000_000),
+    }));
     this.rpc.handle('interfaces', () => model.interfaces());
     this.rpc.handle('portCheck', async (params) => await model.portCheck(params));
     this.rpc.handle('dnsLookup', async (params) => await model.dnsLookup(params));

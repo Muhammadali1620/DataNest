@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- Favorites: star a connection, database, schema, table or view (also Redis databases, MongoDB databases and collections, Elasticsearch indices) with the star button or Add to Favorites. Starred nodes also sit in a Favorites group at the top of the tree and expand like the originals.
+- Density button in the result grid: compact, normal or comfortable rows, and the widest a column gets on its own (240–900 px). New settings `datanest.results.rowHeight` and `datanest.results.maxColumnWidth` set the defaults; your own choice in the grid wins.
 - Disable Connection / Enable Connection: switch a connection off without deleting it. It turns grey in the tree, does not expand and is never connected to; its password, folder and color are kept.
 - Pin a result: a re-run keeps it and shows the new result beside it. Result History brings back a result that a re-run replaced.
 - Public API for other extensions: they register a database (`registerDriver`) and it works in the tree, the SQL editor and the result grid. New Connection (Database from Another Extension)… makes a connection to it. The guide is in `docs/contributing/plugin-api.md`.

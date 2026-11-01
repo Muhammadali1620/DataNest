@@ -96,8 +96,9 @@ describe('.github/workflows/ci.yml (V0.11)', () => {
   it('runs unit and e2e tests on Linux, Windows and macOS', () => {
     expect(workflow.jobs.unit?.strategy?.matrix.os).toEqual(ALL_OS);
     expect(workflow.jobs.e2e?.strategy?.matrix.os).toEqual(ALL_OS);
+    // Through the annotating wrapper, so a red Windows-only job explains itself.
     expect(runs(workflow.jobs.unit ?? ({ steps: [] } as unknown as Job))).toContain(
-      'npm run test:coverage',
+      'node scripts/annotate-failures.mjs "Unit (${{ runner.os }})" npm run test:coverage',
     );
   });
 

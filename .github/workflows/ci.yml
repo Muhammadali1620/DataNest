@@ -49,7 +49,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npm run test:coverage
+      - run: node scripts/annotate-failures.mjs "Unit (${{ runner.os }})" npm run test:coverage
 
   # One job per database group (a compose profile, V6.1): each starts only its own
   # databases, so a heavy server does not slow down or starve the others.

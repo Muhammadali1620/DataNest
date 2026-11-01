@@ -366,6 +366,8 @@ export function targetType(
       throw new DbError('unsupported', msg('Tables cannot be copied to InfluxDB'));
     case 'etcd':
       throw new DbError('unsupported', msg('Tables cannot be copied to etcd'));
+    case 'kafka':
+      throw new DbError('unsupported', msg('Tables cannot be copied to Kafka'));
   }
 }
 

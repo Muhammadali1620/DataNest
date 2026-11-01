@@ -211,6 +211,20 @@ describe('DriverRegistry', () => {
       ).rejects.toThrow('unexpected module shape');
     });
 
+    it('loads the Kafka driver and refuses it as any other (V13.23)', async () => {
+      const kafka = { id: 'kafka', openSession: () => Promise.reject(new Error('unused')) };
+      const loader = vi.fn(() => Promise.resolve({ driver: kafka }));
+      const registry = registryWith(loader as never);
+      expect(await registry.getKafka()).toBe(kafka);
+      expect(loader).toHaveBeenCalledWith('kafka');
+      await expect(registry.get('kafka' as BuiltInSqlDriverId)).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+      await expect(
+        registryWith(() => Promise.resolve({ driver: redis })).getKafka(),
+      ).rejects.toThrow('unexpected module shape');
+    });
+
     it('rejects a SQL bundle that carries no dialect', async () => {
       await expect(
         registryWith(() =>

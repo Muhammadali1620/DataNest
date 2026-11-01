@@ -47,6 +47,7 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'elastic-result': 'search',
   'er-diagram': 'type-hierarchy',
   'etcd-key': 'key',
+  'kafka-topic': 'comment-discussion',
   manager: 'dashboard',
   'mongo-documents': 'json',
   ping: 'debug-disconnect',

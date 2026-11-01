@@ -249,5 +249,9 @@
   "commands.etcd.findKey.title": "Найти ключ etcd по началу имени…",
   "commands.etcd.newKey.title": "Новый ключ etcd…",
   "commands.etcd.deleteKeys.title": "Удалить ключи etcd",
-  "configuration.etcd.keysPerLoad.description": "Сколько ключей и папок дерево читает из папки etcd за один раз. Если в папке больше, показывается «Загрузить ещё ключи…»."
+  "configuration.etcd.keysPerLoad.description": "Сколько ключей и папок дерево читает из папки etcd за один раз. Если в папке больше, показывается «Загрузить ещё ключи…».",
+  "commands.kafka.openTopic.title": "Открыть топик Kafka",
+  "commands.kafka.newTopic.title": "Новый топик Kafka…",
+  "commands.kafka.deleteTopic.title": "Удалить топик Kafka",
+  "configuration.kafka.showInternalTopics.description": "Показывать в дереве служебные топики Kafka (`__consumer_offsets`, `_schemas`, …)."
 }

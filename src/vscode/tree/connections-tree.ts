@@ -20,7 +20,7 @@ import {
   describeTunnel,
   driverFamily,
 } from '../../shared/connection';
-import { COMMAND_IDS } from '../command-ids';
+import { COMMAND_IDS, CONFIG_KEYS, CONFIG_SECTION } from '../command-ids';
 import { affectsDataNest } from '../settings';
 import { dbMarkFile } from '../../shared/db-marks';
 import { connectionUri, tagText } from './connection-decorations';
@@ -28,6 +28,13 @@ import { redisTypeIcon } from './redis-type-icon';
 import { tagsOf } from './connection-look';
 import { elasticFieldItem, elasticIndexItem } from './elastic-items';
 import { etcdFolderItem, etcdKeyItem, etcdMoreItem } from './etcd-items';
+import {
+  kafkaGroupItem,
+  kafkaGroupsItem,
+  kafkaPartitionItem,
+  kafkaTopicItem,
+  kafkaTopicsItem,
+} from './kafka-items';
 import type { EtcdKeyBrowser } from '../../services/etcd/key-browser';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
 import {
@@ -141,6 +148,21 @@ export class ConnectionsTreeProvider
       cache: deps.cache,
       ...(deps.redisKeys === undefined ? {} : { redisKeys: deps.redisKeys }),
       ...(deps.etcdKeys === undefined ? {} : { etcdKeys: deps.etcdKeys }),
+      kafka: {
+        showInternalTopics: () =>
+          vscode.workspace
+            .getConfiguration(CONFIG_SECTION)
+            .get<boolean>(CONFIG_KEYS.kafkaShowInternalTopics, false),
+        language: () => vscode.env.language,
+        texts: {
+          noTopics: vscode.l10n.t('No topics'),
+          noGroups: vscode.l10n.t('No consumer groups'),
+          noPartitions: vscode.l10n.t('No partitions'),
+          noLag: vscode.l10n.t('The group has committed no offsets'),
+          lagLine: (topic, partition, lag) =>
+            vscode.l10n.t('{0} [{1}]: {2} behind', topic, partition, lag),
+        },
+      },
       ...(deps.redisKeySeparator === undefined
         ? {}
         : { redisKeySeparator: deps.redisKeySeparator }),
@@ -608,6 +630,16 @@ export class ConnectionsTreeProvider
         return etcdKeyItem(node);
       case 'etcdMore':
         return etcdMoreItem(node);
+      case 'kafkaTopics':
+        return kafkaTopicsItem(node);
+      case 'kafkaTopic':
+        return kafkaTopicItem(node);
+      case 'kafkaPartition':
+        return kafkaPartitionItem(node);
+      case 'kafkaGroups':
+        return kafkaGroupsItem(node);
+      case 'kafkaGroup':
+        return kafkaGroupItem(node);
       case 'message': {
         const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
         item.id = nodeId(node);

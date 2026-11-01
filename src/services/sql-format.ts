@@ -63,6 +63,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'mongodb':
     case 'elasticsearch':
     case 'etcd':
+    case 'kafka':
     case undefined:
       return 'sql';
   }

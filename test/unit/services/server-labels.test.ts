@@ -93,7 +93,7 @@ describe('sizeSql', () => {
     expect(ask('clickhouse')).toBeUndefined();
   });
 
-  it.each(['sqlite', 'oracle', 'redis', 'mongodb', 'elasticsearch', 'etcd'] as const)(
+  it.each(['sqlite', 'oracle', 'redis', 'mongodb', 'elasticsearch', 'etcd', 'kafka'] as const)(
     'has no cheap way for %s',
     (driver) => {
       expect(ask(driver, 'x', 'y')).toBeUndefined();
@@ -119,6 +119,7 @@ function managerWith(sql: (statement: string) => ReturnType<typeof records>, dia
     acquireMongo: vi.fn(),
     acquireElastic: vi.fn(),
     acquireEtcd: vi.fn(),
+    acquireKafka: vi.fn(),
   };
   return { manager: manager as never, acquire, executed };
 }
@@ -182,6 +183,14 @@ describe('readServerVersion', () => {
     typed.acquireEtcd.mockResolvedValue({ server: { version: '3.5.17' } });
     expect(await readServerVersion(manager, 'c1', 'etcd')).toBe('3.5.17');
     expect(typed.acquireEtcd).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
+  });
+
+  it('labels a Kafka connection with its brokers (V13.23)', async () => {
+    const { manager } = managerWith(() => records([]));
+    const typed = manager as unknown as { acquireKafka: ReturnType<typeof vi.fn> };
+    typed.acquireKafka.mockResolvedValue({ server: { clusterId: 'c', brokers: 3 } });
+    expect(await readServerVersion(manager, 'c1', 'kafka')).toBe('Brokers: 3');
+    expect(typed.acquireKafka).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
   });
 });
 

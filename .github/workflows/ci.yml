@@ -70,6 +70,7 @@ jobs:
             redisjson,
             libsql,
             etcd,
+            kafka,
             influxdb,
             neo4j,
             cassandra,

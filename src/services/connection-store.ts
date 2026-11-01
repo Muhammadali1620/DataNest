@@ -18,6 +18,7 @@ import {
   type ConnectionOptions,
   type DriverId,
   type ElasticSettings,
+  type KafkaSettings,
   type MongoSettings,
   type RedisSettings,
   filterSupport,
@@ -827,7 +828,10 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     port: file ? undefined : input.port,
     user: file ? undefined : trim(input.user),
     // etcd has one key space and no database to pick.
-    database: file || input.driver === 'etcd' ? undefined : trim(input.database),
+    database:
+      file || input.driver === 'etcd' || input.driver === 'kafka'
+        ? undefined
+        : trim(input.database),
     // A plugin driver may read a file as well as connect to a server (V12.7).
     file: file || input.driver === 'plugin' ? trim(input.file) : undefined,
     plugin: input.driver === 'plugin' ? input.plugin : undefined,
@@ -846,6 +850,7 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     redis: input.driver === 'redis' ? normalizeRedis(input.redis) : undefined,
     mongo: input.driver === 'mongodb' ? normalizeMongo(input.mongo) : undefined,
     elastic: input.driver === 'elasticsearch' ? normalizeElastic(input.elastic) : undefined,
+    kafka: input.driver === 'kafka' ? normalizeKafka(input.kafka) : undefined,
   };
   const problems = connectionProblems(normalized);
   if (problems.length > 0) {
@@ -982,6 +987,11 @@ function normalizeElastic(elastic: ElasticSettings | undefined): ElasticSettings
     return undefined;
   }
   return { auth: elastic.auth, ...(prefix === '' ? {} : { pathPrefix: prefix }) };
+}
+
+/** No SASL is the default and is not stored. */
+function normalizeKafka(kafka: KafkaSettings | undefined): KafkaSettings | undefined {
+  return kafka === undefined || kafka.sasl === 'none' ? undefined : { sasl: kafka.sasl };
 }
 
 /** True for a Redis connection that finds its master through Sentinels. */

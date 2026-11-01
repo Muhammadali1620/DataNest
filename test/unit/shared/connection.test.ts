@@ -467,7 +467,7 @@ describe('Redis connections (V7.1)', () => {
       expect(isSqlDriver(id)).toBe(true);
     }
     expect(
-      [...SQL_DRIVER_IDS, 'plugin', 'redis', 'mongodb', 'elasticsearch', 'etcd'].sort(),
+      [...SQL_DRIVER_IDS, 'plugin', 'redis', 'mongodb', 'elasticsearch', 'etcd', 'kafka'].sort(),
     ).toEqual([...DRIVER_IDS].sort());
     expect(isFileDriver('redis')).toBe(false);
   });

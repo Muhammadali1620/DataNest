@@ -179,6 +179,11 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaTopic':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
+    case 'kafkaGroup':
     case 'message':
       return undefined;
   }

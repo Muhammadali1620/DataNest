@@ -92,6 +92,7 @@
     neo4j: 'form.driver.neo4j',
     cassandra: 'form.driver.cassandra',
     etcd: 'form.driver.etcd',
+    kafka: 'form.driver.kafka',
     influxdb: 'form.driver.influxdb',
     plugin: 'form.driver.plugin',
   };
@@ -116,6 +117,7 @@
   const isNeo4j = $derived(fields?.driver === 'neo4j');
   const isCassandra = $derived(fields?.driver === 'cassandra');
   const isEtcd = $derived(fields?.driver === 'etcd');
+  const isKafka = $derived(fields?.driver === 'kafka');
   const isInflux = $derived(fields?.driver === 'influxdb');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
   const secretLabel = $derived(
@@ -429,6 +431,8 @@
                     : fields.mongoMode === 'replicaSet'
                       ? t('form.mongo.hostReplicaSet')
                       : undefined
+                  : isKafka
+                    ? t('form.kafka.hostHint')
                   : isNeo4j
                     ? t('form.neo4j.hostHint')
                   : isCassandra
@@ -547,6 +551,16 @@
             {#if isMongo}
               <MongoFields {fields} {t} {errorFor} />
             {/if}
+            {#if isKafka}
+              <Field label={t('form.kafka.sasl')} hint={t('form.kafka.saslHint')}>
+                <select class="control" bind:value={fields.kafkaSasl} aria-label={t('form.kafka.sasl')}>
+                  <option value="none">{t('form.kafka.sasl.none')}</option>
+                  <option value="plain">{t('form.kafka.sasl.plain')}</option>
+                  <option value="scram-sha-256">{t('form.kafka.sasl.scram256')}</option>
+                  <option value="scram-sha-512">{t('form.kafka.sasl.scram512')}</option>
+                </select>
+              </Field>
+            {/if}
             {#if isElastic}
               <div class="pair">
                 <Field label={t('form.elastic.auth')}>
@@ -580,6 +594,8 @@
                 label={isInflux ? t('form.influx.org') : t('form.user')}
                 hint={isRedis
                   ? t('form.redis.userHint')
+                  : isKafka
+                    ? t('form.kafka.userHint')
                   : isEtcd
                     ? t('form.etcd.userHint')
                     : isInflux
@@ -677,7 +693,7 @@
               {/if}
             {/if}
 
-            {#if !isElastic && !isLibsql && !isEtcd}
+            {#if !isElastic && !isLibsql && !isEtcd && !isKafka}
             <Field
               label={isRedis
                 ? t('form.redis.database')

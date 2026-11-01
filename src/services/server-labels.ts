@@ -3,6 +3,7 @@
 // Read lazily, kept until the tree refreshes, and never allowed to fail the tree: a server
 // that does not say simply leaves the name alone (V11.14).
 
+import { msg } from '../core/user-message';
 import { type DriverId, type SqlDriverId, isSqlDriver } from '../shared/connection';
 import { browseSession } from './browse-session';
 import { ConnectionManager } from './connection-manager';
@@ -11,7 +12,13 @@ import { readServerInfo } from './redis/server-info';
 
 type Reader = Pick<
   ConnectionManager,
-  'acquire' | 'driverOf' | 'acquireRedis' | 'acquireMongo' | 'acquireElastic' | 'acquireEtcd'
+  | 'acquire'
+  | 'driverOf'
+  | 'acquireRedis'
+  | 'acquireMongo'
+  | 'acquireElastic'
+  | 'acquireEtcd'
+  | 'acquireKafka'
 >;
 
 /** `15.19 (Debian 15.19-1.pgdg120+1)` → `15.19`; `10.11.6-MariaDB-1:…` → `10.11.6`. */
@@ -71,6 +78,11 @@ export async function readServerVersion(
   }
   if (driver === 'etcd') {
     return shortVersion((await manager.acquireEtcd(owner, { connectionId })).server.version);
+  }
+  if (driver === 'kafka') {
+    // The brokers do not tell their version over the admin calls; the cluster id is the label.
+    const kafka = await manager.acquireKafka(owner, { connectionId });
+    return msg('Brokers: {0}', kafka.server.brokers);
   }
   const session = await browseSession(manager, connectionId);
   const [row] = await namedRows(session, VERSION_SQL[driver]);
@@ -134,6 +146,7 @@ WHERE active AND database = ${dialect.literal(database)}`;
     case 'mongodb':
     case 'elasticsearch':
     case 'etcd':
+    case 'kafka':
       return undefined;
   }
 }

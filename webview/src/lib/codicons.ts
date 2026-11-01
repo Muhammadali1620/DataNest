@@ -35,6 +35,7 @@ export const CODICONS = {
   code: 0xeac4,
   'collapse-all': 0xeac5,
   combine: 0xebb6,
+  'comment-discussion': 0xeac7,
   copy: 0xebcc,
   dashboard: 0xeacd,
   database: 0xeace,

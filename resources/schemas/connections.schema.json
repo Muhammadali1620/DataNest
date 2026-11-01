@@ -122,13 +122,14 @@
             "mongodb",
             "elasticsearch",
             "etcd",
+            "kafka",
             "libsql",
             "influxdb",
             "neo4j",
             "cassandra",
             "plugin"
           ],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; etcd is a key-value store reached over its HTTP/JSON gateway, with the user and password of an etcd user; libsql is a libSQL server (sqld, Turso) over HTTP, its auth token kept as the password; neo4j is a Neo4j server (5.19 or newer) reached over its HTTP port, queried with Cypher; cassandra is an Apache Cassandra node reached over the CQL native protocol (port 9042), with \"database\" as the keyspace; influxdb is an InfluxDB 2.x server over HTTP (Flux and InfluxQL): the organization goes in \"user\", the API token is the password and \"database\" is the bucket; plugin is a database that another extension added, named in \"plugin\"."
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; etcd is a key-value store reached over its HTTP/JSON gateway, with the user and password of an etcd user; kafka is Apache Kafka: the host lists the bootstrap brokers (host:port, separated by commas); libsql is a libSQL server (sqld, Turso) over HTTP, its auth token kept as the password; neo4j is a Neo4j server (5.19 or newer) reached over its HTTP port, queried with Cypher; cassandra is an Apache Cassandra node reached over the CQL native protocol (port 9042), with \"database\" as the keyspace; influxdb is an InfluxDB 2.x server over HTTP (Flux and InfluxQL): the organization goes in \"user\", the API token is the password and \"database\" is the bucket; plugin is a database that another extension added, named in \"plugin\"."
         },
         "host": {
           "type": "string"
@@ -444,6 +445,18 @@
             "authMechanism": {
               "enum": ["SCRAM-SHA-256", "SCRAM-SHA-1", "PLAIN", "MONGODB-X509"],
               "description": "Left out: the server and DataNest agree on SCRAM. MONGODB-X509 signs in with the client certificate of ssl."
+            }
+          }
+        },
+        "kafka": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sasl"],
+          "description": "How a kafka connection signs in; left out: no SASL (a plaintext or TLS listener). The user and password are the connection's own.",
+          "properties": {
+            "sasl": {
+              "enum": ["none", "plain", "scram-sha-256", "scram-sha-512"],
+              "description": "The SASL mechanism the brokers ask for."
             }
           }
         },

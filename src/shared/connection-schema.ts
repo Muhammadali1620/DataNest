@@ -16,6 +16,8 @@ import {
   MONGO_MODES,
   type MongoSettings,
   ELASTIC_AUTH_METHODS,
+  KAFKA_SASL_MECHANISMS,
+  type KafkaSettings,
   type ElasticSettings,
   OPTION_LIMITS,
   REDIS_MODES,
@@ -124,6 +126,10 @@ export const elasticSchema: Schema<ElasticSettings> = object({
   pathPrefix: optional(string({ maxLength: CONNECTION_LIMITS.field })),
 });
 
+export const kafkaSchema: Schema<KafkaSettings> = object({
+  sasl: literal(...KAFKA_SASL_MECHANISMS),
+});
+
 export const proxySchema: Schema<ProxySettings> = object({
   kind: literal(...PROXY_KINDS),
   host: string({ maxLength: CONNECTION_LIMITS.field }),
@@ -154,6 +160,7 @@ export const connectionInputShape = {
   redis: optional(redisSchema),
   mongo: optional(mongoSchema),
   elastic: optional(elasticSchema),
+  kafka: optional(kafkaSchema),
 };
 
 export const connectionInputSchema: Schema<ConnectionInput> = object(connectionInputShape);

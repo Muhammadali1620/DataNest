@@ -210,6 +210,10 @@ export const COMMAND_IDS = {
   etcdNewKey: 'datanest.etcd.newKey',
   /** Deletes the clicked key, every selected one, or all the keys of a folder. */
   etcdDeleteKeys: 'datanest.etcd.deleteKeys',
+  /** Opens the page of a Kafka topic: its partitions, messages and a form to send one. */
+  kafkaOpenTopic: 'datanest.kafka.openTopic',
+  kafkaNewTopic: 'datanest.kafka.newTopic',
+  kafkaDeleteTopic: 'datanest.kafka.deleteTopic',
   /** A MongoDB database comes to be with its first collection (V7.5). */
   mongoNewDatabase: 'datanest.mongo.newDatabase',
   mongoDropDatabase: 'datanest.mongo.dropDatabase',
@@ -342,6 +346,8 @@ export const CONFIG_KEYS = {
   formatDenseOperators: 'format.denseOperators',
   /** How many etcd keys the tree reads at a time (V13.19). */
   etcdKeysPerLoad: 'etcd.keysPerLoad',
+  /** Whether the tree lists Kafka's own topics, such as `__consumer_offsets` (V13.23). */
+  kafkaShowInternalTopics: 'kafka.showInternalTopics',
   /** What splits Redis key names into folders (V7.2). */
   redisKeySeparator: 'redis.keySeparator',
   /** How many Redis keys the tree loads at a time. */

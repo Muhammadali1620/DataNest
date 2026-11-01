@@ -67,6 +67,13 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<circle cx="7.500" cy="12" r="4.500" fill="none" stroke="currentColor" stroke-width="3"/><rect x="11" y="10.500" width="11" height="3"/><rect x="16" y="13" width="2.500" height="4.500"/><rect x="20" y="13" width="2" height="3.500"/>',
   },
+  // One source feeding two readers: the shape of a topic with its consumers (V13.23); the
+  // vendor's logo is not ours to use.
+  kafka: {
+    hex: '#ea580c',
+    ink: WHITE,
+    body: '<circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="2.500"/><circle cx="18" cy="18" r="2.500"/><path d="M8.500 10.700l7.200-3.600M8.500 13.300l7.200 3.600" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"/>',
+  },
   // A ring around a core.
   oracle: {
     hex: '#c74634',

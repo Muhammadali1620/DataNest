@@ -24,12 +24,14 @@ import { setUpSession } from './session-setup';
 import type { Driver, Session, TransactionState } from '../drivers/driver';
 import type { ElasticDriver, ElasticSession } from '../drivers/elastic-driver';
 import type { EtcdDriver, EtcdSession } from '../drivers/etcd-driver';
+import type { KafkaDriver, KafkaSession } from '../drivers/kafka-driver';
 import type { MongoDriver, MongoSession } from '../drivers/mongo-driver';
 import type { RedisDriver, RedisSession } from '../drivers/redis-driver';
 import type { ConnectionStore } from './connection-store';
 import { ManagedSession } from './managed-session';
 import { ManagedElasticSession } from './elasticsearch/managed-elastic-session';
 import { ManagedEtcdSession } from './etcd/managed-etcd-session';
+import { ManagedKafkaSession } from './kafka/managed-kafka-session';
 import { ManagedMongoSession } from './mongodb/managed-mongo-session';
 import { ManagedRedisSession } from './redis/managed-redis-session';
 import { setUpRedisSession } from './redis/redis-setup';
@@ -73,6 +75,8 @@ export interface DriverProvider {
   getElastic?(): Promise<ElasticDriver>;
   /** Needed only by etcd connections (V13.19). */
   getEtcd?(): Promise<EtcdDriver>;
+  /** Needed only by Kafka connections (V13.23). */
+  getKafka?(): Promise<KafkaDriver>;
 }
 
 /** The slice of TunnelPool the manager needs. */
@@ -115,7 +119,8 @@ type Holder =
       readonly target: SessionTarget;
       readonly session: ElasticSession;
     }
-  | { readonly family: 'etcd'; readonly target: SessionTarget; readonly session: EtcdSession };
+  | { readonly family: 'etcd'; readonly target: SessionTarget; readonly session: EtcdSession }
+  | { readonly family: 'kafka'; readonly target: SessionTarget; readonly session: KafkaSession };
 
 const DISCONNECTED: ConnectionState = { status: 'disconnected' };
 
@@ -247,6 +252,12 @@ export class ConnectionManager implements Disposable {
     return held?.family === 'etcd' ? held.session : undefined;
   }
 
+  /** The live Kafka session of an owner, or undefined when it holds none. */
+  kafkaSessionOf(owner: string): KafkaSession | undefined {
+    const held = this.holders.get(owner);
+    return held?.family === 'kafka' ? held.session : undefined;
+  }
+
   /** Connection ids that currently hold at least one live session. */
   connectedIds(): string[] {
     return [...new Set([...this.holders.values()].map((held) => held.target.connectionId))];
@@ -298,6 +309,15 @@ export class ConnectionManager implements Disposable {
     const held = await this.acquireHolder(owner, target, 'etcd');
     if (held.family !== 'etcd') {
       throw new DbError('internal', msg('Expected an etcd session'));
+    }
+    return held.session;
+  }
+
+  /** Like `acquire`, for a Kafka connection (V13.23). */
+  async acquireKafka(owner: string, target: SessionTarget): Promise<KafkaSession> {
+    const held = await this.acquireHolder(owner, target, 'kafka');
+    if (held.family !== 'kafka') {
+      throw new DbError('internal', msg('Expected a Kafka session'));
     }
     return held.session;
   }
@@ -364,6 +384,10 @@ export class ConnectionManager implements Disposable {
     }
     if (this.familyOf(connectionId) === 'etcd') {
       await this.acquireEtcd(ConnectionManager.treeOwner(connectionId), { connectionId });
+      return;
+    }
+    if (this.familyOf(connectionId) === 'kafka') {
+      await this.acquireKafka(ConnectionManager.treeOwner(connectionId), { connectionId });
       return;
     }
     if (this.familyOf(connectionId) === 'redis') {
@@ -435,6 +459,10 @@ export class ConnectionManager implements Disposable {
     }
     if (input.driver === 'etcd') {
       await this.testEtcd(input, password, ssh, proxyPassword);
+      return;
+    }
+    if (input.driver === 'kafka') {
+      await this.testKafka(input, password, ssh, proxyPassword);
       return;
     }
     const driver = await this.sqlDriver(input.driver, input.plugin);
@@ -571,6 +599,29 @@ export class ConnectionManager implements Disposable {
     }
   }
 
+  private async testKafka(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
+  ): Promise<void> {
+    const driver = await this.kafkaDriver();
+    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
+    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
+    try {
+      let session: KafkaSession;
+      try {
+        // Opening reaches the brokers and asks for the cluster: that proves the link works.
+        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
+      } catch (error) {
+        throw tunnel?.forwardError() ?? error;
+      }
+      await session.close().catch(() => undefined);
+    } finally {
+      await tunnel?.close();
+    }
+  }
+
   /** True when the saved connection refuses every change (V4.6). */
   isReadOnly(connectionId: string): boolean {
     return this.store.get(connectionId)?.readOnly === true;
@@ -626,7 +677,9 @@ export class ConnectionManager implements Disposable {
               ? await this.openElastic(owner, target, config)
               : config.driver === 'etcd'
                 ? await this.openEtcd(owner, target, config)
-                : await this.openSql(owner, target, config, config.driver);
+                : config.driver === 'kafka'
+                  ? await this.openKafka(owner, target, config)
+                  : await this.openSql(owner, target, config, config.driver);
       this.holders.set(owner, holder);
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -823,6 +876,35 @@ export class ConnectionManager implements Disposable {
     return { family: 'etcd', target, session };
   }
 
+  private async openKafka(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+  ): Promise<Holder> {
+    const driver = await this.kafkaDriver();
+    const password = await this.store.getPassword(config.id);
+    const lease = await this.leaseTunnel(config);
+    let opened: KafkaSession;
+    try {
+      opened = await driver.openSession(resolve(config, target, password, lease));
+    } catch (error) {
+      await lease?.release();
+      throw lease?.forwardError() ?? error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedKafkaSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+      keepAliveMs: keepAliveMsOf(config),
+    });
+    session.scheduleKeepAlive();
+    return { family: 'kafka', target, session };
+  }
+
   /** A connect that finished after dispose() must not leave a live link behind. */
   private async closeIfDisposed(
     opened: { close(): Promise<void> },
@@ -847,6 +929,13 @@ export class ConnectionManager implements Disposable {
       throw new DbError('unsupported', msg('Elasticsearch is not available'));
     }
     return await this.drivers.getElastic();
+  }
+
+  private async kafkaDriver(): Promise<KafkaDriver> {
+    if (this.drivers.getKafka === undefined) {
+      throw new DbError('unsupported', msg('Kafka is not available'));
+    }
+    return await this.drivers.getKafka();
   }
 
   private async etcdDriver(): Promise<EtcdDriver> {
@@ -1015,6 +1104,8 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
         );
       case 'etcd':
         return msg('"{0}" is an etcd connection: it has keys, not SQL tables', config.name);
+      case 'kafka':
+        return msg('"{0}" is a Kafka connection: it has topics, not SQL tables', config.name);
       case 'sql':
         return msg('"{0}" is a SQL connection', config.name);
     }
@@ -1028,6 +1119,8 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
       return msg('"{0}" is not an Elasticsearch connection', config.name);
     case 'etcd':
       return msg('"{0}" is not an etcd connection', config.name);
+    case 'kafka':
+      return msg('"{0}" is not a Kafka connection', config.name);
   }
 }
 

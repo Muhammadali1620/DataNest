@@ -9,6 +9,7 @@ import { TEST_ELASTIC } from './elastic-servers';
 import { TEST_ETCD } from './etcd-servers';
 import { TEST_INFLUXDB } from './influxdb-servers';
 import { TEST_CASSANDRA } from './cassandra-servers';
+import { TEST_KAFKA } from './kafka-servers';
 import { TEST_NEO4J } from './neo4j-servers';
 import { TEST_LIBSQL } from './libsql-servers';
 import { TEST_MONGO } from './mongo-servers';
@@ -121,6 +122,11 @@ const DEFINITIONS = {
     always: false,
     folders: ['neo4j'],
     endpoints: () => [{ name: 'neo4j', host: TEST_NEO4J.host, port: TEST_NEO4J.port }],
+  },
+  kafka: {
+    always: false,
+    folders: ['kafka'],
+    endpoints: () => [{ name: 'kafka', host: TEST_KAFKA.host, port: TEST_KAFKA.port }],
   },
   etcd: {
     always: false,

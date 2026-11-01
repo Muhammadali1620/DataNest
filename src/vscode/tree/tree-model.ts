@@ -46,6 +46,14 @@ import {
 import { normalizeTableFilter, tableFilter } from './table-filter';
 import { msg } from '../../core/user-message';
 import { type EtcdKeyBrowser, ROOT } from '../../services/etcd/key-browser';
+import {
+  kafkaConnectionChildren,
+  kafkaGroupChildren,
+  kafkaLagChildren,
+  kafkaPartitionChildren,
+  kafkaTopicChildren,
+  type KafkaTreeDeps,
+} from './kafka-tree';
 import { displayKey, type RedisKeyRef, redisKeyBytes, redisKeyRef } from '../../shared/redis-key';
 import { childFolders, parentFolder } from '../../shared/folder-path';
 
@@ -116,6 +124,8 @@ export interface TreeModelDeps {
   readonly redisKeys?: RedisKeyBrowser;
   /** The folders of etcd connections as read so far (V13.19). */
   readonly etcdKeys?: EtcdKeyBrowser;
+  /** What the Kafka folders need besides the manager (V13.23); without it they are empty. */
+  readonly kafka?: Omit<KafkaTreeDeps, 'manager'>;
   /** `datanest.redis.keySeparator`, for the prefix a folder copies. */
   readonly redisKeySeparator?: () => string;
   readonly projects?: ProjectSource;
@@ -308,6 +318,15 @@ export class TreeModel {
         return elasticSubfields(node);
       case 'etcdFolder':
         return await this.etcdChildren(node.connectionId, node.prefix);
+      case 'kafkaTopics':
+        return await this.withKafka((deps) => kafkaTopicChildren(deps, node));
+      case 'kafkaTopic':
+        return await this.withKafka((deps) => kafkaPartitionChildren(deps, node));
+      case 'kafkaGroups':
+        return await this.withKafka((deps) => kafkaGroupChildren(deps, node));
+      case 'kafkaGroup':
+        return await this.withKafka((deps) => kafkaLagChildren(deps, node));
+      case 'kafkaPartition':
       case 'column':
       case 'object':
       case 'index':
@@ -322,6 +341,11 @@ export class TreeModel {
       case 'message':
         return [];
     }
+  }
+
+  private async withKafka(list: (deps: KafkaTreeDeps) => Promise<TreeNode[]>): Promise<TreeNode[]> {
+    const { kafka } = this.deps;
+    return kafka === undefined ? [] : await list({ manager: this.deps.manager, ...kafka });
   }
 
   private elasticDeps(): ElasticTreeDeps {
@@ -364,6 +388,20 @@ export class TreeModel {
         );
       case 'redisDatabase':
         return { kind: 'connection', connectionId: node.connectionId };
+      case 'kafkaTopics':
+      case 'kafkaGroups':
+        return { kind: 'connection', connectionId: node.connectionId };
+      case 'kafkaTopic':
+        return { kind: 'kafkaTopics', connectionId: node.connectionId };
+      case 'kafkaGroup':
+        return { kind: 'kafkaGroups', connectionId: node.connectionId };
+      case 'kafkaPartition':
+        return {
+          kind: 'kafkaTopic',
+          connectionId: node.connectionId,
+          topic: node.topic,
+          internal: node.topic.startsWith('_'),
+        };
       case 'connection': {
         const project = this.deps.store.projectOf(node.connectionId);
         if (project !== undefined) {
@@ -459,6 +497,11 @@ export class TreeModel {
     }
     if (this.driverIdOf(connectionId) === 'etcd') {
       return await this.etcdChildren(connectionId, ROOT);
+    }
+    if (this.driverIdOf(connectionId) === 'kafka') {
+      // Connect now, so a wrong address shows as the connection's error and not as an empty list.
+      await this.deps.manager.connectAny(connectionId);
+      return kafkaConnectionChildren(connectionId);
     }
     const capabilities = await this.capabilitiesOf(connectionId);
     const metadata = await this.metadataOf(connectionId);

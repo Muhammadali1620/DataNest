@@ -132,6 +132,9 @@ describe('connections view', () => {
       'datanest.etcd.findKey',
       'datanest.etcd.newKey',
       'datanest.etcd.deleteKeys',
+      'datanest.kafka.openTopic',
+      'datanest.kafka.newTopic',
+      'datanest.kafka.deleteTopic',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -177,6 +180,13 @@ describe('connections view', () => {
       'datanest.etcd.openKey',
       'datanest.etcd.deleteKeys',
     ]) {
+      await vscode.commands.executeCommand(id);
+    }
+  });
+
+  it('Kafka topic commands without a node do nothing', async () => {
+    // They belong to tree items; from elsewhere there is no topic to act on.
+    for (const id of ['datanest.kafka.openTopic', 'datanest.kafka.deleteTopic']) {
       await vscode.commands.executeCommand(id);
     }
   });

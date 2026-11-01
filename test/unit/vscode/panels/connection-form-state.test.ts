@@ -135,6 +135,7 @@ describe('toInput', () => {
       redis: { mode: 'sentinel', masterName: 'm', nodes: [{ host: 's2' }], sentinelUser: 'u' },
       mongo: { mode: 'replicaSet', replicaSet: 'rs0', authMechanism: 'SCRAM-SHA-256' },
       elastic: { auth: 'apiKey', pathPrefix: '/es' },
+      kafka: { sasl: 'scram-sha-512' },
     } as const;
     const input = toInput(full);
     const sent = connectionFormProtocol.host.requests.save.params.parse({

@@ -79,6 +79,18 @@ export const TREE_CONTEXT = {
   etcdKey: 'datanest.etcdKey',
   /** "Load more" at the end of a folder whose next page has not been read. */
   etcdMore: 'datanest.etcdMore',
+  /** Kafka connections (V13.23) share the connection menus but none of the SQL ones. */
+  kafkaConnection: 'datanest.kafkaConnection',
+  kafkaConnectionConnected: 'datanest.kafkaConnection.connected',
+  projectKafkaConnection: 'datanest.projectKafkaConnection',
+  projectKafkaConnectionConnected: 'datanest.projectKafkaConnection.connected',
+  /** The "Topics" folder of a Kafka connection. */
+  kafkaTopics: 'datanest.kafkaTopics',
+  kafkaTopic: 'datanest.kafkaTopic',
+  kafkaPartition: 'datanest.kafkaPartition',
+  /** The "Consumer groups" folder, and one group in it. */
+  kafkaGroups: 'datanest.kafkaGroups',
+  kafkaGroup: 'datanest.kafkaGroup',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -393,6 +405,47 @@ export interface EtcdMoreNode {
   readonly loaded: number;
 }
 
+/** The "Topics" folder of a Kafka connection (V13.23). */
+export interface KafkaTopicsNode {
+  readonly kind: 'kafkaTopics';
+  readonly connectionId: string;
+  /** Topics listed, when the cluster was asked. */
+  readonly count?: number;
+}
+
+export interface KafkaTopicNode {
+  readonly kind: 'kafkaTopic';
+  readonly connectionId: string;
+  readonly topic: string;
+  readonly internal: boolean;
+}
+
+/** One partition of a topic, with the offsets it holds. */
+export interface KafkaPartitionNode {
+  readonly kind: 'kafkaPartition';
+  readonly connectionId: string;
+  readonly topic: string;
+  readonly partition: number;
+  /** First offset stored and the offset the next message gets. */
+  readonly low: string;
+  readonly high: string;
+  readonly leader: number;
+}
+
+/** The "Consumer groups" folder of a Kafka connection. */
+export interface KafkaGroupsNode {
+  readonly kind: 'kafkaGroups';
+  readonly connectionId: string;
+}
+
+export interface KafkaGroupNode {
+  readonly kind: 'kafkaGroup';
+  readonly connectionId: string;
+  readonly group: string;
+  readonly state: string;
+  readonly members: number;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -435,6 +488,11 @@ export type TreeNode =
   | EtcdFolderNode
   | EtcdKeyNode
   | EtcdMoreNode
+  | KafkaTopicsNode
+  | KafkaTopicNode
+  | KafkaPartitionNode
+  | KafkaGroupsNode
+  | KafkaGroupNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -477,6 +535,11 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaTopic':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
+    case 'kafkaGroup':
     case 'message':
       return {};
   }
@@ -597,6 +660,16 @@ export function nodeId(node: TreeNode): string {
       return join(['etcdKey', node.connectionId, redisKeyId(node.key)]);
     case 'etcdMore':
       return join(['etcdMore', node.connectionId, redisKeyId(node.prefix)]);
+    case 'kafkaTopics':
+      return join(['kafkaTopics', node.connectionId]);
+    case 'kafkaTopic':
+      return join(['kafkaTopic', node.connectionId, node.topic]);
+    case 'kafkaPartition':
+      return join(['kafkaPartition', node.connectionId, node.topic, String(node.partition)]);
+    case 'kafkaGroups':
+      return join(['kafkaGroups', node.connectionId]);
+    case 'kafkaGroup':
+      return join(['kafkaGroup', node.connectionId, node.group]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -656,6 +729,11 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'etcdFolder' ||
     kind === 'etcdKey' ||
     kind === 'etcdMore' ||
+    kind === 'kafkaTopics' ||
+    kind === 'kafkaTopic' ||
+    kind === 'kafkaPartition' ||
+    kind === 'kafkaGroups' ||
+    kind === 'kafkaGroup' ||
     kind === 'message'
   );
 }
@@ -701,6 +779,10 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.key.text;
     case 'etcdFolder':
       return node.prefix.text;
+    case 'kafkaTopic':
+      return node.topic;
+    case 'kafkaGroup':
+      return node.group;
     case 'project':
     case 'connection':
     case 'group':
@@ -711,6 +793,9 @@ export function nameOf(node: TreeNode): string | undefined {
     case 'redisDatabase':
     case 'redisMore':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
     case 'message':
       return undefined;
   }
@@ -768,6 +853,11 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaTopic':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
+    case 'kafkaGroup':
     case 'message':
       return undefined;
   }
@@ -780,6 +870,15 @@ export function connectionContext(options: {
   readonly family: DriverFamily;
 }): string {
   const { project, connected, family } = options;
+  if (family === 'kafka') {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectKafkaConnectionConnected
+        : TREE_CONTEXT.projectKafkaConnection
+      : connected
+        ? TREE_CONTEXT.kafkaConnectionConnected
+        : TREE_CONTEXT.kafkaConnection;
+  }
   if (family === 'etcd') {
     return project
       ? connected

@@ -44,6 +44,7 @@ once, without a restart.
 | `datanest.servers.maxOpenSizeMb` | `5` | 1 – 512 | The largest file of a server that opens in the editor from the Servers view; a bigger one is offered for download. See [Servers and files](servers.md). |
 | `datanest.servers.showHidden` | `true` | | List hidden files (names starting with a dot) in the Servers view. |
 | `datanest.etcd.keysPerLoad` | `300` | 20 – 5000 | How many keys and folders the tree reads from an etcd folder at a time; **Load More Keys** brings the next page. |
+| `datanest.kafka.showInternalTopics` | `false` | on / off | List Kafka's own topics (`__consumer_offsets`, `_schemas`, …) in the tree. |
 | `datanest.redis.keysPerLoad` | `5000` | 100 – 100 000 | How many Redis keys are loaded at a time with `SCAN`; **Load More Keys** brings the next portion. |
 
 ## Formatting SQL

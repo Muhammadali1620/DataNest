@@ -21,6 +21,8 @@ import {
   DEFAULT_SENTINEL_PORT,
   type ElasticAuthMethod,
   type ElasticSettings,
+  type KafkaSaslMechanism,
+  type KafkaSettings,
   type MongoAuthMechanism,
   type MongoMode,
   type MongoSettings,
@@ -166,6 +168,8 @@ export interface FormFields {
   /** Elasticsearch (V7.8): a user and password, or an API key in the password box. */
   elasticAuth: ElasticAuthMethod;
   elasticPrefix: string;
+  /** Kafka (V13.23): how the brokers want a user to sign in. */
+  kafkaSasl: KafkaSaslMechanism;
   /** A Unix socket instead of host and port (V10.2.5); MySQL, PostgreSQL, Redis. */
   socket: string;
   /** Connect through a proxy (V10.2.5); its fields are kept while it is off. */
@@ -228,6 +232,7 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     ...mongoFieldsFrom(input),
     elasticAuth: input.elastic?.auth ?? 'basic',
     elasticPrefix: input.elastic?.pathPrefix ?? '',
+    kafkaSasl: input.kafka?.sasl ?? 'none',
     socket: input.socket ?? '',
     useProxy: input.proxy !== undefined,
     proxyKind: input.proxy?.kind ?? 'socks5',
@@ -251,6 +256,13 @@ export function toProxy(fields: FormFields): ProxySettings | undefined {
     ...(port === undefined ? {} : { port }),
     ...(user === undefined ? {} : { user }),
   };
+}
+
+/** The Kafka settings to send; none when the brokers ask for no SASL. */
+export function toKafka(fields: FormFields): KafkaSettings | undefined {
+  return fields.driver === 'kafka' && fields.kafkaSasl !== 'none'
+    ? { sasl: fields.kafkaSasl }
+    : undefined;
 }
 
 /** The Elasticsearch settings to send; none for a user and password at the root. */
@@ -547,6 +559,7 @@ export function toInput(fields: FormFields): ConnectionInput {
   const redis = toRedis(fields);
   const mongo = toMongo(fields);
   const elastic = toElastic(fields);
+  const kafka = toKafka(fields);
   const socket = supportsSocket(fields.driver) ? trim(fields.socket) : undefined;
   const proxy = toProxy(fields);
   // An API key signs in alone: a user name would only confuse the server.
@@ -557,7 +570,9 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(host === undefined ? {} : { host }),
     ...(port === undefined ? {} : { port }),
     ...(user === undefined || signsWithKey ? {} : { user }),
-    ...(database === undefined || fields.driver === 'elasticsearch' ? {} : { database }),
+    ...(database === undefined || fields.driver === 'elasticsearch' || fields.driver === 'kafka'
+      ? {}
+      : { database }),
     ...(fields.useSsh && sshAllowed(fields)
       ? {
           ssh: {
@@ -575,6 +590,7 @@ export function toInput(fields: FormFields): ConnectionInput {
     ...(redis === undefined ? {} : { redis }),
     ...(mongo === undefined ? {} : { mongo }),
     ...(elastic === undefined ? {} : { elastic }),
+    ...(kafka === undefined ? {} : { kafka }),
   };
 }
 
@@ -771,6 +787,7 @@ export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void 
   Object.assign(fields, mongoFieldsFrom(input));
   fields.elasticAuth = input.elastic?.auth ?? 'basic';
   fields.elasticPrefix = input.elastic?.pathPrefix ?? '';
+  fields.kafkaSasl = input.kafka?.sasl ?? 'none';
   if (password !== undefined) {
     fields.password = password;
     fields.passwordTouched = true;

@@ -14,6 +14,7 @@ export const DRIVER_IDS = [
   'mongodb',
   'elasticsearch',
   'etcd',
+  'kafka',
   'libsql',
   'influxdb',
   'neo4j',
@@ -31,21 +32,26 @@ export function isDriverId(value: unknown): value is DriverId {
  * What a database speaks (D81): SQL drivers share the dialect, the result grid and the
  * SQL editor; Redis has commands and keys, MongoDB collections of documents (D88), each
  * with a UI of its own; Elasticsearch speaks HTTP and JSON (D91); etcd is a tree of keys
- * with leases (V13.19). Connections, folders, secrets, SSH and the connection form are the
+ * with leases (V13.19); Kafka is a list of topics with partitions and consumer groups
+ * (V13.23). Connections, folders, secrets, SSH and the connection form are the
  * same for all.
  */
-export type DriverFamily = 'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd';
+export type DriverFamily = 'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka';
 
 export function driverFamily(driver: DriverId): DriverFamily {
   return driver === 'redis' ||
     driver === 'mongodb' ||
     driver === 'elasticsearch' ||
-    driver === 'etcd'
+    driver === 'etcd' ||
+    driver === 'kafka'
     ? driver
     : 'sql';
 }
 
-export type SqlDriverId = Exclude<DriverId, 'redis' | 'mongodb' | 'elasticsearch' | 'etcd'>;
+export type SqlDriverId = Exclude<
+  DriverId,
+  'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka'
+>;
 
 export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
   return driverFamily(driver) === 'sql';
@@ -88,6 +94,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   elasticsearch: 9200,
   // The client port; the HTTP/JSON gateway answers on it too.
   etcd: 2379,
+  // A broker's listener; several brokers go in the host box, separated by commas.
+  kafka: 9092,
   // sqld's own HTTP port; Turso and other hosted servers answer on 443 with TLS.
   libsql: 8080,
   // The HTTP API of InfluxDB 2.x; HTTPS is served on the same port.
@@ -233,6 +241,18 @@ export interface ElasticSettings {
   readonly auth: ElasticAuthMethod;
   /** Where Elasticsearch answers behind a proxy, e.g. `/es`; empty at the root. */
   readonly pathPrefix?: string;
+}
+
+/**
+ * How a Kafka connection signs in (V13.23): not at all (a plaintext or TLS listener), or
+ * with SASL; the user and password are the connection's own.
+ */
+export const KAFKA_SASL_MECHANISMS = ['none', 'plain', 'scram-sha-256', 'scram-sha-512'] as const;
+
+export type KafkaSaslMechanism = (typeof KAFKA_SASL_MECHANISMS)[number];
+
+export interface KafkaSettings {
+  readonly sasl: KafkaSaslMechanism;
 }
 
 /** How DataNest proves who it is to an SSH server. */
@@ -497,6 +517,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
     // A query or a request may take as long as the timeout allows; nothing runs on connect.
     case 'elasticsearch':
     case 'etcd':
+    case 'kafka':
     case 'mongodb':
       return {
         connectTimeout: true,
@@ -553,6 +574,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
       return { databases: false, schemas: false };
     // One flat key space; folders are made from the key names.
     case 'etcd':
+    case 'kafka':
       return { databases: false, schemas: false };
     // Buckets are the databases; the system ones are hidden with the other system objects.
     case 'influxdb':
@@ -610,6 +632,8 @@ export interface ConnectionInput {
   readonly mongo?: MongoSettings;
   /** Sign-in and path (V7.8); Elasticsearch connections only. */
   readonly elastic?: ElasticSettings;
+  /** SASL (V13.23); Kafka connections only. */
+  readonly kafka?: KafkaSettings;
 }
 
 export interface ConnectionConfig extends ConnectionInput {

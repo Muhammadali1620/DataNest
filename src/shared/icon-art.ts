@@ -38,6 +38,7 @@ export const PANEL_TILES: Readonly<Record<string, PanelTile>> = {
   'elastic-result': { glyph: 'search', tone: 'purple' },
   'er-diagram': { glyph: 'type-hierarchy', tone: 'pink' },
   'etcd-key': { glyph: 'key', tone: 'blue' },
+  'kafka-topic': { glyph: 'comment-discussion', tone: 'amber' },
   manager: { glyph: 'dashboard', tone: 'teal' },
   'mongo-documents': { glyph: 'json', tone: 'green' },
   ping: { glyph: 'debug-disconnect', tone: 'teal' },

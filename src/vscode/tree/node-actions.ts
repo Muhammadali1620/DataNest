@@ -28,6 +28,11 @@ export function nodeSqlTargetOf(node: TreeNode): NodeSqlTarget | undefined {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaTopic':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
+    case 'kafkaGroup':
     case 'folder':
     case 'group':
     case 'message':
@@ -112,6 +117,11 @@ export function actionsOf(node: TreeNode): readonly Command[] {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaTopic':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
+    case 'kafkaGroup':
     case 'folder':
     case 'group':
     case 'message':

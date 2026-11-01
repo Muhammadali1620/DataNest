@@ -87,6 +87,11 @@ export function dumpStartOf(
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'kafkaTopics':
+    case 'kafkaTopic':
+    case 'kafkaPartition':
+    case 'kafkaGroups':
+    case 'kafkaGroup':
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':

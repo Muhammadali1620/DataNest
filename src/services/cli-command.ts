@@ -52,6 +52,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   elasticsearch: [],
   // Reached over HTTP; `etcdctl` speaks gRPC and has other options.
   etcd: [],
+  // Reached through the client protocol; the console tools take other options.
+  kafka: [],
 };
 
 /** The program's path, looked up like a shell would; undefined when it is not installed. */
@@ -230,6 +232,7 @@ export function cliCommand(
     case 'cassandra':
     case 'elasticsearch':
     case 'etcd':
+    case 'kafka':
       return undefined;
   }
 }

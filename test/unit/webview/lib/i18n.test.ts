@@ -64,6 +64,7 @@ describe('the Russian dictionary', () => {
     'tools.provider.google',
     'tools.set.group.redis',
     'tools.kind.unicode',
+    'form.driver.kafka',
     'form.driver.mysql',
     'form.driver.postgres',
     'form.driver.sqlite',

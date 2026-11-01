@@ -249,5 +249,9 @@
   "commands.etcd.findKey.title": "Find etcd Key by Prefix…",
   "commands.etcd.newKey.title": "New etcd Key…",
   "commands.etcd.deleteKeys.title": "Delete etcd Keys",
-  "configuration.etcd.keysPerLoad.description": "How many keys and folders the tree reads from an etcd folder at a time. A folder with more children shows \"Load more keys…\"."
+  "configuration.etcd.keysPerLoad.description": "How many keys and folders the tree reads from an etcd folder at a time. A folder with more children shows \"Load more keys…\".",
+  "commands.kafka.openTopic.title": "Open Kafka Topic",
+  "commands.kafka.newTopic.title": "New Kafka Topic…",
+  "commands.kafka.deleteTopic.title": "Delete Kafka Topic",
+  "configuration.kafka.showInternalTopics.description": "List Kafka's own topics (`__consumer_offsets`, `_schemas`, …) in the tree."
 }

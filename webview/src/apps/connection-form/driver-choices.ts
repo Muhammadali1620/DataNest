@@ -33,6 +33,7 @@ const DRIVER_MARKS: Readonly<Record<DriverId, readonly [string, Tone]>> = {
   neo4j: ['Nj', 'purple'],
   cassandra: ['Ca', 'blue'],
   etcd: ['Et', 'blue'],
+  kafka: ['Kf', 'orange'],
   influxdb: ['In', 'purple'],
   // Never offered as a card: connections of this kind are made outside the form.
   plugin: ['Pl', 'purple'],

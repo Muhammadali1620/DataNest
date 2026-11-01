@@ -82,6 +82,7 @@ page is in English; the short summaries below are for everyone else.
 | Redis | One server, Sentinel, cluster; Valkey too |
 | Elasticsearch, OpenSearch | Console-style requests, hits as a table |
 | etcd | Keys as folders, values, revisions and leases, over the HTTP/JSON gateway |
+| Apache Kafka | Topics, partitions and consumer-group lag in the tree; read and send messages without moving any group's offsets |
 | Neo4j | Cypher in the editor, labels and relationship types in the tree, nodes and paths as JSON; over the HTTP port (5.19+) |
 | Apache Cassandra | CQL in the editor, keyspaces, tables and materialized views in the tree with their keys, exact big numbers and collections as JSON |
 | libSQL, Turso | sqld and hosted servers over HTTP, with an auth token; the SQL of SQLite |
@@ -280,6 +281,7 @@ The [documentation](docs/index.md) has a guide to every feature, the
 | `datanest.redis.keySeparator` | `:` | What splits Redis key names into folders in the tree. |
 | `datanest.redis.keysPerLoad` | `5000` | Redis keys loaded at a time with `SCAN`. |
 | `datanest.etcd.keysPerLoad` | `300` | etcd keys and folders read from a folder at a time. |
+| `datanest.kafka.showInternalTopics` | `false` | List Kafka's own topics in the tree. |
 | `datanest.logLevel` | `info` | How much goes to the DataNest output channel. |
 
 Every setting is described in [Settings](docs/guide/settings.md).

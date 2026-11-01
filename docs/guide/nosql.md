@@ -120,3 +120,41 @@ token is renewed by itself); leave both empty when it has none.
 
 Not here (yet): watching a key for changes, and etcd's own user, role and cluster
 administration.
+
+## Apache Kafka
+
+DataNest browses a Kafka cluster with the pure-JavaScript client `kafkajs`; nothing native
+is installed. Give the **bootstrap brokers** in the Host box as `host:port` separated by
+commas (a broker without a port takes the one in the Port box, 9092 by default). Choose
+how the brokers want you to sign in (**None**, **PLAIN**, **SCRAM-SHA-256** or
+**SCRAM-SHA-512**, with the user and password of the connection) and turn TLS on below
+when the listener is encrypted.
+
+- The tree shows **Topics** (the cluster's own, such as `__consumer_offsets`, only with
+  `datanest.kafka.showInternalTopics`) and **Consumer groups**. A topic opens into its
+  partitions, each with the offsets it holds; a group opens into the lag it has per
+  partition, `orders [0]: 12 behind`. **New Kafka Topic…** asks for the name, the number
+  of partitions and of copies; **Delete Kafka Topic** asks first.
+- **Open Kafka Topic** (a click on a topic or a partition) opens its page: the partitions
+  with a bar for how full each is, the leader and how many replicas are in sync. Read the
+  **last** messages of a partition, messages **from an offset** or **from a time**
+  (up to 500 at a time). Pick a message to see its key and value as text, JSON or hex, its
+  headers and its time. Offsets are 64-bit numbers and stay exact.
+- **Send a message** takes a key, a value (text, JSON or hex), headers (`name: value`
+  lines), and a partition, or lets the cluster choose. A **tombstone** is a message
+  without a value, which marks the key as deleted for a compacted topic.
+- **Reading never moves anything.** The client can read only through a consumer group, so
+  each read uses a group of its own with a throw-away name (`datanest-peek-…`), turns
+  auto-commit off and never commits: none of your groups is joined and none of their
+  offsets changes. The throw-away group is empty and without offsets afterwards, so the
+  broker forgets it, and the group list hides the name. A read waits for the group to
+  join, so on a real broker it takes a few seconds (the broker's
+  `group.initial.rebalance.delay.ms`).
+- A read-only connection offers no change, and a production one asks before sending a
+  message or creating a topic.
+- Connections through an SSH tunnel or a proxy reach only the bootstrap address; a broker
+  then advertises its own address, which the tunnel does not cover. Use brokers that
+  advertise addresses you can reach.
+
+Not here (yet): a live view of new messages, Avro/Protobuf decoding through a schema
+registry, committing offsets for a group, ACLs and the cluster's configuration.

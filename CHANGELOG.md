@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- SSH algorithms: under an SSH server, write a rule per kind of method (key exchange, host key, cipher, MAC, compression) in OpenSSH's `+name` / `-name` / `^name` / list syntax to reach an old server or tighten a strict one. Names are checked as you type, and a rule that allows weak methods shows a warning. It applies to tunnels, to a SQLite file copied from a server, and to the connection test.
+- Export Index… and Import Documents… on an Elasticsearch/OpenSearch index, and Import as New Index… on the connection: a file with one document per line (with mappings and settings, documents only, or the `_bulk` format), read with a scroll and loaded with `_bulk`; keep or make up ids, and a report with the line of each refused document.
 - Folders of connections can be nested, up to eight levels: New Subfolder…, Move Folder…, drag a folder onto another one, or write `Work/Prod` in the connection's Folder field. Removing a folder lifts what it held one level up.
 - Export Keys… and Restore Keys… on a Redis database, folder or the selected keys: a portable file with one JSON record per line (all types, TTLs, binary bytes), read with SCAN and cancellable; on restore, skip, overwrite or put keys that exist under a prefix.
 - SQL highlighting inside marked strings in JavaScript, TypeScript, Python, Go, PHP, Java, Kotlin and C#: a template tagged `sql`, a `/* sql */` or `// language=SQL` mark, `# sql` in Python, `<<<SQL` in PHP. Strings without a mark are untouched.

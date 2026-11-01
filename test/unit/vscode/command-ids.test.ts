@@ -144,9 +144,11 @@ describe('tree menus', () => {
   it('uses only context values the tree actually sets', () => {
     for (const entry of [...items, ...submenuEntries]) {
       const used = entry.when.match(/viewItem == ([\w.]+)/g) ?? [];
-      expect(used.length).toBeGreaterThan(0);
+      // The star buttons match by pattern (V13.2): the starred form of a context value.
+      expect(used.length > 0 || entry.when.includes('viewItem =~')).toBe(true);
       for (const value of used) {
-        expect(contextValues.has(value.replace('viewItem == ', ''))).toBe(true);
+        const context = value.replace('viewItem == ', '').replace(/\.starred$/u, '');
+        expect(contextValues.has(context)).toBe(true);
       }
     }
   });
@@ -225,7 +227,7 @@ describe('tree menus', () => {
       expect(on(COMMAND_IDS.filterDatabases)).toContain(`viewItem == ${context}`);
     }
     expect(on(COMMAND_IDS.filterSchemas)).toBe(
-      `view == datanest.connections && viewItem == ${TREE_CONTEXT.schema}`,
+      `view == datanest.connections && (viewItem == ${TREE_CONTEXT.schema} || viewItem == ${TREE_CONTEXT.schema}.starred)`,
     );
   });
 

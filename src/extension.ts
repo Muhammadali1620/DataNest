@@ -76,6 +76,7 @@ import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/conn
 import { RedisKeyBrowser } from './services/redis/key-browser';
 import type { TableNode } from './vscode/tree/nodes';
 import { ConnectionDecorations } from './vscode/tree/connection-decorations';
+import { FavoritesStore } from './vscode/tree/favorites';
 import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
@@ -364,7 +365,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
   );
 
   const settings = createSettings();
-  const decorations = new ConnectionDecorations(store);
+  const favorites = new FavoritesStore(context.globalState);
+  const decorations = new ConnectionDecorations(store, favorites);
   context.subscriptions.push(decorations);
   const redisKeySettings = createRedisKeySettings();
   const redisKeys = new RedisKeyBrowser({ manager, settings: redisKeySettings, logger });
@@ -374,6 +376,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
   const tree = new ConnectionsTreeProvider({
     extensionUri: context.extensionUri,
     store,
+    favorites,
     versionMemory,
     projects,
     manager,
@@ -450,6 +453,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
       openFiltered: openRelated,
       redisKeys,
       treeView,
+      favorites,
       redisKeySeparator: () => redisKeySettings.separator(),
       savedQueries,
     }),

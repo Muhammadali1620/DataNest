@@ -45,6 +45,8 @@ import type { ConnectionsTreeProvider } from './tree/connections-tree';
 import { type CommandTarget, treeCommandHandlers } from './tree/tree-commands';
 import { COMMAND_IDS, CONFIG_KEYS, CONFIG_SECTION, type CommandId } from './command-ids';
 import { guardCommand } from './command-runner';
+import { favoriteCommandHandlers } from './tree/favorite-commands';
+import { type FavoritesStore, type TreeElement, unwrapFavorite } from './tree/favorites';
 import { connectionCommandHandlers } from './connection-commands';
 import { addConnectionFromUrl, importConnectionsFromEnv } from './connection-import';
 import { folderCommandHandlers } from './tree/folder-commands';
@@ -179,7 +181,9 @@ export interface CommandDeps {
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys: RedisKeyBrowser;
   /** The Connections view, to reveal a key found by a search. */
-  readonly treeView: vscode.TreeView<TreeNode>;
+  readonly treeView: vscode.TreeView<TreeElement>;
+  /** The starred nodes (V13.2). */
+  readonly favorites: FavoritesStore;
   readonly redisKeySeparator: () => string;
   /** The saved queries of the tree's "Query" folders (V11.12). */
   readonly savedQueries: SavedQueryStore;
@@ -529,12 +533,17 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   };
   const expansionEvents = [
     deps.treeView.onDidExpandElement((event) => {
-      expansion.expanded(event.element);
+      if (isTreeNode(event.element)) {
+        expansion.expanded(event.element);
+      }
     }),
     deps.treeView.onDidCollapseElement((event) => {
-      expansion.collapsed(event.element);
+      if (isTreeNode(event.element)) {
+        expansion.collapsed(event.element);
+      }
     }),
   ];
+  const favoriteCommands = favoriteCommandHandlers({ favorites: deps.favorites });
   const treeCommands = treeCommandHandlers({
     manager: deps.manager,
     expansion,
@@ -785,6 +794,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.enableConnection]: connections.enable,
     [COMMAND_IDS.connect]: treeCommands.connect,
     [COMMAND_IDS.disconnect]: treeCommands.disconnect,
+    [COMMAND_IDS.addFavorite]: favoriteCommands.add,
+    [COMMAND_IDS.removeFavorite]: favoriteCommands.remove,
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,
     [COMMAND_IDS.copyName]: treeCommands.copyName,
     [COMMAND_IDS.openTable]: treeCommands.openTable,
@@ -1023,7 +1034,10 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
   };
   const commands = Object.entries(handlers).map(([id, handler]) =>
-    vscode.commands.registerCommand(id, guardCommand(id, handler, runner)),
+    // An entry of the Favorites group stands for its node: commands work on the node.
+    vscode.commands.registerCommand(id, (...args: unknown[]) =>
+      guardCommand(id, handler, runner)(...(args.map(unwrapFavorite) as never[])),
+    ),
   );
   return [
     ...commands,

@@ -41,6 +41,9 @@ export const COMMAND_IDS = {
   /** Switches a connection off without deleting it, and back on (V13.1). */
   disableConnection: 'datanest.connections.disable',
   enableConnection: 'datanest.connections.enable',
+  /** Stars a node of the tree and takes the star off (V13.2). */
+  addFavorite: 'datanest.favorites.add',
+  removeFavorite: 'datanest.favorites.remove',
   refreshTree: 'datanest.tree.refresh',
   copyName: 'datanest.tree.copyName',
   /** Opens an empty SQL document bound to a connection. */

@@ -1,6 +1,7 @@
 // "Open in DataNest" (V10.2.3) on a SQLite file in the Explorer, or picked from the
 // Command Palette: the file's connection — found or made — connected and shown.
 
+import type { TreeElement } from './tree/favorites';
 import * as vscode from 'vscode';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
@@ -9,12 +10,11 @@ import {
   connectionOfFile,
   SQLITE_FILE_EXTENSIONS,
 } from '../services/sqlite-files';
-import type { TreeNode } from './tree/nodes';
 
 export interface SqliteFileCommandDeps {
   readonly store: ConnectionStore;
   readonly manager: Pick<ConnectionManager, 'connect'>;
-  readonly treeView: vscode.TreeView<TreeNode>;
+  readonly treeView: vscode.TreeView<TreeElement>;
 }
 
 export function openSqliteFileCommand(

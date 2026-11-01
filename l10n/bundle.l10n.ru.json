@@ -1187,5 +1187,9 @@
   "Pick a connection to enable": "Выберите подключение, чтобы включить",
   "Disabled: it is kept, but never connected to": "Выключено: оно сохранено, но к нему не подключаются",
   "Connection \"{0}\" is disabled": "Подключение «{0}» выключено — включите его в дереве",
-  "A project connection cannot be disabled: the file is shared with the team": "Подключение проекта выключить нельзя: файл общий для команды"
+  "A project connection cannot be disabled: the file is shared with the team": "Подключение проекта выключить нельзя: файл общий для команды",
+  "Favorites": "Избранное",
+  "Favorite": "Избранное",
+  "The nodes you starred, in the order you starred them": "Узлы, отмеченные звёздочкой, в порядке добавления",
+  "You can star up to {0} nodes: take a star off first": "Можно отметить не больше {0} узлов: сначала снимите звёздочку с одного из них"
 }

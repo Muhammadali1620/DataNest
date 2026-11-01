@@ -30,6 +30,8 @@ export const TREE_CONTEXT = {
   connectionFolder: 'datanest.connectionFolder',
   connection: 'datanest.connection',
   connectionConnected: 'datanest.connection.connected',
+  /** The Favorites group at the top of the tree (V13.2). */
+  favorites: 'datanest.favorites',
   /** A connection switched off (V13.1): only enable, edit and delete are offered. */
   connectionDisabled: 'datanest.connection.disabled',
   /** The connections of a workspace folder's `.vscode/datanest.json` (V4.7). */

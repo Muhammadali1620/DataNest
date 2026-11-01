@@ -39,6 +39,7 @@ import {
 import {
   CONNECTIONS_VIEW_ID,
   connectionContext,
+  connectionIdOf,
   nodeId,
   TREE_CONTEXT,
   type GroupNode,
@@ -47,6 +48,16 @@ import {
   type TableFolder,
   type TreeNode,
 } from './nodes';
+import {
+  type FavoriteNode,
+  type FavoritesRootNode,
+  type FavoritesStore,
+  type TreeElement,
+  favoriteNodeId,
+  nodeOfRef,
+  starredContext,
+} from './favorites';
+import { starUri } from './connection-decorations';
 import { type ProjectSource, TreeModel, type TreeModelDeps, type TreeSettings } from './tree-model';
 import { formatCount } from '../../core/number-format';
 import type { TableStats } from '../../core/model/objects';
@@ -73,13 +84,18 @@ export interface ConnectionsTreeDeps {
   readonly accounts?: TreeModelDeps['accounts'];
   /** The saved queries of a scope, for the Query folder (V11.12). */
   readonly savedQueries?: TreeModelDeps['savedQueries'];
+  /** The starred nodes (V13.2). */
+  readonly favorites?: FavoritesStore;
 }
+
+/** The one Favorites group; the editor finds an element again by this very object. */
+const FAVORITES_ROOT: FavoritesRootNode = { kind: 'favorites' };
 
 /** The Connections view: connections → databases/schemas → tables/views → columns. */
 export class ConnectionsTreeProvider
-  implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable
+  implements vscode.TreeDataProvider<TreeElement>, vscode.Disposable
 {
-  private readonly changed = new vscode.EventEmitter<TreeNode | undefined>();
+  private readonly changed = new vscode.EventEmitter<TreeElement | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
 
   /** The server version of each connected connection (V11.14); key: the connection id. */
@@ -172,8 +188,21 @@ export class ConnectionsTreeProvider
     this.subscriptions.push(
       this.changed,
       deps.store.onDidChange(() => {
+        // A deleted connection takes its stars with it.
+        void deps.favorites
+          ?.retainConnections(new Set(deps.store.list().map((config) => config.id)))
+          .catch((error: unknown) => {
+            deps.logger.warn('Could not drop the favorites of deleted connections', error);
+          });
         this.refresh();
       }),
+      ...(deps.favorites === undefined
+        ? []
+        : [
+            deps.favorites.onDidChange(() => {
+              this.refresh();
+            }),
+          ]),
       vscode.workspace.onDidChangeConfiguration((event) => {
         // Hiding system objects is a local filter: redrawing is enough.
         if (affectsDataNest(event)) {
@@ -205,6 +234,10 @@ export class ConnectionsTreeProvider
       this.sizes.clear(`${node.connectionId}\u0000`);
     }
     this.changed.fire(node);
+    // A subtree also appears below the Favorites group, if it is starred.
+    if (node !== undefined && this.deps.favorites?.list().length) {
+      this.changed.fire(FAVORITES_ROOT);
+    }
   }
 
   /** The Filter… text of a Tables or Views folder (V10.2.3). */
@@ -218,7 +251,66 @@ export class ConnectionsTreeProvider
     this.refresh(node);
   }
 
-  getTreeItem(node: TreeNode): vscode.TreeItem {
+  getTreeItem(element: TreeElement): vscode.TreeItem {
+    if (element.kind === 'favorites') {
+      const item = new vscode.TreeItem(
+        vscode.l10n.t('Favorites'),
+        vscode.TreeItemCollapsibleState.Expanded,
+      );
+      item.id = TREE_CONTEXT.favorites;
+      item.iconPath = new vscode.ThemeIcon('star-full', new vscode.ThemeColor('charts.yellow'));
+      item.contextValue = TREE_CONTEXT.favorites;
+      item.description = String(this.deps.favorites?.list().length ?? 0);
+      item.tooltip = vscode.l10n.t('The nodes you starred, in the order you starred them');
+      return item;
+    }
+    if (element.kind === 'favorite') {
+      return this.favoriteItem(element);
+    }
+    return this.starred(element, this.nodeItem(element));
+  }
+
+  /** An entry of the Favorites group: the item of its node under an id of its own. */
+  private favoriteItem(entry: FavoriteNode): vscode.TreeItem {
+    // Entries are copies: the label caches must keep pointing at the real nodes.
+    this.shadow = true;
+    try {
+      const item = this.starred(entry.target, this.nodeItem(entry.target));
+      item.id = favoriteNodeId(entry);
+      const owner = connectionIdOf(entry.target);
+      if (entry.via === TREE_CONTEXT.favorites && entry.target.kind !== 'connection' && owner) {
+        // Without the connection's name, two tables called "users" cannot be told apart.
+        const name = this.deps.store.get(owner)?.name;
+        if (name !== undefined) {
+          item.description =
+            typeof item.description === 'string' && item.description !== ''
+              ? `${name} · ${item.description}`
+              : name;
+        }
+      }
+      return item;
+    } finally {
+      this.shadow = false;
+    }
+  }
+
+  /** True while the item of a Favorites entry is built. */
+  private shadow = false;
+
+  /** Marks a starred node: a yellow star on its label, and the context of the menus. */
+  private starred(node: TreeNode, item: vscode.TreeItem): vscode.TreeItem {
+    if (this.deps.favorites?.has(node) !== true) {
+      return item;
+    }
+    item.contextValue = starredContext(item.contextValue);
+    // Connections already carry a look (ConnectionDecorations), which shows the star too.
+    if (node.kind !== 'connection') {
+      item.resourceUri = starUri(node);
+    }
+    return item;
+  }
+
+  private nodeItem(node: TreeNode): vscode.TreeItem {
     switch (node.kind) {
       case 'project': {
         const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.Expanded);
@@ -241,7 +333,9 @@ export class ConnectionsTreeProvider
         return item;
       }
       case 'connection':
-        this.connectionNodes.set(node.connectionId, node);
+        if (!this.shadow) {
+          this.connectionNodes.set(node.connectionId, node);
+        }
         return this.connectionItem(node.connectionId);
       case 'database': {
         const item = expandable(node, node.database, 'database', TREE_CONTEXT.database);
@@ -490,10 +584,29 @@ export class ConnectionsTreeProvider
    */
   holdChildren: ((node: TreeNode) => Promise<void>) | undefined;
 
-  async getChildren(node?: TreeNode): Promise<TreeNode[]> {
-    if (node === undefined) {
-      return this.model.roots();
+  async getChildren(element?: TreeElement): Promise<TreeElement[]> {
+    if (element === undefined) {
+      const roots = this.model.roots();
+      return this.deps.favorites?.list().length ? [FAVORITES_ROOT, ...roots] : roots;
     }
+    if (element.kind === 'favorites') {
+      return (this.deps.favorites?.list() ?? [])
+        .filter((ref) => this.deps.store.get(ref.connectionId) !== undefined)
+        .map((ref): FavoriteNode => ({
+          kind: 'favorite',
+          target: nodeOfRef(ref),
+          via: TREE_CONTEXT.favorites,
+        }));
+    }
+    if (element.kind === 'favorite') {
+      const children = await this.getChildren(element.target);
+      return (children as TreeNode[]).map((target): FavoriteNode => ({
+        kind: 'favorite',
+        target,
+        via: favoriteNodeId(element),
+      }));
+    }
+    const node = element;
     if (node.kind === 'table') {
       await this.holdChildren?.(node);
     }
@@ -501,8 +614,10 @@ export class ConnectionsTreeProvider
   }
 
   /** Lets a found Redis key be revealed (V7.2). */
-  getParent(node: TreeNode): TreeNode | undefined {
-    return this.model.parentOf(node);
+  getParent(element: TreeElement): TreeNode | undefined {
+    return element.kind === 'favorites' || element.kind === 'favorite'
+      ? undefined
+      : this.model.parentOf(element);
   }
 
   dispose(): void {
@@ -549,7 +664,9 @@ export class ConnectionsTreeProvider
       return undefined;
     }
     const key = `${node.connectionId}\u0000${nodeId(node)}`;
-    this.sizeNodes.set(key, node);
+    if (!this.shadow) {
+      this.sizeNodes.set(key, node);
+    }
     this.sizes.ask(key, async () => {
       // A MySQL "database" is its schema; the others name a schema inside a database.
       const target =

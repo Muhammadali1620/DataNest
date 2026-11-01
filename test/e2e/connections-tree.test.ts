@@ -79,6 +79,8 @@ describe('connections view', () => {
     for (const id of [
       'datanest.connections.connect',
       'datanest.connections.disconnect',
+      'datanest.favorites.add',
+      'datanest.favorites.remove',
       'datanest.connections.moveToFolder',
       'datanest.connections.setColor',
       'datanest.connections.filterDatabases',

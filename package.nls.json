@@ -22,6 +22,8 @@
   "commands.connections.duplicate.title": "Duplicate Connection",
   "commands.connections.disable.title": "Disable Connection",
   "commands.connections.enable.title": "Enable Connection",
+  "commands.favorites.add.title": "Add to Favorites",
+  "commands.favorites.remove.title": "Remove from Favorites",
   "commands.connections.remove.title": "Delete Connection",
   "commands.connections.connect.title": "Connect",
   "commands.connections.disconnect.title": "Disconnect",

@@ -22,6 +22,8 @@
   "commands.connections.duplicate.title": "Дублировать подключение",
   "commands.connections.disable.title": "Выключить подключение",
   "commands.connections.enable.title": "Включить подключение",
+  "commands.favorites.add.title": "Добавить в избранное",
+  "commands.favorites.remove.title": "Убрать из избранного",
   "commands.connections.remove.title": "Удалить подключение",
   "commands.connections.connect.title": "Подключиться",
   "commands.connections.disconnect.title": "Отключиться",

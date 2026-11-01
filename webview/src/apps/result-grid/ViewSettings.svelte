@@ -4,20 +4,28 @@
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import {
-    DEFAULT_VIEW,
+    defaultView,
     FONT_SIZES,
     GRID_ALIGNS,
     GRID_FONTS,
     GRID_LAYOUTS,
     GRID_LINES,
     type GridView,
+    MAX_COLUMN_LIMIT,
     MAX_ROW_HEIGHT,
+    MIN_COLUMN_LIMIT,
     MIN_ROW_HEIGHT,
     ROW_HEIGHT_STEP,
   } from './grid-view';
+  import { DEFAULT_LOOK, type ResultsLook } from '../../../../src/shared/results-look';
+
+  /** How much one press of the width buttons moves the limit. */
+  const COLUMN_LIMIT_STEP = 60;
 
   interface Props {
     view: GridView;
+    /** What the settings ask for: the reset goes back to it. */
+    look?: ResultsLook;
     onChange: (next: GridView) => void;
     /** Opens the columns menu (hide, pin, fit). */
     onColumns: () => void;
@@ -25,7 +33,7 @@
     t: Translate;
   }
 
-  const { view, onChange, onColumns, onClose, t }: Props = $props();
+  const { view, look = DEFAULT_LOOK, onChange, onColumns, onClose, t }: Props = $props();
 
   function set<K extends keyof GridView>(key: K, value: GridView[K]): void {
     onChange({ ...view, [key]: value });
@@ -33,6 +41,13 @@
 
   function step(delta: number): void {
     set('rowHeight', Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, view.rowHeight + delta)));
+  }
+
+  function stepLimit(delta: number): void {
+    set(
+      'maxColumnWidth',
+      Math.min(MAX_COLUMN_LIMIT, Math.max(MIN_COLUMN_LIMIT, view.maxColumnWidth + delta)),
+    );
   }
 </script>
 
@@ -46,7 +61,7 @@
       tone="orange"
       label={t('view.reset')}
       onclick={() => {
-        onChange(DEFAULT_VIEW);
+        onChange(defaultView(look));
       }}
     />
     <IconButton icon="close" label={t('dialog.close')} onclick={onClose} />
@@ -82,6 +97,16 @@
       <output data-testid="row-height">{view.rowHeight}</output>
       <IconButton icon="chevron-up" label={t('view.taller')} disabled={view.rowHeight >= MAX_ROW_HEIGHT}
         onclick={() => { step(ROW_HEIGHT_STEP); }} />
+    </div>
+  </div>
+  <div class="row">
+    <span>{t('view.maxColumnWidth')}</span>
+    <div class="stepper" role="group" aria-label={t('view.maxColumnWidth')}>
+      <IconButton icon="chevron-down" label={t('view.narrower')} disabled={view.maxColumnWidth <= MIN_COLUMN_LIMIT}
+        onclick={() => { stepLimit(-COLUMN_LIMIT_STEP); }} />
+      <output data-testid="max-column-width">{view.maxColumnWidth}</output>
+      <IconButton icon="chevron-up" label={t('view.wider')} disabled={view.maxColumnWidth >= MAX_COLUMN_LIMIT}
+        onclick={() => { stepLimit(COLUMN_LIMIT_STEP); }} />
     </div>
   </div>
   <div class="row">
@@ -190,7 +215,7 @@
   }
 
   .stepper output {
-    min-width: 28px;
+    min-width: 40px;
     text-align: center;
   }
 

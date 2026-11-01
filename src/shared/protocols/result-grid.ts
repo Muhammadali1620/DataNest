@@ -148,6 +148,13 @@ const stateSchema = object({
   running: boolean(),
   /** `view` when the page shows a database view: it has no table-only tools. */
   tableKind: optional(literal('view')),
+  /** The look the settings ask for (V13.3); absent means the grid's own defaults. */
+  look: optional(
+    object({
+      rowHeight: number({ integer: true, min: 20, max: 64 }),
+      maxColumnWidth: number({ integer: true, min: 120, max: 1600 }),
+    }),
+  ),
 });
 
 const windowSchema = object({

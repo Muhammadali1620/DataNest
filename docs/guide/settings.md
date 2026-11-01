@@ -9,6 +9,8 @@ once, without a restart.
 |---|---|---|---|
 | `datanest.rowLimit` | `1000` | 1 – 1 000 000 | How many rows one statement may bring back. Larger results are cut off, and the result says it was truncated. |
 | `datanest.pageSize` | `200` | 1 – 100 000 | Rows on one page when a table is opened from the tree. |
+| `datanest.results.rowHeight` | `normal` | `compact`, `normal`, `comfortable` | How tall the rows of the result grid are: 24, 32 or 40 px. The **Density** button in the grid's toolbar changes it for you alone, and that choice wins. |
+| `datanest.results.maxColumnWidth` | `420` | 120 – 1600 px | The widest a column of the result grid gets on its own. Dragging a separator still makes it wider; **Fit to Content** may go up to 800 px, or further when this limit is larger. |
 | `datanest.queryTimeout` | `0` | 0 – 86 400 s | Seconds a statement may run before DataNest cancels it; `0` means no limit. A connection's own query timeout wins over this. |
 | `datanest.transactionMode` | `auto` | `auto`, `manual` | How a new SQL editor commits: every statement at once, or in a transaction that waits for **Commit** or **Roll Back**. |
 | `datanest.queryVariables` | `remember` | `remember`, `ask`, `off` | What `:name` and `${name}` in a statement do: ask for the value and offer the one given last time, ask every time and keep nothing, or leave them in the text. See [Variables](sql.md#variables). |

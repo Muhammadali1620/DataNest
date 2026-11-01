@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  defaultView,
   DEFAULT_VIEW,
   gutterWidth,
   headerHeight,
@@ -20,6 +21,7 @@ describe('normalizeView', () => {
     const view = {
       layout: 'json',
       rowHeight: 40,
+      maxColumnWidth: 640,
       fontSize: 16,
       lines: 'columns',
       align: 'center',
@@ -175,5 +177,104 @@ describe('default look', () => {
     expect(stored.align).toBe('center');
     expect(stored.lines).toBe('rows');
     expect(normalizeView({ align: 'auto' }).align).toBe('auto');
+  });
+});
+
+describe('widest column (V13.3)', () => {
+  it('is 420 px unless somebody chose otherwise', () => {
+    expect(DEFAULT_VIEW.maxColumnWidth).toBe(420);
+    expect(normalizeView({}).maxColumnWidth).toBe(420);
+  });
+
+  it('keeps a stored limit inside the allowed range', () => {
+    expect(normalizeView({ maxColumnWidth: 640 }).maxColumnWidth).toBe(640);
+    expect(normalizeView({ maxColumnWidth: 10 }).maxColumnWidth).toBe(120);
+    expect(normalizeView({ maxColumnWidth: 99_999 }).maxColumnWidth).toBe(1600);
+    expect(normalizeView({ maxColumnWidth: 300.6 }).maxColumnWidth).toBe(301);
+  });
+
+  it('falls back to the settings, not to 420, for a wrong stored value', () => {
+    const look = { rowHeight: 24, maxColumnWidth: 300 };
+    expect(normalizeView({ maxColumnWidth: 'wide' }).maxColumnWidth).toBe(420);
+    expect(normalizeView({}, look).maxColumnWidth).toBe(300);
+  });
+});
+
+describe('the look the settings ask for', () => {
+  const look = { rowHeight: 24, maxColumnWidth: 640 };
+
+  function store(initial?: string) {
+    const data = new Map<string, string>();
+    if (initial !== undefined) {
+      data.set(VIEW_STORAGE_KEY, initial);
+    }
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        data.set(key, value);
+      },
+    };
+  }
+
+  it('builds the untouched view on top of the look', () => {
+    expect(defaultView(look)).toEqual({ ...DEFAULT_VIEW, rowHeight: 24, maxColumnWidth: 640 });
+    expect(defaultView()).toEqual(DEFAULT_VIEW);
+  });
+
+  it('gives a nothing-stored view the look', () => {
+    expect(loadView(store(), look)).toEqual(defaultView(look));
+    expect(loadView(undefined, look)).toEqual(defaultView(look));
+    expect(loadView(store('{broken'), look)).toEqual(defaultView(look));
+  });
+
+  it('lets what the user stored win over the look', () => {
+    const storage = store(JSON.stringify({ rowHeight: 40, maxColumnWidth: 240 }));
+    expect(loadView(storage, look)).toMatchObject({ rowHeight: 40, maxColumnWidth: 240 });
+  });
+
+  it('fills only the field the user never set', () => {
+    const storage = store(JSON.stringify({ rowHeight: 40 }));
+    expect(loadView(storage, look)).toMatchObject({ rowHeight: 40, maxColumnWidth: 640 });
+  });
+
+  it('does not write a height or limit equal to the look: that is not a choice', () => {
+    const storage = store();
+    saveView(storage, { ...defaultView(look), fontSize: 16 }, look);
+    const written = JSON.parse(storage.data.get(VIEW_STORAGE_KEY) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(written).not.toHaveProperty('rowHeight');
+    expect(written).not.toHaveProperty('maxColumnWidth');
+    expect(written).toMatchObject({ fontSize: 16 });
+    // So a later change of the setting reaches this viewer.
+    expect(loadView(storage, { rowHeight: 40, maxColumnWidth: 900 })).toMatchObject({
+      rowHeight: 40,
+      maxColumnWidth: 900,
+      fontSize: 16,
+    });
+  });
+
+  it('writes a height or limit that differs from the look', () => {
+    const storage = store();
+    saveView(storage, { ...defaultView(look), rowHeight: 32, maxColumnWidth: 900 }, look);
+    expect(JSON.parse(storage.data.get(VIEW_STORAGE_KEY) ?? '{}')).toMatchObject({
+      rowHeight: 32,
+      maxColumnWidth: 900,
+    });
+  });
+
+  it('survives a storage that refuses to write', () => {
+    expect(() => {
+      saveView(
+        {
+          setItem: () => {
+            throw new Error('blocked');
+          },
+        },
+        DEFAULT_VIEW,
+      );
+    }).not.toThrow();
   });
 });

@@ -116,6 +116,25 @@ describe('state event', () => {
     expect(state.parse(payload)).toEqual(payload);
   });
 
+  it('carries the look the settings ask for (V13.3)', () => {
+    const payload = {
+      tabs: [],
+      running: false,
+      look: { rowHeight: 24, maxColumnWidth: 640 },
+    };
+    expect(state.parse(payload)).toEqual(payload);
+  });
+
+  it('rejects a look outside what the grid can draw', () => {
+    const base = { tabs: [], running: false };
+    expect(() => state.parse({ ...base, look: { rowHeight: 5, maxColumnWidth: 420 } })).toThrow();
+    expect(() => state.parse({ ...base, look: { rowHeight: 32, maxColumnWidth: 99 } })).toThrow();
+    expect(() =>
+      state.parse({ ...base, look: { rowHeight: 32.5, maxColumnWidth: 420 } }),
+    ).toThrow();
+    expect(() => state.parse({ ...base, look: { rowHeight: 32 } })).toThrow('maxColumnWidth');
+  });
+
   it('rejects a tab without the fields the page needs', () => {
     const { rowCount: _rowCount, ...incomplete } = tab;
     expect(() => state.parse({ tabs: [incomplete], running: false })).toThrow('rowCount');

@@ -1,6 +1,15 @@
 // How the user likes the grid drawn: row height, text size, lines and the gutter.
 // Pure helpers, so the rules for a stored (possibly stale or hand-edited) value are tested.
 
+import {
+  DEFAULT_COLUMN_LIMIT,
+  DEFAULT_LOOK,
+  MAX_COLUMN_LIMIT,
+  MIN_COLUMN_LIMIT,
+  normalizeColumnLimit,
+  type ResultsLook,
+} from '../../../../src/shared/results-look';
+
 export type GridLines = 'none' | 'rows' | 'columns' | 'all';
 export type GridLayout = 'table' | 'json' | 'transposed';
 export type GridFont = 'ui' | 'mono';
@@ -10,6 +19,8 @@ export interface GridView {
   /** How the rows are laid out: the table, as JSON, or turned so fields run down. */
   readonly layout: GridLayout;
   readonly rowHeight: number;
+  /** Widest a column gets on its own, before the user drags it (V13.3). */
+  readonly maxColumnWidth: number;
   readonly fontSize: number;
   readonly lines: GridLines;
   readonly align: GridAlign;
@@ -24,6 +35,10 @@ export interface GridView {
   readonly draggableColumns: boolean;
 }
 
+/** Widths offered by the quick control, from tight to roomy. */
+export const COLUMN_WIDTH_CHOICES = [240, 420, 640, 900] as const;
+export { DEFAULT_COLUMN_LIMIT, MAX_COLUMN_LIMIT, MIN_COLUMN_LIMIT };
+
 export const MIN_ROW_HEIGHT = 20;
 export const MAX_ROW_HEIGHT = 64;
 export const ROW_HEIGHT_STEP = 2;
@@ -35,7 +50,8 @@ export const GRID_ALIGNS: readonly GridAlign[] = ['auto', 'left', 'center', 'rig
 
 export const DEFAULT_VIEW: GridView = {
   layout: 'table',
-  rowHeight: 32,
+  rowHeight: DEFAULT_LOOK.rowHeight,
+  maxColumnWidth: DEFAULT_LOOK.maxColumnWidth,
   fontSize: 14,
   lines: 'all',
   align: 'left',
@@ -52,8 +68,16 @@ function oneOf<T>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-/** Whatever was stored, turned into a valid view: unknown or wrong fields fall back. */
-export function normalizeView(raw: unknown): GridView {
+/** The view nobody has changed: the settings' look on top of the grid's own choices. */
+export function defaultView(look: ResultsLook = DEFAULT_LOOK): GridView {
+  return { ...DEFAULT_VIEW, rowHeight: look.rowHeight, maxColumnWidth: look.maxColumnWidth };
+}
+
+/**
+ * Whatever was stored, turned into a valid view: unknown or wrong fields fall back.
+ * A row height or column limit nobody stored follows the settings' `look`.
+ */
+export function normalizeView(raw: unknown, look: ResultsLook = DEFAULT_LOOK): GridView {
   const source: Partial<Record<keyof GridView, unknown>> =
     typeof raw === 'object' && raw !== null ? raw : {};
   const height = source.rowHeight;
@@ -62,7 +86,11 @@ export function normalizeView(raw: unknown): GridView {
     rowHeight:
       typeof height === 'number' && Number.isFinite(height)
         ? Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, Math.round(height)))
-        : DEFAULT_VIEW.rowHeight,
+        : look.rowHeight,
+    maxColumnWidth:
+      source.maxColumnWidth === undefined
+        ? look.maxColumnWidth
+        : normalizeColumnLimit(source.maxColumnWidth),
     fontSize: oneOf(source.fontSize, FONT_SIZES, DEFAULT_VIEW.fontSize),
     lines: oneOf(source.lines, GRID_LINES, DEFAULT_VIEW.lines),
     align: oneOf(source.align, GRID_ALIGNS, DEFAULT_VIEW.align),
@@ -90,18 +118,37 @@ export function gutterWidth(view: GridView, digits: number): number {
   return Math.max(16, EXPANDER_WIDTH + box + number + 10);
 }
 
-export function loadView(storage: Pick<Storage, 'getItem'> | undefined): GridView {
+export function loadView(
+  storage: Pick<Storage, 'getItem'> | undefined,
+  look: ResultsLook = DEFAULT_LOOK,
+): GridView {
   try {
     const text = storage?.getItem(VIEW_STORAGE_KEY);
-    return text === null || text === undefined ? DEFAULT_VIEW : normalizeView(JSON.parse(text));
+    return text === null || text === undefined
+      ? defaultView(look)
+      : normalizeView(JSON.parse(text), look);
   } catch {
-    return DEFAULT_VIEW;
+    return defaultView(look);
   }
 }
 
-export function saveView(storage: Pick<Storage, 'setItem'> | undefined, view: GridView): void {
+/**
+ * Keeps the view for the next visit. A row height or column limit equal to the settings'
+ * is not written: it is not the user's choice, so a later change of the setting reaches it.
+ */
+export function saveView(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  view: GridView,
+  look: ResultsLook = DEFAULT_LOOK,
+): void {
+  const { rowHeight, maxColumnWidth, ...rest } = view;
+  const own = {
+    ...rest,
+    ...(rowHeight === look.rowHeight ? {} : { rowHeight }),
+    ...(maxColumnWidth === look.maxColumnWidth ? {} : { maxColumnWidth }),
+  };
   try {
-    storage?.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
+    storage?.setItem(VIEW_STORAGE_KEY, JSON.stringify(own));
   } catch {
     // Storage can be blocked; the view then lasts until the page closes.
   }

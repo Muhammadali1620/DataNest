@@ -18,7 +18,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import type { Translate } from '../../lib/i18n';
   import type { TableFilter } from '../../../../src/shared/table-filter';
   import { toTsv } from '../../../../src/shared/tsv';
-  import { fitColumnWidth, initialWidths, keepWidths } from './columns';
+  import { capWidths, fitColumnWidth, initialWidths, keepWidths, SAMPLE_ROWS } from './columns';
   import {
     type ColumnView,
     displayOrder,
@@ -70,7 +70,14 @@ import type { RowAction } from '../../../../src/shared/row-action';
     REFRESH_CHOICES,
     type RefreshSeconds,
   } from './export-options';
-  import { type GridView, loadView, saveView } from './grid-view';
+  import { COLUMN_WIDTH_CHOICES, type GridView, loadView, saveView } from './grid-view';
+  import {
+    DEFAULT_LOOK,
+    densityOfHeight,
+    ROW_DENSITIES,
+    ROW_DENSITY_HEIGHT,
+    type ResultsLook,
+  } from '../../../../src/shared/results-look';
   import RecordPanel from './RecordPanel.svelte';
   import SqlBar from './SqlBar.svelte';
   import type { TableAction } from '../../../../src/shared/table-actions';
@@ -132,9 +139,81 @@ import type { RowAction } from '../../../../src/shared/row-action';
     }
   }
 
+  /** What the settings ask for; the user's own choices in the view win over it. */
+  let look = $state<ResultsLook>(DEFAULT_LOOK);
+
   function changeGridView(next: GridView): void {
+    const limitChanged = next.maxColumnWidth !== view.maxColumnWidth;
     view = next;
-    saveView(safeStorage(), next);
+    saveView(safeStorage(), next, look);
+    if (limitChanged) {
+      applyColumnLimit(next.maxColumnWidth);
+    }
+  }
+
+  /**
+   * A new limit on the width columns get on their own, shown at once: columns nobody
+   * sized are measured again, sized ones are only cut down when they are over it.
+   */
+  function applyColumnLimit(limit: number): void {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return;
+    }
+    if (userSized) {
+      widths = capWidths(widths, limit);
+      savedWidths[viewId] = widths;
+      return;
+    }
+    const rows = Array.from({ length: SAMPLE_ROWS }, (_, index) => rowAt(index));
+    widths = initialWidths(tab.columns, rows, requiredColumns(tab), limit);
+  }
+
+  /** The settings changed: a row height or column limit the user never chose follows them. */
+  function followLook(next: ResultsLook): void {
+    if (next.rowHeight === look.rowHeight && next.maxColumnWidth === look.maxColumnWidth) {
+      return;
+    }
+    look = next;
+    const before = view.maxColumnWidth;
+    view = loadView(safeStorage(), next);
+    if (view.maxColumnWidth !== before) {
+      applyColumnLimit(view.maxColumnWidth);
+    }
+  }
+
+  /** The density menu: three row heights and the widths a column may take, current ones ticked. */
+  const densityItems = $derived([
+    ...ROW_DENSITIES.map((density) => ({
+      id: `row:${density}`,
+      label: t(`density.row.${density}` as MessageKey),
+      ...(densityOfHeight(view.rowHeight) === density ? { icon: 'check' as const } : {}),
+    })),
+    ...COLUMN_WIDTH_CHOICES.map((width, index) => ({
+      id: `width:${width}`,
+      label: t('density.width', width),
+      ...(view.maxColumnWidth === width ? { icon: 'check' as const } : {}),
+      separated: index === 0,
+    })),
+    {
+      id: 'reset',
+      label: t('density.reset'),
+      icon: 'discard' as CodiconName,
+      separated: true,
+    },
+  ]);
+
+  function chooseDensity(id: string): void {
+    if (id === 'reset') {
+      changeGridView({ ...view, rowHeight: look.rowHeight, maxColumnWidth: look.maxColumnWidth });
+    } else if (id.startsWith('row:')) {
+      const density = ROW_DENSITIES.find((candidate) => `row:${candidate}` === id);
+      if (density !== undefined) {
+        changeGridView({ ...view, rowHeight: ROW_DENSITY_HEIGHT[density] });
+      }
+    } else if (id.startsWith('width:')) {
+      changeGridView({ ...view, maxColumnWidth: Number(id.slice('width:'.length)) });
+    }
   }
 
   let gridState = $state<ResultGridState | undefined>(undefined);
@@ -184,6 +263,13 @@ import type { RowAction } from '../../../../src/shared/row-action';
     ).filter((row): row is readonly CellValue[] => row !== undefined);
   }
 
+  /** Which columns of an editable result are NOT NULL, as the header marks them. */
+  function requiredColumns(tab: ResultTab): (boolean | undefined)[] {
+    return tab.edit?.editable === true
+      ? (tab.edit.columns?.map((column) => column?.nullable === false) ?? [])
+      : [];
+  }
+
   /** A NOT NULL column of an editable result shows a `*` in its header. */
   function isRequired(index: number): boolean {
     return editColumns?.[index]?.nullable === false;
@@ -195,7 +281,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
       return;
     }
     const next = [...widths];
-    next[index] = fitColumnWidth(column, index, rows, isRequired(index));
+    next[index] = fitColumnWidth(column, index, rows, isRequired(index), view.maxColumnWidth);
     rememberWidths(next);
   }
 
@@ -205,7 +291,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
       return;
     }
     const rows = rowsOnScreen();
-    rememberWidths(tab.columns.map((column, index) => fitColumnWidth(column, index, rows, isRequired(index))));
+    rememberWidths(
+      tab.columns.map((column, index) =>
+        fitColumnWidth(column, index, rows, isRequired(index), view.maxColumnWidth),
+      ),
+    );
   }
 
   /** The value panel beside the grid, and the cell it follows. */
@@ -599,9 +689,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
             widths = initialWidths(
               tab.columns,
               window.rows,
-              tab.edit?.editable === true
-                ? tab.edit.columns?.map((column) => column?.nullable === false)
-                : [],
+              requiredColumns(tab),
+              view.maxColumnWidth,
             );
           }
         }
@@ -639,7 +728,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
       tab === undefined
         ? undefined
         : savedWidths[viewKey(tab.columns.map((column) => column.name))];
-    widths = tab === undefined ? [] : (saved ?? keepWidths([], tab.columns));
+    widths = tab === undefined ? [] : (saved ?? keepWidths([], tab.columns, [], view.maxColumnWidth));
     userSized = saved !== undefined;
     loaded += 1;
   }
@@ -953,6 +1042,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
     const subscription = rpc.on('state', (next) => {
       const previous = activeTab;
       gridState = next;
+      if (next.look !== undefined) {
+        followLook(next.look);
+      }
       const tab = next.tabs.find((candidate) => candidate.id === next.activeId);
       if (tab?.page !== undefined && tab.columns.length > 0) {
         // A failed read has no columns, but the bar still needs them to be corrected.
@@ -1448,6 +1540,15 @@ import type { RowAction } from '../../../../src/shared/row-action';
                 }
               }}
             />
+            <MenuButton
+              icon="fold"
+              tone="purple"
+              label={t('density.title')}
+              hint={t('density.hint')}
+              testid="density"
+              items={densityItems}
+              onSelect={chooseDensity}
+            />
             <span class="view-anchor">
               <IconButton
                 icon="settings-gear"
@@ -1463,6 +1564,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
               {#if viewOpen}
                 <ViewSettings
                   {view}
+                  {look}
                   onChange={changeGridView}
                   onColumns={() => {
                     columnsOpen = true;

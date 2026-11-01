@@ -8,7 +8,7 @@ import type { ResultColumnInfo } from '../../../../src/shared/protocols/result-g
 /** Narrowest a column may get by dragging. */
 export const MIN_COLUMN_WIDTH = 48;
 
-/** Widest a column gets on its own; dragging may make it wider. */
+/** Widest a column gets on its own unless the user's limit says otherwise (V13.3); dragging may make it wider. */
 export const MAX_AUTO_WIDTH = 420;
 
 /** Width when there is nothing to measure. */
@@ -70,24 +70,39 @@ export function initialWidths(
   columns: readonly ResultColumnInfo[],
   rows: readonly (readonly CellValue[] | undefined)[] = [],
   required: readonly (boolean | undefined)[] = [],
+  maxWidth: number = MAX_AUTO_WIDTH,
 ): number[] {
   const sample = rows.slice(0, SAMPLE_ROWS);
   return columns.map((column, index) =>
-    measure(column.name, index, sample, 200, MAX_AUTO_WIDTH, required[index] === true),
+    measure(column.name, index, sample, 200, maxWidth, required[index] === true),
   );
 }
 
 /**
  * The width that shows a column's longest value in the rows given, up to
- * `MAX_FIT_WIDTH`: what "fit to content" does on request.
+ * `MAX_FIT_WIDTH` or the user's own limit when that is larger: what "fit to content"
+ * does on request.
  */
 export function fitColumnWidth(
   column: ResultColumnInfo,
   index: number,
   rows: readonly (readonly CellValue[] | undefined)[],
   required = false,
+  limit: number = MAX_AUTO_WIDTH,
 ): number {
-  return measure(column.name, index, rows.slice(0, FIT_ROWS), 400, MAX_FIT_WIDTH, required);
+  return measure(
+    column.name,
+    index,
+    rows.slice(0, FIT_ROWS),
+    400,
+    Math.max(MAX_FIT_WIDTH, limit),
+    required,
+  );
+}
+
+/** Widths cut down to a new limit; a column already narrower keeps its width. */
+export function capWidths(widths: readonly number[], limit: number): number[] {
+  return widths.map((width) => Math.min(width, Math.max(MIN_COLUMN_WIDTH, limit)));
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -111,7 +126,8 @@ export function keepWidths(
   previous: readonly number[],
   columns: readonly ResultColumnInfo[],
   rows: readonly (readonly CellValue[] | undefined)[] = [],
+  maxWidth: number = MAX_AUTO_WIDTH,
 ): number[] {
-  const fresh = initialWidths(columns, rows);
+  const fresh = initialWidths(columns, rows, [], maxWidth);
   return fresh.map((width, index) => previous[index] ?? width);
 }

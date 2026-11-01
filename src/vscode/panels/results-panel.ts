@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { CONFIG_KEYS, CONFIG_SECTION } from '../command-ids';
+import { readResultsLook } from '../settings';
 import { changeVerdict, NO_POLICY, type WritePolicy } from '../../services/write-policy';
 import type { Logger } from '../../core/logging/logger';
 import type { QueryRunner } from '../../services/query-runner';
@@ -472,6 +474,16 @@ export class ResultsPanel implements vscode.Disposable {
           this.update();
         }
       }),
+      // A change of the look in the settings shows in open grids at once.
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (
+          !this.disposed &&
+          (event.affectsConfiguration(`${CONFIG_SECTION}.${CONFIG_KEYS.resultsRowHeight}`) ||
+            event.affectsConfiguration(`${CONFIG_SECTION}.${CONFIG_KEYS.resultsMaxColumnWidth}`))
+        ) {
+          this.update();
+        }
+      }),
     );
     this.panel.onDidDispose(() => {
       this.dispose();
@@ -519,6 +531,7 @@ export class ResultsPanel implements vscode.Disposable {
       this.panel.title = title;
     }
     this.activeId = state.activeId;
+    state.look = readResultsLook();
     this.rpc.emit('state', state);
   }
 

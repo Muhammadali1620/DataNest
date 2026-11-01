@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CellValue } from '../../../../../src/shared/cell-value';
 import {
+  capWidths,
   clamp,
   DEFAULT_COLUMN_WIDTH,
   FIT_ROWS,
@@ -187,5 +188,63 @@ describe('fitColumnWidth', () => {
       i < FIT_ROWS ? 'a' : 'z'.repeat(80),
     ]);
     expect(fitColumnWidth(column, 0, rows)).toBe(fitColumnWidth(column, 0, [['a']]));
+  });
+});
+
+describe("the user's limit on column width (V13.3)", () => {
+  const columns = [{ name: 'note' }, { name: 'id' }];
+  const rows = [['x'.repeat(150), '1']];
+
+  it('keeps the old maximum when no limit is given', () => {
+    expect(initialWidths(columns, rows)[0]).toBe(MAX_AUTO_WIDTH);
+  });
+
+  it('cuts an automatic width at a narrower limit and leaves a short column alone', () => {
+    const widths = initialWidths(columns, rows, [], 240);
+    expect(widths[0]).toBe(240);
+    expect(widths[1]).toBe(initialWidths(columns, rows)[1]);
+  });
+
+  it('lets an automatic width grow up to a wider limit', () => {
+    const wide = initialWidths(columns, [['x'.repeat(190), '1']], [], 1600)[0] ?? 0;
+    expect(wide).toBeGreaterThan(MAX_AUTO_WIDTH);
+    expect(wide).toBeLessThanOrEqual(1600);
+  });
+
+  it('never goes below the narrowest a column can be', () => {
+    expect(initialWidths([{ name: '' }], [], [], 10)[0]).toBe(MIN_COLUMN_WIDTH);
+  });
+
+  it('applies to keepWidths for a new set of columns, but keeps what was sized', () => {
+    expect(keepWidths([], columns, rows, 240)[0]).toBe(240);
+    expect(keepWidths([500], columns, rows, 240)[0]).toBe(500);
+  });
+
+  it('lets "fit to content" go past a narrow limit: it was asked for', () => {
+    expect(fitColumnWidth(columns[0] ?? { name: '' }, 0, [['x'.repeat(100)]], false, 240)).toBe(
+      fitColumnWidth(columns[0] ?? { name: '' }, 0, [['x'.repeat(100)]]),
+    );
+  });
+
+  it('lets "fit to content" reach a limit larger than its own maximum', () => {
+    const fit = fitColumnWidth({ name: 'note' }, 0, [['x'.repeat(300)]], false, 1600);
+    expect(fit).toBeGreaterThan(MAX_FIT_WIDTH);
+    expect(fit).toBeLessThanOrEqual(1600);
+  });
+});
+
+describe('capWidths', () => {
+  it('cuts only the widths over the limit', () => {
+    expect(capWidths([100, 300, 900], 300)).toEqual([100, 300, 300]);
+  });
+
+  it('keeps at least the narrowest width and does not touch the input', () => {
+    const input = [60, 500];
+    expect(capWidths(input, 10)).toEqual([MIN_COLUMN_WIDTH, MIN_COLUMN_WIDTH]);
+    expect(input).toEqual([60, 500]);
+  });
+
+  it('copes with no columns', () => {
+    expect(capWidths([], 300)).toEqual([]);
   });
 });

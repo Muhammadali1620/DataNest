@@ -5,6 +5,7 @@ import { isQueryVariablesMode, type QueryVariablesMode } from '../services/query
 import { DEFAULT_FORMAT_STYLE, type FormatStyle } from '../services/sql-format';
 import { CONFIG_KEYS, CONFIG_SECTION } from './command-ids';
 import { isTransactionMode, type TransactionMode } from './editor/transaction-modes';
+import { lookFromSettings, type ResultsLook } from '../shared/results-look';
 import type { TreeSettings } from './tree/tree-model';
 import type { KeyBrowserSettings } from '../services/redis/key-browser';
 
@@ -193,4 +194,13 @@ export function readFormatStyle(
 /** True when a configuration change touches one of our settings. */
 export function affectsDataNest(event: vscode.ConfigurationChangeEvent): boolean {
   return event.affectsConfiguration(CONFIG_SECTION);
+}
+
+/** The row height and the widest own column width the settings ask the result grid for (V13.3). */
+export function readResultsLook(): ResultsLook {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return lookFromSettings(
+    config.get<string>(CONFIG_KEYS.resultsRowHeight, 'normal'),
+    config.get<number>(CONFIG_KEYS.resultsMaxColumnWidth),
+  );
 }

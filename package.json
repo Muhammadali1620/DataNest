@@ -1922,6 +1922,30 @@
           "markdownDescription": "%configuration.pageSize.description%",
           "scope": "window"
         },
+        "datanest.results.rowHeight": {
+          "type": "string",
+          "enum": [
+            "compact",
+            "normal",
+            "comfortable"
+          ],
+          "default": "normal",
+          "enumDescriptions": [
+            "%configuration.results.rowHeight.compact%",
+            "%configuration.results.rowHeight.normal%",
+            "%configuration.results.rowHeight.comfortable%"
+          ],
+          "markdownDescription": "%configuration.results.rowHeight.description%",
+          "scope": "window"
+        },
+        "datanest.results.maxColumnWidth": {
+          "type": "integer",
+          "default": 420,
+          "minimum": 120,
+          "maximum": 1600,
+          "markdownDescription": "%configuration.results.maxColumnWidth.description%",
+          "scope": "window"
+        },
         "datanest.queryTimeout": {
           "type": "number",
           "default": 0,

@@ -14,6 +14,10 @@ copied and exported exactly as the server sent it.
   through the matches.
 - **Columns**: hide, show and pin columns, drag a header edge to resize, double-click it to
   fit the content.
+- **Density**: the purple button in the toolbar makes the rows compact, normal or
+  comfortable (24, 32 or 40 px) and sets the widest a column gets on its own (240 to
+  900 px). It applies at once and is remembered. Defaults for everyone:
+  `datanest.results.rowHeight` and `datanest.results.maxColumnWidth`.
 - **Value panel** (`F4`): long text, pretty-printed JSON, a hex dump of binary data, images
   stored in BLOBs. **Record card** (`Shift+F4`): the focused row as a form.
 - A foreign key cell links to the row it points at: `Ctrl+click` or `F12`.

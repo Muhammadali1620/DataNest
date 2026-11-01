@@ -257,6 +257,9 @@ export const CONFIG_KEYS = {
   rowLimit: 'rowLimit',
   /** Rows one page of a table view holds. */
   pageSize: 'pageSize',
+  /** How roomy the result grid is by default (V13.3): row height and widest own column width. */
+  resultsRowHeight: 'results.rowHeight',
+  resultsMaxColumnWidth: 'results.maxColumnWidth',
   /** Seconds a statement may run before it is cancelled; 0 means no limit. */
   queryTimeout: 'queryTimeout',
   /** How many executed statements the history keeps; 0 turns it off. */

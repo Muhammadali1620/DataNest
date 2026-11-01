@@ -260,6 +260,8 @@ The [documentation](docs/index.md) has a guide to every feature, the
 |---|---|---|
 | `datanest.rowLimit` | `1000` | Rows one statement may bring back. |
 | `datanest.pageSize` | `200` | Rows on one page when a table is opened from the tree. |
+| `datanest.results.rowHeight` | `normal` | Row height of the result grid: `compact`, `normal` or `comfortable`. |
+| `datanest.results.maxColumnWidth` | `420` | The widest a result column gets on its own, in pixels. |
 | `datanest.queryTimeout` | `0` | Seconds before a statement is cancelled; `0` means no limit. |
 | `datanest.showSystemObjects` | `false` | Show the server's own databases and schemas. |
 | `datanest.historyLimit` | `500` | Statements kept in the query history; `0` turns it off. |

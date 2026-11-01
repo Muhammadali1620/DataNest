@@ -7,7 +7,15 @@ import type { TableFilter } from '../shared/table-filter';
 import type { ConnectionStore } from '../services/connection-store';
 import type { MetadataCache } from '../services/metadata-cache';
 import type { QueryEditors } from './editor/query-editor';
-import { runCommandHandlers, sqlTextRunner, type SqlTextRunner } from './editor/run-query';
+import {
+  checkedRunner,
+  runCommandHandlers,
+  sqlTextRunner,
+  type SqlTextRunner,
+} from './editor/run-query';
+import { SqlNotebooks } from './notebook/sql-notebooks';
+import type { ProjectConnections } from '../services/project-connections';
+import type { ResultStore } from '../services/result-store';
 import { explainCommandHandlers } from './editor/explain-query';
 import { askVariableValue } from './editor/query-variables';
 import {
@@ -137,6 +145,17 @@ export interface CommandDeps {
   ) => Promise<void>;
   /** Opens a chart of a result (V8.7). */
   readonly chartResult: (resultId: string) => void;
+  /** Compares two results picked from the ones of this session (V12.4). */
+  readonly compareResults: () => Promise<void>;
+  /** The connections of the project files; notebooks name them by their id there (V12.1). */
+  readonly projectConnections: ProjectConnections;
+  readonly results: ResultStore;
+  /** The queries kept in the project (V12.3). */
+  readonly projectQueries: {
+    readonly save: () => Promise<void>;
+    readonly open: () => Promise<void>;
+    readonly remove: () => Promise<void>;
+  };
   /** Writes every row of a tree table to a file (V5.4). */
   readonly exportTable: (target?: unknown) => Promise<void>;
   /** Reads the project connection files again. */
@@ -320,6 +339,16 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     fillVariables: fillQueryVariables,
   };
   const runCommands = runCommandHandlers(runDeps);
+  const notebooks = new SqlNotebooks({
+    store: deps.store,
+    projects: deps.projectConnections,
+    manager: deps.manager,
+    runner: deps.runner,
+    results: deps.results,
+    run: checkedRunner(runDeps),
+    bindings: deps.editors.bindings,
+    logger: deps.logger,
+  });
   if (deps.pageActions !== undefined) {
     deps.pageActions.runSql = sqlTextRunner(runDeps);
     deps.pageActions.importInto = imports.importInto;
@@ -852,6 +881,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await deps.exportResult(resultId, format);
       return undefined;
     },
+    [COMMAND_IDS.compareResults]: () => deps.compareResults(),
+    [COMMAND_IDS.newNotebook]: () => notebooks.create(),
+    [COMMAND_IDS.selectNotebookConnection]: () => notebooks.selectConnection(),
+    [COMMAND_IDS.saveProjectQuery]: () => deps.projectQueries.save(),
+    [COMMAND_IDS.openProjectQuery]: () => deps.projectQueries.open(),
+    [COMMAND_IDS.deleteProjectQuery]: () => deps.projectQueries.remove(),
     [COMMAND_IDS.chartResult]: () => {
       // The results panel itself may have the focus: then the SQL editor beside it counts.
       const document = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find(
@@ -968,6 +1003,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   );
   return [
     ...commands,
+    notebooks,
     ...expansionEvents,
     mongoEditors,
     elasticEditors,

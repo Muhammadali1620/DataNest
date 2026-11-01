@@ -337,6 +337,11 @@ export class ResultStore {
     return stored === undefined ? undefined : summaryOf(stored);
   }
 
+  /** Summaries of every stored result, the newest first (V12.4). */
+  list(): ResultSummary[] {
+    return [...this.results.values()].map(summaryOf).reverse();
+  }
+
   /** Summaries of a document's results, oldest first. */
   forDocument(documentUri: string): ResultSummary[] {
     return (this.byDocument.get(documentUri) ?? []).flatMap((id) => {

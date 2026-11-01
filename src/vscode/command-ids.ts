@@ -147,6 +147,18 @@ export const COMMAND_IDS = {
   importData: 'datanest.table.importData',
   /** Opens a chart of the shown result (V8.7). */
   chartResult: 'datanest.results.chart',
+  /** Opens a new SQL notebook (V12.1). */
+  newNotebook: 'datanest.notebook.new',
+  /** Picks the connection of the SQL notebook in front of the user (V12.1). */
+  selectNotebookConnection: 'datanest.notebook.selectConnection',
+  /** Saves the query being written in the project, in `.vscode/datanest-queries` (V12.3). */
+  saveProjectQuery: 'datanest.projectQueries.save',
+  /** Opens a query kept in the project (V12.3). */
+  openProjectQuery: 'datanest.projectQueries.open',
+  /** Deletes a query kept in the project (V12.3). */
+  deleteProjectQuery: 'datanest.projectQueries.delete',
+  /** Compares two results of queries: what is the same, what differs, what is in one only (V12.4). */
+  compareResults: 'datanest.results.compare',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

@@ -21,7 +21,14 @@ import { QueryRunner } from './services/query-runner';
 import { policyOf } from './services/write-policy';
 import { StreamExporter } from './services/stream-export';
 import { exportCommandHandlers } from './vscode/export-commands';
+import { projectQueryHandlers, workspaceProjectQueryFiles } from './vscode/project-query-commands';
+import { ProjectQueries } from './services/project-queries';
 import { chartCommandHandlers } from './vscode/chart-commands';
+import {
+  COMPARE_SCHEME,
+  CompareListings,
+  compareResultsHandler,
+} from './vscode/compare-results-commands';
 import { ResultLinks } from './services/result-links';
 import type { TableFilter } from './shared/table-filter';
 import { ResultCopier } from './services/result-copier';
@@ -210,6 +217,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
   });
   const exportResult = exports.exportResult;
+  const compareListings = new CompareListings();
+  context.subscriptions.push(
+    compareListings,
+    vscode.workspace.registerTextDocumentContentProvider(COMPARE_SCHEME, compareListings),
+  );
+  const compareResults = compareResultsHandler({ results, listings: compareListings });
   const { chartResult } = chartCommandHandlers({
     extensionUri: context.extensionUri,
     results,
@@ -383,6 +396,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       openTable,
       exportResult,
       chartResult,
+      compareResults,
+      projectConnections: projects,
+      results,
+      projectQueries: projectQueryHandlers({
+        queries: new ProjectQueries(workspaceProjectQueryFiles()),
+        projects,
+        store,
+        editors,
+      }),
       exportTable: exports.exportTable,
       objectEdits,
       diagnostics,

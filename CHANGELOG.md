@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.7.0] - 2026-11-01
+
+### Added
+
+- SQL notebooks (`*.sqlnb`): cells of SQL and Markdown, a table under each cell, one connection and one session for the whole notebook.
+- Placeholders of the database in queries — `?` (MySQL, SQLite), `$1` (PostgreSQL), `:1` (Oracle) — are asked for like `:name` variables.
+- Project queries: Save, Open and Delete Project Query keep SQL in `.vscode/datanest-queries`, with the connection of the project named in a comment.
+- Compare Results: two results of queries in the editor's diff view, matched by key columns or as whole rows, with the counts.
+
 ## [1.6.2] - 2026-10-31
 
 ### Changed

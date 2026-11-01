@@ -218,6 +218,32 @@ describe('fillVariables', () => {
   });
 });
 
+describe('fillVariables: positional placeholders (V12.2)', () => {
+  it('asks for each ? of a script separately, numbered through its statements', async () => {
+    const given = options({ '?1': '1', '?2': "'a'", '?3': '3' }, { driver: 'mysql' });
+    const first = statement('SELECT ?, ?');
+    const second = statement('SELECT ?', 12);
+    const filled = await fillVariables([first, second], given);
+    expect(given.asked.map((entry) => entry[0])).toEqual(['?1', '?2', '?3']);
+    expect(filled?.statements.map((entry) => entry.text)).toEqual(["SELECT 1, 'a'", 'SELECT 3']);
+  });
+
+  it('asks once for a repeated $1 and fills both places', async () => {
+    const given = options({ $1: '7' });
+    const filled = await fillVariables([statement('SELECT $1, $1')], given);
+    expect(given.asked).toHaveLength(1);
+    expect(filled?.statements[0]?.text).toBe('SELECT 7, 7');
+  });
+
+  it('leaves placeholders alone when variables are off', async () => {
+    const filled = await fillVariables(
+      [statement('SELECT ?')],
+      options({}, { mode: 'off', driver: 'mysql' }),
+    );
+    expect(filled?.statements[0]?.text).toBe('SELECT ?');
+  });
+});
+
 describe('inDocument', () => {
   it('gives results back the written statement and moves error positions to it', async () => {
     const written = [statement('SELECT :id FROM nowhere', 5)];

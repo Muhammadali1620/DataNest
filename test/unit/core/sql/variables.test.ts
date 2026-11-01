@@ -69,7 +69,7 @@ describe('findVariables', () => {
 
   it('wants ${name} exactly: a name and braces with nothing else', () => {
     expect(names('SELECT ${ spaced }, ${}, $x, ${a b}, ${unclosed')).toEqual([]);
-    expect(names('SELECT $1, $2', 'postgres')).toEqual([]);
+    expect(names('SELECT $1, $2')).toEqual([]);
   });
 
   it('skips routine, trigger and package definitions, whose binds are the server’s', () => {
@@ -254,5 +254,78 @@ describe('variable values as literals of each dialect', () => {
 
   it('escapes backslashes where MySQL reads them', () => {
     expect(mysqlDialect.literal(variableValue('a\\')).endsWith("\\\\'")).toBe(true);
+  });
+});
+
+describe('findVariables: positional placeholders (V12.2)', () => {
+  it('numbers the ? of MySQL and SQLite in the order they appear', () => {
+    for (const driver of ['mysql', 'sqlite'] as const) {
+      expect(names('SELECT * FROM t WHERE a = ? AND b BETWEEN ? AND ?', driver)).toEqual([
+        '?1',
+        '?2',
+        '?3',
+      ]);
+    }
+  });
+
+  it('continues the numbering from where the previous statement stopped', () => {
+    expect(findVariables('SELECT ?, ?', 'mysql', 3).map((v) => v.name)).toEqual(['?3', '?4']);
+  });
+
+  it('reads SQLite ?NNN as a named place that can repeat', () => {
+    expect(names('SELECT ?2, ?1, ?2', 'sqlite')).toEqual(['?2', '?1', '?2']);
+    const [first] = findVariables('SELECT ?12', 'sqlite');
+    expect(first).toMatchObject({ name: '?12', start: 7, end: 10, positional: true });
+  });
+
+  it('leaves ? alone where it is not a placeholder', () => {
+    expect(names('SELECT \'?\' , "?", `?` -- ?\n/* ? */', 'mysql')).toEqual([]);
+    expect(names('SELECT data ? $$x$$ FROM t', 'postgres')).toEqual([]);
+    expect(names('SELECT a ? b', 'clickhouse')).toEqual([]);
+    expect(names('SELECT a ? b')).toEqual([]);
+  });
+
+  it('finds $n in PostgreSQL by number, so a repeated $1 is one value', () => {
+    expect(names('SELECT * FROM t WHERE a = $1 OR b = $2 OR c = $1', 'postgres')).toEqual([
+      '$1',
+      '$2',
+      '$1',
+    ]);
+    expect(findVariables('WHERE a=$1', 'postgres')[0]).toMatchObject({ start: 8, end: 10 });
+  });
+
+  it('does not take $0, $01, $1.5, or $1 in other dialects', () => {
+    expect(names('SELECT $0, $01', 'postgres')).toEqual([]);
+    expect(names('SELECT $1', 'mysql')).toEqual([]);
+    expect(names('SELECT $1', 'sqlite')).toEqual([]);
+  });
+
+  it('finds :n in Oracle and still finds :name', () => {
+    expect(names('SELECT * FROM t WHERE a = :1 AND b = :name AND c = :2', 'oracle')).toEqual([
+      ':1',
+      'name',
+      ':2',
+    ]);
+    expect(names('SELECT :1', 'postgres')).toEqual([]);
+  });
+
+  it('does not take placeholders of a statement the server prepares itself', () => {
+    expect(names('PREPARE p AS SELECT $1', 'postgres')).toEqual([]);
+    expect(names('prepare p from ?', 'mysql')).toEqual([]);
+    expect(names('EXECUTE p (1)', 'postgres')).toEqual([]);
+  });
+
+  it('does not look into a function body', () => {
+    expect(
+      names('CREATE FUNCTION f(int) RETURNS int AS $$ SELECT $1 $$ LANGUAGE sql', 'postgres'),
+    ).toEqual([]);
+  });
+
+  it('substitutes the placeholders with the values', () => {
+    const sql = 'SELECT * FROM t WHERE a = ? AND b = ?';
+    const found = findVariables(sql, 'mysql');
+    const values: Record<string, string> = { '?1': '10', '?2': "'x'" };
+    const result = substituteVariables(sql, found, (name) => values[name] ?? 'NULL');
+    expect(result.text).toBe("SELECT * FROM t WHERE a = 10 AND b = 'x'");
   });
 });

@@ -2,6 +2,8 @@
 // asked for when the statement runs. Only code is searched — never strings, comments
 // or quoted names — and never routine or trigger definitions, where `:new.id` is the
 // server's own syntax. Values go in as literals of the dialect (D103).
+// Positional placeholders (V12.2) are found too, in the spelling of the dialect: `?` in
+// MySQL and SQLite, `$1` in PostgreSQL, `:1` in Oracle. Each `?` is its own value.
 
 import type { CellValue } from '../../shared/cell-value';
 import type { DriverId } from '../../shared/connection';
@@ -13,6 +15,8 @@ export interface SqlVariable {
   readonly start: number;
   /** Offset just past the name (or the closing `}`). */
   readonly end: number;
+  /** A placeholder the server numbers (`?`, `$1`, `:1`) rather than a name the user chose. */
+  readonly positional?: true;
 }
 
 /** The text a statement runs as, and how to find a place of it in the original. */
@@ -62,12 +66,35 @@ function isDefinition(sql: string, tokens: readonly Token[]): boolean {
   return words.slice(1).some((word) => DEFINITIONS.has(word));
 }
 
-/** The variables of one statement, in the order they appear. */
-export function findVariables(sql: string, driver?: DriverId): SqlVariable[] {
+/** Statements whose `$1` or `?` belong to the server's own prepared-statement syntax. */
+const PREPARING: ReadonlySet<string> = new Set(['PREPARE', 'EXECUTE', 'DEALLOCATE']);
+
+function startsPreparing(sql: string, tokens: readonly Token[]): boolean {
+  const first = tokens.find((token) => !isTrivia(token));
+  return first?.kind === 'word' && PREPARING.has(textOf(sql, first).toUpperCase());
+}
+
+/** `1`, `12`: the digits of a placeholder, never `0`, `01` or `1.5`. */
+function placeNumber(sql: string, token: Token | undefined, mark: Token): string | undefined {
+  if (token?.kind !== 'number' || token.start !== mark.end) {
+    return undefined;
+  }
+  const text = textOf(sql, token);
+  return /^[1-9]\d*$/u.test(text) ? text : undefined;
+}
+
+/**
+ * The variables of one statement, in the order they appear. The `?` of a statement are
+ * named `?<n>` counting from `firstQuestion`, so a script's statements do not share them.
+ */
+export function findVariables(sql: string, driver?: DriverId, firstQuestion = 1): SqlVariable[] {
   const tokens = tokenize(sql, syntaxOf(driver));
   if (isDefinition(sql, tokens)) {
     return [];
   }
+  const preparing = startsPreparing(sql, tokens);
+  const questions = driver === 'mysql' || driver === 'sqlite';
+  let question = firstQuestion;
   const found: SqlVariable[] = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
@@ -76,6 +103,35 @@ export function findVariables(sql: string, driver?: DriverId): SqlVariable[] {
     }
     const mark = textOf(sql, token);
     const next = tokens[index + 1];
+    if (mark === '?' && questions && !preparing) {
+      // SQLite's `?3` names its place; a bare `?` takes the next free number.
+      const place = driver === 'sqlite' ? placeNumber(sql, next, token) : undefined;
+      if (place !== undefined && next !== undefined) {
+        found.push({ name: `?${place}`, start: token.start, end: next.end, positional: true });
+        index++;
+      } else {
+        found.push({
+          name: `?${question++}`,
+          start: token.start,
+          end: token.end,
+          positional: true,
+        });
+      }
+      continue;
+    }
+    if ((mark === '$' && driver === 'postgres') || (mark === ':' && driver === 'oracle')) {
+      const place = preparing ? undefined : placeNumber(sql, next, token);
+      if (place !== undefined && next !== undefined && !attachedBefore(tokens[index - 1], sql)) {
+        found.push({
+          name: `${mark}${place}`,
+          start: token.start,
+          end: next.end,
+          positional: true,
+        });
+        index++;
+        continue;
+      }
+    }
     if (mark === ':' && next?.kind === 'word' && !attachedBefore(tokens[index - 1], sql)) {
       found.push({ name: textOf(sql, next), start: token.start, end: next.end });
       index++;

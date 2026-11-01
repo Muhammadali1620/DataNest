@@ -106,9 +106,18 @@ export async function fillVariables(
   statements: readonly SqlStatement[],
   options: FillVariablesOptions,
 ): Promise<FilledStatements | undefined> {
-  const found = statements.map((statement) =>
-    options.mode === 'off' ? [] : findVariables(statement.text, options.driver),
-  );
+  // The `?` of a script are numbered through all its statements, so each is asked once.
+  let questions = 0;
+  const found = statements.map((statement) => {
+    if (options.mode === 'off') {
+      return [];
+    }
+    const variables = findVariables(statement.text, options.driver, questions + 1);
+    questions += variables.filter(
+      (variable) => variable.positional === true && variable.name.startsWith('?'),
+    ).length;
+    return variables;
+  });
   const names = variableNames(found.flat());
   if (names.length === 0) {
     return { statements, substitutions: new Map() };

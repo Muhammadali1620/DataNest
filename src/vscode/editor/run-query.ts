@@ -59,12 +59,24 @@ export interface SqlTextRequest {
 
 export type SqlTextRunner = (request: SqlTextRequest) => Promise<SqlTextOutcome>;
 
+/** What running SQL text in a document through the usual checks came to. */
+export type CheckedOutcome =
+  | { readonly ok: true; readonly outcome: RunOutcome }
+  | { readonly ok: false; readonly error?: string };
+
+export interface CheckedRunRequest extends SqlTextRequest {
+  /** False for a document that has no result panel, e.g. a notebook (V12.1). */
+  readonly showPanel?: boolean;
+}
+
 /**
- * Runs SQL typed on the result page like Run does: same policy, safe mode, variables and
- * transaction questions, same session of the document; its results replace the document's.
+ * Runs SQL text like Run does: same policy, safe mode, variables and transaction
+ * questions, same session of the document. `ok: false` means nothing ran.
  */
-export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
-  return async ({ documentUri, target, sql, replace }) => {
+export function checkedRunner(
+  deps: RunQueryDeps,
+): (request: CheckedRunRequest) => Promise<CheckedOutcome> {
+  return async ({ documentUri, target, sql, replace, showPanel = true }) => {
     const driver = deps.store.get(target.connectionId)?.driver;
     const written = splitStatements(sql, driver);
     if (written.length === 0) {
@@ -85,7 +97,9 @@ export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
     if (!(await keepsTransaction(statements, driver, deps.transactionState?.(documentUri)))) {
       return { ok: false };
     }
-    deps.showResults(documentUri);
+    if (showPanel) {
+      deps.showResults(documentUri);
+    }
     const outcome = await deps.runner.run({
       documentUri,
       target,
@@ -94,7 +108,21 @@ export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
       ...(replace === undefined ? {} : { replace }),
     });
     report(outcome, deps.logger);
-    return sqlTextOutcome(outcome.results, outcome.cancelled);
+    return { ok: true, outcome };
+  };
+}
+
+/**
+ * Runs SQL typed on the result page like Run does: same policy, safe mode, variables and
+ * transaction questions, same session of the document; its results replace the document's.
+ */
+export function sqlTextRunner(deps: RunQueryDeps): SqlTextRunner {
+  const run = checkedRunner(deps);
+  return async (request) => {
+    const checked = await run(request);
+    return checked.ok
+      ? sqlTextOutcome(checked.outcome.results, checked.outcome.cancelled)
+      : { ok: false, ...(checked.error === undefined ? {} : { error: checked.error }) };
   };
 }
 

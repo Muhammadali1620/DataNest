@@ -2,7 +2,7 @@
   "name": "datanest",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "publisher": "datanest",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -66,9 +66,21 @@
   "activationEvents": [
     "onView:datanest.connections",
     "onLanguage:datanest-mongo",
-    "onLanguage:datanest-es"
+    "onLanguage:datanest-es",
+    "onNotebook:datanest-sql"
   ],
   "contributes": {
+    "notebooks": [
+      {
+        "type": "datanest-sql",
+        "displayName": "%notebook.displayName%",
+        "selector": [
+          {
+            "filenamePattern": "*.sqlnb"
+          }
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -428,6 +440,39 @@
         "title": "%commands.results.chart.title%",
         "category": "DataNest",
         "icon": "$(graph)"
+      },
+      {
+        "command": "datanest.notebook.new",
+        "title": "%commands.notebook.new.title%",
+        "category": "DataNest",
+        "icon": "$(notebook)"
+      },
+      {
+        "command": "datanest.notebook.selectConnection",
+        "title": "%commands.notebook.selectConnection.title%",
+        "category": "DataNest",
+        "icon": "$(database)"
+      },
+      {
+        "command": "datanest.projectQueries.save",
+        "title": "%commands.projectQueries.save.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.projectQueries.open",
+        "title": "%commands.projectQueries.open.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.projectQueries.delete",
+        "title": "%commands.projectQueries.delete.title%",
+        "category": "DataNest"
+      },
+      {
+        "command": "datanest.results.compare",
+        "title": "%commands.results.compare.title%",
+        "category": "DataNest",
+        "icon": "$(diff)"
       },
       {
         "command": "datanest.results.export",
@@ -805,6 +850,13 @@
       }
     ],
     "menus": {
+      "notebook/toolbar": [
+        {
+          "command": "datanest.notebook.selectConnection",
+          "when": "notebookType == 'datanest-sql'",
+          "group": "navigation@1"
+        }
+      ],
       "commandPalette": [
         {
           "command": "datanest.dev.openPing",

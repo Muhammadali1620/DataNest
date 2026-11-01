@@ -41,6 +41,26 @@ Strings, comments and quoted names are never searched, and neither are things th
 look like variables: casts (`a::int`), assignments (`@x := 1`), array slices, ClickHouse
 parameters (`{id:UInt32}`) and the bodies of routines and triggers (`:new.id`).
 
+### Placeholders
+
+The placeholders of the database itself are asked for in the same way, in the spelling
+the dialect uses:
+
+| Database | Placeholder |
+|---|---|
+| MySQL, MariaDB | `?` |
+| SQLite | `?` and `?1` |
+| PostgreSQL | `$1`, `$2`, … |
+| Oracle | `:1`, `:2`, … |
+
+```sql
+SELECT * FROM orders WHERE customer_id = ? AND status = ?;
+```
+
+Every `?` is a value of its own (`?1`, `?2`, … — numbered through the whole script), while a
+`$1` that appears twice is asked for once. `PREPARE` and `EXECUTE` statements are left
+alone: the placeholders in them belong to the server.
+
 ## Help while writing
 
 - Completion knows the tables and columns of the connection, aliases, the columns of every
@@ -78,3 +98,43 @@ how many are kept; `0` turns the history off.
 
 **Explain Plan** shows the plan of the statement under the cursor; **Explain Analyze**
 also runs it (only for statements that read). See [Tools](tools.md#query-plans).
+
+## Compare results
+
+**Compare Results…** (Command Palette) puts two results of this session side by side. Pick
+the two results, then the column or columns that identify a row (an `id`, say); pick none
+to compare whole rows. DataNest opens the editor's own diff view on two listings with the
+rows in matching order, so changed rows line up and rows found in one result only stand
+out, and a message gives the counts: the same, different, only in the first, only in the
+second. Only the columns both results have are compared (names match regardless of case);
+the others are named in the message. Values are compared exactly: `10.50` and `10.5` are
+the same number, `a` and `A` are not, `NULL` is not an empty string.
+
+## Notebooks
+
+A **SQL notebook** (`*.sqlnb`, **New SQL Notebook** in the Command Palette) mixes cells of
+SQL with cells of Markdown. Run a cell with the usual notebook controls; its result appears
+under it as a table (the first 500 rows; the rest stay on the server). A notebook has one
+connection, shown in the status bar and the toolbar, and **one session**: a temporary table
+or a `SET` in one cell is still there in the next. Variables, placeholders, safe mode and
+the production and read-only rules work as in a query editor.
+
+The file holds the cells and the connection, not the results, so it is small and diffs well.
+A connection from the project file (`.vscode/datanest.json`) is saved by its id there, so a
+teammate who opens the notebook gets the same connection.
+
+## Project queries
+
+**Save Query to Project…** keeps the query you are writing (or the selection) as
+`.vscode/datanest-queries/<name>.sql`, next to the project's connections, so it can be
+committed and shared. **Open Project Query…** lists them; **Delete Project Query…** removes
+one. A query written on a project connection starts with comments that say where it runs:
+
+```sql
+-- datanest: connection=staging
+-- datanest: database=shop
+SELECT …
+```
+
+Opening it binds the editor to that connection when you have it. A connection that is not in
+the project file is never named in the file.

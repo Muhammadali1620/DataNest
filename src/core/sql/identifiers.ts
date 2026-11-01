@@ -17,6 +17,8 @@ const LIMITS: Readonly<
   influxdb: undefined,
   // Labels and property keys are free text.
   neo4j: undefined,
+  // Keyspace and table names: letters, digits and underscores, up to 48 characters.
+  cassandra: { max: 48, bytes: false },
   plugin: undefined,
   mssql: { max: 128, bytes: false },
   // Names are file names on the server's disk; it allows long ones.

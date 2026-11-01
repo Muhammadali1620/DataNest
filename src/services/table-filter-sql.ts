@@ -31,7 +31,14 @@ export function escapeLike(text: string): string {
   return text.replace(/[!%_]/g, (char) => `!${char}`);
 }
 
-function conditionSql(dialect: Dialect, condition: FilterCondition): string {
+/** Column types by name, for the dialects that write a value by the type it is compared with. */
+export type ColumnTypes = ReadonlyMap<string, string>;
+
+function conditionSql(
+  dialect: Dialect,
+  condition: FilterCondition,
+  types: ColumnTypes | undefined,
+): string {
   const column = dialect.quoteIdentifier(condition.column);
   const value = condition.value ?? '';
   const operator = condition.operator;
@@ -40,7 +47,11 @@ function conditionSql(dialect: Dialect, condition: FilterCondition): string {
   }
   const comparison = COMPARISONS[operator];
   if (comparison !== undefined) {
-    return `${column} ${comparison} ${dialect.literal(value)}`;
+    const literal =
+      dialect.comparisonLiteral === undefined
+        ? dialect.literal(value)
+        : dialect.comparisonLiteral(value, types?.get(condition.column));
+    return `${column} ${comparison} ${literal}`;
   }
   const escaped = escapeLike(value);
   const pattern =
@@ -75,6 +86,7 @@ export function buildWhere(
   dialect: Dialect,
   driver: DriverId,
   filter: TableFilter | undefined,
+  types?: ColumnTypes,
 ): string | undefined {
   if (filter === undefined || isEmptyFilter(filter)) {
     return undefined;
@@ -82,7 +94,7 @@ export function buildWhere(
   // OR starts a new group; inside a group the conditions are ANDed, as SQL reads them.
   const groups: string[][] = [];
   filter.conditions.forEach((condition, index) => {
-    const sql = conditionSql(dialect, condition);
+    const sql = conditionSql(dialect, condition, types);
     const last = groups.at(-1);
     if (last === undefined || (index > 0 && condition.join === 'or')) {
       groups.push([sql]);
@@ -99,7 +111,9 @@ export function buildWhere(
   const where = (filter.where ?? '').trim();
   if (where !== '') {
     checkWhere(where, driver);
-    alternatives.push(`(\n${where}\n)`);
+    // CQL has no parentheses around conditions: the text goes in as it is, and the line break
+    // after it keeps a `--` comment of its own from reaching what follows.
+    alternatives.push(driver === 'cassandra' ? `${where}\n` : `(\n${where}\n)`);
   }
   return alternatives.join(' AND ');
 }

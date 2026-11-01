@@ -55,6 +55,49 @@ const COMMON: readonly SqlSnippet[] = [
 ];
 
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlSnippet[]>> = {
+  // CQL (V13.22): no JOIN, no OFFSET, and every table is its key.
+  cassandra: [
+    {
+      prefix: 'sel',
+      title: 'SELECT … FROM keyspace.table WHERE key = … LIMIT …',
+      body: 'SELECT ${1:*}\nFROM ${2:keyspace}.${3:table}\nWHERE ${4:partition_key} = ${5:value}\nLIMIT ${6:100};',
+    },
+    {
+      prefix: 'ins',
+      title: 'INSERT INTO keyspace.table (…) VALUES (…)',
+      body: 'INSERT INTO ${1:keyspace}.${2:table} (${3:columns})\nVALUES (${4:values})\nIF NOT EXISTS;',
+    },
+    {
+      prefix: 'upd',
+      title: 'UPDATE keyspace.table SET … WHERE key = …',
+      body: 'UPDATE ${1:keyspace}.${2:table}\nSET ${3:column} = ${4:value}\nWHERE ${5:partition_key} = ${6:value};',
+    },
+    {
+      prefix: 'del',
+      title: 'DELETE FROM keyspace.table WHERE key = …',
+      body: 'DELETE FROM ${1:keyspace}.${2:table}\nWHERE ${3:partition_key} = ${4:value};',
+    },
+    {
+      prefix: 'table',
+      title: 'CREATE TABLE with a partition and a clustering key',
+      body: 'CREATE TABLE ${1:keyspace}.${2:table} (\n  ${3:id} uuid,\n  ${4:created} timestamp,\n  ${5:value} text,\n  PRIMARY KEY ((${3:id}), ${4:created})\n) WITH CLUSTERING ORDER BY (${4:created} DESC);',
+    },
+    {
+      prefix: 'keyspace',
+      title: 'CREATE KEYSPACE … WITH replication',
+      body: "CREATE KEYSPACE ${1:name}\nWITH replication = {'class': 'SimpleStrategy', 'replication_factor': ${2:1}};",
+    },
+    {
+      prefix: 'index',
+      title: 'CREATE INDEX ON keyspace.table (column)',
+      body: 'CREATE INDEX ${1:name} ON ${2:keyspace}.${3:table} (${4:column});',
+    },
+    {
+      prefix: 'consistency',
+      title: 'CONSISTENCY level (cqlsh command)',
+      body: 'CONSISTENCY ${1|LOCAL_ONE,ONE,LOCAL_QUORUM,QUORUM,ALL,EACH_QUORUM|};',
+    },
+  ],
   neo4j: [
     {
       prefix: 'match',
@@ -171,9 +214,9 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {
-  if (driver === 'neo4j') {
-    // The SELECT templates of COMMON are no Cypher.
-    return BY_DRIVER.neo4j;
+  if (driver === 'neo4j' || driver === 'cassandra') {
+    // The SELECT templates of COMMON are no Cypher, and CQL has no joins.
+    return BY_DRIVER[driver];
   }
   return driver === undefined || !isSqlDriver(driver) ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
 }

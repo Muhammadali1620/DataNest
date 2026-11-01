@@ -5,6 +5,7 @@ import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
 import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
 import { influxdbDialect } from '../../../src/drivers/influxdb/dialect';
 import { neo4jDialect } from '../../../src/drivers/neo4j/dialect';
+import { cassandraDialect } from '../../../src/drivers/cassandra/dialect';
 import { planColumnMove } from '../../../src/services/column-move';
 import { actionSql } from '../../../src/services/schema-actions';
 import { canReorderColumns } from '../../../src/shared/table-design';
@@ -84,6 +85,7 @@ describe('canReorderColumns', () => {
     libsql: sqliteDialect,
     influxdb: influxdbDialect,
     neo4j: neo4jDialect,
+    cassandra: cassandraDialect,
     mssql: mssqlDialect,
     clickhouse: clickhouseDialect,
     oracle: oracleDialect,

@@ -349,6 +349,8 @@ export function targetType(
       return oracleType(neutral, indexed);
     case 'neo4j':
       throw new DbError('unsupported', msg('Tables cannot be copied to Neo4j'));
+    case 'cassandra':
+      throw new DbError('unsupported', msg('Tables cannot be copied to Cassandra'));
     case 'plugin':
       throw new DbError(
         'unsupported',

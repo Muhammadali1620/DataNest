@@ -19,6 +19,16 @@ const SYSTEM_DATABASES: Readonly<Record<SqlDriverId, readonly string[]>> = {
   influxdb: ['_monitoring', '_tasks'],
   // `system` holds the server's own users, roles and database list.
   neo4j: ['system'],
+  // The keyspaces Cassandra keeps for itself (schema, auth, tracing, virtual tables).
+  cassandra: [
+    'system',
+    'system_schema',
+    'system_auth',
+    'system_distributed',
+    'system_traces',
+    'system_views',
+    'system_virtual_schema',
+  ],
   plugin: [],
   // The server's own tools keep these four apart as "system databases" too.
   mssql: ['master', 'model', 'msdb', 'tempdb'],
@@ -36,6 +46,7 @@ const SYSTEM_SCHEMAS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   libsql: [],
   influxdb: [],
   neo4j: [],
+  cassandra: [],
   plugin: [],
   mssql: ['sys', 'INFORMATION_SCHEMA', 'guest'],
   clickhouse: [],
@@ -51,6 +62,7 @@ const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<SqlDriverId, readonly string[]>> =
   libsql: [],
   influxdb: [],
   neo4j: [],
+  cassandra: [],
   plugin: [],
   mssql: [],
   clickhouse: [],

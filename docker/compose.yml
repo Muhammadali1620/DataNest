@@ -515,6 +515,30 @@ services:
       <<: *healthcheck
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:7474/']
 
+  # Apache Cassandra (V13.22), group `cassandra`: one node, the CQL port on 7942, no sign-in. The
+  # heap is held small and the data lives in tmpfs. It takes a minute or two to be ready; the
+  # test makes its own keyspace. The node advertises its container address, which the driver
+  # never uses: every request goes to the one address the connection names.
+  cassandra:
+    image: cassandra:4.1
+    container_name: datanest-cassandra
+    profiles: [cassandra]
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+      CASSANDRA_CLUSTER_NAME: datanest
+    ports:
+      - 127.0.0.1:7942:9042
+    tmpfs:
+      - /var/lib/cassandra
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD-SHELL', 'cqlsh -e "SELECT release_version FROM system.local" > /dev/null 2>&1']
+      interval: 10s
+      timeout: 20s
+      retries: 30
+      start_period: 40s
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

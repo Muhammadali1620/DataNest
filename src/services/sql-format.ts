@@ -56,6 +56,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'oracle':
       return 'plsql';
     case 'neo4j':
+    case 'cassandra':
     case 'plugin':
     case 'influxdb':
     case 'redis':

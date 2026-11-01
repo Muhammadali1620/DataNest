@@ -317,6 +317,11 @@ export const ru: Record<MessageKey, string> = {
   'form.driver.plugin': 'База из другого расширения',
   'form.driver.libsql': 'libSQL / Turso',
   'form.driver.neo4j': 'Neo4j',
+  'form.driver.cassandra': 'Apache Cassandra',
+  'form.cassandra.hostHint':
+    'Адрес одного узла: localhost или cassandra.example.com; используется порт CQL (9042). К остальным узлам обращение идёт через него',
+  'form.cassandra.keyspace': 'Пространство ключей (keyspace)',
+  'form.cassandra.keyspaceHint': 'Необязательно: пространство ключей, которое открыть сразу',
   'form.neo4j.hostHint':
     'Адрес сервера: localhost, my-db.databases.neo4j.io или адрес neo4j://. Используется HTTP-порт (7474), а не Bolt; нужен Neo4j 5.19 или новее',
   'form.driver.etcd': 'etcd',
@@ -648,6 +653,8 @@ export const ru: Record<MessageKey, string> = {
     'выберите и колонки ключа, чтобы каждую строку можно было определить',
   'grid.readOnly.columns-mismatch': 'колонки результата не совпадают с колонками таблицы',
   'grid.readOnly.failed': 'не удалось прочитать структуру таблицы',
+  'grid.readOnly.wide-column':
+    'UPDATE в Cassandra создаёт и несуществующую строку, поэтому строки меняются на CQL, а не в таблице',
   'grid.readOnly.graph': 'узлы и связи меняются запросами Cypher, а не в таблице',
   'grid.readOnly.connection-read-only': 'подключение только для чтения',
   'grid.editHint':

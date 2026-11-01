@@ -226,6 +226,12 @@ export interface Dialect {
    * to be spatial: a text column holding such words must stay text.
    */
   spatialLiteral?(text: string): string | undefined;
+  /**
+   * The literal a table filter compares a column with, when the server wants it typed (CQL
+   * takes `7` for an int, `'7'` for text and a bare uuid); the value is the text the user
+   * typed, `dataType` the column's type as the reader reports it. Absent: `literal` does it.
+   */
+  comparisonLiteral?(value: string, dataType: string | undefined): string;
   /** Wraps or extends a SELECT so it returns `limit` rows starting at `offset`. */
   paginate(sql: string, limit: number, offset: number): string;
   /**

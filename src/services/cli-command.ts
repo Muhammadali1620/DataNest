@@ -41,6 +41,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   influxdb: [],
   // Neo4j's cypher-shell speaks Bolt, not the HTTP port we use.
   neo4j: [],
+  // cqlsh takes the password only as an argument or from a file of its own; neither is safe here.
+  cassandra: [],
   mssql: ['sqlcmd'],
   clickhouse: ['clickhouse-client', 'clickhouse'],
   oracle: ['sql', 'sqlplus'],
@@ -225,6 +227,7 @@ export function cliCommand(
     case 'libsql':
     case 'influxdb':
     case 'neo4j':
+    case 'cassandra':
     case 'elasticsearch':
     case 'etcd':
       return undefined;

@@ -49,6 +49,9 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   influxdbs: 'influxdb',
   // Neo4j (V13.21): `neo4j+s://` asks for TLS; the address names Bolt, but the HTTP port is used.
   neo4j: 'neo4j',
+  // Cassandra (V13.22): `cassandra://user:pass@host:9042/keyspace`, `?ssl=true` for TLS.
+  cassandra: 'cassandra',
+  cql: 'cassandra',
   // etcd (V13.19): the address of its client port; the path means nothing to it.
   etcd: 'etcd',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).

@@ -54,6 +54,13 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<path d="M12 6 6 17.500M12 6l6 11.500M6 17.500h12" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="5.500" r="3.200"/><circle cx="5.500" cy="18" r="3.200"/><circle cx="18.500" cy="18" r="3.200"/>',
   },
+  // A ring of four nodes: the ring Cassandra spreads its data over (V13.22); the vendor's logo is
+  // not ours to use.
+  cassandra: {
+    hex: '#0891b2',
+    ink: WHITE,
+    body: '<circle cx="12" cy="12" r="6.500" fill="none" stroke="currentColor" stroke-width="1.800"/><circle cx="12" cy="5.500" r="2.600"/><circle cx="18.500" cy="12" r="2.600"/><circle cx="12" cy="18.500" r="2.600"/><circle cx="5.500" cy="12" r="2.600"/>',
+  },
   // A key: the thing etcd stores values under (V13.19); the vendor's logo is not ours to use.
   etcd: {
     hex: '#2563eb',

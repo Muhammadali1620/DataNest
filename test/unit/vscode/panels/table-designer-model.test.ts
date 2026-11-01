@@ -7,6 +7,7 @@ import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import { influxdbDialect } from '../../../../src/drivers/influxdb/dialect';
 import { neo4jDialect } from '../../../../src/drivers/neo4j/dialect';
+import { cassandraDialect } from '../../../../src/drivers/cassandra/dialect';
 import type {
   ListedObjectKind,
   ObjectRef,
@@ -29,6 +30,7 @@ const DIALECTS = {
   libsql: sqliteDialect,
   influxdb: influxdbDialect,
   neo4j: neo4jDialect,
+  cassandra: cassandraDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
   oracle: oracleDialect,

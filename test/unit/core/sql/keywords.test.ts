@@ -26,9 +26,9 @@ describe('KEYWORDS', () => {
   it('includes the core SQL every dialect shares', () => {
     // Cypher (Neo4j) is no SQL: it has its own test below.
     for (const driver of SQL_DRIVER_IDS.filter((id) => id !== 'neo4j')) {
-      // InfluxQL has neither joins nor INSERT: points are written by line protocol.
+      // InfluxQL has neither joins nor INSERT (points are written by line protocol), CQL no joins.
       const shared =
-        driver === 'influxdb'
+        driver === 'influxdb' || driver === 'cassandra'
           ? ['SELECT', 'FROM', 'WHERE']
           : ['SELECT', 'FROM', 'WHERE', 'JOIN', 'INSERT'];
       for (const keyword of shared) {

@@ -77,6 +77,33 @@ const INFLUX_FUNCTIONS: readonly SqlFunction[] = [
 ];
 
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlFunction[]>> = {
+  // CQL (V13.22): its own functions; most of the SQL ones in COMMON do not exist there.
+  cassandra: [
+    fn('COUNT', '*'),
+    fn('SUM', 'column'),
+    fn('AVG', 'column'),
+    fn('MIN', 'column'),
+    fn('MAX', 'column'),
+    fn('TOKEN', 'partition_key'),
+    fn('TTL', 'column'),
+    fn('WRITETIME', 'column'),
+    fn('NOW'),
+    fn('UUID'),
+    fn('CURRENTTIMESTAMP'),
+    fn('CURRENTDATE'),
+    fn('CURRENTTIME'),
+    fn('CURRENTTIMEUUID'),
+    fn('MINTIMEUUID', 'timestamp'),
+    fn('MAXTIMEUUID', 'timestamp'),
+    fn('TODATE', 'value'),
+    fn('TOTIMESTAMP', 'value'),
+    fn('TOUNIXTIMESTAMP', 'value'),
+    fn('TOJSON', 'column'),
+    fn('FROMJSON', 'text'),
+    fn('CAST', 'column AS type'),
+    fn('BLOBASTEXT', 'blob'),
+    fn('TEXTASBLOB', 'text'),
+  ],
   // Cypher (V13.21): the functions people reach for first.
   neo4j: [
     fn('labels', 'node'),
@@ -253,9 +280,9 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
 
 /** The functions of a dialect, common ones first; standard SQL when none is known. */
 export function functionsOf(driver?: DriverId): readonly SqlFunction[] {
-  if (driver === 'neo4j') {
-    // Cypher has none of the SQL functions that COMMON lists.
-    return BY_DRIVER.neo4j;
+  if (driver === 'neo4j' || driver === 'cassandra') {
+    // Cypher and CQL have none of the SQL functions that COMMON lists.
+    return BY_DRIVER[driver];
   }
   return driver === undefined || !isSqlDriver(driver) ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
 }

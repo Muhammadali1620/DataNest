@@ -134,6 +134,7 @@ export function columnSql(
         rename,
       ]);
     case 'neo4j':
+    case 'cassandra':
     case 'plugin':
     case 'redis':
     case 'mongodb':
@@ -213,6 +214,7 @@ export function indexSql(
       ]);
     }
     case 'neo4j':
+    case 'cassandra':
       throw new Error('This connection has no SQL indexes');
     case 'sqlite':
     case 'libsql':
@@ -281,6 +283,7 @@ export function foreignKeySql(
     case 'clickhouse':
       return script([note('ClickHouse has no foreign keys')]);
     case 'neo4j':
+    case 'cassandra':
     case 'plugin':
     case 'redis':
     case 'mongodb':

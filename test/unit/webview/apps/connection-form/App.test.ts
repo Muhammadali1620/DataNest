@@ -844,7 +844,7 @@ describe('connection form App', () => {
 
     it('fills on Enter and explains a URL it cannot read', async () => {
       await withState();
-      await fireEvent.input(field('Connection URL'), { target: { value: 'cassandra://cache' } });
+      await fireEvent.input(field('Connection URL'), { target: { value: 'kafka://cache' } });
       await fireEvent.keyDown(field('Connection URL'), { key: 'Enter' });
       await waitFor(() => {
         expect(

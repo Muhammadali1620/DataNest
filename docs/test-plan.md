@@ -29,6 +29,7 @@ npm run db:up -- redis mongodb elasticsearch # разделы 16e–16g и 16j
 npm run db:up -- libsql # libSQL (sqld) 7080 (раздел 16e3)
 npm run db:up -- influxdb # InfluxDB 2.7 7186 (раздел 16e4)
 npm run db:up -- neo4j # Neo4j 5 7474 (раздел 16e5)
+npm run db:up -- cassandra # Cassandra 4.1 7942 (раздел 16e6; стартует 1–2 минуты)
 npm run package        # соберёт datanest-<версия>.vsix
 ```
 
@@ -351,6 +352,18 @@ npm run package        # соберёт datanest-<версия>.vsix
 5. Только чтение. Отметить «только чтение» → `CREATE (:Nope)` отклоняется (и клиентом, и сервером, режим `Read`).
 6. Отмена. `UNWIND range(1, 2000000000) AS x RETURN count(x)` → «Отменить» возвращает управление; следующий запрос работает.
 7. Что не поддерживается и говорит об этом: конструктор таблиц, SQL-дамп и перенос таблицы, пользователи, план запроса, форматирование SQL, явные транзакции (каждый запрос — своя транзакция).
+
+## 16e6. Apache Cassandra (V13.22)
+
+`npm run db:up -- cassandra` поднимает Cassandra 4.1 на `127.0.0.1:7942` (CQL, без входа, данные в tmpfs; куча 512 МБ; готовность — через минуту-две, healthcheck `cqlsh`).
+
+1. Подключение. «База данных» → «Apache Cassandra»: «Хост», «Порт» (по умолчанию 9042), «Пользователь», «Пароль», «Пространство ключей (keyspace)». Хост `127.0.0.1`, порт `7942` → «Проверить» — успешно; порт `7999` — «connection-failed». URL `cassandra://127.0.0.1:7942/system` заполняет форму; `?ssl=true` включает TLS.
+2. Запросы. В новом редакторе: `CREATE KEYSPACE demo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}`, `CREATE TABLE demo.events (room text, seq int, body text, PRIMARY KEY ((room), seq)) WITH CLUSTERING ORDER BY (seq DESC)`, вставки и `SELECT * FROM demo.events WHERE room = 'a'` — столбцы с типами (`text`, `int`), подсказки CQL (`ALLOW FILTERING`, `TOKEN`, `WRITETIME`), снипеты `table`, `keyspace`, `consistency`. `CONSISTENCY QUORUM` отвечает «Consistency level: QUORUM».
+3. Типы. Таблица с `bigint`, `varint`, `decimal`, `timestamp`, `uuid`, `inet`, `blob`, `list`, `set`, `map`, `tuple` и своим типом: числа точные (9007199254740993), коллекции и типы пользователя — JSON-текстом, `blob` — hex с размером.
+4. Дерево. Раскрыть подключение → пространства ключей (системные скрыты: «Показывать системные объекты» их возвращает) → таблицы и материализованные представления; у таблицы колонки ключа первыми (значок ключа), индексы: `PRIMARY KEY` и вторичные; «Показать определение» — `CREATE TABLE … PRIMARY KEY … WITH CLUSTERING ORDER BY …` и `CREATE INDEX …`.
+5. Открыть таблицу. Двойной щелчок по таблице — первая страница, общее число (`COUNT(*)`), «следующая страница» читает строки заново и пропускает уже показанные (в CQL нет OFFSET). Фильтр «seq = 7» сравнивает число, «room = 7» — текст, uuid пишется без кавычек; свой `WHERE` вставляется как есть (CQL не принимает скобок). Сортировка по столбцу без ограничения ключа отвечает ошибкой сервера.
+6. Только чтение. «Только чтение» отклоняет `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `DROP`, `BEGIN BATCH` до отправки; сервер сам такого режима не имеет. Результат таблицы всегда только для чтения (UPDATE в Cassandra создаёт и несуществующую строку).
+7. Что не поддерживается и говорит об этом: конструктор таблиц, SQL-дамп и перенос таблицы, пользователи, план запроса, поиск по всем столбцам, транзакции; отмена не останавливает уже идущую страницу, а прекращает чтение следующих.
 
 ## 16f. MongoDB (0.7.0)
 

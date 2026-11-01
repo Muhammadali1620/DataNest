@@ -81,6 +81,7 @@ export async function planServerOf(session: Session, driver: SqlDriverId): Promi
       return 'sqlite';
     case 'influxdb':
     case 'neo4j':
+    case 'cassandra':
     case 'plugin':
       throw new DbError(
         'unsupported',

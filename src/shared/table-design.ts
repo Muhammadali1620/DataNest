@@ -229,6 +229,8 @@ const INTEGER_TYPES: Readonly<Record<SqlDriverId, ReadonlySet<string>>> = {
   influxdb: new Set(),
   // Nodes have no table designer; ids are strings.
   neo4j: new Set(),
+  // Tables are made with CQL; the designer is not offered.
+  cassandra: new Set(),
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
   // Nothing numbers itself: rows have no identity, only a sorting key.
   clickhouse: new Set(),

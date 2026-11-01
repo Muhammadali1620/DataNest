@@ -90,6 +90,7 @@
     elasticsearch: 'form.driver.elasticsearch',
     libsql: 'form.driver.libsql',
     neo4j: 'form.driver.neo4j',
+    cassandra: 'form.driver.cassandra',
     etcd: 'form.driver.etcd',
     influxdb: 'form.driver.influxdb',
     plugin: 'form.driver.plugin',
@@ -113,6 +114,7 @@
   const isElastic = $derived(fields?.driver === 'elasticsearch');
   const isLibsql = $derived(fields?.driver === 'libsql');
   const isNeo4j = $derived(fields?.driver === 'neo4j');
+  const isCassandra = $derived(fields?.driver === 'cassandra');
   const isEtcd = $derived(fields?.driver === 'etcd');
   const isInflux = $derived(fields?.driver === 'influxdb');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
@@ -429,6 +431,8 @@
                       : undefined
                   : isNeo4j
                     ? t('form.neo4j.hostHint')
+                  : isCassandra
+                    ? t('form.cassandra.hostHint')
                   : isLibsql
                     ? t('form.libsql.hostHint')
                     : !isRedis
@@ -679,14 +683,18 @@
                 ? t('form.redis.database')
                 : isInflux
                   ? t('form.influx.bucket')
-                  : t('form.database')}
+                  : isCassandra
+                    ? t('form.cassandra.keyspace')
+                    : t('form.database')}
               hint={isRedis
                 ? t('form.redis.databaseHint')
                 : isMongo
                   ? t('form.mongo.databaseHint')
                   : isInflux
                     ? t('form.influx.bucketHint')
-                    : t('form.databaseHint')}
+                    : isCassandra
+                      ? t('form.cassandra.keyspaceHint')
+                      : t('form.databaseHint')}
               error={isRedis
                 ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
                 : undefined}
@@ -701,7 +709,9 @@
                   ? t('form.redis.database')
                   : isInflux
                     ? t('form.influx.bucket')
-                    : t('form.database')}
+                    : isCassandra
+                      ? t('form.cassandra.keyspace')
+                      : t('form.database')}
                 autocomplete="off"
               />
             </Field>

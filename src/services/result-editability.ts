@@ -56,6 +56,9 @@ export async function analyzeEditability(
   if (context.driver === 'neo4j') {
     return readOnlyResult('graph');
   }
+  if (context.driver === 'cassandra') {
+    return readOnlyResult('wide-column');
+  }
   const parsed = parseSelectSource(sql, context.syntax);
   if (!parsed.ok) {
     return readOnlyResult(parsed.refusal);

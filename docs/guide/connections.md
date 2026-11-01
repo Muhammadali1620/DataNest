@@ -14,6 +14,7 @@
 | MongoDB | One server, a replica set or `mongodb+srv://`; SCRAM, X.509 and LDAP sign-in. |
 | Elasticsearch | And OpenSearch; user and password or an API key. |
 | Neo4j | A graph database (5.19 or newer) over its HTTP port (7474), queried with Cypher; user and password. Labels are listed as tables and relationship types as views written `[TYPE]`. Statements run one by one, each as its own transaction. |
+| Cassandra | Apache Cassandra over the CQL port (9042): one node's address, user and password when sign-in is on, an optional keyspace. The other nodes are reached through that one address, so a tunnel or a container works. Keyspaces are the databases; a table is shown with its partition and clustering columns first. `CONSISTENCY QUORUM` (as in cqlsh) in the editor or in the init SQL sets the level. There is no read-only mode on the server: DataNest refuses the changing statements itself. Rows are changed with CQL, not in the grid, because an UPDATE would also create a row that does not exist. |
 | etcd | A key-value cluster (v3) over its HTTP/JSON gateway on the client port (2379); user and password when the cluster has authentication. |
 | libSQL | A libSQL server (sqld, Turso) over HTTP; the address and an auth token. TLS is on for a hosted server (port 443), off for a local one (8080). |
 | InfluxDB | InfluxDB 2.x over HTTP (port 8086): the organization goes in the *Organization* field, the API token in *API token*, and *Bucket* is the one InfluxQL runs on. Address: `influxdb://host:8086/bucket?org=acme&token=…` (`influxdbs://` or `tls=1` for TLS). |
@@ -24,7 +25,7 @@ you never use cost nothing.
 ## Filling the form
 
 - **From a URL**: paste `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://`,
-  `oracle://`, `redis://`, `mongodb://`, `elasticsearch://`, `libsql://` or `neo4j://` URLs (or a JDBC
+  `oracle://`, `redis://`, `mongodb://`, `elasticsearch://`, `libsql://`, `neo4j://` or `cassandra://` URLs (or a JDBC
   `oracle:thin:@…` one) into the field at the top of the form, or run
   **Add Connection from URL…**.
 - **From `.env` files**: **Import Connections from .env…** finds `DATABASE_URL`-style

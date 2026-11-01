@@ -11,7 +11,7 @@ import type { Dialect, ResultColumn, Session } from '../drivers/driver';
 import type { ConnectionManager, SessionTarget } from './connection-manager';
 import type { MetadataCache } from './metadata-cache';
 import { analyzeEditability } from './result-editability';
-import { buildOrderBy, buildWhere, type TableSort } from './table-filter-sql';
+import { buildOrderBy, buildWhere, type ColumnTypes, type TableSort } from './table-filter-sql';
 import type { Placement, ResultRow, ResultStore, ResultSummary } from './result-store';
 import { isEmptyFilter, type TableFilter } from '../shared/table-filter';
 
@@ -166,7 +166,15 @@ export class TableViewer {
     }
     const driver = await this.deps.manager.driverOf(view.target.connectionId);
     const { dialect } = driver;
-    const where = buildWhere(dialect, driver.id, view.filter);
+    const types =
+      dialect.comparisonLiteral === undefined || view.filter === undefined
+        ? undefined
+        : await this.columnTypes(
+            await this.deps.manager.acquire(TableViewer.owner(documentUri), view.target),
+            view.target.connectionId,
+            view.table,
+          );
+    const where = buildWhere(dialect, driver.id, view.filter, types);
     const orderBy = buildOrderBy(dialect, view.sort);
     const list =
       columns === undefined ? '*' : columns.map((name) => dialect.quoteIdentifier(name)).join(', ');
@@ -200,17 +208,21 @@ export class TableViewer {
     try {
       const driver = await this.deps.manager.driverOf(request.target.connectionId);
       const quoted = driver.dialect.quoteTable(request.table);
-      const where = buildWhere(driver.dialect, driver.id, filter);
+      const session = await this.deps.manager.acquire(
+        TableViewer.owner(documentUri),
+        request.target,
+      );
+      const types =
+        driver.dialect.comparisonLiteral === undefined || filter === undefined
+          ? undefined
+          : await this.columnTypes(session, request.target.connectionId, request.table);
+      const where = buildWhere(driver.dialect, driver.id, filter, types);
       const orderBy = buildOrderBy(driver.dialect, request.sort);
       const whereSql = where === undefined ? '' : ` WHERE ${where}`;
       sql = driver.dialect.paginate(
         `SELECT * FROM ${quoted}${whereSql}${orderBy === undefined ? '' : ` ORDER BY ${orderBy}`}`,
         pageSize,
         offset,
-      );
-      const session = await this.deps.manager.acquire(
-        TableViewer.owner(documentUri),
-        request.target,
       );
       const { columns, rows } = await readAll(session, sql, pageSize);
       // Counting is a separate statement, and a failure there must not lose the page.
@@ -273,6 +285,20 @@ export class TableViewer {
         },
         REPLACE_VIEW,
       );
+    }
+  }
+
+  /** The types of a table's columns by name; empty when they cannot be read (the filter then falls back). */
+  private async columnTypes(
+    session: Session,
+    connectionId: string,
+    table: TableRef,
+  ): Promise<ColumnTypes> {
+    try {
+      const columns = await this.deps.cache.wrap(connectionId, session.metadata).listColumns(table);
+      return new Map(columns.map((column) => [column.name, column.dataType]));
+    } catch {
+      return new Map();
     }
   }
 

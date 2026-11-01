@@ -227,16 +227,24 @@ export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf())
       // Flux (InfluxDB, V13.20) starts with from() or an import. It writes only through
       // to() (and the packages that wrap it), so any such word makes it a change.
       return !words.some((word) => FLUX_WRITES.has(word.text));
+    // CONSISTENCY and LIST are cqlsh commands of Cassandra: the level of the next statements,
+    // and the lists of roles.
     case 'VALUES':
     case 'TABLE':
     case 'SHOW':
     case 'DESCRIBE':
     case 'DESC':
     case 'USE':
+    case 'CONSISTENCY':
+    case 'LIST':
     case 'PRINT':
     case 'EXISTS':
       return true;
     case 'BEGIN':
+      // A CQL batch holds INSERT, UPDATE and DELETE statements: it is a change, not a transaction.
+      if (['BATCH', 'UNLOGGED', 'COUNTER'].includes(words[1]?.text ?? '')) {
+        return false;
+      }
       // In T-SQL a bare BEGIN opens a block of statements, which may write anything;
       // only BEGIN TRAN starts a transaction.
       // In PL/SQL it opens an anonymous block, which may do anything too.

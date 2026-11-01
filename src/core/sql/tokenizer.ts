@@ -209,8 +209,28 @@ const CYPHER: SqlSyntax = {
   cypher: true,
 };
 
+/** CQL (Cassandra): `'…'` strings with doubled quotes, `"…"` names, `$$…$$` bodies, `--` and `//` comments. */
+const CQL: SqlSyntax = {
+  backslashEscapes: false,
+  hashComments: false,
+  backtickIdentifiers: false,
+  doubleQuoteIdentifiers: true,
+  escapeStrings: false,
+  dollarQuotes: true,
+  nestedBlockComments: false,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
+  slashComments: true,
+};
+
 const BY_DRIVER: Readonly<Record<SqlDriverId, SqlSyntax>> = {
   neo4j: CYPHER,
+  cassandra: CQL,
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,

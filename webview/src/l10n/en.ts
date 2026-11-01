@@ -314,6 +314,11 @@ export const en = {
   'form.driver.plugin': 'Database from another extension',
   'form.driver.libsql': 'libSQL / Turso',
   'form.driver.neo4j': 'Neo4j',
+  'form.driver.cassandra': 'Apache Cassandra',
+  'form.cassandra.hostHint':
+    'The address of one node, e.g. localhost or cassandra.example.com; the CQL port (9042) is used. The other nodes are reached through it',
+  'form.cassandra.keyspace': 'Keyspace',
+  'form.cassandra.keyspaceHint': 'Optional: the keyspace to open right away',
   'form.neo4j.hostHint':
     'The server address, e.g. localhost or my-db.databases.neo4j.io, or a neo4j:// URL. The HTTP port (7474) is used, not Bolt; Neo4j 5.19 or newer',
   'form.driver.etcd': 'etcd',
@@ -645,6 +650,8 @@ export const en = {
   'grid.readOnly.key-not-selected': 'select the key columns too, so each row can be identified',
   'grid.readOnly.columns-mismatch': 'the result columns do not match the table columns',
   'grid.readOnly.failed': 'the table structure could not be read',
+  'grid.readOnly.wide-column':
+    'an UPDATE in Cassandra also creates a row that does not exist, so rows are changed with CQL, not in the grid',
   'grid.readOnly.graph': 'nodes and relationships are changed with Cypher, not in the grid',
   'grid.readOnly.connection-read-only': 'the connection is read-only',
   'grid.editHint': 'Double-click or Enter edits · Delete sets NULL · Ctrl+Delete removes rows',

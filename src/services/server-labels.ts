@@ -43,6 +43,7 @@ const VERSION_SQL: Readonly<Record<SqlDriverId, string>> = {
   // The server names its version in the /health answer, not in a query.
   influxdb: '',
   neo4j: "CALL dbms.components() YIELD name, versions RETURN name + ' ' + versions[0] AS version",
+  cassandra: 'SELECT release_version AS version FROM system.local',
   mssql: "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version",
   clickhouse: 'SELECT version() AS version',
   // The plugin's driver names its own server; there is no query that fits every one.
@@ -126,6 +127,7 @@ WHERE active AND database = ${dialect.literal(database)}`;
     case 'libsql':
     case 'influxdb':
     case 'neo4j':
+    case 'cassandra':
     case 'plugin':
     case 'oracle':
     case 'redis':

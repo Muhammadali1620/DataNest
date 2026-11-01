@@ -14,6 +14,7 @@ import { driver as clickhouseDriver } from '../../../src/drivers/clickhouse';
 import { driver as libsqlDriver } from '../../../src/drivers/libsql';
 import { driver as influxdbDriver } from '../../../src/drivers/influxdb';
 import { driver as neo4jDriver } from '../../../src/drivers/neo4j';
+import { driver as cassandraDriver } from '../../../src/drivers/cassandra';
 import { driver as oracleDriver } from '../../../src/drivers/oracle';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { ConnectionManager } from '../../../src/services/connection-manager';
@@ -127,6 +128,7 @@ describe('copy as', () => {
         libsql: libsqlDriver,
         influxdb: influxdbDriver,
         neo4j: neo4jDriver,
+        cassandra: cassandraDriver,
       };
       manager = new ConnectionManager({
         store,

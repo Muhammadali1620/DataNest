@@ -83,6 +83,7 @@ page is in English; the short summaries below are for everyone else.
 | Elasticsearch, OpenSearch | Console-style requests, hits as a table |
 | etcd | Keys as folders, values, revisions and leases, over the HTTP/JSON gateway |
 | Neo4j | Cypher in the editor, labels and relationship types in the tree, nodes and paths as JSON; over the HTTP port (5.19+) |
+| Apache Cassandra | CQL in the editor, keyspaces, tables and materialized views in the tree with their keys, exact big numbers and collections as JSON |
 | libSQL, Turso | sqld and hosted servers over HTTP, with an auth token; the SQL of SQLite |
 | InfluxDB 2.x | Flux and InfluxQL over HTTP: buckets, measurements, tags and fields in the tree, points as a table |
 | TiDB, CockroachDB, YugabyteDB, Amazon Aurora | Through the MySQL and PostgreSQL drivers, with presets |

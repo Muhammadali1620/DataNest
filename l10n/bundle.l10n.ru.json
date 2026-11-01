@@ -1492,5 +1492,20 @@
   "Constraints added: {0}": "Добавлено ограничений: {0}",
   "Constraints removed: {0}": "Убрано ограничений: {0}",
   "// {0} has no indexes or constraints": "// У {0} нет индексов и ограничений",
-  "Tables cannot be copied to Neo4j": "Таблицы нельзя копировать в Neo4j"
+  "Tables cannot be copied to Neo4j": "Таблицы нельзя копировать в Neo4j",
+  "Cassandra has no table designer: a table is its key, so change it with CQL (CREATE TABLE, ALTER TABLE)": "У Cassandra нет конструктора таблиц: таблица — это её ключ, меняйте её на CQL (CREATE TABLE, ALTER TABLE)",
+  "Functions and aggregates of Cassandra are changed with CQL": "Функции и агрегаты Cassandra меняются на CQL",
+  "Cassandra cannot rename a table: create a new one and copy the rows": "Cassandra не умеет переименовывать таблицу: создайте новую и скопируйте строки",
+  "Cassandra has no SQL dump: use cqlsh COPY, nodetool snapshot or DSBulk": "У Cassandra нет SQL-дампа: используйте cqlsh COPY, nodetool snapshot или DSBulk",
+  "A Cassandra row exists only with its key: give the key columns": "Строка Cassandra существует только вместе со своим ключом: укажите колонки ключа",
+  "No Cassandra node could be reached": "Ни один узел Cassandra не отвечает",
+  "No Cassandra node could be reached: {0}": "Ни один узел Cassandra не отвечает: {0}",
+  "Pick a keyspace first": "Сначала выберите пространство ключей (keyspace)",
+  "Cassandra keeps no such objects": "В Cassandra нет таких объектов",
+  "\"{0}\" does not exist": "«{0}» не существует",
+  "SERIAL CONSISTENCY is not supported: lightweight transactions use their own level": "SERIAL CONSISTENCY не поддерживается: у лёгких транзакций свой уровень",
+  "Unknown consistency level \"{0}\"": "Неизвестный уровень согласованности «{0}»",
+  "Consistency level: {0}": "Уровень согласованности: {0}",
+  "Searching all columns is not available for Cassandra": "Поиск по всем колонкам для Cassandra недоступен",
+  "Tables cannot be copied to Cassandra": "Таблицы нельзя копировать в Cassandra"
 }

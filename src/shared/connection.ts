@@ -17,6 +17,7 @@ export const DRIVER_IDS = [
   'libsql',
   'influxdb',
   'neo4j',
+  'cassandra',
   'plugin',
 ] as const;
 
@@ -93,6 +94,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   influxdb: 8086,
   // Neo4j's HTTP port; the Query API lives there (Bolt on 7687 is not spoken).
   neo4j: 7474,
+  // The CQL native protocol port of Cassandra (V13.22).
+  cassandra: 9042,
 };
 
 export const CONNECTION_LIMITS = {
@@ -412,6 +415,18 @@ export function optionSupport(driver: DriverId): OptionSupport {
         queryTimeout: true,
         init: true,
       };
+    // The native protocol: a connect timeout, TLS, a read timeout and init statements (the
+    // cqlsh `CONSISTENCY` command among them); the driver keeps its sockets alive itself.
+    case 'cassandra':
+      return {
+        connectTimeout: true,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: true,
+      };
     // HTTP requests like libSQL's: a connect timeout, TLS and a run limit; no socket of ours.
     case 'neo4j':
       return {
@@ -523,6 +538,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     case 'clickhouse':
       return { databases: true, schemas: false };
     case 'neo4j':
+    case 'cassandra':
       return { databases: true, schemas: false };
     // The database is the one service the connection names.
     case 'oracle':

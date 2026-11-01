@@ -18,6 +18,8 @@ export const READ_ONLY_REASONS = [
   'failed',
   /** Nodes and relationships are changed with Cypher, not row by row (V13.21). */
   'graph',
+  /** An UPDATE in Cassandra writes even where no row exists, so rows are changed with CQL (V13.22). */
+  'wide-column',
   /** The connection is marked read-only (V4.6). */
   'connection-read-only',
 ] as const;

@@ -672,6 +672,18 @@
         "icon": "$(symbol-numeric)"
       },
       {
+        "command": "datanest.redis.exportKeys",
+        "title": "%commands.redis.exportKeys.title%",
+        "category": "DataNest",
+        "icon": "$(export)"
+      },
+      {
+        "command": "datanest.redis.restoreKeys",
+        "title": "%commands.redis.restoreKeys.title%",
+        "category": "DataNest",
+        "icon": "$(cloud-upload)"
+      },
+      {
         "command": "datanest.redis.openKey",
         "title": "%commands.redis.openKey.title%",
         "category": "DataNest",
@@ -1520,6 +1532,16 @@
           "command": "datanest.redis.countKeys",
           "when": "view == datanest.connections && viewItem == datanest.redisFolder",
           "group": "1_keys@2"
+        },
+        {
+          "command": "datanest.redis.exportKeys",
+          "when": "view == datanest.connections && (viewItem == datanest.redisDatabase || viewItem == datanest.redisDatabase.starred || viewItem == datanest.redisFolder || viewItem == datanest.redisKey)",
+          "group": "3_files@1"
+        },
+        {
+          "command": "datanest.redis.restoreKeys",
+          "when": "view == datanest.connections && (viewItem == datanest.redisDatabase || viewItem == datanest.redisDatabase.starred || viewItem == datanest.redisFolder)",
+          "group": "3_files@2"
         },
         {
           "command": "datanest.redis.filterKeys",

@@ -115,6 +115,8 @@
   "commands.table.transfer.title": "Скопировать в другое подключение…",
   "commands.redis.loadMoreKeys.title": "Загрузить ещё ключи",
   "commands.redis.filterKeys.title": "Фильтр ключей…",
+  "commands.redis.exportKeys.title": "Выгрузить ключи…",
+  "commands.redis.restoreKeys.title": "Восстановить ключи…",
   "commands.redis.countKeys.title": "Посчитать ключи",
   "commands.redis.findKey.title": "Найти ключ Redis…",
   "configuration.redis.keySeparator.description": "Чем имена ключей Redis делятся на папки в дереве, например `user:1:name` → `user` → `1`. Пусто — без папок.",

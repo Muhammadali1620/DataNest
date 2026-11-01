@@ -105,6 +105,8 @@ import type { TransactionModes } from './editor/transaction-modes';
 import type { RedisKeyBrowser } from '../services/redis/key-browser';
 import { describeTarget, type DriverId } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
+import { redisKeyFileCommandHandlers } from './redis/redis-key-file-commands';
+import { keyFileEditorDeps } from './redis/redis-key-file-ui';
 import { askNewKey } from './redis/new-key';
 import { RedisKeyPanel } from './panels/redis-key-panel';
 import { RedisConsolePanel } from './panels/redis-console-panel';
@@ -415,6 +417,12 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       },
     });
   };
+  const redisKeyFileCommands = redisKeyFileCommandHandlers({
+    browser: deps.redisKeys,
+    store: deps.store,
+    tree: deps.tree,
+    ...keyFileEditorDeps,
+  });
   const redisKeyCommands = redisKeyCommandHandlers({
     browser: deps.redisKeys,
     store: deps.store,
@@ -1007,6 +1015,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
     [COMMAND_IDS.redisLoadMoreKeys]: redisKeyCommands.loadMoreKeys,
     [COMMAND_IDS.redisCountKeys]: redisKeyCommands.countKeys,
+    [COMMAND_IDS.redisExportKeys]: redisKeyFileCommands.exportKeys,
+    [COMMAND_IDS.redisRestoreKeys]: redisKeyFileCommands.restoreKeys,
     [COMMAND_IDS.redisFilterKeys]: redisKeyCommands.filterKeys,
     [COMMAND_IDS.redisFindKey]: redisKeyCommands.findKey,
     [COMMAND_IDS.redisOpenKey]: redisKeyCommands.openKey,

@@ -185,6 +185,9 @@ export const COMMAND_IDS = {
   redisFindKey: 'datanest.redis.findKey',
   /** Counts every key under a folder of a Redis database (V13.7). */
   redisCountKeys: 'datanest.redis.countKeys',
+  /** Writes the keys of a database, folder or selection to a file, and reads them back (V13.9). */
+  redisExportKeys: 'datanest.redis.exportKeys',
+  redisRestoreKeys: 'datanest.redis.restoreKeys',
   /** Opens the page of a Redis key: its value, TTL, size (V7.3). */
   redisOpenKey: 'datanest.redis.openKey',
   redisNewKey: 'datanest.redis.newKey',

@@ -112,6 +112,8 @@ describe('connections view', () => {
       'datanest.table.generateDelete',
       'datanest.redis.loadMoreKeys',
       'datanest.redis.countKeys',
+      'datanest.redis.exportKeys',
+      'datanest.redis.restoreKeys',
       'datanest.redis.filterKeys',
       'datanest.redis.findKey',
       'datanest.redis.openKey',
@@ -163,6 +165,8 @@ describe('connections view', () => {
     for (const id of [
       'datanest.redis.loadMoreKeys',
       'datanest.redis.countKeys',
+      'datanest.redis.exportKeys',
+      'datanest.redis.restoreKeys',
       'datanest.redis.openKey',
       'datanest.redis.renameKey',
       'datanest.redis.deleteKeys',

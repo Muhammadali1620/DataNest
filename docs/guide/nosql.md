@@ -15,6 +15,13 @@ do not apply to them, and theirs do not apply to SQL connections.
   lists, sets, sorted sets and streams as tables you can edit. The TTL can be set or
   removed. Values are bytes: nothing is changed on the way.
 - **New Key…**, **Rename Key…**, **Delete Key**.
+- **Export Keys…** writes the keys of a database, of a folder or of the selected keys to a
+  file, one JSON record per line (strings, hashes, lists, sets, sorted sets and streams,
+  with their TTLs; bytes that are not text as base64). It walks with `SCAN` and cuts big
+  collections into records, so memory stays small, and it can be cancelled. **Restore
+  Keys…** reads such a file back and asks what to do with a key that exists: skip it,
+  overwrite it, or restore everything under a prefix. A read-only connection refuses it,
+  and a production one asks first.
 - **Open Redis Console** runs commands as `redis-cli` would, with suggestions taken from
   the server's own command documentation. Commands that would turn the console into a
   stream (`SUBSCRIBE`, `MONITOR`) are refused, as are those that would change the

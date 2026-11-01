@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- Result tabs come back after a restart: for a saved SQL file, the statements that only read are remembered (never rows or passwords) and return as empty tabs with a Run button. `datanest.results.restore` turns it off; `datanest.results.restoreRun` runs them again on its own, never on production or a switched-off connection.
+- PostGIS geometry and geography values show as text (`SRID=4326;POINT(13.4 52.5)`) instead of hex; the text can be edited and copied as it is. Dumps and table copies write MySQL and MariaDB spatial columns in the form the server keeps, so geometries come back exactly with any SRID.
 - SSH algorithms: under an SSH server, write a rule per kind of method (key exchange, host key, cipher, MAC, compression) in OpenSSH's `+name` / `-name` / `^name` / list syntax to reach an old server or tighten a strict one. Names are checked as you type, and a rule that allows weak methods shows a warning. It applies to tunnels, to a SQLite file copied from a server, and to the connection test.
 - Export Index… and Import Documents… on an Elasticsearch/OpenSearch index, and Import as New Index… on the connection: a file with one document per line (with mappings and settings, documents only, or the `_bulk` format), read with a scroll and loaded with `_bulk`; keep or make up ids, and a report with the line of each refused document.
 - Folders of connections can be nested, up to eight levels: New Subfolder…, Move Folder…, drag a folder onto another one, or write `Work/Prod` in the connection's Folder field. Removing a folder lifts what it held one level up.

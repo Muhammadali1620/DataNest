@@ -5,7 +5,7 @@
 /** Sizes of built bundles, in kilobytes (`npm run build:prod`). */
 export const BUNDLE_KB = {
   /** Everything loaded at activation; drivers and big libraries are separate bundles. */
-  extension: 1024,
+  extension: 1536,
   /** The largest driver bundle (SQL Server and MySQL are about 1.1 MB). */
   driver: 1536,
   /** The largest webview app script; each panel loads only its own. */

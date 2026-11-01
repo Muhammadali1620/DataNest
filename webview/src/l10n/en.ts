@@ -313,6 +313,9 @@ export const en = {
   'form.driver.elasticsearch': 'Elasticsearch / OpenSearch',
   'form.driver.plugin': 'Database from another extension',
   'form.driver.libsql': 'libSQL / Turso',
+  'form.driver.neo4j': 'Neo4j',
+  'form.neo4j.hostHint':
+    'The server address, e.g. localhost or my-db.databases.neo4j.io, or a neo4j:// URL. The HTTP port (7474) is used, not Bolt; Neo4j 5.19 or newer',
   'form.driver.etcd': 'etcd',
   'form.driver.influxdb': 'InfluxDB',
   'form.influx.org': 'Organization',
@@ -642,6 +645,7 @@ export const en = {
   'grid.readOnly.key-not-selected': 'select the key columns too, so each row can be identified',
   'grid.readOnly.columns-mismatch': 'the result columns do not match the table columns',
   'grid.readOnly.failed': 'the table structure could not be read',
+  'grid.readOnly.graph': 'nodes and relationships are changed with Cypher, not in the grid',
   'grid.readOnly.connection-read-only': 'the connection is read-only',
   'grid.editHint': 'Double-click or Enter edits · Delete sets NULL · Ctrl+Delete removes rows',
   'grid.editToolbar': 'Edit rows',

@@ -44,7 +44,7 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, Redis Stack, MongoDB, Elasticsearch, PostGIS, libSQL, etcd, InfluxDB and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, Redis Stack, MongoDB, Elasticsearch, PostGIS, libSQL, etcd, InfluxDB, Neo4j and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'clickhouse',
       'cockroach',
@@ -56,6 +56,7 @@ describe('docker/compose.yml (D17)', () => {
       'mongodb',
       'mssql',
       'mysql',
+      'neo4j',
       'oracle',
       'postgis',
       'postgres',
@@ -72,7 +73,7 @@ describe('docker/compose.yml (D17)', () => {
 
   it.each(all)('puts %s in exactly one profile, its test group (V6.1)', (_id, service) => {
     expect(service.profiles).toHaveLength(1);
-    expect(service.profiles?.[0]).toMatch(/^[a-z]+$/);
+    expect(service.profiles?.[0]).toMatch(/^[a-z0-9]+$/);
   });
 
   it('keeps MySQL, MariaDB, PostgreSQL and SSH together in core', () => {

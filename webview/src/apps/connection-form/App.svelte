@@ -89,6 +89,7 @@
     mongodb: 'form.driver.mongodb',
     elasticsearch: 'form.driver.elasticsearch',
     libsql: 'form.driver.libsql',
+    neo4j: 'form.driver.neo4j',
     etcd: 'form.driver.etcd',
     influxdb: 'form.driver.influxdb',
     plugin: 'form.driver.plugin',
@@ -111,6 +112,7 @@
   const isMongo = $derived(fields?.driver === 'mongodb');
   const isElastic = $derived(fields?.driver === 'elasticsearch');
   const isLibsql = $derived(fields?.driver === 'libsql');
+  const isNeo4j = $derived(fields?.driver === 'neo4j');
   const isEtcd = $derived(fields?.driver === 'etcd');
   const isInflux = $derived(fields?.driver === 'influxdb');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
@@ -124,7 +126,12 @@
           : t('form.password'),
   );
   const defaultPort = $derived(
-    isLibsql
+    isNeo4j
+      ? // A hosted server answers on 443 with TLS; a local one listens on 7474 without it.
+        fields?.sslMode === 'off'
+        ? 7474
+        : 443
+      : isLibsql
       ? // A hosted server answers on 443 with TLS; a local sqld listens on 8080 without it.
         fields?.sslMode === 'off'
         ? 8080
@@ -194,7 +201,9 @@
     const next = formState?.drivers.find((driver) => driver.id === fields?.driver);
     // libSQL's default depends on TLS, so its field starts empty and the hint says which.
     fields.port =
-      next?.defaultPort === undefined || fields.driver === 'libsql' ? '' : String(next.defaultPort);
+      next?.defaultPort === undefined || fields.driver === 'libsql' || fields.driver === 'neo4j'
+        ? ''
+        : String(next.defaultPort);
     if (fields.driver === 'redis') {
       changeRedisMode(fields, fields.redisMode);
     }
@@ -418,6 +427,8 @@
                     : fields.mongoMode === 'replicaSet'
                       ? t('form.mongo.hostReplicaSet')
                       : undefined
+                  : isNeo4j
+                    ? t('form.neo4j.hostHint')
                   : isLibsql
                     ? t('form.libsql.hostHint')
                     : !isRedis

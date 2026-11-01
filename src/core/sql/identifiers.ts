@@ -15,6 +15,8 @@ const LIMITS: Readonly<
   sqlite: undefined,
   libsql: undefined,
   influxdb: undefined,
+  // Labels and property keys are free text.
+  neo4j: undefined,
   plugin: undefined,
   mssql: { max: 128, bytes: false },
   // Names are file names on the server's disk; it allows long ones.

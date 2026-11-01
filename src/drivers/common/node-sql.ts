@@ -133,6 +133,7 @@ export function columnSql(
         note('change column name'),
         rename,
       ]);
+    case 'neo4j':
     case 'plugin':
     case 'redis':
     case 'mongodb':
@@ -211,6 +212,8 @@ export function indexSql(
         `CREATE ${unique}INDEX ${name} ON ${target} (${columns});`,
       ]);
     }
+    case 'neo4j':
+      throw new Error('This connection has no SQL indexes');
     case 'sqlite':
     case 'libsql':
       return index.primary
@@ -277,6 +280,7 @@ export function foreignKeySql(
       ]);
     case 'clickhouse':
       return script([note('ClickHouse has no foreign keys')]);
+    case 'neo4j':
     case 'plugin':
     case 'redis':
     case 'mongodb':

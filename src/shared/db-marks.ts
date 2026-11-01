@@ -48,6 +48,12 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<path d="M2 14h4l2.500-8 4 14 3-9 1.500 3H22" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/>',
   },
+  // Three nodes joined by edges: a graph database (V13.21); the vendor's logo is not ours to use.
+  neo4j: {
+    hex: '#4f46e5',
+    ink: WHITE,
+    body: '<path d="M12 6 6 17.500M12 6l6 11.500M6 17.500h12" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="5.500" r="3.200"/><circle cx="5.500" cy="18" r="3.200"/><circle cx="18.500" cy="18" r="3.200"/>',
+  },
   // A key: the thing etcd stores values under (V13.19); the vendor's logo is not ours to use.
   etcd: {
     hex: '#2563eb',

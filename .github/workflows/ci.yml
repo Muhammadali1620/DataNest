@@ -71,6 +71,7 @@ jobs:
             libsql,
             etcd,
             influxdb,
+            neo4j,
             mongodb,
             elasticsearch,
           ]

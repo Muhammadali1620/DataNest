@@ -16,6 +16,7 @@ export const DRIVER_IDS = [
   'etcd',
   'libsql',
   'influxdb',
+  'neo4j',
   'plugin',
 ] as const;
 
@@ -90,6 +91,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   libsql: 8080,
   // The HTTP API of InfluxDB 2.x; HTTPS is served on the same port.
   influxdb: 8086,
+  // Neo4j's HTTP port; the Query API lives there (Bolt on 7687 is not spoken).
+  neo4j: 7474,
 };
 
 export const CONNECTION_LIMITS = {
@@ -409,6 +412,17 @@ export function optionSupport(driver: DriverId): OptionSupport {
         queryTimeout: true,
         init: true,
       };
+    // HTTP requests like libSQL's: a connect timeout, TLS and a run limit; no socket of ours.
+    case 'neo4j':
+      return {
+        connectTimeout: true,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: false,
+      };
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
       return {
@@ -507,6 +521,8 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     case 'mssql':
       return { databases: true, schemas: true };
     case 'clickhouse':
+      return { databases: true, schemas: false };
+    case 'neo4j':
       return { databases: true, schemas: false };
     // The database is the one service the connection names.
     case 'oracle':

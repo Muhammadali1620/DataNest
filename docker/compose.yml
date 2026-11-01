@@ -494,6 +494,27 @@ services:
       <<: *healthcheck
       test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8086/health']
 
+  # Neo4j (V13.21), group `neo4j`: the community server, its HTTP port (Query API) on 7474; Bolt
+  # is not published, DataNest does not speak it. One sign-in, `neo4j` / `datanest-test`. The
+  # memory is held small so the JVM stays friendly to a laptop; the data lives in tmpfs.
+  neo4j:
+    image: neo4j:5-community
+    container_name: datanest-neo4j
+    profiles: [neo4j]
+    environment:
+      NEO4J_AUTH: neo4j/datanest-test
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+      NEO4J_dbms_usage__report_enabled: 'false'
+    ports:
+      - 127.0.0.1:7474:7474
+    tmpfs:
+      - /data
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:7474/']
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

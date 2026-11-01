@@ -9,6 +9,7 @@ import { oracleDialect } from '../../../../src/drivers/oracle/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import { influxdbDialect } from '../../../../src/drivers/influxdb/dialect';
+import { neo4jDialect } from '../../../../src/drivers/neo4j/dialect';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
 import type { BuiltInSqlDriverId } from '../../../../src/shared/connection';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
@@ -60,6 +61,7 @@ const DIALECTS = {
   sqlite: sqliteDialect,
   libsql: sqliteDialect,
   influxdb: influxdbDialect,
+  neo4j: neo4jDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
   oracle: oracleDialect,

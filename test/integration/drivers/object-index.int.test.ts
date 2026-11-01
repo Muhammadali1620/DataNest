@@ -12,6 +12,7 @@ import { driver as mssqlDriver } from '../../../src/drivers/mssql';
 import { driver as clickhouseDriver } from '../../../src/drivers/clickhouse';
 import { driver as libsqlDriver } from '../../../src/drivers/libsql';
 import { driver as influxdbDriver } from '../../../src/drivers/influxdb';
+import { driver as neo4jDriver } from '../../../src/drivers/neo4j';
 import { driver as oracleDriver } from '../../../src/drivers/oracle';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { browseSession } from '../../../src/services/browse-session';
@@ -39,6 +40,7 @@ beforeAll(async () => {
     oracle: oracleDriver,
     libsql: libsqlDriver,
     influxdb: influxdbDriver,
+    neo4j: neo4jDriver,
   };
 }, 60_000);
 

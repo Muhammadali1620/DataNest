@@ -6,5 +6,5 @@ come from the "simple-icons" package (https://simpleicons.org), released under C
 
 The names and logos of these products are trademarks of their respective owners. DataNest is
 not affiliated with, sponsored by or endorsed by them. The marks are used only to identify
-the database a connection talks to (nominative use). The SQL Server, Oracle, libSQL and InfluxDB
-marks are simple drawings of ours.
+the database a connection talks to (nominative use). The SQL Server, Oracle, libSQL,
+InfluxDB, etcd and Neo4j marks are simple drawings of ours.

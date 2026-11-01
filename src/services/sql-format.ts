@@ -55,6 +55,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
       return 'clickhouse';
     case 'oracle':
       return 'plsql';
+    case 'neo4j':
     case 'plugin':
     case 'influxdb':
     case 'redis':
@@ -109,6 +110,10 @@ export function formatEdits(
   formatter: FormatterModule,
   range?: { readonly from: number; readonly to: number },
 ): FormatResult {
+  // The formatter knows SQL, not Cypher: `(a)-[r]->(b)` would come back garbled.
+  if (driver === 'neo4j') {
+    return { edits: [], failed: 0 };
+  }
   const statements =
     range === undefined
       ? splitStatements(text, driver)

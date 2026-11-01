@@ -47,6 +47,8 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   // InfluxDB 2.x (V13.20): `influxdb://host:8086/bucket?org=acme&token=…`; `influxdbs` is TLS.
   influxdb: 'influxdb',
   influxdbs: 'influxdb',
+  // Neo4j (V13.21): `neo4j+s://` asks for TLS; the address names Bolt, but the HTTP port is used.
+  neo4j: 'neo4j',
   // etcd (V13.19): the address of its client port; the path means nothing to it.
   etcd: 'etcd',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
@@ -370,6 +372,46 @@ function influxdbUrl(plain: string): UrlResult {
   };
 }
 
+/**
+ * `neo4j://user:password@host:7687/database`, `neo4j+s://` for TLS. The address a Neo4j
+ * client prints is a Bolt address, and DataNest speaks HTTP: Bolt's port is dropped, so the
+ * HTTP default is used, and any other port is kept.
+ */
+function neo4jUrl(text: string): UrlResult {
+  const secure = /^neo4j\+s/iu.test(text);
+  let url: URL;
+  try {
+    url = new URL(text.replace(/^[a-z][a-z0-9+.-]*:/iu, 'datanest:'));
+  } catch {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const host = nonEmpty(decode(url.hostname).replace(/^\[(.*)\]$/u, '$1'));
+  if (host === undefined) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const portText = nonEmpty(url.port);
+  const port = portText !== undefined && /^\d+$/u.test(portText) ? Number(portText) : undefined;
+  const user = nonEmpty(decode(url.username));
+  const password = url.password === '' ? undefined : decode(url.password);
+  const database = nonEmpty(decode(url.pathname.replace(/^\//u, '').split('/')[0] ?? ''));
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'neo4j',
+    host,
+    ...(port === undefined || port === 7687 || port < 1 || port > 65_535 ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
+    ...(database === undefined ? {} : { database }),
+    ...(secure ? { ssl: { mode: 'verify-full' as const } } : {}),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(password === undefined || password === '' ? {} : { password }),
+    },
+  };
+}
+
 /** Reads a connection URL. Unknown query parameters are ignored. */
 export function parseConnectionUrl(text: string): UrlResult {
   const trimmed = text.trim();
@@ -386,6 +428,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'elasticsearch') {
     return parseElasticUrl(trimmed);
+  }
+  if (driver === 'neo4j') {
+    return neo4jUrl(trimmed);
   }
   // Strip `jdbc:` and `+driver`, so the rest parses as one plain URL.
   const plain = trimmed

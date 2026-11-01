@@ -24,7 +24,8 @@ describe('KEYWORDS', () => {
   });
 
   it('includes the core SQL every dialect shares', () => {
-    for (const driver of SQL_DRIVER_IDS) {
+    // Cypher (Neo4j) is no SQL: it has its own test below.
+    for (const driver of SQL_DRIVER_IDS.filter((id) => id !== 'neo4j')) {
       // InfluxQL has neither joins nor INSERT: points are written by line protocol.
       const shared =
         driver === 'influxdb'
@@ -34,6 +35,14 @@ describe('KEYWORDS', () => {
         expect(KEYWORDS[driver], `${driver} is missing ${keyword}`).toContain(keyword);
       }
     }
+  });
+
+  it('gives Cypher its own clauses and none of SQL', () => {
+    for (const keyword of ['MATCH', 'RETURN', 'MERGE', 'DETACH DELETE', 'OPTIONAL MATCH']) {
+      expect(KEYWORDS.neo4j).toContain(keyword);
+    }
+    expect(KEYWORDS.neo4j).not.toContain('SELECT');
+    expect(KEYWORDS.neo4j).not.toContain('FROM');
   });
 
   it('keeps the dialect-only words where they belong', () => {

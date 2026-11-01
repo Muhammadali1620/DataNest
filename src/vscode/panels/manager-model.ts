@@ -61,6 +61,10 @@ export function sectionsFor(driver: DriverId): ManagerSection[] {
   if (!isSqlDriver(driver)) {
     return [];
   }
+  if (driver === 'neo4j') {
+    // The processes, dashboard and dump of the manager are SQL servers' tools.
+    return [];
+  }
   return driver === 'sqlite' || driver === 'libsql'
     ? ['log', 'dashboard', 'dump', 'sync']
     : ['log', 'dashboard', 'processes', 'dump', 'sync'];

@@ -347,6 +347,8 @@ export function targetType(
       return clickhouseType(neutral);
     case 'oracle':
       return oracleType(neutral, indexed);
+    case 'neo4j':
+      throw new DbError('unsupported', msg('Tables cannot be copied to Neo4j'));
     case 'plugin':
       throw new DbError(
         'unsupported',

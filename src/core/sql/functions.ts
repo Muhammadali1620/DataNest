@@ -77,6 +77,51 @@ const INFLUX_FUNCTIONS: readonly SqlFunction[] = [
 ];
 
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlFunction[]>> = {
+  // Cypher (V13.21): the functions people reach for first.
+  neo4j: [
+    fn('labels', 'node'),
+    fn('type', 'relationship'),
+    fn('elementId', 'entity'),
+    fn('id', 'entity'),
+    fn('keys', 'entity'),
+    fn('properties', 'entity'),
+    fn('nodes', 'path'),
+    fn('relationships', 'path'),
+    fn('startNode', 'relationship'),
+    fn('endNode', 'relationship'),
+    fn('size', 'list'),
+    fn('head', 'list'),
+    fn('last', 'list'),
+    fn('range', 'start', 'end'),
+    fn('collect', 'expression'),
+    fn('toString', 'value'),
+    fn('toInteger', 'value'),
+    fn('toFloat', 'value'),
+    fn('toBoolean', 'value'),
+    fn('toLower', 'text'),
+    fn('toUpper', 'text'),
+    fn('split', 'text', 'delimiter'),
+    fn('substring', 'text', 'start', 'length'),
+    fn('datetime'),
+    fn('date'),
+    fn('duration', 'map'),
+    fn('timestamp'),
+    fn('rand'),
+    fn('point', 'map'),
+    fn('distance', 'point1', 'point2'),
+    fn('shortestPath', 'pattern'),
+    fn('count', 'expression'),
+    fn('sum', 'expression'),
+    fn('avg', 'expression'),
+    fn('min', 'expression'),
+    fn('max', 'expression'),
+    fn('coalesce', 'value', 'fallback'),
+    fn('abs', 'number'),
+    fn('round', 'number'),
+    fn('floor', 'number'),
+    fn('ceil', 'number'),
+    fn('sqrt', 'number'),
+  ],
   influxdb: INFLUX_FUNCTIONS,
   mysql: [
     ...LENGTH_SUBSTR,
@@ -208,6 +253,10 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
 
 /** The functions of a dialect, common ones first; standard SQL when none is known. */
 export function functionsOf(driver?: DriverId): readonly SqlFunction[] {
+  if (driver === 'neo4j') {
+    // Cypher has none of the SQL functions that COMMON lists.
+    return BY_DRIVER.neo4j;
+  }
   return driver === undefined || !isSqlDriver(driver) ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
 }
 

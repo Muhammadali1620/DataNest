@@ -25,6 +25,7 @@ export function hasAccounts(driver: DriverId): boolean {
     driver !== 'sqlite' &&
     driver !== 'libsql' &&
     driver !== 'influxdb' &&
+    driver !== 'neo4j' &&
     driver !== 'plugin'
   );
 }

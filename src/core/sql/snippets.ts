@@ -55,6 +55,28 @@ const COMMON: readonly SqlSnippet[] = [
 ];
 
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlSnippet[]>> = {
+  neo4j: [
+    {
+      prefix: 'match',
+      title: 'MATCH (n:Label) WHERE … RETURN n',
+      body: 'MATCH (${1:n}:${2:Label})\nWHERE ${1:n}.${3:property} = ${4:value}\nRETURN ${1:n}\nLIMIT ${5:100};',
+    },
+    {
+      prefix: 'rel',
+      title: 'MATCH (a)-[r:TYPE]->(b) RETURN …',
+      body: 'MATCH (${1:a}:${2:Label})-[${3:r}:${4:TYPE}]->(${5:b}:${6:Label})\nRETURN ${1:a}, ${3:r}, ${5:b}\nLIMIT ${7:100};',
+    },
+    {
+      prefix: 'merge',
+      title: 'MERGE (n:Label {key: value})',
+      body: 'MERGE (${1:n}:${2:Label} {${3:key}: ${4:value}})\nON CREATE SET ${1:n}.created = datetime()\nRETURN ${1:n};',
+    },
+    {
+      prefix: 'count',
+      title: 'MATCH (n) RETURN labels(n), count(*)',
+      body: 'MATCH (n)\nRETURN labels(n) AS labels, count(*) AS total\nORDER BY total DESC;',
+    },
+  ],
   influxdb: [
     {
       prefix: 'last1h',
@@ -149,5 +171,9 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {
+  if (driver === 'neo4j') {
+    // The SELECT templates of COMMON are no Cypher.
+    return BY_DRIVER.neo4j;
+  }
   return driver === undefined || !isSqlDriver(driver) ? COMMON : [...COMMON, ...BY_DRIVER[driver]];
 }

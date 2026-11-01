@@ -39,6 +39,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   libsql: [],
   // Flux and InfluxQL go through the HTTP API; the `influx` CLI wants its own config.
   influxdb: [],
+  // Neo4j's cypher-shell speaks Bolt, not the HTTP port we use.
+  neo4j: [],
   mssql: ['sqlcmd'],
   clickhouse: ['clickhouse-client', 'clickhouse'],
   oracle: ['sql', 'sqlplus'],
@@ -222,6 +224,7 @@ export function cliCommand(
     case 'plugin':
     case 'libsql':
     case 'influxdb':
+    case 'neo4j':
     case 'elasticsearch':
     case 'etcd':
       return undefined;

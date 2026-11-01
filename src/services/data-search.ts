@@ -89,6 +89,9 @@ export function containsCondition(
     case 'influxdb':
       // InfluxQL matches text with a regular expression, not LIKE: not offered here.
       throw new DbError('unsupported', msg('Searching all columns is not available for InfluxDB'));
+    case 'neo4j':
+      // Cypher: a case-insensitive regular expression on the text of the property.
+      return `toString(${name}) =~ ${dialect.literal(`(?is).*${text.replace(/[\\.[\]{}()*+?^$|]/gu, '\\$&')}.*`)}`;
     case 'mysql':
     case 'sqlite':
     case 'libsql':

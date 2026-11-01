@@ -30,6 +30,7 @@ const DRIVER_MARKS: Readonly<Record<DriverId, readonly [string, Tone]>> = {
   mongodb: ['Mg', 'green'],
   elasticsearch: ['Es', 'purple'],
   libsql: ['Ls', 'blue'],
+  neo4j: ['Nj', 'purple'],
   etcd: ['Et', 'blue'],
   influxdb: ['In', 'purple'],
   // Never offered as a card: connections of this kind are made outside the form.

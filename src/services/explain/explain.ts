@@ -80,6 +80,7 @@ export async function planServerOf(session: Session, driver: SqlDriverId): Promi
     case 'libsql':
       return 'sqlite';
     case 'influxdb':
+    case 'neo4j':
     case 'plugin':
       throw new DbError(
         'unsupported',

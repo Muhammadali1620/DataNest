@@ -17,6 +17,8 @@ const SYSTEM_DATABASES: Readonly<Record<SqlDriverId, readonly string[]>> = {
   libsql: [],
   // The buckets InfluxDB keeps for its own tasks and monitoring.
   influxdb: ['_monitoring', '_tasks'],
+  // `system` holds the server's own users, roles and database list.
+  neo4j: ['system'],
   plugin: [],
   // The server's own tools keep these four apart as "system databases" too.
   mssql: ['master', 'model', 'msdb', 'tempdb'],
@@ -33,6 +35,7 @@ const SYSTEM_SCHEMAS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   sqlite: [],
   libsql: [],
   influxdb: [],
+  neo4j: [],
   plugin: [],
   mssql: ['sys', 'INFORMATION_SCHEMA', 'guest'],
   clickhouse: [],
@@ -47,6 +50,7 @@ const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<SqlDriverId, readonly string[]>> =
   sqlite: [],
   libsql: [],
   influxdb: [],
+  neo4j: [],
   plugin: [],
   mssql: [],
   clickhouse: [],

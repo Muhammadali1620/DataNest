@@ -134,6 +134,79 @@ function mainVerbIndex(words: readonly Word[]): number {
 /** What follows BEGIN when T-SQL starts a transaction rather than a block. */
 const TSQL_TRANSACTION = new Set(['TRAN', 'TRANSACTION', 'DISTRIBUTED']);
 
+/** Cypher words that write or administer wherever they appear in a statement. */
+const CYPHER_WRITE_WORDS = new Set([
+  'CREATE',
+  'MERGE',
+  'DELETE',
+  'DETACH',
+  'SET',
+  'REMOVE',
+  'DROP',
+  'FOREACH',
+  'LOAD',
+  'ALTER',
+  'GRANT',
+  'DENY',
+  'REVOKE',
+  'RENAME',
+  'START',
+  'STOP',
+  'TERMINATE',
+  'DEALLOCATE',
+  'REALLOCATE',
+  'ENABLE',
+  'INSERT',
+  'DRYRUN',
+]);
+
+/** Procedures known to only read; any other CALL may write, and is treated so. */
+const CYPHER_READ_PROCEDURES = [
+  'DB.LABELS',
+  'DB.RELATIONSHIPTYPES',
+  'DB.PROPERTYKEYS',
+  'DB.SCHEMA.',
+  'DB.INDEXES',
+  'DB.CONSTRAINTS',
+  'DB.PING',
+  'DB.INFO',
+  'DB.STATS.RETRIEVE',
+  'DBMS.COMPONENTS',
+  'DBMS.PROCEDURES',
+  'DBMS.FUNCTIONS',
+  'DBMS.LISTCONFIG',
+  'DBMS.SHOWCURRENTUSER',
+  'DBMS.QUERYJMX',
+];
+
+/** Cypher: a statement reads unless a writing word or a procedure we do not know shows up. */
+function cypherReads(words: readonly Word[]): boolean {
+  const first = words[0]?.text ?? '';
+  if (first === 'SHOW' || first === 'EXPLAIN') {
+    return true;
+  }
+  for (const [index, word] of words.entries()) {
+    if (CYPHER_WRITE_WORDS.has(word.text)) {
+      return false;
+    }
+    if (word.text === 'CALL') {
+      const next = words[index + 1];
+      // `CALL { … }` runs a subquery: what is inside is scanned like the rest.
+      if (next?.depth !== word.depth) {
+        continue;
+      }
+      const name = words
+        .slice(index + 1, index + 4)
+        .map((part) => part.text)
+        .join('.');
+      if (!CYPHER_READ_PROCEDURES.some((known) => name === known || name.startsWith(known))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /** True when running the statement can only read; false when it may change anything. */
 export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf()): boolean {
   const { words, topPunctuation, hasParentheses } = scan(sql, syntax);
@@ -141,6 +214,10 @@ export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf())
   if (first === undefined) {
     // Only comments or blanks: nothing runs.
     return true;
+  }
+  if (syntax.cypher) {
+    // A table opened from the tree is a SELECT the session turns into Cypher.
+    return first.text === 'SELECT' ? selectReads(words, 0) : cypherReads(words);
   }
   switch (first.text) {
     case 'SELECT':

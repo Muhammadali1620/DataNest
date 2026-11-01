@@ -8,6 +8,7 @@ import { testDatabase, testSshServer } from './databases';
 import { TEST_ELASTIC } from './elastic-servers';
 import { TEST_ETCD } from './etcd-servers';
 import { TEST_INFLUXDB } from './influxdb-servers';
+import { TEST_NEO4J } from './neo4j-servers';
 import { TEST_LIBSQL } from './libsql-servers';
 import { TEST_MONGO } from './mongo-servers';
 import { TEST_REDIS, TEST_REDISJSON } from './redis-servers';
@@ -109,6 +110,11 @@ const DEFINITIONS = {
     always: false,
     folders: ['influxdb'],
     endpoints: () => [{ name: 'influxdb', host: TEST_INFLUXDB.host, port: TEST_INFLUXDB.port }],
+  },
+  neo4j: {
+    always: false,
+    folders: ['neo4j'],
+    endpoints: () => [{ name: 'neo4j', host: TEST_NEO4J.host, port: TEST_NEO4J.port }],
   },
   etcd: {
     always: false,

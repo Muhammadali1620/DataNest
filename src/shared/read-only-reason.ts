@@ -16,6 +16,8 @@ export const READ_ONLY_REASONS = [
   'key-not-selected',
   'columns-mismatch',
   'failed',
+  /** Nodes and relationships are changed with Cypher, not row by row (V13.21). */
+  'graph',
   /** The connection is marked read-only (V4.6). */
   'connection-read-only',
 ] as const;

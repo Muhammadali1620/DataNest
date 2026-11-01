@@ -316,6 +316,9 @@ export const ru: Record<MessageKey, string> = {
   'form.driver.elasticsearch': 'Elasticsearch / OpenSearch',
   'form.driver.plugin': 'База из другого расширения',
   'form.driver.libsql': 'libSQL / Turso',
+  'form.driver.neo4j': 'Neo4j',
+  'form.neo4j.hostHint':
+    'Адрес сервера: localhost, my-db.databases.neo4j.io или адрес neo4j://. Используется HTTP-порт (7474), а не Bolt; нужен Neo4j 5.19 или новее',
   'form.driver.etcd': 'etcd',
   'form.driver.influxdb': 'InfluxDB',
   'form.influx.org': 'Организация',
@@ -645,6 +648,7 @@ export const ru: Record<MessageKey, string> = {
     'выберите и колонки ключа, чтобы каждую строку можно было определить',
   'grid.readOnly.columns-mismatch': 'колонки результата не совпадают с колонками таблицы',
   'grid.readOnly.failed': 'не удалось прочитать структуру таблицы',
+  'grid.readOnly.graph': 'узлы и связи меняются запросами Cypher, а не в таблице',
   'grid.readOnly.connection-read-only': 'подключение только для чтения',
   'grid.editHint':
     'Двойной щелчок или Enter — правка · Delete — NULL · Ctrl+Delete — удалить строки',

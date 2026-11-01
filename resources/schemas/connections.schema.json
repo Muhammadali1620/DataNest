@@ -124,9 +124,10 @@
             "etcd",
             "libsql",
             "influxdb",
+            "neo4j",
             "plugin"
           ],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; etcd is a key-value store reached over its HTTP/JSON gateway, with the user and password of an etcd user; libsql is a libSQL server (sqld, Turso) over HTTP, its auth token kept as the password; influxdb is an InfluxDB 2.x server over HTTP (Flux and InfluxQL): the organization goes in \"user\", the API token is the password and \"database\" is the bucket; plugin is a database that another extension added, named in \"plugin\"."
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; etcd is a key-value store reached over its HTTP/JSON gateway, with the user and password of an etcd user; libsql is a libSQL server (sqld, Turso) over HTTP, its auth token kept as the password; neo4j is a Neo4j server (5.19 or newer) reached over its HTTP port, queried with Cypher; influxdb is an InfluxDB 2.x server over HTTP (Flux and InfluxQL): the organization goes in \"user\", the API token is the password and \"database\" is the bucket; plugin is a database that another extension added, named in \"plugin\"."
         },
         "host": {
           "type": "string"

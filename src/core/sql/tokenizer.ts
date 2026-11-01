@@ -58,6 +58,10 @@ export interface SqlSyntax {
   readonly quoteOperator: boolean;
   /** `//` starts a line comment (Flux, V13.20). */
   readonly slashComments?: boolean;
+  /** `--` starts a line comment; absent means it does. In Cypher it is a relationship, `(a)--(b)`. */
+  readonly dashComments?: boolean;
+  /** The language is Cypher, not SQL: what reads and what writes is told by other words (V13.21). */
+  readonly cypher?: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -184,7 +188,29 @@ const INFLUX: SqlSyntax = {
   slashComments: true,
 };
 
+/** Cypher (Neo4j): `//` comments, `--` is an edge, backslash escapes, backticks quote names. */
+const CYPHER: SqlSyntax = {
+  backslashEscapes: true,
+  hashComments: false,
+  backtickIdentifiers: true,
+  doubleQuoteIdentifiers: false,
+  escapeStrings: false,
+  dollarQuotes: false,
+  nestedBlockComments: false,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
+  slashComments: true,
+  dashComments: false,
+  cypher: true,
+};
+
 const BY_DRIVER: Readonly<Record<SqlDriverId, SqlSyntax>> = {
+  neo4j: CYPHER,
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,
@@ -242,7 +268,7 @@ function readToken(sql: string, start: number, syntax: SqlSyntax): Token {
   if (/\s/.test(char)) {
     return { kind: 'whitespace', start, end: runOfWhitespace(sql, start) };
   }
-  if (sql.startsWith('--', start)) {
+  if (syntax.dashComments !== false && sql.startsWith('--', start)) {
     return { kind: 'comment', start, end: endOfLine(sql, start + 2) };
   }
   if (syntax.slashComments === true && sql.startsWith('//', start)) {

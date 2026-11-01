@@ -211,21 +211,13 @@ export async function execRemoteCommand(
       channel.stderr.on('data', (chunk: Buffer) => {
         control.onData(chunk, true);
       });
-      channel.on('exit', (exitCode: number | null, exitSignal?: string) => {
-        code = exitCode ?? undefined;
-        signal = exitSignal;
-      });
-      channel.on('error', (error: Error) => {
-        reject(
-          new DbError(
-            'connection-failed',
-            msg('The connection to the server was lost: {0}', errorMessage(error)),
-            { cause: error },
-          ),
-        );
-      });
-      channel.once('close', () => {
-        control.signal?.removeEventListener('abort', abort);
+      let closed = false;
+      let settled = false;
+      const settle = (): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
         if (aborted) {
           resolve({});
         } else if (code === undefined && signal === undefined) {
@@ -241,6 +233,33 @@ export async function execRemoteCommand(
             ...(code === undefined ? {} : { code }),
             ...(signal === undefined ? {} : { signal }),
           });
+        }
+      };
+      channel.on('exit', (exitCode: number | null, exitSignal?: string) => {
+        code = exitCode ?? undefined;
+        signal = exitSignal;
+        // The status may be handled after the channel reported closed (seen on Windows and macOS).
+        if (closed) {
+          settle();
+        }
+      });
+      channel.on('error', (error: Error) => {
+        reject(
+          new DbError(
+            'connection-failed',
+            msg('The connection to the server was lost: {0}', errorMessage(error)),
+            { cause: error },
+          ),
+        );
+      });
+      channel.once('close', () => {
+        control.signal?.removeEventListener('abort', abort);
+        closed = true;
+        if (aborted || code !== undefined || signal !== undefined) {
+          settle();
+        } else {
+          // Give a status that is still on its way a moment before calling it a lost link.
+          setTimeout(settle, 250);
         }
       });
     });

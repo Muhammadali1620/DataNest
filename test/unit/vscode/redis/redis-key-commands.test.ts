@@ -37,6 +37,18 @@ function setup(
     include: vi.fn(),
     forget: vi.fn(),
     session: vi.fn(() => Promise.resolve(session)),
+    countFolder: vi.fn(
+      (
+        _connectionId: string,
+        _database: number,
+        _prefix: string,
+        options?: { onProgress?: (found: number) => void },
+      ) => {
+        options?.onProgress?.(10);
+        options?.onProgress?.(20);
+        return Promise.resolve(undefined);
+      },
+    ),
   };
   const openKey = vi.fn((_place: RedisPlace, _key: RedisKeyRef) => Promise.resolve());
   const askNewKey = vi.fn((_prefix: string) => Promise.resolve(options.newKey));
@@ -46,6 +58,13 @@ function setup(
     Promise.resolve(options.confirm ?? true),
   );
   const refresh = vi.fn();
+  let clock = 0;
+  const signal = { aborted: false };
+  const withCountProgress = vi.fn(
+    async (_title: string, task: (signal: { readonly aborted: boolean }) => Promise<void>) => {
+      await task(signal);
+    },
+  );
   const askPattern = vi.fn((_current: string | undefined) => Promise.resolve(options.pattern));
   const pickConnection = vi.fn((ids: readonly string[]) => Promise.resolve(ids[1]));
   const findKey = vi.fn((_place: RedisPlace, _initial: string) => Promise.resolve(options.found));
@@ -65,6 +84,8 @@ function setup(
     openConsole,
     openServerInfo,
     confirm,
+    withCountProgress,
+    now: () => clock,
     texts: {
       deleteKeys: (names) => `delete ${names.join(',')}?`,
       deleteAction: 'Delete',
@@ -73,6 +94,7 @@ function setup(
       replaceAction: 'Replace',
       changeAction: 'Change',
       readOnly: 'read-only',
+      countingTitle: (prefix) => `counting ${prefix}`,
     },
   });
   return {
@@ -89,6 +111,11 @@ function setup(
     askNewKey,
     openConsole,
     openServerInfo,
+    withCountProgress,
+    signal,
+    tick: (ms: number) => {
+      clock += ms;
+    },
   };
 }
 
@@ -392,5 +419,66 @@ describe('openConsole / serverInfo (V7.4)', () => {
       code: 'unsupported',
     });
     expect(openConsole).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('countKeys (V13.7)', () => {
+  const folder: TreeNode = {
+    kind: 'redisFolder',
+    connectionId: 'r1',
+    database: 2,
+    path: ['user'],
+    prefix: 'user:',
+    count: 4,
+  };
+
+  it('counts the folder under a progress that can be cancelled', async () => {
+    const { handlers, browser, withCountProgress, signal } = setup();
+    await handlers.countKeys(folder);
+    expect(withCountProgress).toHaveBeenCalledWith('counting user:', expect.any(Function));
+    expect(browser.countFolder).toHaveBeenCalledWith('r1', 2, 'user:', {
+      signal,
+      onProgress: expect.any(Function) as unknown,
+    });
+  });
+
+  it('redraws the folder at the start and at the end', async () => {
+    const { handlers, refresh } = setup();
+    await handlers.countKeys(folder);
+    expect(refresh.mock.calls.at(0)).toEqual([folder]);
+    expect(refresh.mock.calls.at(-1)).toEqual([folder]);
+  });
+
+  it('redraws while counting, but not on every step', async () => {
+    const { handlers, refresh } = setup();
+    // The fake reports two steps at the same instant: only the first is drawn.
+    await handlers.countKeys(folder);
+    expect(refresh).toHaveBeenCalledTimes(3);
+  });
+
+  it('redraws the folder even when the count failed, and passes the failure on', async () => {
+    const { handlers, browser, refresh } = setup();
+    browser.countFolder.mockRejectedValueOnce(new Error('NOPERM'));
+    await expect(handlers.countKeys(folder)).rejects.toThrow('NOPERM');
+    expect(refresh.mock.calls.at(-1)).toEqual([folder]);
+  });
+
+  it('counts on a read-only and on a production connection without asking', async () => {
+    const configs: ConnectionConfig[] = [
+      { id: 'r1', name: 'Cache', driver: 'redis', host: 'h', readOnly: true, production: true },
+    ];
+    const { handlers, browser, confirm } = setup({ configs });
+    await handlers.countKeys(folder);
+    expect(browser.countFolder).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('ignores everything that is not a folder', async () => {
+    const { handlers, browser, withCountProgress } = setup();
+    await handlers.countKeys(db);
+    await handlers.countKeys('r1');
+    await handlers.countKeys();
+    expect(browser.countFolder).not.toHaveBeenCalled();
+    expect(withCountProgress).not.toHaveBeenCalled();
   });
 });

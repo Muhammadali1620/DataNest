@@ -452,6 +452,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       });
     },
     noRedisMessage: vscode.l10n.t('There is no Redis connection yet'),
+    withCountProgress: async (title, task) => {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title, cancellable: true },
+        async (_progress, token) => {
+          await task({
+            get aborted() {
+              return token.isCancellationRequested;
+            },
+          });
+        },
+      );
+    },
     openKey: async (place, key) => {
       openRedisKey(place, key);
       await Promise.resolve();
@@ -507,6 +519,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       replaceAction: vscode.l10n.t('Replace'),
       changeAction: vscode.l10n.t('Change'),
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+      countingTitle: (prefix) => vscode.l10n.t('Counting keys under {0}…', prefix),
     },
   });
   // A double click on a table opens it and leaves its row as it was (V11.12).
@@ -993,6 +1006,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       return undefined;
     },
     [COMMAND_IDS.redisLoadMoreKeys]: redisKeyCommands.loadMoreKeys,
+    [COMMAND_IDS.redisCountKeys]: redisKeyCommands.countKeys,
     [COMMAND_IDS.redisFilterKeys]: redisKeyCommands.filterKeys,
     [COMMAND_IDS.redisFindKey]: redisKeyCommands.findKey,
     [COMMAND_IDS.redisOpenKey]: redisKeyCommands.openKey,

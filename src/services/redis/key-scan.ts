@@ -64,6 +64,74 @@ export async function scanFrom(
   return { keys, position: { master, cursor, done } };
 }
 
+/** Keys a count walks through before it says "at least" (V13.7). */
+export const COUNT_CAP = 100_000;
+
+/** How long a count may walk before it says "at least". */
+export const COUNT_BUDGET_MS = 30_000;
+
+export interface CountRequest {
+  /** A glob; every key when absent. */
+  readonly match?: string;
+  /** Stop once this many different keys were seen. */
+  readonly cap: number;
+  /** Stop after this many milliseconds. */
+  readonly budgetMs: number;
+  /** Checked between steps: a count the user cancelled stops there. */
+  readonly signal?: { readonly aborted: boolean };
+  /** Told the number of keys seen so far, after each step. */
+  readonly onProgress?: (found: number) => void;
+  readonly now?: () => number;
+}
+
+export interface CountResult {
+  readonly count: number;
+  /** SCAN walked the whole database: `count` is exact. */
+  readonly complete: boolean;
+  /** The user cancelled; `count` is only what was seen by then. */
+  readonly cancelled: boolean;
+}
+
+/**
+ * How many keys match a glob, by walking the database with SCAN (never KEYS, which
+ * would block the server). SCAN may return a key twice, so keys are counted once each.
+ */
+export async function countKeys(
+  session: RedisSession,
+  request: CountRequest,
+): Promise<CountResult> {
+  const now = request.now ?? Date.now;
+  const started = now();
+  const seen = new Set<string>();
+  let master = 0;
+  let cursor = '0';
+  let walked = false;
+  while (!walked) {
+    if (request.signal?.aborted === true) {
+      return { count: seen.size, complete: false, cancelled: true };
+    }
+    const step = await session.scanStep(master, cursor, {
+      ...(request.match === undefined ? {} : { match: request.match }),
+      count: SCAN_STEP_COUNT,
+    });
+    for (const key of step.keys) {
+      seen.add(Buffer.from(key).toString('latin1'));
+    }
+    if (step.cursor === '0') {
+      master += 1;
+      cursor = '0';
+      walked = master >= step.masters;
+    } else {
+      cursor = step.cursor;
+    }
+    request.onProgress?.(seen.size);
+    if (!walked && (seen.size >= request.cap || now() - started >= request.budgetMs)) {
+      return { count: seen.size, complete: false, cancelled: false };
+    }
+  }
+  return { count: seen.size, complete: true, cancelled: false };
+}
+
 /** Pipelined TYPE in batches; a key deleted meanwhile (`none`) is left out. */
 export async function withTypes(
   session: RedisSession,

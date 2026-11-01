@@ -111,6 +111,7 @@ describe('connections view', () => {
       'datanest.table.generateUpdate',
       'datanest.table.generateDelete',
       'datanest.redis.loadMoreKeys',
+      'datanest.redis.countKeys',
       'datanest.redis.filterKeys',
       'datanest.redis.findKey',
       'datanest.redis.openKey',
@@ -161,6 +162,7 @@ describe('connections view', () => {
     // They belong to tree items; from elsewhere there is no key to act on.
     for (const id of [
       'datanest.redis.loadMoreKeys',
+      'datanest.redis.countKeys',
       'datanest.redis.openKey',
       'datanest.redis.renameKey',
       'datanest.redis.deleteKeys',

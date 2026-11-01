@@ -115,6 +115,7 @@
   "commands.table.transfer.title": "Copy to Another Connection…",
   "commands.redis.loadMoreKeys.title": "Load More Keys",
   "commands.redis.filterKeys.title": "Filter Keys…",
+  "commands.redis.countKeys.title": "Count Keys",
   "commands.redis.findKey.title": "Find Redis Key…",
   "configuration.redis.keySeparator.description": "What splits Redis key names into folders in the tree, e.g. `user:1:name` → `user` → `1`. Empty: no folders.",
   "configuration.sqlite.remoteMaxSizeMb.description": "The most a SQLite file on a server may weigh, in megabytes, for DataNest to copy it over SSH and open it (the copy is read-only). A bigger file is refused before anything is copied.",

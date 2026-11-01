@@ -6,7 +6,16 @@ import type { Logger } from '../../core/logging/logger';
 import type { RedisSession } from '../../drivers/redis-driver';
 import type { RedisKeyRef } from '../../shared/redis-key';
 import { ConnectionManager } from '../connection-manager';
-import { SCAN_START, type ScanPosition, scanFrom, withTypes } from './key-scan';
+import {
+  COUNT_BUDGET_MS,
+  COUNT_CAP,
+  countKeys,
+  escapeGlob,
+  SCAN_START,
+  type ScanPosition,
+  scanFrom,
+  withTypes,
+} from './key-scan';
 import { type KeyChildren, KeyTree, type LoadedKey } from './key-tree';
 
 /** Settings the browser reads; asked every time, so a change applies at the next load. */
@@ -27,7 +36,15 @@ export interface KeyBrowserDeps {
 /** How long one load may walk before it shows what it has. */
 export const LOAD_BUDGET_MS = 2000;
 
+/** The full number of keys under a prefix (V13.7): running, or counted (maybe only "at least"). */
+export type FolderCount =
+  | { readonly state: 'counting'; readonly found: number }
+  | { readonly state: 'counted'; readonly count: number; readonly exact: boolean };
+
 interface DatabaseKeys {
+  /** Counts by prefix; they go with the loaded keys when the tree is refreshed. */
+  counts: Map<string, FolderCount>;
+  counting: Map<string, Promise<void>>;
   pattern: string | undefined;
   tree: KeyTree;
   position: ScanPosition;
@@ -101,6 +118,77 @@ export class RedisKeyBrowser {
     );
   }
 
+  /** What is known of the full number of keys under a prefix, if it was asked for. */
+  countOf(connectionId: string, database: number, prefix: string): FolderCount | undefined {
+    return this.states.get(stateKey(connectionId, database))?.counts.get(prefix);
+  }
+
+  /**
+   * Counts the keys under a prefix with SCAN, up to a cap and a time budget; the result
+   * stays until the tree is refreshed. A second call for a prefix being counted shares
+   * the first. A cancelled count is forgotten, not remembered as a number.
+   */
+  async countFolder(
+    connectionId: string,
+    database: number,
+    prefix: string,
+    options: {
+      readonly signal?: { readonly aborted: boolean };
+      readonly onProgress?: (found: number) => void;
+      readonly cap?: number;
+      readonly budgetMs?: number;
+    } = {},
+  ): Promise<FolderCount | undefined> {
+    const state = this.state(connectionId, database);
+    const running = state.counting.get(prefix);
+    if (running !== undefined) {
+      await running;
+      return state.counts.get(prefix);
+    }
+    state.counts.set(prefix, { state: 'counting', found: 0 });
+    const work = (async () => {
+      try {
+        const session = await this.session(connectionId, database);
+        const result = await countKeys(session, {
+          match: `${escapeGlob(prefix)}*`,
+          cap: options.cap ?? COUNT_CAP,
+          budgetMs: options.budgetMs ?? COUNT_BUDGET_MS,
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          onProgress: (found) => {
+            if (state.counts.get(prefix)?.state === 'counting') {
+              state.counts.set(prefix, { state: 'counting', found });
+            }
+            options.onProgress?.(found);
+          },
+          ...(this.deps.now === undefined ? {} : { now: this.deps.now }),
+        });
+        // A reset while this count ran replaced the state: the number belongs to nobody.
+        if (this.states.get(stateKey(connectionId, database)) !== state) {
+          return;
+        }
+        if (result.cancelled) {
+          state.counts.delete(prefix);
+        } else {
+          state.counts.set(prefix, {
+            state: 'counted',
+            count: result.count,
+            exact: result.complete,
+          });
+        }
+      } catch (error) {
+        state.counts.delete(prefix);
+        throw error;
+      }
+    })();
+    state.counting.set(prefix, work);
+    try {
+      await work;
+    } finally {
+      state.counting.delete(prefix);
+    }
+    return state.counts.get(prefix);
+  }
+
   /** Forgets what was loaded, keeping each database's filter. */
   reset(connectionId?: string, database?: number): void {
     for (const [key, state] of this.states) {
@@ -141,6 +229,8 @@ export class RedisKeyBrowser {
 
   private fresh(pattern: string | undefined): DatabaseKeys {
     return {
+      counts: new Map(),
+      counting: new Map(),
       pattern,
       tree: new KeyTree(this.deps.settings.separator()),
       position: SCAN_START,

@@ -183,6 +183,8 @@ export const COMMAND_IDS = {
   redisFilterKeys: 'datanest.redis.filterKeys',
   /** Finds a Redis key with SCAN and shows it in the tree. */
   redisFindKey: 'datanest.redis.findKey',
+  /** Counts every key under a folder of a Redis database (V13.7). */
+  redisCountKeys: 'datanest.redis.countKeys',
   /** Opens the page of a Redis key: its value, TTL, size (V7.3). */
   redisOpenKey: 'datanest.redis.openKey',
   redisNewKey: 'datanest.redis.newKey',

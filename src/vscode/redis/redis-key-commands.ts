@@ -38,12 +38,14 @@ export interface RedisKeyTexts {
   /** The button of the production question. */
   readonly changeAction: string;
   readonly readOnly: string;
+  /** The title of the cancellable progress of a count. */
+  countingTitle(prefix: string): string;
 }
 
 export interface RedisKeyCommandDeps {
   readonly browser: Pick<
     RedisKeyBrowser,
-    'loadMore' | 'patternOf' | 'setPattern' | 'include' | 'forget' | 'session'
+    'loadMore' | 'patternOf' | 'setPattern' | 'include' | 'forget' | 'session' | 'countFolder'
   >;
   readonly store: Pick<ConnectionStore, 'get' | 'list'>;
   readonly tree: RefreshableTree;
@@ -72,6 +74,16 @@ export interface RedisKeyCommandDeps {
     action: string,
   ) => Promise<boolean>;
   readonly texts: RedisKeyTexts;
+  /**
+   * Runs a count under a cancellable progress; the task gets a signal that turns
+   * `aborted` when the user cancels (V13.7).
+   */
+  readonly withCountProgress: (
+    title: string,
+    task: (signal: { readonly aborted: boolean }) => Promise<void>,
+  ) => Promise<void>;
+  /** Milliseconds now; tests pass their own clock. */
+  readonly now?: () => number;
   /** Opens a console on a database (V7.4). */
   readonly openConsole: (place: RedisPlace) => void;
   /** Opens what the server reports about itself (V7.4). */
@@ -82,6 +94,7 @@ export type RedisKeyCommandName =
   | 'loadMoreKeys'
   | 'filterKeys'
   | 'findKey'
+  | 'countKeys'
   | 'openKey'
   | 'newKey'
   | 'renameKey'
@@ -175,6 +188,38 @@ export function redisKeyCommandHandlers(
       deps.browser.include(place.connectionId, place.database, found);
       await deps.reveal(place, found);
       await deps.openKey(place, found.key);
+      return undefined;
+    },
+
+    /**
+     * Counts every key under the clicked folder with SCAN; the number replaces the loaded
+     * count in the tree, and the tree is redrawn as the count advances. Reading only, so
+     * read-only and production connections need no question.
+     */
+    countKeys: async (target?: CommandTarget) => {
+      if (!isTreeNode(target) || target.kind !== 'redisFolder') {
+        return undefined;
+      }
+      const folder = target;
+      const now = deps.now ?? Date.now;
+      let drawn = Number.NEGATIVE_INFINITY;
+      try {
+        await deps.withCountProgress(deps.texts.countingTitle(folder.prefix), async (signal) => {
+          deps.tree.refresh(folder);
+          await deps.browser.countFolder(folder.connectionId, folder.database, folder.prefix, {
+            signal,
+            // A redraw per step would flood the tree; a few per second show the climb.
+            onProgress: () => {
+              if (now() - drawn >= 300) {
+                drawn = now();
+                deps.tree.refresh(folder);
+              }
+            },
+          });
+        });
+      } finally {
+        deps.tree.refresh(folder);
+      }
       return undefined;
     },
 

@@ -1191,5 +1191,9 @@
   "Favorites": "Избранное",
   "Favorite": "Избранное",
   "The nodes you starred, in the order you starred them": "Узлы, отмеченные звёздочкой, в порядке добавления",
-  "You can star up to {0} nodes: take a star off first": "Можно отметить не больше {0} узлов: сначала снимите звёздочку с одного из них"
+  "You can star up to {0} nodes: take a star off first": "Можно отметить не больше {0} узлов: сначала снимите звёздочку с одного из них",
+  "{0} keys under {1}": "Ключей под {1}: {0}",
+  "At least {0} keys under {1}: counting stopped at its limit": "Не меньше {0} ключей под {1}: подсчёт остановился на пределе",
+  "Counting keys under {0}: {1} so far": "Считаем ключи под {0}: пока {1}",
+  "Counting keys under {0}…": "Считаем ключи под {0}…"
 }

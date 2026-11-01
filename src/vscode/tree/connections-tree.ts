@@ -60,6 +60,7 @@ import {
 import { starUri } from './connection-decorations';
 import { type ProjectSource, TreeModel, type TreeModelDeps, type TreeSettings } from './tree-model';
 import { formatCount } from '../../core/number-format';
+import { folderCountView } from './folder-count';
 import type { TableStats } from '../../core/model/objects';
 import { formatSize } from '../../shared/byte-size';
 
@@ -512,8 +513,23 @@ export class ConnectionsTreeProvider
         );
         item.id = nodeId(node);
         item.iconPath = vscode.ThemeIcon.Folder;
-        item.description = formatCount(node.count, vscode.env.language);
-        item.tooltip = vscode.l10n.t('{0} keys loaded under {1}', node.count, node.prefix);
+        const total = this.deps.redisKeys?.countOf(node.connectionId, node.database, node.prefix);
+        const view = folderCountView(node.count, total, (count) =>
+          formatCount(count, vscode.env.language),
+        );
+        item.description = view.text;
+        item.tooltip =
+          view.kind === 'counted'
+            ? view.exact
+              ? vscode.l10n.t('{0} keys under {1}', view.count, node.prefix)
+              : vscode.l10n.t(
+                  'At least {0} keys under {1}: counting stopped at its limit',
+                  view.count,
+                  node.prefix,
+                )
+            : view.kind === 'counting'
+              ? vscode.l10n.t('Counting keys under {0}: {1} so far', node.prefix, view.found)
+              : vscode.l10n.t('{0} keys loaded under {1}', node.count, node.prefix);
         item.contextValue = TREE_CONTEXT.redisFolder;
         return item;
       }

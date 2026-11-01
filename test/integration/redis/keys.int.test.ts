@@ -132,4 +132,38 @@ describe('Redis keys (V7.2)', () => {
     const found = await findKeys(await cluster(), 'echo', { limit: 10, budgetMs: 5000 });
     expect(found.keys).toEqual([{ key: { text: 'cluster:echo' }, type: 'string' }]);
   });
+
+  it('counts all the keys of a folder, more than one load brings (V13.7)', async () => {
+    // A load of 500 keys shows 500 of the 2005 below `big:`; the count walks them all.
+    const browser = browserOver(await open(), 500);
+    const counted = await browser.countFolder('c', 0, 'big:');
+    expect(counted).toEqual({ state: 'counted', count: 2005, exact: true });
+    const small = await browser.countFolder('c', 0, 'user:');
+    expect(small).toEqual({ state: 'counted', count: 4, exact: true });
+    expect(await browser.countFolder('c', 0, 'nothing:')).toMatchObject({ count: 0, exact: true });
+  });
+
+  it('counts with the same number as the folder shows once everything is loaded', async () => {
+    const browser = browserOver(await open());
+    const top = await browser.children('c', 0, []);
+    const folder = top.folders.find((entry) => entry.name === 'big');
+    const counted = await browser.countFolder('c', 0, 'big:');
+    expect(counted).toMatchObject({ count: folder?.count });
+  });
+
+  it('says "at least" when the count is cut at its cap', async () => {
+    const browser = browserOver(await open());
+    const counted = await browser.countFolder('c', 0, 'big:', { cap: 1500 });
+    expect(counted).toMatchObject({ exact: false });
+    expect(counted?.state === 'counted' && counted.count).toBeGreaterThanOrEqual(1500);
+  });
+
+  it('counts a folder over every master of a cluster', async () => {
+    const browser = browserOver(await cluster());
+    expect(await browser.countFolder('c', 0, 'cluster:')).toEqual({
+      state: 'counted',
+      count: 11,
+      exact: true,
+    });
+  });
 });

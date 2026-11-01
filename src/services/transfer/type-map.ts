@@ -77,7 +77,7 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
     return { kind: 'integer', bytes: 2, unsigned: false };
   }
   // SQLite keeps every integer in eight bytes, whatever the declaration says.
-  if (driver === 'sqlite' && type.includes('int')) {
+  if ((driver === 'sqlite' || driver === 'libsql') && type.includes('int')) {
     return { kind: 'integer', bytes: 8, unsigned: false };
   }
   for (const [pattern, bytes] of INT_BYTES) {
@@ -339,6 +339,7 @@ export function targetType(
     case 'postgres':
       return postgresType(neutral);
     case 'sqlite':
+    case 'libsql':
       return sqliteType(neutral);
     case 'mssql':
       return mssqlType(neutral, indexed);

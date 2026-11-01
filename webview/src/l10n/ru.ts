@@ -295,6 +295,11 @@ export const ru: Record<MessageKey, string> = {
     'Ответ слишком большой, чтобы показать его здесь целиком; скопируйте, чтобы увидеть весь',
   'form.driver.elasticsearch': 'Elasticsearch / OpenSearch',
   'form.driver.plugin': 'База из другого расширения',
+  'form.driver.libsql': 'libSQL / Turso',
+  'form.libsql.hostHint':
+    'Адрес сервера, например my-db-org.turso.io, или адрес libsql://. Для облачного сервера включите TLS ниже',
+  'form.libsql.token': 'Токен доступа',
+  'form.libsql.tokenHint': 'Передаётся как bearer-токен; для сервера без входа оставьте пустым',
   'form.elastic.auth': 'Вход',
   'form.elastic.auth.basic': 'Пользователь и пароль',
   'form.elastic.auth.apiKey': 'API-ключ',

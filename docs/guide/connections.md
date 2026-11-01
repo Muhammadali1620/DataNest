@@ -13,6 +13,7 @@
 | Redis | One server, Sentinel or a cluster; Valkey too. |
 | MongoDB | One server, a replica set or `mongodb+srv://`; SCRAM, X.509 and LDAP sign-in. |
 | Elasticsearch | And OpenSearch; user and password or an API key. |
+| libSQL | A libSQL server (sqld, Turso) over HTTP; the address and an auth token. TLS is on for a hosted server (port 443), off for a local one (8080). |
 
 Each driver is loaded the first time you connect to that kind of database, so the ones
 you never use cost nothing.
@@ -20,7 +21,7 @@ you never use cost nothing.
 ## Filling the form
 
 - **From a URL**: paste `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://`,
-  `oracle://`, `redis://`, `mongodb://` or `elasticsearch://` URLs (or a JDBC
+  `oracle://`, `redis://`, `mongodb://`, `elasticsearch://` or `libsql://` URLs (or a JDBC
   `oracle:thin:@…` one) into the field at the top of the form, or run
   **Add Connection from URL…**.
 - **From `.env` files**: **Import Connections from .env…** finds `DATABASE_URL`-style

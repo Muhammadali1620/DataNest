@@ -54,7 +54,7 @@ const COMMON: readonly SqlSnippet[] = [
   },
 ];
 
-const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
+const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlSnippet[]>> = {
   mysql: [
     {
       prefix: 'upsert',
@@ -123,6 +123,12 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
       body: 'BEGIN\n  ${1:NULL;}\nEXCEPTION\n  WHEN OTHERS THEN\n    ${2:RAISE;}\nEND;\n/',
     },
   ],
+};
+
+/** A libSQL server runs SQLite's SQL (V13.17). */
+const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
+  ...OWN,
+  libsql: OWN.sqlite,
 };
 
 export function snippetsOf(driver?: DriverId): readonly SqlSnippet[] {

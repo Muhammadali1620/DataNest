@@ -134,7 +134,7 @@
       ? 'CLIENT SETNAME my-app'
       : fields.driver === 'postgres'
       ? 'SET search_path = app, public;'
-      : fields.driver === 'sqlite'
+      : fields.driver === 'sqlite' || fields.driver === 'libsql'
         ? 'PRAGMA foreign_keys = ON;'
         : fields.driver === 'mssql'
           ? 'SET DATEFORMAT ymd;'

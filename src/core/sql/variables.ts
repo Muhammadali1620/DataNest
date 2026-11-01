@@ -93,7 +93,7 @@ export function findVariables(sql: string, driver?: DriverId, firstQuestion = 1)
     return [];
   }
   const preparing = startsPreparing(sql, tokens);
-  const questions = driver === 'mysql' || driver === 'sqlite';
+  const questions = driver === 'mysql' || driver === 'sqlite' || driver === 'libsql';
   let question = firstQuestion;
   const found: SqlVariable[] = [];
   for (let index = 0; index < tokens.length; index++) {
@@ -105,7 +105,8 @@ export function findVariables(sql: string, driver?: DriverId, firstQuestion = 1)
     const next = tokens[index + 1];
     if (mark === '?' && questions && !preparing) {
       // SQLite's `?3` names its place; a bare `?` takes the next free number.
-      const place = driver === 'sqlite' ? placeNumber(sql, next, token) : undefined;
+      const place =
+        driver === 'sqlite' || driver === 'libsql' ? placeNumber(sql, next, token) : undefined;
       if (place !== undefined && next !== undefined) {
         found.push({ name: `?${place}`, start: token.start, end: next.end, positional: true });
         index++;

@@ -57,6 +57,7 @@ const DIALECTS = {
   mysql: mysqlDialect,
   postgres: postgresDialect,
   sqlite: sqliteDialect,
+  libsql: sqliteDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
   oracle: oracleDialect,

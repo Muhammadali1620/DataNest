@@ -61,7 +61,7 @@ export function sectionsFor(driver: DriverId): ManagerSection[] {
   if (!isSqlDriver(driver)) {
     return [];
   }
-  return driver === 'sqlite'
+  return driver === 'sqlite' || driver === 'libsql'
     ? ['log', 'dashboard', 'dump', 'sync']
     : ['log', 'dashboard', 'processes', 'dump', 'sync'];
 }

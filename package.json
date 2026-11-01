@@ -40,6 +40,8 @@
     "redis",
     "elasticsearch",
     "opensearch",
+    "libsql",
+    "turso",
     "cockroachdb",
     "tidb",
     "yugabytedb",

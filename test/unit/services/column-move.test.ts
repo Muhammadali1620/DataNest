@@ -78,6 +78,8 @@ describe('canReorderColumns', () => {
     mysql: mysqlDialect,
     postgres: postgresDialect,
     sqlite: sqliteDialect,
+    // A libSQL server runs SQLite's SQL, and its dialect is the same object (V13.17).
+    libsql: sqliteDialect,
     mssql: mssqlDialect,
     clickhouse: clickhouseDialect,
     oracle: oracleDialect,

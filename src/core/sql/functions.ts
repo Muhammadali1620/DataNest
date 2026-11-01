@@ -40,7 +40,7 @@ const COMMON: readonly SqlFunction[] = [
   fn('LEAD', 'expression'),
 ];
 
-const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
+const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlFunction[]>> = {
   mysql: [
     ...LENGTH_SUBSTR,
     fn('NOW'),
@@ -161,6 +161,12 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
     fn('JSON_VALUE', 'document', 'path'),
     fn('SYS_GUID'),
   ],
+};
+
+/** A libSQL server runs SQLite's SQL (V13.17). */
+const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
+  ...OWN,
+  libsql: OWN.sqlite,
 };
 
 /** The functions of a dialect, common ones first; standard SQL when none is known. */

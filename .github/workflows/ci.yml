@@ -68,6 +68,7 @@ jobs:
             postgis,
             redis,
             redisjson,
+            libsql,
             mongodb,
             elasticsearch,
           ]

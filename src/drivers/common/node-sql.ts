@@ -125,6 +125,7 @@ export function columnSql(
       ]);
     }
     case 'sqlite':
+    case 'libsql':
       return script([
         note(
           'SQLite changes the type, default or NOT NULL of a column only by rebuilding the table: use the table designer',
@@ -209,6 +210,7 @@ export function indexSql(
       ]);
     }
     case 'sqlite':
+    case 'libsql':
       return index.primary
         ? script([
             note(
@@ -264,6 +266,7 @@ export function foreignKeySql(
     case 'oracle':
       return script([`ALTER TABLE ${target} DROP CONSTRAINT ${name};`, add]);
     case 'sqlite':
+    case 'libsql':
       return script([
         note('SQLite changes foreign keys only by rebuilding the table: use the table designer'),
         note(add),

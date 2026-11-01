@@ -26,6 +26,7 @@ npm run db:up -- clickhouse # ClickHouse 7123/7443 (раздел 16b)
 npm run db:up -- oracle # Oracle 23ai Free 7521 (раздел 16c)
 npm run db:up -- compat # TiDB 7400, CockroachDB 7257, YugabyteDB 7533 (раздел 16d)
 npm run db:up -- redis mongodb elasticsearch # разделы 16e–16g и 16j
+npm run db:up -- libsql # libSQL (sqld) 7080 (раздел 16e3)
 npm run package        # соберёт datanest-<версия>.vsix
 ```
 
@@ -314,6 +315,17 @@ npm run package        # соберёт datanest-<версия>.vsix
 2. Изменить ячейку `location` на `SRID=4326;POINT(7 8)` и сохранить — значение записано, после перечитывания то же.
 3. Дамп `spatial_places` → в скрипте текст геометрий (не hex); выполнить скрипт на пустой базе — строки совпадают.
 4. MySQL и MariaDB (`db:up -- core`): таблица с колонками `POINT` и `GEOMETRY` (SRID 0, 3857 и 4326) → в таблице `SRID=3857;POINT(1 2)`. Дамп таблицы → значения записаны как `x'…'`, не как `ST_GeomFromText`; выполнить скрипт — `ST_AsText` и `ST_SRID` совпадают до и после. «Перенести таблицу» в другую базу того же сервера — то же.
+
+## 16e3. libSQL и Turso (V13.17)
+
+`npm run db:up -- libsql` поднимает sqld 0.24 на `127.0.0.1:7080` (HTTP, без входа, данные в tmpfs).
+
+1. Подключение. «База данных» → «libSQL / Turso»: поля «Хост» и «Токен доступа», пользователя и базы нет; порт пустой, подсказка «По умолчанию: 8080» без TLS и «443» с TLS. Хост `127.0.0.1`, порт `7080` → «Проверить» — успешно; порт `7999` — «connection-failed». URL `libsql://127.0.0.1:7080?tls=0` заполняет форму без TLS, `libsql://db-org.turso.io?authToken=…` — с TLS и токеном.
+2. Запросы. `SELECT sqlite_version()` — версия; `CREATE TABLE t (id INTEGER PRIMARY KEY, b BLOB, n INTEGER)`, `INSERT … 9223372036854775807` — число показывается точно, байты — «двоичное значение». Ошибка в тексте — «syntax error», нет таблицы — «no such table», дубль ключа — «constraint».
+3. Транзакции. `BEGIN` — в строке состояния «транзакция открыта»; `INSERT`, `ROLLBACK` — строка исчезла, значок гаснет. Вторая вкладка с тем же подключением не видит незавершённых строк.
+4. Отмена. Запрос `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c` → «Отменить» возвращает управление сразу; следующий запрос работает.
+5. Только чтение. Отметить «только чтение» → `INSERT` отклоняется самим клиентом до отправки. sqld не принимает `PRAGMA query_only`, поэтому сервер этот запрет не усиливает; для строгого запрета выдайте токен только для чтения.
+6. Дерево, конструктор таблиц, дамп и перенос — как у SQLite (общий диалект); значок — бирюзовая стопка дисков.
 
 ## 16f. MongoDB (0.7.0)
 

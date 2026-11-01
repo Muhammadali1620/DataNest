@@ -39,6 +39,7 @@ const VERSION_SQL: Readonly<Record<SqlDriverId, string>> = {
   mysql: 'SELECT VERSION() AS version',
   postgres: "SELECT current_setting('server_version') AS version",
   sqlite: 'SELECT sqlite_version() AS version',
+  libsql: 'SELECT sqlite_version() AS version',
   mssql: "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version",
   clickhouse: 'SELECT version() AS version',
   // The plugin's driver names its own server; there is no query that fits every one.
@@ -116,6 +117,7 @@ FROM ${prefix}sys.dm_db_partition_stats ps${owner}`;
         : `SELECT COALESCE(SUM(bytes_on_disk), 0) AS size FROM system.parts
 WHERE active AND database = ${dialect.literal(database)}`;
     case 'sqlite':
+    case 'libsql':
     case 'plugin':
     case 'oracle':
     case 'redis':

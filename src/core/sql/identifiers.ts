@@ -13,6 +13,7 @@ const LIMITS: Readonly<
   mysql: { max: 64, bytes: false },
   postgres: { max: 63, bytes: true },
   sqlite: undefined,
+  libsql: undefined,
   plugin: undefined,
   mssql: { max: 128, bytes: false },
   // Names are file names on the server's disk; it allows long ones.

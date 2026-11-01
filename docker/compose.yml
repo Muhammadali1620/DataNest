@@ -432,6 +432,25 @@ services:
       <<: *healthcheck
       test: ['CMD-SHELL', 'redis-cli PING | grep -qx PONG']
 
+  # libSQL server (V13.17), group `libsql`: sqld with its HTTP (Hrana) interface, no sign-in.
+  # The data lives in tmpfs, so every start is empty; the tests make their own tables.
+  libsql:
+    image: ghcr.io/tursodatabase/libsql-server:v0.24.33
+    container_name: datanest-libsql
+    profiles: [libsql]
+    # The image's own wrapper listens on 8080 and keeps the data in /var/lib/sqld.
+    ports:
+      - 127.0.0.1:7080:8080
+    tmpfs:
+      - /var/lib/sqld
+    healthcheck:
+      <<: *healthcheck
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /health HTTP/1.0\r\n\r\n" >&3; head -n1 <&3 | grep -q " 200"'
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

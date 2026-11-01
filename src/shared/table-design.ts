@@ -225,6 +225,7 @@ const INTEGER_TYPES: Readonly<Record<SqlDriverId, ReadonlySet<string>>> = {
   postgres: new Set(['smallint', 'integer', 'int', 'bigint', 'int2', 'int4', 'int8']),
   // Only INTEGER PRIMARY KEY is the rowid; INT or BIGINT would not auto-number.
   sqlite: new Set(['integer']),
+  libsql: new Set(['integer']),
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
   // Nothing numbers itself: rows have no identity, only a sorting key.
   clickhouse: new Set(),
@@ -342,7 +343,7 @@ function autoIncrementProblems(design: TableDesign, driver: DriverId): DesignPro
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'type' });
     } else if (
       (driver === 'mysql' && !column.primaryKey) ||
-      (driver === 'sqlite' && (!column.primaryKey || keys.length !== 1))
+      ((driver === 'sqlite' || driver === 'libsql') && (!column.primaryKey || keys.length !== 1))
     ) {
       problems.push({ kind: 'auto-increment', column: column.id, reason: 'key' });
     } else if (
@@ -395,5 +396,7 @@ export function newTableDesign(driver: DriverId, name = ''): TableDesign {
  * with the drivers.
  */
 export function canReorderColumns(driver: DriverId): boolean {
-  return driver === 'mysql' || driver === 'sqlite' || driver === 'clickhouse';
+  return (
+    driver === 'mysql' || driver === 'sqlite' || driver === 'libsql' || driver === 'clickhouse'
+  );
 }

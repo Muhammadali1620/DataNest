@@ -35,6 +35,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   mysql: ['mysql', 'mariadb'],
   postgres: ['psql'],
   sqlite: ['sqlite3'],
+  // Reached over HTTP; sqlite3 cannot open a remote database.
+  libsql: [],
   mssql: ['sqlcmd'],
   clickhouse: ['clickhouse-client', 'clickhouse'],
   oracle: ['sql', 'sqlplus'],
@@ -214,6 +216,7 @@ export function cliCommand(
       };
     }
     case 'plugin':
+    case 'libsql':
     case 'elasticsearch':
       return undefined;
   }

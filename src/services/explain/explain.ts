@@ -77,6 +77,8 @@ export async function planServerOf(session: Session, driver: SqlDriverId): Promi
     case 'clickhouse':
     case 'oracle':
       return driver;
+    case 'libsql':
+      return 'sqlite';
     case 'plugin':
       throw new DbError(
         'unsupported',

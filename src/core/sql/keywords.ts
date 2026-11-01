@@ -768,6 +768,7 @@ export const KEYWORDS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   mysql: MYSQL_KEYWORDS,
   postgres: POSTGRES_KEYWORDS,
   sqlite: SQLITE_KEYWORDS,
+  libsql: SQLITE_KEYWORDS,
   // Plain SQL: the closest of ours to the standard.
   plugin: SQLITE_KEYWORDS,
   mssql: MSSQL_KEYWORDS,

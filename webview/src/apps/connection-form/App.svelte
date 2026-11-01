@@ -88,6 +88,7 @@
     redis: 'form.driver.redis',
     mongodb: 'form.driver.mongodb',
     elasticsearch: 'form.driver.elasticsearch',
+    libsql: 'form.driver.libsql',
     plugin: 'form.driver.plugin',
   };
 
@@ -107,9 +108,15 @@
   const isRedis = $derived(fields?.driver === 'redis');
   const isMongo = $derived(fields?.driver === 'mongodb');
   const isElastic = $derived(fields?.driver === 'elasticsearch');
+  const isLibsql = $derived(fields?.driver === 'libsql');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
   const defaultPort = $derived(
-    formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
+    isLibsql
+      ? // A hosted server answers on 443 with TLS; a local sqld listens on 8080 without it.
+        fields?.sslMode === 'off'
+        ? 8080
+        : 443
+      : formState?.drivers.find((driver) => driver.id === fields?.driver)?.defaultPort,
   );
 
   function errorFor(problem: Parameters<typeof problemMessage>[1]): string | undefined {
@@ -172,7 +179,9 @@
     fields.driver = choice as DriverId;
     // Moving between drivers offers the new default port instead of the old one.
     const next = formState?.drivers.find((driver) => driver.id === fields?.driver);
-    fields.port = next?.defaultPort === undefined ? '' : String(next.defaultPort);
+    // libSQL's default depends on TLS, so its field starts empty and the hint says which.
+    fields.port =
+      next?.defaultPort === undefined || fields.driver === 'libsql' ? '' : String(next.defaultPort);
     if (fields.driver === 'redis') {
       changeRedisMode(fields, fields.redisMode);
     }
@@ -396,9 +405,11 @@
                     : fields.mongoMode === 'replicaSet'
                       ? t('form.mongo.hostReplicaSet')
                       : undefined
-                  : !isRedis
-                    ? undefined
-                    : fields.redisMode === 'sentinel'
+                  : isLibsql
+                    ? t('form.libsql.hostHint')
+                    : !isRedis
+                      ? undefined
+                      : fields.redisMode === 'sentinel'
                       ? t('form.redis.hostSentinel')
                       : fields.redisMode === 'cluster'
                         ? t('form.redis.hostCluster')
@@ -536,7 +547,7 @@
             {/if}
 
             <div class="pair">
-              {#if !withApiKey}
+              {#if !withApiKey && !isLibsql}
               <Field label={t('form.user')} hint={isRedis ? t('form.redis.userHint') : undefined}>
                 <input
                   class="control"
@@ -548,11 +559,13 @@
               </Field>
               {/if}
               <Field
-                label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
+                label={withApiKey ? t('form.elastic.apiKey') : isLibsql ? t('form.libsql.token') : t('form.password')}
                 hint={fields.passwordTouched
                   ? withApiKey
                     ? t('form.elastic.apiKeyHint')
-                    : undefined
+                    : isLibsql
+                      ? t('form.libsql.tokenHint')
+                      : undefined
                   : formState?.hasStoredPassword
                     ? t('form.passwordStored')
                     : formState?.importedPassword === true
@@ -568,7 +581,7 @@
                   }}
                   maxlength={PASSWORD_MAX_LENGTH}
                   disabled={fields.erasePassword}
-                  label={withApiKey ? t('form.elastic.apiKey') : t('form.password')}
+                  label={withApiKey ? t('form.elastic.apiKey') : isLibsql ? t('form.libsql.token') : t('form.password')}
                   showLabel={t('form.showSecret')}
                   hideLabel={t('form.hideSecret')}
                   testid="password"
@@ -625,7 +638,7 @@
               {/if}
             {/if}
 
-            {#if !isElastic}
+            {#if !isElastic && !isLibsql}
             <Field
               label={isRedis ? t('form.redis.database') : t('form.database')}
               hint={isRedis

@@ -87,6 +87,7 @@ export function containsCondition(
       return `positionCaseInsensitiveUTF8(toString(${name}), ${dialect.literal(text)}) > 0`;
     case 'mysql':
     case 'sqlite':
+    case 'libsql':
     case 'plugin':
     case 'mssql':
       // MySQL and SQL Server compare ignoring case by their default collations, SQLite in ASCII.

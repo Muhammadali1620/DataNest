@@ -13,6 +13,7 @@ export const DRIVER_IDS = [
   'redis',
   'mongodb',
   'elasticsearch',
+  'libsql',
   'plugin',
 ] as const;
 
@@ -75,6 +76,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   redis: 6379,
   mongodb: 27_017,
   elasticsearch: 9200,
+  // sqld's own HTTP port; Turso and other hosted servers answer on 443 with TLS.
+  libsql: 8080,
 };
 
 export const CONNECTION_LIMITS = {
@@ -371,6 +374,18 @@ export function optionSupport(driver: DriverId): OptionSupport {
         queryTimeout: false,
         init: false,
       };
+    // A request over HTTP(S): a connect timeout and TLS, and statements that run as long as
+    // the timeout allows; the server keeps the stream, there is no socket of ours to keep alive.
+    case 'libsql':
+      return {
+        connectTimeout: true,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: true,
+      };
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
       return {
@@ -462,6 +477,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     case 'postgres':
       return { databases: true, schemas: true };
     case 'sqlite':
+    case 'libsql':
     case 'plugin':
       return { databases: false, schemas: false };
     case 'mssql':

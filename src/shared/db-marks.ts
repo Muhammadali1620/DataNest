@@ -35,6 +35,13 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<rect x="4" y="8" width="16" height="9" rx="2.500"/><rect x="7.500" y="2.500" width="3" height="6"/><rect x="13.500" y="2.500" width="3" height="6"/><rect x="10.500" y="16" width="3" height="5.500"/>',
   },
+  // A stack of discs: a server database reached over HTTP (V13.17); libSQL has no glyph in
+  // the package, and the drawing is ours.
+  libsql: {
+    hex: '#0d9488',
+    ink: WHITE,
+    body: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 9.500c0 1.700 3.600 3 8 3s8-1.300 8-3v3.500c0 1.700-3.600 3-8 3s-8-1.300-8-3zM4 16.500c0 1.700 3.600 3 8 3s8-1.300 8-3V19c0 1.700-3.600 3-8 3s-8-1.300-8-3z"/>',
+  },
   // A ring around a core.
   oracle: {
     hex: '#c74634',

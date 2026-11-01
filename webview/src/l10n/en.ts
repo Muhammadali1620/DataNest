@@ -292,6 +292,11 @@ export const en = {
   'elastic.truncated': 'The answer is too large to show whole here; copy it to see all of it',
   'form.driver.elasticsearch': 'Elasticsearch / OpenSearch',
   'form.driver.plugin': 'Database from another extension',
+  'form.driver.libsql': 'libSQL / Turso',
+  'form.libsql.hostHint':
+    'The server address, e.g. my-db-org.turso.io, or a libsql:// URL. Turn TLS on below for a hosted server',
+  'form.libsql.token': 'Auth token',
+  'form.libsql.tokenHint': 'Sent as a bearer token; leave empty for a server without sign-in',
   'form.elastic.auth': 'Sign-in',
   'form.elastic.auth.basic': 'User and password',
   'form.elastic.auth.apiKey': 'API key',

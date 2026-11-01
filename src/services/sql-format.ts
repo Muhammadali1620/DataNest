@@ -46,6 +46,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'postgres':
       return 'postgresql';
     case 'sqlite':
+    case 'libsql':
       return 'sqlite';
     case 'mssql':
       return 'transactsql';

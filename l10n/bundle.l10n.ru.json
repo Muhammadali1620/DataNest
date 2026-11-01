@@ -1284,5 +1284,14 @@
   "The key has no JSON value": "У ключа нет значения JSON",
   "The path no longer exists: refresh the key": "Такого пути больше нет: обновите ключ",
   "Not valid JSON: {0}": "Это не JSON: {0}",
-  "The whole document goes with the key: delete the key": "Весь документ уходит вместе с ключом: удалите ключ"
+  "The whole document goes with the key: delete the key": "Весь документ уходит вместе с ключом: удалите ключ",
+  "The server reported an error without a message": "Сервер сообщил об ошибке без текста",
+  "The server refused the auth token": "Сервер не принял токен доступа",
+  "The server answered with HTTP status {0}": "Сервер ответил статусом HTTP {0}",
+  "The result is larger than 256 MB: narrow the query with a LIMIT": "Результат больше 256 МБ: сузьте запрос, добавив LIMIT",
+  "The server sent an answer that is not JSON": "Сервер прислал ответ не в формате JSON",
+  "The server sent no answer to the statement": "Сервер не прислал ответа на запрос",
+  "The server sent an answer to the statement in an unknown form": "Сервер прислал ответ на запрос в неизвестном виде",
+  "The server closed the session; the open transaction was lost": "Сервер закрыл сеанс; открытая транзакция потеряна",
+  "The server did not answer in time": "Сервер не ответил вовремя"
 }

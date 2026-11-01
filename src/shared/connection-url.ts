@@ -41,6 +41,9 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   clickhouse: 'clickhouse',
   ch: 'clickhouse',
   oracle: 'oracle',
+  // libSQL servers over HTTP (V13.17); `turso://` is the same address on a hosted server.
+  libsql: 'libsql',
+  turso: 'libsql',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
   redis: 'redis',
   rediss: 'redis',
@@ -282,6 +285,41 @@ function oracleUrl(plain: string): UrlResult {
   };
 }
 
+/**
+ * `libsql://db-org.turso.io?authToken=…`: TLS and an auth token in the query, as the
+ * libSQL clients write it. `tls=0` asks for plain HTTP (a local sqld).
+ */
+function libsqlUrl(plain: string): UrlResult {
+  let url: URL;
+  try {
+    url = new URL(plain.replace(/^[a-z][a-z0-9.-]*:/i, 'datanest:'));
+  } catch {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const host = nonEmpty(decode(url.hostname).replace(/^\[(.*)\]$/, '$1'));
+  if (host === undefined) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const portText = nonEmpty(url.port);
+  const port = portText !== undefined && /^\d+$/.test(portText) ? Number(portText) : undefined;
+  const token = nonEmpty(url.searchParams.get('authToken') ?? url.searchParams.get('token'));
+  const plainHttp = ['0', 'false'].includes((url.searchParams.get('tls') ?? '').toLowerCase());
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'libsql',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(plainHttp ? {} : { ssl: { mode: 'verify-full' as const } }),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(token === undefined ? {} : { password: token }),
+    },
+  };
+}
+
 /** Reads a connection URL. Unknown query parameters are ignored. */
 export function parseConnectionUrl(text: string): UrlResult {
   const trimmed = text.trim();
@@ -316,6 +354,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'oracle') {
     return oracleUrl(plain);
+  }
+  if (driver === 'libsql') {
+    return libsqlUrl(plain);
   }
   let url: URL;
   try {

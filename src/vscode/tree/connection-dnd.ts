@@ -88,7 +88,10 @@ export class ConnectionsDragAndDrop implements vscode.TreeDragAndDropController<
       if (plan?.kind === 'connections') {
         await this.store.moveConnections(plan.ids, plan.destination);
       } else if (plan?.kind === 'folder') {
-        await this.store.moveFolder(plan.folder, plan.before);
+        await this.store.moveFolder(plan.folder, {
+          ...(plan.parent === undefined ? {} : { parent: plan.parent }),
+          ...(plan.before === undefined ? {} : { before: plan.before }),
+        });
       }
     } catch (error) {
       // A drop is a gesture; a failure is logged and shown, never thrown at the editor.

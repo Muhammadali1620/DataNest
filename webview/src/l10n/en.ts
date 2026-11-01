@@ -51,7 +51,8 @@ export const en = {
   'form.place.inProject':
     'Kept in .vscode/datanest.json of the project "{0}": everyone who opens the project sees it. The password stays on this computer.',
   'form.folder': 'Folder',
-  'form.folderHint': 'Optional: a folder in the tree; a new name creates it',
+  'form.folderHint':
+    'Optional: a folder in the tree; a new name creates it, Work/Prod puts it in a folder inside a folder',
   'form.color': 'Color',
   'form.color.none': 'None',
   'form.color.red': 'Red',

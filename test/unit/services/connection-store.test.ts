@@ -550,13 +550,13 @@ describe('ConnectionStore folders', () => {
     for (const name of ['A', 'B', 'C']) {
       await store.createFolder(name);
     }
-    await store.moveFolder('C', 'A');
+    await store.moveFolder('C', { before: 'A' });
     expect(store.folders()).toEqual(['C', 'A', 'B']);
     await store.moveFolder('C');
     expect(store.folders()).toEqual(['A', 'B', 'C']);
-    await store.moveFolder('A', 'missing');
+    await store.moveFolder('A', { before: 'missing' });
     expect(store.folders()).toEqual(['B', 'C', 'A']);
-    await store.moveFolder('B', 'B');
+    await store.moveFolder('B', { before: 'B' });
     expect(store.folders()).toEqual(['B', 'C', 'A']);
   });
 
@@ -617,6 +617,322 @@ describe('ConnectionStore folders', () => {
     const updated = await store.update(a.id, input('a', ''));
     expect(updated.folder).toBeUndefined();
     expect(store.folders()).toEqual(['New one']);
+  });
+});
+
+describe('ConnectionStore nested folders (V13.8)', () => {
+  let state: FakeMemento;
+  let secrets: FakeSecretStorage;
+  let store: ConnectionStore;
+  const input = (name: string, folder?: string): ConnectionInput => ({
+    name,
+    driver: 'mysql',
+    host: 'h',
+    ...(folder === undefined ? {} : { folder }),
+  });
+  const where = () => store.list().map((config) => `${config.folder ?? '-'}:${config.name}`);
+  const reopen = () => new ConnectionStore({ state, secrets, logger: new RecordingLogger() });
+
+  beforeEach(() => {
+    state = new FakeMemento();
+    secrets = new FakeSecretStorage();
+    store = reopen();
+  });
+
+  describe('creating', () => {
+    it('makes a folder inside a folder, and the folders around it when they are missing', async () => {
+      await store.createFolder('Work/Prod/EU');
+      expect(store.folders()).toEqual(['Work', 'Work/Prod', 'Work/Prod/EU']);
+    });
+
+    it('does not make a folder twice, whatever way it was reached', async () => {
+      await store.createFolder('Work/Prod');
+      await expect(store.createFolder('Work/Prod')).rejects.toThrow('already exists');
+      await expect(store.createFolder('Work')).rejects.toThrow('already exists');
+      await store.createFolder('Work/Dev');
+      expect(store.folders()).toEqual(['Work', 'Work/Prod', 'Work/Dev']);
+    });
+
+    it('trims every name of the path and refuses an empty or too long one', async () => {
+      await store.createFolder(' Work / Prod ');
+      expect(store.folders()).toEqual(['Work', 'Work/Prod']);
+      await expect(store.createFolder('Work//Prod')).rejects.toThrow('name');
+      await expect(store.createFolder('Work/')).rejects.toThrow('name');
+      await expect(store.createFolder(`Work/${'x'.repeat(201)}`)).rejects.toThrow('name');
+    });
+
+    it('allows eight levels and refuses a ninth', async () => {
+      const eight = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].join('/');
+      await store.createFolder(eight);
+      expect(store.folders()).toHaveLength(8);
+      await expect(store.createFolder(`${eight}/i`)).rejects.toThrow('8 levels');
+    });
+
+    it('keeps a one-level folder exactly as it was', async () => {
+      await store.createFolder('Prod');
+      expect(store.folders()).toEqual(['Prod']);
+      expect(await store.createFolder('Dev')).toBe('Dev');
+    });
+  });
+
+  describe('connections in nested folders', () => {
+    it('takes the folder path from the form, tidied, and lists the folders around it', async () => {
+      const config = await store.add(input('a', ' Work / / Prod /'));
+      expect(config.folder).toBe('Work/Prod');
+      expect(store.folders()).toEqual(['Work', 'Work/Prod']);
+    });
+
+    it('refuses a path nested too deep', async () => {
+      await expect(store.add(input('a', 'a/b/c/d/e/f/g/h/i'))).rejects.toThrow('levels');
+    });
+
+    it('treats a blank folder as none', async () => {
+      const config = await store.add(input('a', '  /  '));
+      expect(JSON.parse(JSON.stringify(config))).not.toHaveProperty('folder');
+    });
+
+    it('moves connections into a nested folder', async () => {
+      await store.createFolder('Work/Prod');
+      const a = await store.add(input('a'));
+      await store.moveConnections([a.id], { folder: 'Work/Prod' });
+      expect(where()).toEqual(['Work/Prod:a']);
+      await expect(store.moveConnections([a.id], { folder: 'Work/Nope' })).rejects.toMatchObject({
+        code: 'not-found',
+      });
+    });
+  });
+
+  describe('renaming', () => {
+    it('renames a folder with the folders and connections inside it', async () => {
+      await store.createFolder('Work/Prod');
+      await store.add(input('a', 'Work'));
+      await store.add(input('b', 'Work/Prod'));
+      await store.add(input('c', 'Other'));
+      expect(await store.renameFolder('Work', 'Job')).toBe('Job');
+      expect(store.folders()).toEqual(['Job', 'Job/Prod', 'Other']);
+      expect(where()).toEqual(['Job:a', 'Job/Prod:b', 'Other:c']);
+    });
+
+    it('renames a folder inside a folder without touching its neighbours', async () => {
+      await store.createFolder('Work/Prod');
+      await store.createFolder('Work/Dev');
+      await store.renameFolder('Work/Prod', 'Work/Live');
+      expect(store.folders()).toEqual(['Work', 'Work/Live', 'Work/Dev']);
+    });
+
+    it('moves a folder when the new path is somewhere else', async () => {
+      await store.createFolder('A/X');
+      await store.createFolder('B');
+      await store.add(input('a', 'A/X'));
+      await store.renameFolder('A/X', 'B/X');
+      expect(store.folders()).toEqual(['A', 'B', 'B/X']);
+      expect(where()).toEqual(['B/X:a']);
+    });
+
+    it('refuses a name that is taken, one that goes into itself and a missing folder', async () => {
+      await store.createFolder('A/X');
+      await store.createFolder('A/Y');
+      await expect(store.renameFolder('A/X', 'A/Y')).rejects.toThrow('already exists');
+      await expect(store.renameFolder('A', 'A/X/Z')).rejects.toThrow('into itself');
+      await expect(store.renameFolder('A', 'A/B')).rejects.toThrow('into itself');
+      await expect(store.renameFolder('Nope', 'N')).rejects.toMatchObject({ code: 'not-found' });
+    });
+
+    it('does not take a name that is only a prefix of another for a clash', async () => {
+      await store.createFolder('Prod');
+      await store.createFolder('Production');
+      await store.add(input('a', 'Production'));
+      await store.renameFolder('Prod', 'Live');
+      expect(store.folders()).toEqual(['Live', 'Production']);
+      expect(where()).toEqual(['Production:a']);
+    });
+
+    it('refuses a rename that would nest the contents too deep', async () => {
+      await store.createFolder('a/b/c/d/e/f');
+      await store.createFolder('x/y/z');
+      await expect(store.renameFolder('a', 'x/y/z/a')).rejects.toThrow('levels');
+      expect(store.folders()).toContain('a/b/c/d/e/f');
+    });
+  });
+
+  describe('removing', () => {
+    it('lifts what the folder held one level up, none is deleted', async () => {
+      await store.createFolder('Work/Prod/EU');
+      await store.add(input('a', 'Work/Prod'));
+      await store.add(input('b', 'Work/Prod/EU'));
+      await store.add(input('c', 'Work'));
+      await store.removeFolder('Work/Prod');
+      expect(store.folders()).toEqual(['Work', 'Work/EU']);
+      expect(where()).toEqual(['Work:a', 'Work/EU:b', 'Work:c']);
+    });
+
+    it('lifts a top-level folder’s contents to the top level', async () => {
+      await store.createFolder('Work/Prod');
+      await store.add(input('a', 'Work'));
+      await store.add(input('b', 'Work/Prod'));
+      await store.removeFolder('Work');
+      expect(store.folders()).toEqual(['Prod']);
+      expect(where()).toEqual(['-:a', 'Prod:b']);
+    });
+
+    it('merges a lifted folder with a folder of the same name', async () => {
+      await store.createFolder('A/Dev');
+      await store.createFolder('Dev');
+      await store.add(input('x', 'A/Dev'));
+      await store.add(input('y', 'Dev'));
+      await store.removeFolder('A');
+      expect(store.folders()).toEqual(['Dev']);
+      expect(where()).toEqual(['Dev:x', 'Dev:y']);
+    });
+
+    it('leaves a folder with a similar name alone', async () => {
+      await store.createFolder('Prod');
+      await store.createFolder('Prod2');
+      await store.add(input('a', 'Prod2'));
+      await store.removeFolder('Prod');
+      expect(store.folders()).toEqual(['Prod2']);
+      expect(where()).toEqual(['Prod2:a']);
+    });
+  });
+
+  describe('moving', () => {
+    beforeEach(async () => {
+      for (const path of ['A', 'B', 'C', 'A/X', 'A/Y']) {
+        await store.createFolder(path);
+      }
+    });
+
+    it('moves a folder with its contents into another folder, last', async () => {
+      await store.add(input('a', 'A/X'));
+      await store.moveFolder('A', { parent: 'B' });
+      expect(store.folders()).toEqual(['B', 'B/A', 'B/A/X', 'B/A/Y', 'C']);
+      expect(where()).toEqual(['B/A/X:a']);
+    });
+
+    it('moves a folder to the top level', async () => {
+      await store.moveFolder('A/X', {});
+      expect(store.folders()).toEqual(['A', 'B', 'C', 'A/Y', 'X']);
+    });
+
+    it('puts a folder in front of a sibling in the destination', async () => {
+      await store.moveFolder('C', { before: 'A' });
+      expect(store.folders()).toEqual(['C', 'A', 'B', 'A/X', 'A/Y']);
+      await store.moveFolder('B', { parent: 'A', before: 'A/X' });
+      expect(store.folders()).toEqual(['C', 'A', 'A/B', 'A/X', 'A/Y']);
+    });
+
+    it('puts a folder after the last one inside the destination when no sibling is named', async () => {
+      await store.moveFolder('C', { parent: 'A' });
+      expect(store.folders()).toEqual(['A', 'B', 'A/X', 'A/Y', 'A/C']);
+    });
+
+    it('ignores a "before" that is not in the destination', async () => {
+      await store.moveFolder('C', { parent: 'A', before: 'B' });
+      expect(store.folders().at(-1)).toBe('A/C');
+      await store.moveFolder('B', { before: 'missing' });
+      expect(store.folders().at(-1)).toBe('B');
+    });
+
+    it('reorders inside the same parent', async () => {
+      await store.moveFolder('A/Y', { parent: 'A', before: 'A/X' });
+      expect(store.folders()).toEqual(['A', 'B', 'C', 'A/Y', 'A/X']);
+    });
+
+    it('does nothing when dropped in front of itself', async () => {
+      await store.moveFolder('A', { before: 'A' });
+      expect(store.folders()).toEqual(['A', 'B', 'C', 'A/X', 'A/Y']);
+    });
+
+    it('refuses a move into itself or into what the folder holds', async () => {
+      await expect(store.moveFolder('A', { parent: 'A' })).rejects.toThrow('into itself');
+      await expect(store.moveFolder('A', { parent: 'A/X' })).rejects.toThrow('into itself');
+      expect(store.folders()).toEqual(['A', 'B', 'C', 'A/X', 'A/Y']);
+    });
+
+    it('allows a move into a folder whose name only begins like the folder', async () => {
+      await store.createFolder('AB');
+      await store.moveFolder('A', { parent: 'AB' });
+      expect(store.folders()).toContain('AB/A/X');
+    });
+
+    it('refuses a name that is taken in the destination, and a missing folder', async () => {
+      await store.createFolder('B/X');
+      await expect(store.moveFolder('A/X', { parent: 'B' })).rejects.toThrow('already exists');
+      await expect(store.moveFolder('Nope')).rejects.toMatchObject({ code: 'not-found' });
+      await expect(store.moveFolder('A', { parent: 'Nope' })).rejects.toMatchObject({
+        code: 'not-found',
+      });
+    });
+
+    it('refuses a move that nests the contents too deep', async () => {
+      await store.createFolder('p/q/r/s/t/u');
+      await store.createFolder('A/X/1/2/3/4');
+      await expect(store.moveFolder('A', { parent: 'p/q/r/s/t/u' })).rejects.toThrow('levels');
+      expect(store.folders()).toContain('A/X/1/2/3/4');
+    });
+
+    it('keeps the order of the connections that are not inside', async () => {
+      await store.add(input('first'));
+      await store.add(input('inside', 'A/X'));
+      await store.add(input('last', 'B'));
+      await store.moveFolder('A', { parent: 'B' });
+      expect(where()).toEqual(['-:first', 'B/A/X:inside', 'B:last']);
+    });
+  });
+
+  describe('persistence and old data', () => {
+    it('keeps nested folders over a restart', async () => {
+      await store.createFolder('Work/Prod');
+      await store.add(input('a', 'Work/Prod'));
+      const reloaded = reopen();
+      expect(reloaded.folders()).toEqual(['Work', 'Work/Prod']);
+      expect(reloaded.list().map((config) => config.folder)).toEqual(['Work/Prod']);
+    });
+
+    it('reads state saved before nesting: one-level folders stay as they were', () => {
+      state.data.set(CONNECTIONS_STATE_KEY, {
+        version: 2,
+        items: [{ id: '1', name: 'a', driver: 'mysql', host: 'h', folder: 'Prod' }],
+        folders: ['Prod', 'Dev'],
+      });
+      const old = reopen();
+      expect(old.folders()).toEqual(['Prod', 'Dev']);
+      expect(old.get('1')?.folder).toBe('Prod');
+    });
+
+    it('adds the folders around a nested one that a saved list names alone', () => {
+      state.data.set(CONNECTIONS_STATE_KEY, {
+        version: 2,
+        items: [{ id: '1', name: 'a', driver: 'mysql', host: 'h', folder: 'A/B/C' }],
+        folders: ['Z', 'A/B/C'],
+      });
+      expect(reopen().folders()).toEqual(['Z', 'A', 'A/B', 'A/B/C']);
+    });
+
+    it('tidies stray separators in saved paths', () => {
+      state.data.set(CONNECTIONS_STATE_KEY, {
+        version: 2,
+        items: [
+          { id: '1', name: 'a', driver: 'mysql', host: 'h', folder: '/A//B/' },
+          { id: '2', name: 'b', driver: 'mysql', host: 'h', folder: '/' },
+        ],
+        folders: ['/A//B/', '//'],
+      });
+      const tidy = reopen();
+      expect(tidy.folders()).toEqual(['A', 'A/B']);
+      expect(tidy.get('1')?.folder).toBe('A/B');
+      expect(tidy.get('2')).not.toHaveProperty('folder');
+    });
+
+    it('tells the listeners about every change', async () => {
+      let calls = 0;
+      store.onDidChange(() => (calls += 1));
+      await store.createFolder('A/B');
+      await store.renameFolder('A/B', 'A/C');
+      await store.moveFolder('A/C', {});
+      await store.removeFolder('C');
+      expect(calls).toBe(4);
+    });
   });
 });
 

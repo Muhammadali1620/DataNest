@@ -133,7 +133,7 @@ export const connectionInputShape = {
   socket: optional(string({ maxLength: CONNECTION_LIMITS.file })),
   proxy: optional(proxySchema),
   ssl: optional(sslSchema),
-  folder: optional(string({ maxLength: CONNECTION_LIMITS.folder })),
+  folder: optional(string({ maxLength: CONNECTION_LIMITS.folderPath })),
   color: optional(literal(...CONNECTION_COLORS)),
   production: optional(boolean()),
   readOnly: optional(boolean()),

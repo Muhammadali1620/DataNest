@@ -18,6 +18,9 @@ export const COMMAND_IDS = {
   /** Folders of connections in the tree. */
   createFolder: 'datanest.folders.create',
   renameFolder: 'datanest.folders.rename',
+  /** A folder inside a folder, and moving a folder into another (V13.8). */
+  createSubfolder: 'datanest.folders.createSub',
+  moveFolder: 'datanest.folders.move',
   removeFolder: 'datanest.folders.remove',
   /** Puts the clicked (and selected) connections into a folder. */
   moveToFolder: 'datanest.connections.moveToFolder',

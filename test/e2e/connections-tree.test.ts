@@ -89,6 +89,8 @@ describe('connections view', () => {
       'datanest.connections.export',
       'datanest.folders.create',
       'datanest.folders.rename',
+      'datanest.folders.createSub',
+      'datanest.folders.move',
       'datanest.folders.remove',
       'datanest.tree.refresh',
       'datanest.tree.copyName',

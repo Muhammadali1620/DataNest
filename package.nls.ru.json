@@ -91,6 +91,8 @@
   "commands.table.generateDelete.title": "Сгенерировать DELETE",
   "commands.folders.create.title": "Новая папка…",
   "commands.folders.rename.title": "Переименовать папку…",
+  "commands.folders.createSub.title": "Новая вложенная папка…",
+  "commands.folders.move.title": "Переместить папку…",
   "commands.folders.remove.title": "Удалить папку",
   "commands.connections.moveToFolder.title": "Переместить в папку…",
   "commands.connections.setColor.title": "Цвет…",

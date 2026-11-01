@@ -30,6 +30,18 @@ import {
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
 import {
+  cleanFolderPath,
+  deepestFolder,
+  folderBaseName,
+  folderSegments,
+  isInFolder,
+  joinFolder,
+  MAX_FOLDER_DEPTH,
+  parentFolder,
+  replaceFolderPrefix,
+  withAncestors,
+} from '../shared/folder-path';
+import {
   array,
   boolean,
   literal,
@@ -90,7 +102,7 @@ const connectionConfigSchema: Schema<ConnectionConfig> = object({
   name: string({ minLength: 1, maxLength: CONNECTION_LIMITS.name }),
 });
 
-const folderSchema = string({ minLength: 1, maxLength: CONNECTION_LIMITS.folder });
+const folderSchema = string({ minLength: 1, maxLength: CONNECTION_LIMITS.folderPath });
 
 /** Version 1 had no folders; it is read as is and written back as version 2. */
 const stateSchema = union(
@@ -109,6 +121,14 @@ const stateSchema = union(
 export interface MoveDestination {
   readonly folder?: string;
   /** A connection in that folder to put them in front of; the end of it when absent. */
+  readonly before?: string;
+}
+
+/** Where a moved folder goes (V13.8): into a folder (or the top level) and before a sibling. */
+export interface FolderDestination {
+  /** The folder to go into; absent means the top level. */
+  readonly parent?: string;
+  /** A folder in that parent to put it in front of; the end of the parent when absent. */
   readonly before?: string;
 }
 
@@ -207,8 +227,12 @@ export class ConnectionStore {
     return [...this.folderList];
   }
 
+  /**
+   * Makes a folder. `name` is its path: `a/b` is the folder `b` inside `a`, and `a` is
+   * made too when it is missing (V13.8).
+   */
   async createFolder(name: string): Promise<string> {
-    const folder = folderName(name);
+    const folder = checkedFolderPath(name);
     if (this.folderList.includes(folder)) {
       throw new DbError('unsupported', msg('A folder named "{0}" already exists', folder));
     }
@@ -217,45 +241,115 @@ export class ConnectionStore {
     return folder;
   }
 
-  /** Renames a folder; its connections go along. */
+  /**
+   * Renames a folder, or (with a longer path) moves it: what it holds goes along, the
+   * folders inside and their connections too.
+   */
   async renameFolder(from: string, to: string): Promise<string> {
-    const target = folderName(to);
+    const target = checkedFolderPath(to);
     this.requireFolder(from);
     if (target === from) {
       return target;
     }
+    if (isInFolder(target, from)) {
+      throw new DbError('unsupported', msg('A folder cannot be moved into itself'));
+    }
     if (this.folderList.includes(target)) {
       throw new DbError('unsupported', msg('A folder named "{0}" already exists', target));
     }
+    this.requireDepth(from, target);
     await this.save(
-      this.items.map((item) => (item.folder === from ? { ...item, folder: target } : item)),
-      this.folderList.map((folder) => (folder === from ? target : folder)),
+      this.items.map((item) => relocated(item, from, target)),
+      [
+        ...this.folderList.map((folder) =>
+          isInFolder(folder, from) ? replaceFolderPrefix(folder, from, target) : folder,
+        ),
+      ],
     );
     this.notify();
     return target;
   }
 
-  /** Removes a folder; its connections move to the top level, none is deleted. */
+  /**
+   * Removes a folder. What it held moves up one level, into the folder around it or the
+   * top level: its connections and its folders with theirs. None is deleted. A folder
+   * that already has a subfolder of the same name takes the contents in (merged).
+   */
   async removeFolder(name: string): Promise<void> {
     this.requireFolder(name);
+    const up = parentFolder(name);
+    const lifted = (folder: string): string | undefined =>
+      folder === name ? undefined : replaceFolderPrefix(folder, name, up);
+    const folders = this.folderList.flatMap((folder) => {
+      if (!isInFolder(folder, name)) {
+        return [folder];
+      }
+      const moved = lifted(folder);
+      return moved === undefined ? [] : [moved];
+    });
     await this.save(
-      this.items.map((item) => (item.folder === name ? withoutFolder(item) : item)),
-      this.folderList.filter((folder) => folder !== name),
+      this.items.map((item) => {
+        if (item.folder === undefined || !isInFolder(item.folder, name)) {
+          return item;
+        }
+        const moved = lifted(item.folder) ?? up;
+        return moved === undefined ? withoutFolder(item) : { ...item, folder: moved };
+      }),
+      [...new Set(folders)],
     );
     this.notify();
   }
 
-  /** Puts a folder in front of another one, or last. */
-  async moveFolder(name: string, before?: string): Promise<void> {
+  /**
+   * Moves a folder, with everything inside it, into another folder (or the top level)
+   * and in front of one of the folders there, or last. A folder cannot go into itself
+   * or into what it holds; a name taken in the destination is refused.
+   */
+  async moveFolder(name: string, destination: FolderDestination = {}): Promise<void> {
     this.requireFolder(name);
+    const { parent, before } = destination;
+    if (parent !== undefined) {
+      this.requireFolder(parent);
+      if (isInFolder(parent, name)) {
+        throw new DbError('unsupported', msg('A folder cannot be moved into itself'));
+      }
+    }
     if (before === name) {
       return;
     }
-    const rest = this.folderList.filter((folder) => folder !== name);
-    const index = before === undefined ? -1 : rest.indexOf(before);
-    rest.splice(index === -1 ? rest.length : index, 0, name);
-    await this.save(this.items, rest);
+    const target = joinFolder(parent, folderBaseName(name));
+    if (target !== name && this.folderList.includes(target)) {
+      throw new DbError('unsupported', msg('A folder named "{0}" already exists', target));
+    }
+    this.requireDepth(name, target);
+    const block = this.folderList
+      .filter((folder) => isInFolder(folder, name))
+      .map((folder) => replaceFolderPrefix(folder, name, target));
+    const rest = this.folderList.filter((folder) => !isInFolder(folder, name));
+    let index = before === undefined ? -1 : rest.indexOf(before);
+    if (index === -1 || parentFolder(before ?? '') !== parent) {
+      // After the last folder inside the destination, or at the very end.
+      const last =
+        parent === undefined ? -1 : rest.findLastIndex((folder) => isInFolder(folder, parent));
+      index = last === -1 ? rest.length : last + 1;
+    }
+    rest.splice(index, 0, ...block);
+    await this.save(
+      this.items.map((item) => relocated(item, name, target)),
+      rest,
+    );
     this.notify();
+  }
+
+  private requireDepth(from: string, to: string): void {
+    const inside = this.folderList.filter((folder) => isInFolder(folder, from));
+    const deepest = deepestFolder(inside.map((folder) => replaceFolderPrefix(folder, from, to)));
+    if (deepest > MAX_FOLDER_DEPTH) {
+      throw new DbError(
+        'unsupported',
+        msg('Folders nest at most {0} levels deep', MAX_FOLDER_DEPTH),
+      );
+    }
   }
 
   /**
@@ -623,7 +717,10 @@ export class ConnectionStore {
     }
     try {
       const parsed = stateSchema.parse(raw);
-      return { items: parsed.items, folders: parsed.version === 2 ? parsed.folders : [] };
+      return tidyFolders({
+        items: parsed.items,
+        folders: parsed.version === 2 ? parsed.folders : [],
+      });
     } catch (error) {
       // Broken state must not brick the extension: start empty, keep the log loud.
       this.logger.error('Saved connections are corrupted and were ignored', error);
@@ -652,12 +749,35 @@ export class ConnectionStore {
   }
 }
 
-function folderName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed === '' || trimmed.length > CONNECTION_LIMITS.folder) {
+/**
+ * The path of a folder as it is kept: every name trimmed, none empty or longer than
+ * 200 characters, no deeper than `MAX_FOLDER_DEPTH`.
+ */
+function checkedFolderPath(path: string): string {
+  const names = folderSegments(path.trim()).map((name) => name.trim());
+  if (names.some((name) => name === '' || name.length > CONNECTION_LIMITS.folder)) {
     throw new DbError('unsupported', msg('A folder needs a name of up to 200 characters'));
   }
-  return trimmed;
+  if (names.length > MAX_FOLDER_DEPTH) {
+    throw new DbError('unsupported', msg('Folders nest at most {0} levels deep', MAX_FOLDER_DEPTH));
+  }
+  return names.join('/');
+}
+
+/**
+ * The folder a form names: blank means none, stray separators are forgiven (`a//b/` is
+ * `a/b`), and what is left must be a usable path.
+ */
+function folderOrNothing(path: string): string | undefined {
+  const cleaned = cleanFolderPath(path);
+  return cleaned === undefined ? undefined : checkedFolderPath(cleaned);
+}
+
+/** A connection after the folder `from` became `to` (undefined: it is not inside it). */
+function relocated(config: ConnectionConfig, from: string, to: string): ConnectionConfig {
+  return config.folder !== undefined && isInFolder(config.folder, from)
+    ? { ...config, folder: replaceFolderPrefix(config.folder, from, to) }
+    : config;
 }
 
 function withoutFolder(config: ConnectionConfig): ConnectionConfig {
@@ -665,15 +785,30 @@ function withoutFolder(config: ConnectionConfig): ConnectionConfig {
   return rest;
 }
 
-/** Every folder a connection names is listed, even if the list lost it. */
+/**
+ * Every folder a connection names is listed, even if the list lost it, and so is every
+ * folder around a nested one (V13.8), before what it holds.
+ */
 function withReferenced(folders: readonly string[], items: readonly ConnectionConfig[]): string[] {
-  const result = [...new Set(folders)];
-  for (const item of items) {
-    if (item.folder !== undefined && !result.includes(item.folder)) {
-      result.push(item.folder);
-    }
-  }
-  return result;
+  const named = items.flatMap((item) => (item.folder === undefined ? [] : [item.folder]));
+  return withAncestors([...folders, ...named]);
+}
+
+/** What was saved, with stray separators and blanks taken out of the folder paths. */
+function tidyFolders(state: { items: ConnectionConfig[]; folders: string[] }): {
+  items: ConnectionConfig[];
+  folders: string[];
+} {
+  return {
+    items: state.items.map((item) => {
+      const folder = cleanFolderPath(item.folder);
+      if (folder === item.folder) {
+        return item;
+      }
+      return folder === undefined ? withoutFolder(item) : { ...item, folder };
+    }),
+    folders: [...new Set(state.folders.flatMap((folder) => cleanFolderPath(folder) ?? []))],
+  };
 }
 
 /** Trims text fields and drops empty optional ones, with a final validity check. */
@@ -699,7 +834,7 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     socket: file || !supportsSocket(input.driver) ? undefined : trim(input.socket),
     proxy: file || input.proxy === undefined ? undefined : normalizeProxy(input.proxy),
     ssl: file || input.ssl === undefined ? undefined : normalizeSsl(input.ssl),
-    folder: trim(input.folder),
+    folder: input.folder === undefined ? undefined : folderOrNothing(input.folder),
     color: input.color,
     // Only a set flag is stored, so configs stay the same as before for everyone else.
     production: input.production === true ? true : undefined,

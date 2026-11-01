@@ -98,7 +98,7 @@ export function readConnectionFile(text: string): FileReadResult {
             (folder): folder is string =>
               typeof folder === 'string' &&
               folder.trim() !== '' &&
-              folder.length <= CONNECTION_LIMITS.folder,
+              folder.length <= CONNECTION_LIMITS.folderPath,
           )
         : [],
     },

@@ -165,6 +165,18 @@
         "icon": "$(edit)"
       },
       {
+        "command": "datanest.folders.createSub",
+        "title": "%commands.folders.createSub.title%",
+        "category": "DataNest",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "datanest.folders.move",
+        "title": "%commands.folders.move.title%",
+        "category": "DataNest",
+        "icon": "$(arrow-right)"
+      },
+      {
         "command": "datanest.folders.remove",
         "title": "%commands.folders.remove.title%",
         "category": "DataNest",
@@ -1284,14 +1296,24 @@
           "group": "1_project@1"
         },
         {
+          "command": "datanest.folders.createSub",
+          "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
+          "group": "1_folder@0"
+        },
+        {
           "command": "datanest.folders.rename",
           "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
           "group": "1_folder@1"
         },
         {
-          "command": "datanest.folders.remove",
+          "command": "datanest.folders.move",
           "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
           "group": "1_folder@2"
+        },
+        {
+          "command": "datanest.folders.remove",
+          "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
+          "group": "2_remove@1"
         },
         {
           "command": "datanest.query.new",
@@ -1772,6 +1794,11 @@
           "command": "datanest.favorites.remove",
           "when": "view == datanest.connections && viewItem =~ /\\.starred$/",
           "group": "0_favorite@1"
+        },
+        {
+          "command": "datanest.folders.createSub",
+          "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
+          "group": "inline@0"
         }
       ],
       "editor/title": [

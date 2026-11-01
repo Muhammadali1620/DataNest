@@ -84,8 +84,10 @@ export const CONNECTION_LIMITS = {
   file: 4000,
   /** Id of an SSH hop; it becomes part of a SecretStorage key. */
   hopId: 64,
-  /** Name of a folder in the tree. */
+  /** One name in the path of a folder in the tree. */
   folder: 200,
+  /** The whole path of a nested folder (V13.8): eight names and the separators. */
+  folderPath: 1700,
 } as const;
 
 /** Labels a connection can wear in the tree, e.g. red for production. */

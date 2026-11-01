@@ -188,7 +188,6 @@
   "Rename Folder": "Переименовать папку",
   "Remove Folder": "Удалить папку",
   "Remove the folder \"{0}\"?": "Удалить папку «{0}»?",
-  "Its {0} connection(s) move to the top level; none is deleted.": "Её подключения ({0}) переместятся на верхний уровень, ни одно не удаляется.",
   "current": "сейчас",
   "No folder (top level)": "Без папки (верхний уровень)",
   "New Folder…": "Новая папка…",
@@ -1232,5 +1231,12 @@
   "Left out: {0}.": "Пропущено: {0}.",
   "Restored {0} keys into {1}": "Восстановлено ключей: {0}, в {1}",
   "Left as they were: {0}": "Оставлено как было: {0}",
-  "Refused: {0}": "Отказано: {0}"
+  "Refused: {0}": "Отказано: {0}",
+  "Its {0} connection(s) and {1} folder(s) move up one level; none is deleted.": "Её подключения ({0}) и папки ({1}) поднимутся на уровень выше; ничего не удаляется.",
+  "A folder cannot be moved into itself": "Папку нельзя переместить в саму себя или в то, что в ней лежит",
+  "Folders nest at most {0} levels deep": "Папки вкладываются не глубже, чем на {0} уровней",
+  "A name cannot contain \"/\": make a folder inside a folder instead": "В имени нельзя использовать «/»: создайте папку внутри папки",
+  "Folders nest too deep": "Слишком глубокая вложенность папок",
+  "New Subfolder": "Новая вложенная папка",
+  "Move the folder \"{0}\" to": "Переместить папку «{0}» в"
 }

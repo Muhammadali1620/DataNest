@@ -3,6 +3,7 @@
 // imported from one. Passwords and other secrets never leave SecretStorage.
 
 import type { ConnectionConfig, ConnectionInput } from '../shared/connection';
+import { cleanFolderPath, withAncestors } from '../shared/folder-path';
 import { entryJson, readConnectionFile, writeConnectionFile } from '../shared/connection-file';
 import type { ConnectionStore } from './connection-store';
 import { sameTarget } from './env-import';
@@ -15,8 +16,11 @@ export function exportConnections(
   configs: readonly ConnectionConfig[],
   folderOrder: readonly string[],
 ): string {
+  // A nested folder brings the folders around it, so the file's order is complete (V13.8).
   const used = new Set(
-    configs.flatMap((config) => (config.folder === undefined ? [] : [config.folder])),
+    withAncestors(
+      configs.flatMap((config) => (config.folder === undefined ? [] : [config.folder])),
+    ),
   );
   return writeConnectionFile({
     // Whether a connection is switched off is a matter of this machine, not of the file.
@@ -72,15 +76,18 @@ export async function importConnections(
 ): Promise<ConnectionConfig[]> {
   const wanted = new Set(
     chosen.flatMap((input) => {
-      const folder = input.folder?.trim();
-      return folder === undefined || folder === '' ? [] : [folder];
+      const folder = cleanFolderPath(input.folder);
+      return folder === undefined ? [] : [folder];
     }),
   );
   const existing = new Set(store.folders());
   for (const folder of [...folderOrder, ...wanted]) {
     if (wanted.has(folder) && !existing.has(folder)) {
       await store.createFolder(folder);
-      existing.add(folder);
+      // The folders around a nested one were made with it.
+      for (const made of withAncestors([folder])) {
+        existing.add(made);
+      }
     }
   }
   const added: ConnectionConfig[] = [];

@@ -61,6 +61,7 @@ import { starUri } from './connection-decorations';
 import { type ProjectSource, TreeModel, type TreeModelDeps, type TreeSettings } from './tree-model';
 import { formatCount } from '../../core/number-format';
 import { folderCountView } from './folder-count';
+import { countInFolder, folderBaseName } from '../../shared/folder-path';
 import type { TableStats } from '../../core/model/objects';
 import { formatSize } from '../../shared/byte-size';
 
@@ -327,10 +328,20 @@ export class ConnectionsTreeProvider
         return item;
       }
       case 'connectionFolder': {
-        const item = new vscode.TreeItem(node.folder, vscode.TreeItemCollapsibleState.Expanded);
+        // A nested folder shows its own name; the path is in the tooltip (V13.8).
+        const item = new vscode.TreeItem(
+          folderBaseName(node.folder),
+          vscode.TreeItemCollapsibleState.Expanded,
+        );
         item.id = nodeId(node);
         item.iconPath = vscode.ThemeIcon.Folder;
         item.contextValue = TREE_CONTEXT.connectionFolder;
+        const inside = countInFolder(
+          this.deps.store.list().map((config) => config.folder),
+          node.folder,
+        );
+        item.description = inside === 0 ? undefined : String(inside);
+        item.tooltip = node.folder.split('/').join(' › ');
         return item;
       }
       case 'connection':

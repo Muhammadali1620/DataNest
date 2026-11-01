@@ -686,7 +686,7 @@
                   class="control"
                   bind:value={fields.folder}
                   list="datanest-folders"
-                  maxlength={CONNECTION_LIMITS.folder}
+                  maxlength={CONNECTION_LIMITS.folderPath}
                   aria-label={t('form.folder')}
                   autocomplete="off"
                 />

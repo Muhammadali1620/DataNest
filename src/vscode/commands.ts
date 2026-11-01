@@ -794,6 +794,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.addConnection]: connections.add,
     [COMMAND_IDS.createFolder]: folders.createFolder,
     [COMMAND_IDS.renameFolder]: folders.renameFolder,
+    [COMMAND_IDS.createSubfolder]: folders.createSubfolder,
+    [COMMAND_IDS.moveFolder]: folders.moveFolder,
     [COMMAND_IDS.removeFolder]: folders.removeFolder,
     [COMMAND_IDS.moveToFolder]: (target, ...rest: unknown[]) =>
       folders.moveToFolder(target, selectionOf(rest[0])),

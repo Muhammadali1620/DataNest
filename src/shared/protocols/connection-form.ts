@@ -76,7 +76,9 @@ const formStateSchema = object({
   /** The project whose file holds the edited connection; absent for the user's own. */
   project: optional(projectSchema),
   /** Folders the connection can be put in; a new name creates one. */
-  folders: optional(array(string({ maxLength: CONNECTION_LIMITS.folder }), { maxLength: 10_000 })),
+  folders: optional(
+    array(string({ maxLength: CONNECTION_LIMITS.folderPath }), { maxLength: 10_000 }),
+  ),
   /** Driver ids the page may offer, with their default ports. */
   drivers: array(
     object({

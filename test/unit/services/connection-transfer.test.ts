@@ -167,3 +167,96 @@ describe('importConnections', () => {
     expect(store.folders()).toEqual([]);
   });
 });
+
+describe('nested folders in export files (V13.8)', () => {
+  it('writes the folders around a nested one, in the store’s order', async () => {
+    const { store } = makeStore();
+    await store.add({ name: 'Shop', driver: 'mysql', host: 'h', folder: 'Work/Prod/EU' });
+    await store.createFolder('Unused');
+    const text = exportConnections(store.list(), store.folders());
+    const parsed = JSON.parse(text) as { folders: string[]; connections: { folder: string }[] };
+    expect(parsed.folders).toEqual(['Work', 'Work/Prod', 'Work/Prod/EU']);
+    expect(parsed.connections[0]?.folder).toBe('Work/Prod/EU');
+  });
+
+  it('reads a file with a nested path and keeps the path', () => {
+    const text = JSON.stringify({
+      version: 1,
+      folders: ['Work', 'Work/Prod'],
+      connections: [{ name: 'A', driver: 'mysql', host: 'h', folder: 'Work/Prod' }],
+    });
+    const read = readImport(text, []);
+    expect(read).toMatchObject({ ok: true });
+    if (read.ok) {
+      expect(read.plan.folders).toEqual(['Work', 'Work/Prod']);
+      expect(read.plan.candidates[0]?.input.folder).toBe('Work/Prod');
+    }
+  });
+
+  it('reads a file made before nesting: its folders are one level', () => {
+    const text = JSON.stringify({
+      version: 1,
+      folders: ['Prod'],
+      connections: [{ name: 'A', driver: 'mysql', host: 'h', folder: 'Prod' }],
+    });
+    const read = readImport(text, []);
+    expect(read).toMatchObject({ ok: true });
+  });
+
+  it('round-trips nested folders into another store', async () => {
+    const source = makeStore();
+    await source.store.add({ name: 'Shop', driver: 'mysql', host: 'h', folder: 'Work/Prod' });
+    await source.store.add({ name: 'Blog', driver: 'mysql', host: 'h', folder: 'Work' });
+    const text = exportConnections(source.store.list(), source.store.folders());
+    const target = makeStore();
+    const read = readImport(text, target.store.list());
+    if (!read.ok) {
+      throw new Error(read.error);
+    }
+    const added = await importConnections(
+      target.store,
+      read.plan.candidates.map((candidate) => candidate.input),
+      read.plan.folders,
+    );
+    expect(added.map((config) => config.folder)).toEqual(['Work/Prod', 'Work']);
+    expect(target.store.folders()).toEqual(['Work', 'Work/Prod']);
+  });
+
+  it('imports into folders that exist: a nested one beside an old one', async () => {
+    const { store } = makeStore();
+    await store.createFolder('Work');
+    await importConnections(
+      store,
+      [
+        { name: 'A', driver: 'mysql', host: 'h', folder: 'Work/Prod' },
+        { name: 'B', driver: 'mysql', host: 'h', folder: 'Work' },
+      ],
+      ['Work', 'Work/Prod'],
+    );
+    expect(store.folders()).toEqual(['Work', 'Work/Prod']);
+  });
+
+  it('does not create a folder twice when a nested one made its parent first', async () => {
+    const { store } = makeStore();
+    const added = await importConnections(
+      store,
+      [
+        { name: 'A', driver: 'mysql', host: 'h', folder: 'Work/Prod' },
+        { name: 'B', driver: 'mysql', host: 'h', folder: 'Work' },
+      ],
+      [],
+    );
+    expect(added).toHaveLength(2);
+    expect(store.folders()).toEqual(['Work', 'Work/Prod']);
+  });
+
+  it('tidies a path in the file: stray separators and blanks', async () => {
+    const { store } = makeStore();
+    await importConnections(
+      store,
+      [{ name: 'A', driver: 'mysql', host: 'h', folder: ' /Work// Prod/ ' }],
+      [],
+    );
+    expect(store.folders()).toEqual(['Work', 'Work/Prod']);
+  });
+});

@@ -65,20 +65,23 @@ describe('planDrop', () => {
     ).toBeUndefined();
   });
 
-  it('moves a folder in front of another folder, or of the folder of a connection', () => {
+  it('moves a folder into the folder it is dropped on, or its empty leaf', () => {
     expect(planDrop([folder('Dev')], folder('Prod'), folderOf)).toEqual({
       kind: 'folder',
       folder: 'Dev',
-      before: 'Prod',
+      parent: 'Prod',
     });
+    expect(
+      planDrop([folder('Dev')], { kind: 'message', text: 'Empty', folder: 'Prod' }, folderOf),
+    ).toEqual({ kind: 'folder', folder: 'Dev', parent: 'Prod' });
+  });
+
+  it('moves a folder in front of the folder of the connection it is dropped on', () => {
     expect(planDrop([folder('Dev')], conn('a'), folderOf)).toEqual({
       kind: 'folder',
       folder: 'Dev',
       before: 'Prod',
     });
-    expect(
-      planDrop([folder('Dev')], { kind: 'message', text: 'Empty', folder: 'Prod' }, folderOf),
-    ).toEqual({ kind: 'folder', folder: 'Dev', before: 'Prod' });
   });
 
   it('moves a folder last when dropped on empty space or a loose connection', () => {
@@ -119,5 +122,82 @@ describe('planDrop', () => {
         inProject,
       ),
     ).toBeUndefined();
+  });
+
+  describe('nested folders (V13.8)', () => {
+    const nested: Record<string, string | undefined> = {
+      a: 'Work/Prod',
+      b: 'Work/Prod/EU',
+      c: 'Work',
+      d: undefined,
+    };
+    const inFolder = (id: string) => nested[id];
+
+    it('drops connections into a nested folder by its whole path', () => {
+      expect(planDrop([conn('d')], folder('Work/Prod'), inFolder)).toEqual({
+        kind: 'connections',
+        ids: ['d'],
+        destination: { folder: 'Work/Prod' },
+      });
+    });
+
+    it('puts connections in front of one in a nested folder', () => {
+      expect(planDrop([conn('d')], conn('a'), inFolder)).toEqual({
+        kind: 'connections',
+        ids: ['d'],
+        destination: { folder: 'Work/Prod', before: 'a' },
+      });
+    });
+
+    it('moves a folder into a nested one', () => {
+      expect(planDrop([folder('Dev')], folder('Work/Prod'), inFolder)).toEqual({
+        kind: 'folder',
+        folder: 'Dev',
+        parent: 'Work/Prod',
+      });
+    });
+
+    it('puts a folder next to the folder of the connection dropped on, in its parent', () => {
+      expect(planDrop([folder('Dev')], conn('a'), inFolder)).toEqual({
+        kind: 'folder',
+        folder: 'Dev',
+        parent: 'Work',
+        before: 'Work/Prod',
+      });
+      expect(planDrop([folder('Dev')], conn('c'), inFolder)).toEqual({
+        kind: 'folder',
+        folder: 'Dev',
+        before: 'Work',
+      });
+    });
+
+    it('takes a nested folder out to the top level on empty space', () => {
+      expect(planDrop([folder('Work/Prod')], undefined, inFolder)).toEqual({
+        kind: 'folder',
+        folder: 'Work/Prod',
+      });
+      expect(planDrop([folder('Work/Prod')], conn('d'), inFolder)).toEqual({
+        kind: 'folder',
+        folder: 'Work/Prod',
+      });
+    });
+
+    it('never drops a folder into itself or into what it holds', () => {
+      expect(planDrop([folder('Work')], folder('Work'), inFolder)).toBeUndefined();
+      expect(planDrop([folder('Work')], folder('Work/Prod'), inFolder)).toBeUndefined();
+      expect(
+        planDrop([folder('Work')], { kind: 'message', text: 'E', folder: 'Work/Prod' }, inFolder),
+      ).toBeUndefined();
+      expect(planDrop([folder('Work')], conn('a'), inFolder)).toBeUndefined();
+      expect(planDrop([folder('Work/Prod')], conn('b'), inFolder)).toBeUndefined();
+    });
+
+    it('does not take a folder whose name only begins like the dragged one for its content', () => {
+      expect(planDrop([folder('Wor')], folder('Work'), inFolder)).toEqual({
+        kind: 'folder',
+        folder: 'Wor',
+        parent: 'Work',
+      });
+    });
   });
 });

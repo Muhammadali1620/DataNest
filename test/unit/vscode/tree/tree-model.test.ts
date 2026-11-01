@@ -103,6 +103,75 @@ describe('TreeModel', () => {
       ]);
     });
 
+    describe('nested folders (V13.8)', () => {
+      it('shows only the top-level folders at the root', async () => {
+        await store.createFolder('Work/Prod');
+        await store.createFolder('Home');
+        expect(model.roots()).toEqual([
+          { kind: 'connectionFolder', folder: 'Work' },
+          { kind: 'connectionFolder', folder: 'Home' },
+          { kind: 'connection', connectionId: mysql.id },
+        ]);
+      });
+
+      it('lists the folders inside a folder before its connections', async () => {
+        await store.createFolder('Work/Prod');
+        await store.createFolder('Work/Dev');
+        const direct = await store.add({ name: 'D', driver: 'sqlite', file: '/d', folder: 'Work' });
+        expect(await model.children({ kind: 'connectionFolder', folder: 'Work' })).toEqual([
+          { kind: 'connectionFolder', folder: 'Work/Prod' },
+          { kind: 'connectionFolder', folder: 'Work/Dev' },
+          { kind: 'connection', connectionId: direct.id },
+        ]);
+      });
+
+      it('lists connections of a folder of the third level', async () => {
+        const deep = await store.add({
+          name: 'Deep',
+          driver: 'sqlite',
+          file: '/d',
+          folder: 'A/B/C',
+        });
+        expect(await model.children({ kind: 'connectionFolder', folder: 'A/B' })).toEqual([
+          { kind: 'connectionFolder', folder: 'A/B/C' },
+        ]);
+        expect(await model.children({ kind: 'connectionFolder', folder: 'A/B/C' })).toEqual([
+          { kind: 'connection', connectionId: deep.id },
+        ]);
+      });
+
+      it('does not mix up a folder with one that begins with the same letters', async () => {
+        await store.createFolder('Prod/EU');
+        await store.createFolder('Production/US');
+        expect(await model.children({ kind: 'connectionFolder', folder: 'Prod' })).toEqual([
+          { kind: 'connectionFolder', folder: 'Prod/EU' },
+        ]);
+      });
+
+      it('a folder with only folders inside is not called empty', async () => {
+        await store.createFolder('Work/Prod');
+        expect(await model.children({ kind: 'connectionFolder', folder: 'Work' })).toEqual([
+          { kind: 'connectionFolder', folder: 'Work/Prod' },
+        ]);
+        expect(await model.children({ kind: 'connectionFolder', folder: 'Work/Prod' })).toEqual([
+          { kind: 'message', text: 'Drag here', folder: 'Work/Prod' },
+        ]);
+      });
+
+      it('finds the parent of a folder and of a connection in a nested folder', async () => {
+        const deep = await store.add({ name: 'Deep', driver: 'sqlite', file: '/d', folder: 'A/B' });
+        expect(model.parentOf({ kind: 'connection', connectionId: deep.id })).toEqual({
+          kind: 'connectionFolder',
+          folder: 'A/B',
+        });
+        expect(model.parentOf({ kind: 'connectionFolder', folder: 'A/B' })).toEqual({
+          kind: 'connectionFolder',
+          folder: 'A',
+        });
+        expect(model.parentOf({ kind: 'connectionFolder', folder: 'A' })).toBeUndefined();
+      });
+    });
+
     it('says where to drop connections in an empty folder', async () => {
       await store.createFolder('Empty');
       expect(await model.children({ kind: 'connectionFolder', folder: 'Empty' })).toEqual([

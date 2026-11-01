@@ -53,7 +53,8 @@ export const ru: Record<MessageKey, string> = {
   'form.place.inProject':
     'Хранится в .vscode/datanest.json проекта «{0}»: его видят все, кто открывает проект. Пароль остаётся на этом компьютере.',
   'form.folder': 'Папка',
-  'form.folderHint': 'Необязательно: папка в дереве; новое имя создаёт папку',
+  'form.folderHint':
+    'Необязательно: папка в дереве; новое имя создаёт папку, Work/Prod — папку внутри папки',
   'form.color': 'Цвет',
   'form.color.none': 'Нет',
   'form.color.red': 'Красный',

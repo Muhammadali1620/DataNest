@@ -86,7 +86,7 @@ not yet — use SSH.)
 
 ## Organizing
 
-- Folders: **New Folder…**, drag and drop, **Move to Folder…**.
+- Folders: **New Folder…**, drag and drop, **Move to Folder…**. Folders nest, up to eight levels: **New Subfolder…** on a folder, **Move Folder…** (or drag a folder onto another one), and `Work/Prod` in the Folder field of the connection form puts it in a folder inside a folder. **Remove Folder** lifts what it held one level up; nothing is deleted.
 - **Set Color…** puts a colour label on a connection.
 - **Filter Databases…** and **Filter Schemas…** show only what you name, with `*`
   wildcards and `!` exclusions: `app_*, !app_test`.

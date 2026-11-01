@@ -91,6 +91,8 @@
   "commands.table.generateDelete.title": "Generate DELETE",
   "commands.folders.create.title": "New Folder…",
   "commands.folders.rename.title": "Rename Folder…",
+  "commands.folders.createSub.title": "New Subfolder…",
+  "commands.folders.move.title": "Move Folder…",
   "commands.folders.remove.title": "Remove Folder",
   "commands.connections.moveToFolder.title": "Move to Folder…",
   "commands.connections.setColor.title": "Set Color…",

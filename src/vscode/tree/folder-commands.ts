@@ -2,7 +2,14 @@ import * as vscode from 'vscode';
 import type { ConnectionStore } from '../../services/connection-store';
 import { CONNECTION_COLORS, type ConnectionColor } from '../../shared/connection';
 import { COLOR_THEME_IDS } from './connection-look';
-import { folderNameProblem } from './folder-names';
+import {
+  childFolders,
+  folderBaseName,
+  isInFolder,
+  joinFolder,
+  parentFolder,
+} from '../../shared/folder-path';
+import { folderNameProblem, type FolderNameProblem } from './folder-names';
 import { connectionIdOf, type TreeNode } from './nodes';
 import type { CommandTarget } from './tree-commands';
 
@@ -10,8 +17,12 @@ export interface FolderCommandDeps {
   readonly store: ConnectionStore;
 }
 
-function problemText(problem: NonNullable<ReturnType<typeof folderNameProblem>>): string {
+function problemText(problem: FolderNameProblem): string {
   switch (problem) {
+    case 'separator':
+      return vscode.l10n.t('A name cannot contain "/": make a folder inside a folder instead');
+    case 'too-deep':
+      return vscode.l10n.t('Folders nest too deep');
     case 'empty':
       return vscode.l10n.t('Give the folder a name');
     case 'too-long':
@@ -21,17 +32,27 @@ function problemText(problem: NonNullable<ReturnType<typeof folderNameProblem>>)
   }
 }
 
+/** A folder shown by its whole path, e.g. `Work › Prod`. */
+function pathLabel(folder: string): string {
+  return folder.split('/').join(' › ');
+}
+
+/**
+ * Asks for the name of a folder: `current` is the folder being renamed (its name is the
+ * starting text), `parent` the folder a new one goes into.
+ */
 async function askFolderName(
   store: ConnectionStore,
   title: string,
   current?: string,
+  parent?: string,
 ): Promise<string | undefined> {
   const name = await vscode.window.showInputBox({
     title,
-    value: current ?? '',
+    value: current === undefined ? '' : folderBaseName(current),
     prompt: vscode.l10n.t('Folders group connections in the tree; drag connections into them'),
     validateInput: (value) => {
-      const problem = folderNameProblem(value, store.folders(), current);
+      const problem = folderNameProblem(value, store.folders(), current, parent);
       return problem === undefined ? undefined : problemText(problem);
     },
   });
@@ -64,7 +85,9 @@ function colorLabel(color: ConnectionColor): string {
 /** Folder and color commands of the tree. */
 export function folderCommandHandlers(deps: FolderCommandDeps): {
   createFolder: (target?: CommandTarget) => Promise<void>;
+  createSubfolder: (target?: CommandTarget) => Promise<void>;
   renameFolder: (target?: CommandTarget) => Promise<void>;
+  moveFolder: (target?: CommandTarget) => Promise<void>;
   removeFolder: (target?: CommandTarget) => Promise<void>;
   moveToFolder: (target?: CommandTarget, selection?: readonly TreeNode[]) => Promise<void>;
   setColor: (target?: CommandTarget) => Promise<void>;
@@ -87,14 +110,51 @@ export function folderCommandHandlers(deps: FolderCommandDeps): {
   return {
     createFolder,
 
+    createSubfolder: async (target?: CommandTarget) => {
+      const parent = folderOf(target) ?? (await pickFolder(store));
+      if (parent === undefined) {
+        return;
+      }
+      const name = await askFolderName(store, vscode.l10n.t('New Subfolder'), undefined, parent);
+      if (name !== undefined) {
+        await store.createFolder(joinFolder(parent, name));
+      }
+    },
+
     renameFolder: async (target?: CommandTarget) => {
       const folder = folderOf(target) ?? (await pickFolder(store));
       if (folder === undefined) {
         return;
       }
       const name = await askFolderName(store, vscode.l10n.t('Rename Folder'), folder);
-      if (name !== undefined && name !== folder) {
-        await store.renameFolder(folder, name);
+      if (name !== undefined && name !== folderBaseName(folder)) {
+        await store.renameFolder(folder, joinFolder(parentFolder(folder), name));
+      }
+    },
+
+    moveFolder: async (target?: CommandTarget) => {
+      const folder = folderOf(target) ?? (await pickFolder(store));
+      if (folder === undefined) {
+        return;
+      }
+      const TOP = Symbol('top');
+      const items: (vscode.QuickPickItem & { value: string | typeof TOP })[] = [
+        { label: `$(list-flat) ${vscode.l10n.t('No folder (top level)')}`, value: TOP },
+        // Not itself and not what it holds: a folder cannot go into its own contents.
+        ...store
+          .folders()
+          .filter((one) => !isInFolder(one, folder))
+          .map((one) => ({
+            label: `$(folder) ${pathLabel(one)}`,
+            value: one,
+            ...(one === parentFolder(folder) ? { description: vscode.l10n.t('current') } : {}),
+          })),
+      ];
+      const chosen = await vscode.window.showQuickPick(items, {
+        title: vscode.l10n.t('Move the folder "{0}" to', pathLabel(folder)),
+      });
+      if (chosen !== undefined) {
+        await store.moveFolder(folder, chosen.value === TOP ? {} : { parent: chosen.value });
       }
     },
 
@@ -104,15 +164,17 @@ export function folderCommandHandlers(deps: FolderCommandDeps): {
         return;
       }
       const inside = store.list().filter((config) => config.folder === folder).length;
-      if (inside > 0) {
+      const subfolders = childFolders(store.folders(), folder).length;
+      if (inside + subfolders > 0) {
         const remove = vscode.l10n.t('Remove Folder');
         const answer = await vscode.window.showWarningMessage(
-          vscode.l10n.t('Remove the folder "{0}"?', folder),
+          vscode.l10n.t('Remove the folder "{0}"?', pathLabel(folder)),
           {
             modal: true,
             detail: vscode.l10n.t(
-              'Its {0} connection(s) move to the top level; none is deleted.',
+              'Its {0} connection(s) and {1} folder(s) move up one level; none is deleted.',
               inside,
+              subfolders,
             ),
           },
           remove,
@@ -140,7 +202,7 @@ export function folderCommandHandlers(deps: FolderCommandDeps): {
       const TOP = Symbol('top');
       const items: (vscode.QuickPickItem & { value: string | typeof NEW | typeof TOP })[] = [
         ...store.folders().map((folder) => ({
-          label: `$(folder) ${folder}`,
+          label: `$(folder) ${pathLabel(folder)}`,
           value: folder,
           ...(folder === current ? { description: vscode.l10n.t('current') } : {}),
         })),
@@ -203,5 +265,9 @@ async function pickFolder(store: ConnectionStore): Promise<string | undefined> {
     void vscode.window.showInformationMessage(vscode.l10n.t('There are no folders yet'));
     return undefined;
   }
-  return await vscode.window.showQuickPick(folders, { title: vscode.l10n.t('Pick a folder') });
+  const chosen = await vscode.window.showQuickPick(
+    folders.map((folder) => ({ label: pathLabel(folder), folder })),
+    { title: vscode.l10n.t('Pick a folder') },
+  );
+  return chosen?.folder;
 }

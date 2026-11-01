@@ -45,6 +45,7 @@ import {
 } from './nodes';
 import { normalizeTableFilter, tableFilter } from './table-filter';
 import { msg } from '../../core/user-message';
+import { childFolders, parentFolder } from '../../shared/folder-path';
 
 /** What a project node says when it has nothing to list (V4.7). */
 export interface ProjectTexts {
@@ -150,9 +151,10 @@ export class TreeModel {
       key: view.folder.key,
       name: view.folder.name,
     }));
-    const folders = this.deps.store
-      .folders()
-      .map((folder): TreeNode => ({ kind: 'connectionFolder', folder }));
+    const folders = childFolders(this.deps.store.folders(), undefined).map((folder): TreeNode => ({
+      kind: 'connectionFolder',
+      folder,
+    }));
     const loose = this.ownConnections()
       .filter((config) => config.folder === undefined)
       .map((config): TreeNode => ({ kind: 'connection', connectionId: config.id }));
@@ -195,13 +197,20 @@ export class TreeModel {
       .filter((config) => this.deps.store.projectOf(config.id) === undefined);
   }
 
-  /** The connections of one folder; a leaf that says so when there are none. */
+  /**
+   * What one folder holds: the folders inside it (V13.8), then its connections; a leaf
+   * that says so when there are none of either.
+   */
   connectionsInFolder(folder: string): TreeNode[] {
+    const inside = childFolders(this.deps.store.folders(), folder).map((path): TreeNode => ({
+      kind: 'connectionFolder',
+      folder: path,
+    }));
     const connections = this.ownConnections()
       .filter((config) => config.folder === folder)
       .map((config): TreeNode => ({ kind: 'connection', connectionId: config.id }));
-    if (connections.length > 0 || this.deps.texts.emptyFolder === undefined) {
-      return connections;
+    if (inside.length + connections.length > 0 || this.deps.texts.emptyFolder === undefined) {
+      return [...inside, ...connections];
     }
     return [{ kind: 'message', text: this.deps.texts.emptyFolder, folder }];
   }
@@ -345,8 +354,11 @@ export class TreeModel {
         const folder = this.deps.store.get(node.connectionId)?.folder;
         return folder === undefined ? undefined : { kind: 'connectionFolder', folder };
       }
+      case 'connectionFolder': {
+        const parent = parentFolder(node.folder);
+        return parent === undefined ? undefined : { kind: 'connectionFolder', folder: parent };
+      }
       case 'project':
-      case 'connectionFolder':
       case 'database':
       case 'schema':
       case 'group':

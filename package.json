@@ -827,6 +827,24 @@
         "icon": "$(trash)"
       },
       {
+        "command": "datanest.elastic.exportIndex",
+        "title": "%commands.elastic.exportIndex.title%",
+        "category": "DataNest",
+        "icon": "$(export)"
+      },
+      {
+        "command": "datanest.elastic.importIndex",
+        "title": "%commands.elastic.importIndex.title%",
+        "category": "DataNest",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "datanest.elastic.importNewIndex",
+        "title": "%commands.elastic.importNewIndex.title%",
+        "category": "DataNest",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "datanest.elastic.newQuery",
         "title": "%commands.elastic.newQuery.title%",
         "category": "DataNest",
@@ -1096,6 +1114,18 @@
         },
         {
           "command": "datanest.elastic.deleteIndex",
+          "when": "false"
+        },
+        {
+          "command": "datanest.elastic.exportIndex",
+          "when": "false"
+        },
+        {
+          "command": "datanest.elastic.importIndex",
+          "when": "false"
+        },
+        {
+          "command": "datanest.elastic.importNewIndex",
           "when": "false"
         },
         {
@@ -1694,6 +1724,21 @@
           "command": "datanest.elastic.deleteIndex",
           "when": "view == datanest.connections && (viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred)",
           "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.elastic.exportIndex",
+          "when": "view == datanest.connections && (viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred)",
+          "group": "1_export@1"
+        },
+        {
+          "command": "datanest.elastic.importIndex",
+          "when": "view == datanest.connections && (viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred)",
+          "group": "1_export@2"
+        },
+        {
+          "command": "datanest.elastic.importNewIndex",
+          "when": "view == datanest.connections && (viewItem == datanest.elasticConnection || viewItem == datanest.elasticConnection.starred || viewItem == datanest.elasticConnection.connected || viewItem == datanest.elasticConnection.connected.starred || viewItem == datanest.projectElasticConnection || viewItem == datanest.projectElasticConnection.starred || viewItem == datanest.projectElasticConnection.connected || viewItem == datanest.projectElasticConnection.connected.starred)",
+          "group": "2_edit@2"
         },
         {
           "command": "datanest.tree.filterTables",

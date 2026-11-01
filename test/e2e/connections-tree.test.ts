@@ -35,6 +35,9 @@ describe('connections view', () => {
       'datanest.mongo.importCollection',
       'datanest.elastic.copyAsCurl',
       'datanest.elastic.showSettings',
+      'datanest.elastic.exportIndex',
+      'datanest.elastic.importIndex',
+      'datanest.elastic.importNewIndex',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }

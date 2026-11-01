@@ -233,6 +233,10 @@ export const COMMAND_IDS = {
   elasticPickConnection: 'datanest.elastic.pickConnection',
   elasticCopyAsCurl: 'datanest.elastic.copyAsCurl',
   elasticShowSettings: 'datanest.elastic.showSettings',
+  /** An index to a file and back, and a file as a new index (V13.11). */
+  elasticExportIndex: 'datanest.elastic.exportIndex',
+  elasticImportIndex: 'datanest.elastic.importIndex',
+  elasticImportNewIndex: 'datanest.elastic.importNewIndex',
   mongoExportCollection: 'datanest.mongo.exportCollection',
   mongoImportCollection: 'datanest.mongo.importCollection',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */

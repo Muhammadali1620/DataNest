@@ -14,6 +14,8 @@ import { formatJson } from '../../core/json/json-tree';
 import { callJson } from '../../services/elasticsearch/catalog';
 import { isTreeNode } from '../tree/nodes';
 import { elasticTreeSession } from '../tree/elastic-tree';
+import { indexFileCommandHandlers } from './index-file-commands';
+import { indexFileEditorDeps } from './index-file-ui';
 
 export interface ElasticCommandDeps {
   readonly manager: ConnectionManager;
@@ -30,7 +32,10 @@ type ElasticCommandId = (typeof COMMAND_IDS)[
   | 'elasticRunRequest'
   | 'elasticPickConnection'
   | 'elasticCopyAsCurl'
-  | 'elasticShowSettings'];
+  | 'elasticShowSettings'
+  | 'elasticExportIndex'
+  | 'elasticImportIndex'
+  | 'elasticImportNewIndex'];
 
 export function elasticCommands(
   deps: ElasticCommandDeps,
@@ -75,9 +80,18 @@ export function elasticCommands(
       noElastic: vscode.l10n.t('There is no Elasticsearch connection yet'),
     },
   });
+  const files = indexFileCommandHandlers({
+    manager: deps.manager,
+    store: deps.store,
+    tree: deps.tree,
+    ...indexFileEditorDeps,
+  });
   return {
     [COMMAND_IDS.elasticNewIndex]: handlers.newIndex,
     [COMMAND_IDS.elasticDeleteIndex]: handlers.deleteIndex,
+    [COMMAND_IDS.elasticExportIndex]: files.exportIndex,
+    [COMMAND_IDS.elasticImportIndex]: files.importIndex,
+    [COMMAND_IDS.elasticImportNewIndex]: files.importNewIndex,
     [COMMAND_IDS.elasticNewQuery]: async (target) => {
       await deps.editors.newQuery(target);
     },

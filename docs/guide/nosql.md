@@ -70,3 +70,12 @@ do not apply to them, and theirs do not apply to SQL connections.
   whole answer as text; 64-bit numbers stay exact. `_bulk` and `_msearch` take NDJSON
   bodies. Requests that change or delete data follow the connection's production,
   read-only and safe mode rules.
+- **Export Index…** on an index writes its documents to a file, one per line: with the
+  mappings and settings in a header line (so a new index can be made just like it), as
+  documents only, or in the `_bulk` format for `curl`. It reads the index with a scroll, a
+  page at a time, so a big index does not sit in memory, and 64-bit numbers stay exact.
+  **Import Documents…** loads such a file (or any NDJSON or JSON array of documents) into an
+  index through `_bulk`: keep the ids and replace what exists, keep the ids and leave what
+  exists, or make up new ids; a refused document either stops the load or is skipped, and
+  the report lists its line. **Import as New Index…** on the connection makes the index from
+  the header of the file first. Loading follows the production and read-only rules.

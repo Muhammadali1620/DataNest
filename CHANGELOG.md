@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- RedisJSON keys open as a tree of their document, one level at a time, with each node's value, JSONPath and text; copy a path or a value, edit a value or delete a member (with the usual read-only and production checks). The key shows a yellow JSON icon in the tree.
+- Tools for the editor's language model and a `@datanest` chat participant: list connections, read a schema, and run one statement that only reads (at most 100 rows, each query approved by you, never on a switched-off connection). Passwords and hosts are never sent. `datanest.ai.enabled` turns it off; editors without a language model API do not show it.
 - Result tabs come back after a restart: for a saved SQL file, the statements that only read are remembered (never rows or passwords) and return as empty tabs with a Run button. `datanest.results.restore` turns it off; `datanest.results.restoreRun` runs them again on its own, never on production or a switched-off connection.
 - PostGIS geometry and geography values show as text (`SRID=4326;POINT(13.4 52.5)`) instead of hex; the text can be edited and copied as it is. Dumps and table copies write MySQL and MariaDB spatial columns in the form the server keeps, so geometries come back exactly with any SRID.
 - SSH algorithms: under an SSH server, write a rule per kind of method (key exchange, host key, cipher, MAC, compression) in OpenSSH's `+name` / `-name` / `^name` / list syntax to reach an old server or tighten a strict one. Names are checked as you type, and a rule that allows weak methods shows a warning. It applies to tunnels, to a SQLite file copied from a server, and to the connection test.

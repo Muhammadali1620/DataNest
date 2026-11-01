@@ -24,6 +24,7 @@ import { COMMAND_IDS } from '../command-ids';
 import { affectsDataNest } from '../settings';
 import { dbMarkFile } from '../../shared/db-marks';
 import { connectionUri, tagText } from './connection-decorations';
+import { redisTypeIcon } from './redis-type-icon';
 import { tagsOf } from './connection-look';
 import { elasticFieldItem, elasticIndexItem } from './elastic-items';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
@@ -550,7 +551,11 @@ export class ConnectionsTreeProvider
           vscode.TreeItemCollapsibleState.None,
         );
         item.id = nodeId(node);
-        item.iconPath = new vscode.ThemeIcon(redisTypeIcon(node.keyType));
+        const look = redisTypeIcon(node.keyType);
+        item.iconPath = new vscode.ThemeIcon(
+          look.icon,
+          look.color === undefined ? undefined : new vscode.ThemeColor(look.color),
+        );
         item.description = node.keyType;
         item.tooltip = node.key.text;
         item.contextValue = TREE_CONTEXT.redisKey;
@@ -822,28 +827,6 @@ function statusIcon(status: ReturnType<ConnectionManager['getState']>['status'])
       return new vscode.ThemeIcon('database', new vscode.ThemeColor('list.errorForeground'));
     case 'disconnected':
       return new vscode.ThemeIcon('database');
-  }
-}
-
-/** Codicons per Redis type; a module's own type (JSON, time series) gets a generic one. */
-function redisTypeIcon(type: string | undefined): string {
-  switch (type) {
-    case 'string':
-      return 'symbol-string';
-    case 'hash':
-      return 'symbol-structure';
-    case 'list':
-      return 'list-ordered';
-    case 'set':
-      return 'symbol-array';
-    case 'zset':
-      return 'list-filter';
-    case 'stream':
-      return 'pulse';
-    case undefined:
-      return 'key';
-    default:
-      return 'extensions';
   }
 }
 

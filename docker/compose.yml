@@ -419,6 +419,19 @@ services:
           'redis-cli -c -p 7391 -a datanest --no-auth-warning GET cluster:seed | grep -qx done',
         ]
 
+  # Redis Stack server (V13.14), group `redisjson`: Redis with the RedisJSON module, for
+  # the viewer of JSON keys. Plain, no password; its own group keeps the heavy image out
+  # of the `redis` job.
+  redisjson:
+    image: redis/redis-stack-server:7.4.0-v1
+    container_name: datanest-redisjson
+    profiles: [redisjson]
+    ports:
+      - 127.0.0.1:7383:6379
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD-SHELL', 'redis-cli PING | grep -qx PONG']
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

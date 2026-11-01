@@ -14,6 +14,14 @@ do not apply to them, and theirs do not apply to SQL connections.
 - **Open Key** shows a key on a page of its own: a string as text, JSON or hex; hashes,
   lists, sets, sorted sets and streams as tables you can edit. The TTL can be set or
   removed. Values are bytes: nothing is changed on the way.
+- A **RedisJSON** key (type `ReJSON-RL`, from Redis Stack) opens as a tree of its document,
+  one level at a time, so a huge document is never read whole: objects and arrays show
+  their size, scalars their value, in the colour of their kind. Select a node to see its
+  text and its JSONPath, copy either, edit the value of the node (the text must be valid
+  JSON; numbers are kept as written) or delete a member. Only an existing path is
+  replaced, so nothing is created by mistake; a read-only connection offers no change and a
+  production one asks first. A part bigger than 4 MB in memory is not shown whole. Without
+  the module on the server the page says so, and TTL, rename and delete still work.
 - **New Key…**, **Rename Key…**, **Delete Key**.
 - **Export Keys…** writes the keys of a database, of a folder or of the selected keys to a
   file, one JSON record per line (strings, hashes, lists, sets, sorted sets and streams,

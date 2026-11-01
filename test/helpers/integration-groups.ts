@@ -7,7 +7,7 @@ import { createConnection } from 'node:net';
 import { testDatabase, testSshServer } from './databases';
 import { TEST_ELASTIC } from './elastic-servers';
 import { TEST_MONGO } from './mongo-servers';
-import { TEST_REDIS } from './redis-servers';
+import { TEST_REDIS, TEST_REDISJSON } from './redis-servers';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -91,6 +91,11 @@ const DEFINITIONS = {
         port,
       })),
     ],
+  },
+  redisjson: {
+    always: false,
+    folders: ['redisjson'],
+    endpoints: () => [{ name: 'redisjson', host: TEST_REDISJSON.host, port: TEST_REDISJSON.port }],
   },
   mongodb: {
     always: false,

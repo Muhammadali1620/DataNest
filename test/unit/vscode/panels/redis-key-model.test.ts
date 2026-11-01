@@ -3,6 +3,7 @@ import { DbError } from '../../../../src/core/errors';
 import type { RedisReply } from '../../../../src/drivers/redis-driver';
 import { RedisKeyModel } from '../../../../src/vscode/panels/redis-key-model';
 import { bulk, FakeRedisSession } from '../../../helpers/fake-redis';
+import { FakeJsonSession } from '../../../helpers/fake-redisjson';
 
 /** A server with one key of `type`, whose LRANGE pages come from `list`. */
 function server(type: string, options: { list?: string[]; exists?: boolean } = {}) {
@@ -189,5 +190,85 @@ describe('RedisKeyModel', () => {
     await expect(keyModel.deleteKey()).rejects.toMatchObject({ code: 'permission-denied' });
     expect(session.calls).toEqual([]);
     expect((await keyModel.refresh()).readOnly).toBe(true);
+  });
+});
+
+describe('RedisKeyModel with a RedisJSON key (V13.14)', () => {
+  const jsonModel = (session: FakeJsonSession, readOnly = false) =>
+    new RedisKeyModel({
+      key: { text: 'doc' },
+      database: 0,
+      connectionName: 'Stack',
+      readOnly,
+      session: () => Promise.resolve(session),
+    });
+  const doc = { name: 'Ann', tags: ['a', 'b'], nested: { x: 1 } };
+
+  it('gives the page the root of the document and no items', async () => {
+    const state = await jsonModel(new FakeJsonSession(doc)).refresh();
+    expect(state.type).toBe('ReJSON-RL');
+    expect(state.json).toEqual({ path: '$', label: '$', kind: 'object', size: 3 });
+    expect(state.items).toBeUndefined();
+    expect(state.more).toBeUndefined();
+    expect(state.value).toBeUndefined();
+    expect(state.jsonError).toBeUndefined();
+  });
+
+  it('tells why the document cannot be read instead of failing the key', async () => {
+    const state = await jsonModel(new FakeJsonSession(doc, { noModule: true })).refresh();
+    expect(state.exists).toBe(true);
+    expect(state.json).toBeUndefined();
+    expect(state.jsonError).toMatch(/unknown command/);
+  });
+
+  it('lets a lost link through: that is not the module', async () => {
+    const session = new FakeJsonSession(doc);
+    await session.close();
+    await expect(jsonModel(session).refresh()).rejects.toMatchObject({ code: 'connection-failed' });
+  });
+
+  it('reads children and text of a path', async () => {
+    const m = jsonModel(new FakeJsonSession(doc));
+    await m.refresh();
+    expect((await m.jsonChildren('$', 0)).nodes.map((n) => n.label)).toEqual([
+      'name',
+      'tags',
+      'nested',
+    ]);
+    expect((await m.jsonText('$["tags"]')).text).toBe('["a", "b"]');
+  });
+
+  it('changes a value by path and reads the document again', async () => {
+    const session = new FakeJsonSession(doc);
+    const m = jsonModel(session);
+    await m.refresh();
+    const state = await m.apply({ kind: 'jsonSet', path: '$["nested"]', text: '{"a":1,"b":2}' });
+    expect(session.text()).toContain('"nested":{"a":1,"b":2}');
+    expect(state.json?.size).toBe(3);
+    const after = await m.apply({ kind: 'jsonDelete', path: '$["tags"]' });
+    expect(after.json?.size).toBe(2);
+  });
+
+  it('refuses a change on a read-only connection before the server sees it', async () => {
+    const session = new FakeJsonSession(doc);
+    const m = jsonModel(session, true);
+    await m.refresh();
+    const before = session.calls.length;
+    await expect(m.apply({ kind: 'jsonSet', path: '$', text: '1' })).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    await expect(m.apply({ kind: 'jsonDelete', path: '$["tags"]' })).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(session.calls).toHaveLength(before);
+    // Reading still works.
+    expect((await m.jsonText('$')).text).toContain('Ann');
+  });
+
+  it('says a document is gone once the key is', async () => {
+    const session = new FakeJsonSession(doc, {}, 'other');
+    const state = await jsonModel(session).refresh();
+    expect(state.exists).toBe(false);
+    expect(state.json).toBeUndefined();
   });
 });

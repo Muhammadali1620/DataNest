@@ -38,6 +38,9 @@ export const redisKeyRefSchema = object({
   hex: optional(string({ maxLength: 200_000 })),
 });
 
+/** What `TYPE` says for a key of the RedisJSON module (V13.14). */
+export const REDIS_JSON_TYPE = 'ReJSON-RL';
+
 /** The types the page edits; anything else (a module's type) is shown by name only. */
 export const EDITABLE_TYPES = ['string', 'hash', 'list', 'set', 'zset', 'stream'] as const;
 
@@ -58,6 +61,22 @@ const itemSchema = object({
     array(object({ field: redisValueSchema, value: redisValueSchema }), { maxLength: 10_000 }),
   ),
 });
+
+/** One row of the tree of a RedisJSON document (V13.14). */
+export const jsonNodeSchema = object({
+  /** JSONPath from `$`. */
+  path: string({ maxLength: 10_000 }),
+  /** The member name, or the position in an array; `$` for the root. */
+  label: string({ maxLength: 100_000 }),
+  /** object, array, string, integer, number, boolean, null — or what a newer module says. */
+  kind: string({ maxLength: 40 }),
+  /** Members, items or characters. */
+  size: optional(number({ integer: true, min: 0 })),
+  /** The value of a scalar, cut. */
+  preview: optional(string({ maxLength: 1000 })),
+});
+
+const jsonPathParams = object({ path: string({ minLength: 1, maxLength: 10_000 }) });
 
 const keyStateSchema = object({
   key: redisKeyRefSchema,
@@ -83,6 +102,10 @@ const keyStateSchema = object({
   more: optional(boolean()),
   /** The pattern the items are filtered by (hash, set, zset). */
   filter: optional(string({ maxLength: 1000 })),
+  /** The root of a RedisJSON document; its children are asked for as they are opened. */
+  json: optional(jsonNodeSchema),
+  /** Why the document cannot be read (the module is not loaded, or refuses). */
+  jsonError: optional(string({ maxLength: 5000 })),
 });
 
 const valueParams = object({ value: redisValueSchema });
@@ -155,6 +178,40 @@ export const redisKeyProtocol = defineProtocol({
         result: object({}),
       },
       deleteEntry: { params: object({ id: string({ maxLength: 64 }) }), result: object({}) },
+      /** The members of an object or items of an array, from `offset` (RedisJSON). */
+      jsonChildren: {
+        params: object({
+          path: string({ minLength: 1, maxLength: 10_000 }),
+          offset: number({ integer: true, min: 0 }),
+        }),
+        result: object({
+          nodes: array(jsonNodeSchema, { maxLength: 1000 }),
+          total: number({ integer: true, min: 0 }),
+          more: boolean(),
+        }),
+      },
+      /** A part of the document laid out as text, for reading and copying. */
+      jsonText: {
+        params: jsonPathParams,
+        result: object({
+          text: string({ maxLength: 2_100_000 }),
+          truncated: optional(boolean()),
+          /** Bytes in memory; the part is too big to read whole. */
+          tooLarge: optional(number({ integer: true, min: 0 })),
+        }),
+      },
+      /** Puts text on the clipboard (the host does it; a page may not). */
+      copyText: { params: object({ text: string({ maxLength: 2_100_000 }) }), result: object({}) },
+      /** JSON.SET on an existing path, the value being JSON text. */
+      jsonSet: {
+        params: object({
+          path: string({ minLength: 1, maxLength: 10_000 }),
+          text: string({ maxLength: 2_100_000 }),
+        }),
+        result: object({}),
+      },
+      /** JSON.DEL below the root. */
+      jsonDelete: { params: jsonPathParams, result: object({}) },
       /** EXPIRE in seconds, or PERSIST for null. */
       setTtl: {
         params: object({ seconds: nullable(number({ integer: true, min: 1 })) }),
@@ -187,3 +244,5 @@ export type RedisKeyProtocol = typeof redisKeyProtocol;
 export type RedisKeyState = Infer<typeof keyStateSchema>;
 
 export type RedisKeyItem = Infer<typeof itemSchema>;
+
+export type JsonNodeInfo = Infer<typeof jsonNodeSchema>;

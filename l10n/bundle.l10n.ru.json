@@ -1279,5 +1279,10 @@
   "This statement is not run: only statements that merely read are.": "Эта команда не выполняется: выполняются только те, что лишь читают.",
   "\"{0}\" is a production database: the statement is not run for you.": "«{0}» — рабочая база: команду за вас не выполняю.",
   "Running it (read only, at most 100 rows)…": "Выполняю (только чтение, не больше 100 строк)…",
-  "Something went wrong: {0}": "Что-то пошло не так: {0}"
+  "Something went wrong: {0}": "Что-то пошло не так: {0}",
+  "Not a JSON path of this key": "Это не путь JSON этого ключа",
+  "The key has no JSON value": "У ключа нет значения JSON",
+  "The path no longer exists: refresh the key": "Такого пути больше нет: обновите ключ",
+  "Not valid JSON: {0}": "Это не JSON: {0}",
+  "The whole document goes with the key: delete the key": "Весь документ уходит вместе с ключом: удалите ключ"
 }

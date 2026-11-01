@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { RedisKeyProtocol, RedisKeyState } from '../../../../src/shared/protocols/redis-key';
+  import {
+    REDIS_JSON_TYPE,
+    type RedisKeyProtocol,
+    type RedisKeyState,
+  } from '../../../../src/shared/protocols/redis-key';
   import type { RedisValue } from '../../../../src/shared/redis-value';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Icon from '../../components/Icon.svelte';
@@ -8,6 +12,7 @@
   import type { CodiconName } from '../../lib/codicons';
   import type { Translate } from '../../lib/i18n';
   import ItemEditor from './ItemEditor.svelte';
+  import JsonView from './JsonView.svelte';
   import ValueEditor from './ValueEditor.svelte';
   import {
     cellText,
@@ -40,6 +45,8 @@
   let now = $state(Date.now());
   /** Bumped on every state, so the value box starts over from the server's value. */
   let version = $state(0);
+  /** The tree of a RedisJSON key, to read again whatever it shows after the key was read. */
+  let jsonView = $state<{ reload(): Promise<void> } | undefined>(undefined);
 
   const items = $derived<PageItem[]>((keyState?.items ?? []) as PageItem[]);
   const selected = $derived(
@@ -67,6 +74,9 @@
       version += 1;
       stringDraft = undefined;
       renameText = next.key.text;
+      if (next.json !== undefined) {
+        void jsonView?.reload();
+      }
       if (editing !== undefined && editing !== 'new') {
         // The edited item may have moved or gone; its editor closes then.
         const still = (next.items ?? []).some((item) => itemKey(item) === editing);
@@ -125,6 +135,8 @@
         return 'sort-precedence';
       case 'stream':
         return 'pulse';
+      case REDIS_JSON_TYPE:
+        return 'json';
       default:
         return 'symbol-misc';
     }
@@ -337,6 +349,25 @@
               }}><Icon name="save" />{t('redis.save')}</button
             >
           </footer>
+        {/if}
+      {:else if keyState.type === REDIS_JSON_TYPE}
+        {#if keyState.json !== undefined}
+          <JsonView
+            bind:this={jsonView}
+            {rpc}
+            {t}
+            root={keyState.json}
+            readOnly={keyState.readOnly}
+            act={run}
+            {busy}
+          />
+        {:else}
+          <div class="notice warning problem" data-testid="json-unavailable">
+            <Icon name="warning" />
+            <span class="message"
+              >{t('redis.json.unavailable', keyState.jsonError ?? '')}<br />{t('redis.json.unavailableHint')}</span
+            >
+          </div>
         {/if}
       {:else if !editableType}
         <div class="notice info problem" data-testid="unsupported"><Icon name="info" /><span>{t('redis.unsupported', keyState.type)}</span></div>

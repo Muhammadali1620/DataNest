@@ -44,7 +44,7 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, MongoDB, Elasticsearch, PostGIS and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, Redis Stack, MongoDB, Elasticsearch, PostGIS and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'clickhouse',
       'cockroach',
@@ -59,6 +59,7 @@ describe('docker/compose.yml (D17)', () => {
       'redis',
       'redis-cluster',
       'redis-sentinel',
+      'redisjson',
       'ssh',
       'ssh-inner',
       'tidb',

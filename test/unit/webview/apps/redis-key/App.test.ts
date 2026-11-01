@@ -261,9 +261,9 @@ describe('Redis key page', () => {
   it('says when the key is gone, and when its type is not shown', async () => {
     const host = await open(state({ exists: false, type: 'none', value: undefined }));
     expect(screen.getByTestId('gone')).toBeTruthy();
-    host.emit('state', state({ type: 'ReJSON-RL', value: undefined }));
+    host.emit('state', state({ type: 'MBbloom--', value: undefined }));
     await waitFor(() => {
-      expect(screen.getByTestId('unsupported').textContent).toContain('ReJSON-RL');
+      expect(screen.getByTestId('unsupported').textContent).toContain('MBbloom--');
     });
   });
 });

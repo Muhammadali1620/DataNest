@@ -35,3 +35,6 @@ export const TEST_REDIS = {
     key: join(TLS_DIR, 'client.key'),
   },
 } as const;
+
+/** The Redis Stack server of the `redisjson` group (V13.14): the RedisJSON module, no password. */
+export const TEST_REDISJSON = { host: '127.0.0.1', port: 7383 } as const;

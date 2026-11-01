@@ -143,6 +143,20 @@ export class RedisKeyPanel implements vscode.Disposable {
       async (params) => await this.ran({ kind: 'deleteEntry', ...params }),
     );
     this.rpc.handle('setTtl', async (params) => await this.ran({ kind: 'setTtl', ...params }));
+    this.rpc.handle(
+      'jsonChildren',
+      async ({ path, offset }) => await model.jsonChildren(path, offset),
+    );
+    this.rpc.handle('copyText', async ({ text }) => {
+      await vscode.env.clipboard.writeText(text);
+      return {};
+    });
+    this.rpc.handle('jsonText', async ({ path }) => await model.jsonText(path));
+    this.rpc.handle('jsonSet', async (params) => await this.ran({ kind: 'jsonSet', ...params }));
+    this.rpc.handle(
+      'jsonDelete',
+      async (params) => await this.ran({ kind: 'jsonDelete', ...params }),
+    );
     this.rpc.handle('rename', async ({ name }) => ({ renamed: await this.rename(name) }));
     this.rpc.handle('deleteKey', async () => ({ deleted: await this.deleteKey() }));
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).

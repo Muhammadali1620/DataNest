@@ -999,6 +999,18 @@
         "icon": "$(folder-opened)"
       },
       {
+        "command": "datanest.servers.terminal",
+        "title": "%commands.servers.terminal.title%",
+        "category": "DataNest",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "datanest.servers.runCommand",
+        "title": "%commands.servers.runCommand.title%",
+        "category": "DataNest",
+        "icon": "$(play)"
+      },
+      {
         "command": "datanest.sftp.open",
         "title": "%commands.sftp.open.title%",
         "category": "DataNest",
@@ -2072,6 +2084,21 @@
           "command": "datanest.servers.disconnect",
           "when": "view == datanest.servers && viewItem == datanest.server.open",
           "group": "1_state@1"
+        },
+        {
+          "command": "datanest.servers.terminal",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.(server(\\.open)?|sftpDir(\\.ro)?)$/",
+          "group": "0_shell@1"
+        },
+        {
+          "command": "datanest.servers.runCommand",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.(server(\\.open)?|sftpDir(\\.ro)?)$/",
+          "group": "0_shell@2"
+        },
+        {
+          "command": "datanest.servers.terminal",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.server(\\.open)?$/",
+          "group": "inline@0"
         },
         {
           "command": "datanest.sftp.refresh",

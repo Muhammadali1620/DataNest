@@ -51,6 +51,23 @@ opens.
 - Links to folders and special files are not followed or copied, so a link back into the
   tree cannot make a copy run forever.
 
+## Terminal and commands
+
+- **Open Terminal** (the button on a server, or the menu of a server or a folder) opens a
+  real shell in the editor's terminal panel, with a pseudo-terminal: colours, full-screen
+  programs, `Ctrl+C`, resizing and UTF-8 work as in any terminal. On a folder it starts in
+  that folder. The icon takes the server's colour.
+- It uses the same login as the file browser: jump hosts, proxy, SSH algorithms and the host
+  key check. Nothing from your own environment is passed to the server.
+- When the shell ends (`exit`) or the link drops, the terminal says so and any key logs in
+  again; closing the terminal ends the connection. At most eight terminals can be open on one
+  server.
+- **Run Command on Server…** runs one command without a terminal and writes its output to an
+  output channel named after the server; Cancel in the notification stops it. It runs in the
+  folder you started from.
+- A **read-only** server is not opened for a terminal or a command until you confirm: read-only
+  is DataNest's promise about its own file operations, and a shell can break it.
+
 ## Safety
 
 - A server marked **read-only** offers no change at all: upload, new, rename, delete and
@@ -61,4 +78,4 @@ opens.
 
 ## Not here yet
 
-An SSH terminal and moving by drag and drop inside the tree are not part of this view.
+Moving by drag and drop inside the tree is not part of this view.

@@ -227,6 +227,8 @@
   "commands.servers.refresh.title": "Refresh Servers",
   "commands.servers.export.title": "Export Servers…",
   "commands.servers.import.title": "Import Servers…",
+  "commands.servers.terminal.title": "Open Terminal",
+  "commands.servers.runCommand.title": "Run Command on Server…",
   "commands.sftp.open.title": "Open",
   "commands.sftp.upload.title": "Upload Files…",
   "commands.sftp.uploadFolder.title": "Upload Folders…",

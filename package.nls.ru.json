@@ -227,6 +227,8 @@
   "commands.servers.refresh.title": "Обновить серверы",
   "commands.servers.export.title": "Экспортировать серверы…",
   "commands.servers.import.title": "Импортировать серверы…",
+  "commands.servers.terminal.title": "Открыть терминал",
+  "commands.servers.runCommand.title": "Выполнить команду на сервере…",
   "commands.sftp.open.title": "Открыть",
   "commands.sftp.upload.title": "Загрузить файлы на сервер…",
   "commands.sftp.uploadFolder.title": "Загрузить папки на сервер…",

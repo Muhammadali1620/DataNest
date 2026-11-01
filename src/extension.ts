@@ -96,6 +96,7 @@ import { SftpHub } from './services/sftp-hub';
 import { SFTP_SCHEME } from './vscode/servers/server-model';
 import { SftpFileSystem } from './vscode/servers/sftp-file-system';
 import { type ServerCommands, serverCommandHandlers } from './vscode/servers/server-commands';
+import { terminalCommandHandlers } from './vscode/servers/terminal-commands';
 import { SERVERS_VIEW_ID, ServersTree } from './vscode/servers/servers-tree';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
@@ -531,6 +532,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     maxOpenBytes: readServersMaxOpenBytes,
   });
   serverTreeBridge.drop = serverCommands.drop;
+  const terminalCommands = terminalCommandHandlers({
+    store: serverStore,
+    opener: tunnels,
+    checkHostKey: hostKeyCheck,
+    logger,
+  });
   const sftpFiles = new SftpFileSystem({
     hub: sftpHub,
     store: serverStore,
@@ -553,6 +560,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
   context.subscriptions.push(
     ...registerCommands({
       servers: serverCommands.handlers,
+      terminals: terminalCommands,
       extensionVersion:
         (context.extension.packageJSON as { version?: string }).version ?? 'unknown',
       logger,

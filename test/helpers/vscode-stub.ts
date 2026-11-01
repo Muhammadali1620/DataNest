@@ -152,6 +152,8 @@ export const window = {
   showErrorMessage: vi.fn(),
   showOpenDialog: vi.fn(),
   showSaveDialog: vi.fn(),
+  createTerminal: vi.fn(),
+  createOutputChannel: vi.fn(),
   withProgress: vi.fn(
     (
       _options: unknown,

@@ -194,6 +194,8 @@ function fakeModule(): SshModule & {
       });
     },
     openSftp: () => Promise.reject(new Error('no SFTP in this fake')),
+    openShell: () => Promise.reject(new Error('no shell in this fake')),
+    execCommand: () => Promise.reject(new Error('no commands in this fake')),
     openTunnel: (value: TunnelSpec) => {
       if (module.failNext !== undefined) {
         const error = module.failNext;

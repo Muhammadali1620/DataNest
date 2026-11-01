@@ -28,6 +28,7 @@ import type {
 } from './remote-snapshots';
 import { openProxyTunnel } from './proxy/proxy-tunnel';
 import type { SftpSession } from './sftp-types';
+import type { ExecControl, ExecResult, ShellSession, ShellWindow } from './shell-types';
 
 /** How long each SSH server may take to answer and log us in. */
 export const SSH_TIMEOUT_MS = 10_000;
@@ -222,6 +223,15 @@ export interface SshModule extends FileDownloader {
   openTunnel(spec: TunnelSpec, logger: Logger): Promise<Tunnel>;
   /** An SFTP session for the file browser (V13.16). */
   openSftp(spec: RemoteFileSpec, logger: Logger): Promise<SftpSession>;
+  /** A shell with a pseudo-terminal on a saved server (V13.18). */
+  openShell(spec: RemoteFileSpec, window: ShellWindow, logger: Logger): Promise<ShellSession>;
+  /** One command on a saved server, without a terminal (V13.18). */
+  execCommand(
+    spec: RemoteFileSpec,
+    command: string,
+    control: ExecControl,
+    logger: Logger,
+  ): Promise<ExecResult>;
 }
 
 export type SshLoader = () => Promise<SshModule>;
@@ -333,6 +343,26 @@ export class TunnelPool {
       throw new DbError('internal', msg('The tunnel pool is disposed'));
     }
     return await (await this.sshModule()).openSftp(spec, this.logger);
+  }
+
+  /** A shell of its own for the SSH terminal (V13.18); the caller closes it. */
+  async openShell(spec: RemoteFileSpec, window: ShellWindow): Promise<ShellSession> {
+    if (this.disposed) {
+      throw new DbError('internal', msg('The tunnel pool is disposed'));
+    }
+    return await (await this.sshModule()).openShell(spec, window, this.logger);
+  }
+
+  /** Runs one command on a server, without a terminal (V13.18). */
+  async execCommand(
+    spec: RemoteFileSpec,
+    command: string,
+    control: ExecControl,
+  ): Promise<ExecResult> {
+    if (this.disposed) {
+      throw new DbError('internal', msg('The tunnel pool is disposed'));
+    }
+    return await (await this.sshModule()).execCommand(spec, command, control, this.logger);
   }
 
   /** A tunnel of its own, for "Test connection": never shared, closed by the caller. */

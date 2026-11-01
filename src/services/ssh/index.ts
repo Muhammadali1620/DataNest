@@ -4,10 +4,13 @@
 import type { SshModule } from '../tunnels';
 import { downloadFiles } from './sftp';
 import { openSftpSession } from './sftp-session';
+import { execRemoteCommand, openShellSession } from './shell-session';
 import { openSshTunnel } from './tunnel';
 
 export const ssh: SshModule = {
   openTunnel: openSshTunnel,
   downloadFiles,
   openSftp: openSftpSession,
+  openShell: openShellSession,
+  execCommand: execRemoteCommand,
 };

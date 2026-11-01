@@ -250,6 +250,9 @@ export const COMMAND_IDS = {
   refreshServers: 'datanest.servers.refresh',
   exportServers: 'datanest.servers.export',
   importServers: 'datanest.servers.import',
+  // A shell and one-off commands on a server (V13.18).
+  openServerTerminal: 'datanest.servers.terminal',
+  runServerCommand: 'datanest.servers.runCommand',
   sftpOpen: 'datanest.sftp.open',
   sftpUpload: 'datanest.sftp.upload',
   sftpUploadFolder: 'datanest.sftp.uploadFolder',

@@ -11,6 +11,7 @@ import {
   type Attributes,
   type ParsedKey,
   Server,
+  type ServerChannel,
   type ServerConfig,
   type SFTPWrapper,
   utils,
@@ -39,6 +40,14 @@ export interface TestSshServer {
   readonly forwards: string[];
   /** Users that logged in, in order. */
   readonly logins: string[];
+  /** Pseudo-terminals that were asked for, in order (V13.18). */
+  readonly ptys: { term: string; cols: number; rows: number }[];
+  /** Window changes of a terminal, in order (V13.18). */
+  readonly windowChanges: { cols: number; rows: number }[];
+  /** Commands run with `exec`, in order (V13.18). */
+  readonly execs: string[];
+  /** Shells that were opened (V13.18). */
+  shells: number;
   /** Drops every client connection, as a server restart would. */
   kick(): void;
   close(): Promise<void>;
@@ -108,12 +117,23 @@ export async function startSshServer(options: {
    * wins over `files`.
    */
   readonly sftp?: (sftp: SFTPWrapper) => void;
+  /**
+   * Serves a shell with a scripted channel of the test's own (V13.18); without it a shell
+   * request is refused.
+   */
+  readonly shell?: (channel: ServerChannel) => void;
+  /** Runs a command with a scripted channel (V13.18); without it `exec` is refused. */
+  readonly exec?: (command: string, channel: ServerChannel) => void;
   /** Restricts the methods the server speaks, e.g. an old one with only SHA-1 key exchange. */
   readonly algorithms?: ServerConfig['algorithms'];
 }): Promise<TestSshServer> {
   const opened: string[] = [];
   const forwards: string[] = [];
   const logins: string[] = [];
+  const ptys: { term: string; cols: number; rows: number }[] = [];
+  const windowChanges: { cols: number; rows: number }[] = [];
+  const execs: string[] = [];
+  const counters = { shells: 0 };
   const clients = new Set<{ end(): void }>();
   const key = testHostKey();
   const server = new Server(
@@ -193,9 +213,31 @@ export async function startSshServer(options: {
             }
             serveSftp(acceptSftp(), options.files, opened);
           });
-          // Nothing else (a shell, a command) is offered.
-          session.on('exec', (_accept, rejectExec) => {
-            rejectExec();
+          session.on('pty', (acceptPty, _rejectPty, info) => {
+            ptys.push({ term: info.term, cols: info.cols, rows: info.rows });
+            acceptPty();
+          });
+          session.on('window-change', (acceptWindow, _rejectWindow, info) => {
+            windowChanges.push({ cols: info.cols, rows: info.rows });
+            if (typeof acceptWindow === 'function') {
+              acceptWindow();
+            }
+          });
+          session.on('shell', (acceptShell, rejectShell) => {
+            if (options.shell === undefined) {
+              rejectShell();
+              return;
+            }
+            counters.shells += 1;
+            options.shell(acceptShell());
+          });
+          session.on('exec', (acceptExec, rejectExec, info) => {
+            if (options.exec === undefined) {
+              rejectExec();
+              return;
+            }
+            execs.push(info.command);
+            options.exec(info.command, acceptExec());
           });
         });
         client.on('tcpip', (accept, reject, info) => {
@@ -229,6 +271,15 @@ export async function startSshServer(options: {
     fingerprint: describeHostKey('127.0.0.1', port, publicKey).fingerprint,
     forwards,
     logins,
+    ptys,
+    windowChanges,
+    execs,
+    get shells() {
+      return counters.shells;
+    },
+    set shells(value: number) {
+      counters.shells = value;
+    },
     kick: () => {
       for (const client of clients) {
         client.end();

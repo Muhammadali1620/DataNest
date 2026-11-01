@@ -107,6 +107,7 @@ import { describeTarget, type DriverId } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
 import { redisKeyFileCommandHandlers } from './redis/redis-key-file-commands';
 import type { ServerCommands } from './servers/server-commands';
+import type { TerminalCommandName } from './servers/terminal-commands';
 import { keyFileEditorDeps } from './redis/redis-key-file-ui';
 import { askNewKey } from './redis/new-key';
 import { RedisKeyPanel } from './panels/redis-key-panel';
@@ -159,6 +160,8 @@ export interface CommandDeps {
   readonly pluginConnections: PluginConnectionHandlers;
   /** The commands of the Servers view and its files (V13.16). */
   readonly servers: ServerCommands['handlers'];
+  /** A shell and one-off commands on a server (V13.18). */
+  readonly terminals: Record<TerminalCommandName, (...args: unknown[]) => unknown>;
   /** The connections of the project files; notebooks name them by their id there (V12.1). */
   readonly projectConnections: ProjectConnections;
   readonly results: ResultStore;
@@ -1028,6 +1031,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.refreshServers]: deps.servers.refreshServers,
     [COMMAND_IDS.exportServers]: deps.servers.exportServers,
     [COMMAND_IDS.importServers]: deps.servers.importServers,
+    [COMMAND_IDS.openServerTerminal]: deps.terminals.openTerminal,
+    [COMMAND_IDS.runServerCommand]: deps.terminals.runCommand,
     [COMMAND_IDS.sftpOpen]: deps.servers.open,
     [COMMAND_IDS.sftpUpload]: deps.servers.upload,
     [COMMAND_IDS.sftpUploadFolder]: deps.servers.uploadFolder,

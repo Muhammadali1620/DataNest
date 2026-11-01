@@ -138,3 +138,19 @@ SELECT …
 
 Opening it binds the editor to that connection when you have it. A connection that is not in
 the project file is never named in the file.
+
+## SQL inside strings of other languages
+
+In JavaScript, TypeScript, Python, Go, PHP, Java, Kotlin and C# files, a string you mark is
+coloured as SQL. Nothing else changes: a string without a mark stays an ordinary string.
+
+| Language | Marks |
+|---|---|
+| JavaScript, TypeScript | a template tagged `sql` — ``sql`SELECT …` ``; `/* sql */` right before a string; `// sql` or `// language=SQL` on the line above |
+| Python | `# sql` or `# language=SQL` on the line above a `"""` string or a one-line string |
+| Go | `/* sql */` before a string; `// sql` or `// language=SQL` above it (raw strings in backticks too) |
+| PHP | a heredoc or nowdoc named `SQL` (`<<<SQL`); `/* sql */`, `// sql` or `# sql` as above |
+| Java, Kotlin, C# | `/* sql */` before a string or `"""` text block; `// sql` or `// language=SQL` above it |
+
+The mark is not case-sensitive, and only the first string after a line mark is coloured. In
+JavaScript and TypeScript the `${…}` parts of a template stay in the language of the file.

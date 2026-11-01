@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQL in marked strings (Go)",
+  "scopeName": "datanest.sql-injection.go",
+  "injectionSelector": "L:source.go -comment -string",
+  "patterns": [
+    {
+      "begin": "(?i)(/\\*\\s*(?:language\\s*=\\s*)?sql\\s*\\*/)\\s*(\\x60)",
+      "end": "(\\x60)",
+      "name": "string.quoted.raw.embedded-sql",
+      "contentName": "meta.embedded.block.sql",
+      "patterns": [
+        {
+          "include": "source.sql"
+        }
+      ],
+      "beginCaptures": {
+        "1": {
+          "name": "comment.block.embedded-sql-marker"
+        }
+      }
+    },
+    {
+      "begin": "(?i)(/\\*\\s*(?:language\\s*=\\s*)?sql\\s*\\*/)\\s*()([\"])",
+      "end": "(\\3)|$",
+      "name": "string.quoted.embedded-sql",
+      "contentName": "meta.embedded.block.sql",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape"
+        },
+        {
+          "include": "source.sql"
+        }
+      ],
+      "beginCaptures": {
+        "1": {
+          "name": "comment.block.embedded-sql-marker"
+        }
+      }
+    },
+    {
+      "begin": "(?i)((?:\\/\\/)\\s*(?:language\\s*=\\s*)?sql)\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "comment.line.embedded-sql-marker"
+        }
+      },
+      "end": "^(?![^\\n]*[\\x60\"'])|(?<=[\\x60\"'])",
+      "patterns": [
+        {
+          "begin": "(\\x60)",
+          "end": "(\\x60)",
+          "name": "string.quoted.raw.embedded-sql",
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            {
+              "include": "source.sql"
+            }
+          ]
+        },
+        {
+          "begin": "()([\"])",
+          "end": "(\\2)|$",
+          "name": "string.quoted.embedded-sql",
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape"
+            },
+            {
+              "include": "source.sql"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

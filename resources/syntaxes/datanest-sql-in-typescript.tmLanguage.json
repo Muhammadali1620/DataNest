@@ -1,0 +1,137 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQL in marked strings (TypeScript)",
+  "scopeName": "datanest.sql-injection.typescript",
+  "injectionSelector": "L:source.ts -comment -string, L:source.tsx -comment -string",
+  "patterns": [
+    {
+      "begin": "\\b(?:sql|SQL)(?:<[^<>\\x60]*>)?\\s*(\\x60)",
+      "end": "(\\x60)",
+      "name": "string.template.embedded-sql",
+      "contentName": "meta.embedded.block.sql",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape"
+        },
+        {
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "name": "meta.template.expression",
+          "contentName": "meta.embedded.line.ts",
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        {
+          "include": "source.sql"
+        }
+      ]
+    },
+    {
+      "begin": "(?i)(/\\*\\s*(?:language\\s*=\\s*)?sql\\s*\\*/)\\s*(\\x60)",
+      "end": "(\\x60)",
+      "name": "string.template.embedded-sql",
+      "contentName": "meta.embedded.block.sql",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape"
+        },
+        {
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "name": "meta.template.expression",
+          "contentName": "meta.embedded.line.ts",
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        {
+          "include": "source.sql"
+        }
+      ],
+      "beginCaptures": {
+        "1": {
+          "name": "comment.block.embedded-sql-marker"
+        }
+      }
+    },
+    {
+      "begin": "(?i)(/\\*\\s*(?:language\\s*=\\s*)?sql\\s*\\*/)\\s*()([\"'])",
+      "end": "(\\3)|$",
+      "name": "string.quoted.embedded-sql",
+      "contentName": "meta.embedded.block.sql",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape"
+        },
+        {
+          "include": "source.sql"
+        }
+      ],
+      "beginCaptures": {
+        "1": {
+          "name": "comment.block.embedded-sql-marker"
+        }
+      }
+    },
+    {
+      "begin": "(?i)((?:\\/\\/)\\s*(?:language\\s*=\\s*)?sql)\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "comment.line.embedded-sql-marker"
+        }
+      },
+      "end": "^(?![^\\n]*[\\x60\"'])|(?<=[\\x60\"'])",
+      "patterns": [
+        {
+          "begin": "(\\x60)",
+          "end": "(\\x60)",
+          "name": "string.template.embedded-sql",
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape"
+            },
+            {
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "name": "meta.template.expression",
+              "contentName": "meta.embedded.line.ts",
+              "patterns": [
+                {
+                  "include": "source.ts"
+                }
+              ]
+            },
+            {
+              "include": "source.sql"
+            }
+          ]
+        },
+        {
+          "begin": "()([\"'])",
+          "end": "(\\2)|$",
+          "name": "string.quoted.embedded-sql",
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape"
+            },
+            {
+              "include": "source.sql"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

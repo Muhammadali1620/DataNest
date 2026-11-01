@@ -2268,6 +2268,90 @@
         "language": "datanest-es",
         "scopeName": "source.datanest-es",
         "path": "./resources/syntaxes/datanest-es.tmLanguage.json"
+      },
+      {
+        "scopeName": "datanest.sql-injection.javascript",
+        "path": "./resources/syntaxes/datanest-sql-in-javascript.tmLanguage.json",
+        "injectTo": [
+          "source.js",
+          "source.js.jsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql",
+          "meta.embedded.line.js": "javascript"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.typescript",
+        "path": "./resources/syntaxes/datanest-sql-in-typescript.tmLanguage.json",
+        "injectTo": [
+          "source.ts",
+          "source.tsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql",
+          "meta.embedded.line.ts": "typescript"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.python",
+        "path": "./resources/syntaxes/datanest-sql-in-python.tmLanguage.json",
+        "injectTo": [
+          "source.python"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.go",
+        "path": "./resources/syntaxes/datanest-sql-in-go.tmLanguage.json",
+        "injectTo": [
+          "source.go"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.php",
+        "path": "./resources/syntaxes/datanest-sql-in-php.tmLanguage.json",
+        "injectTo": [
+          "source.php"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.java",
+        "path": "./resources/syntaxes/datanest-sql-in-java.tmLanguage.json",
+        "injectTo": [
+          "source.java"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.kotlin",
+        "path": "./resources/syntaxes/datanest-sql-in-kotlin.tmLanguage.json",
+        "injectTo": [
+          "source.kotlin"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql"
+        }
+      },
+      {
+        "scopeName": "datanest.sql-injection.csharp",
+        "path": "./resources/syntaxes/datanest-sql-in-csharp.tmLanguage.json",
+        "injectTo": [
+          "source.cs"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.sql": "sql"
+        }
       }
     ],
     "submenus": [
@@ -2341,6 +2425,8 @@
     "typescript-eslint": "8.72.0",
     "vite": "8.3.5",
     "vitest": "5.0.5",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2",
     "yaml": "2.9.1"
   },
   "overrides": {

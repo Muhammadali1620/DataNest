@@ -13,6 +13,12 @@ import { msg } from '../core/user-message';
 import type { HostKeyCheck, TunnelHop } from './tunnels';
 import type { ProxySpec } from './proxy/proxy-client';
 
+/**
+ * On Windows a database file stays locked for a moment after its session closed, so
+ * removing the copy retries (Node waits and tries again on EBUSY and EPERM).
+ */
+const REMOVE_OPTIONS = { recursive: true, force: true, maxRetries: 10, retryDelay: 100 };
+
 /** The SSH servers on the way to the file, with secrets resolved. */
 export interface RemoteFileSpec {
   /** Connected in order: each later hop is reached through the one before it. */
@@ -112,7 +118,7 @@ export class RemoteSnapshots implements SnapshotProvider {
   async sweep(): Promise<void> {
     try {
       for (const entry of await readdir(this.folder)) {
-        await rm(join(this.folder, entry), { recursive: true, force: true });
+        await rm(join(this.folder, entry), REMOVE_OPTIONS);
       }
     } catch {
       // No folder yet: nothing to sweep.
@@ -156,7 +162,7 @@ export class RemoteSnapshots implements SnapshotProvider {
         held.users -= 1;
         if (held.users === 0 && this.shared.get(key) === held) {
           this.shared.delete(key);
-          await rm(copied.dir, { recursive: true, force: true });
+          await rm(copied.dir, REMOVE_OPTIONS);
         }
       },
     };
@@ -168,7 +174,7 @@ export class RemoteSnapshots implements SnapshotProvider {
     this.shared.clear();
     for (const entry of entries) {
       try {
-        await rm((await entry.copy).dir, { recursive: true, force: true });
+        await rm((await entry.copy).dir, REMOVE_OPTIONS);
       } catch {
         // A copy that never finished has nothing to remove.
       }
@@ -183,7 +189,7 @@ export class RemoteSnapshots implements SnapshotProvider {
   ): Promise<{ path: string; bytes: number; dir: string }> {
     const dir = join(this.folder, createHash('sha256').update(key).digest('hex').slice(0, 24));
     const path = join(dir, localNameOf(remotePath));
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, REMOVE_OPTIONS);
     await mkdir(dir, { recursive: true });
     try {
       // The database first, then its log: a checkpoint in between leaves a copy that is old
@@ -202,7 +208,7 @@ export class RemoteSnapshots implements SnapshotProvider {
       this.logger.info(`Copied ${remotePath} (${bytes} bytes) to this machine`);
       return { path, bytes, dir };
     } catch (error) {
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir, REMOVE_OPTIONS);
       throw error;
     }
   }

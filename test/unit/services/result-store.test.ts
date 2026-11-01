@@ -1315,3 +1315,106 @@ describe('ResultStore', () => {
     });
   });
 });
+
+describe('ResultStore restored tabs (V13.12)', () => {
+  const FILE = 'file:///work/report.sql';
+  const TARGET = { connectionId: 'c1', database: 'shop' };
+  const restored = (overrides: Partial<Parameters<ResultStore['addRestored']>[0]> = {}) => ({
+    documentUri: FILE,
+    statement: 'SELECT 1',
+    statementStart: 3.7,
+    target: TARGET,
+    pinned: false,
+    ...overrides,
+  });
+  const ran = (overrides: Partial<NewResult> = {}) =>
+    result({ documentUri: FILE, origin: { target: TARGET, owner: 'editor:1' }, ...overrides });
+
+  it('shows a restored tab with its statement and connection but no rows', () => {
+    const store = new ResultStore();
+    const summary = store.addRestored(restored());
+    expect(summary).toMatchObject({
+      statement: 'SELECT 1',
+      statementStart: 3,
+      restored: true,
+      rowCount: 0,
+      pinned: false,
+      origin: { target: TARGET },
+    });
+    expect(summary.columns).toEqual([]);
+    expect(store.window(summary.id, 0, 10)?.rows).toEqual([]);
+    expect(store.forDocument(FILE)).toHaveLength(1);
+  });
+
+  it('tells the page the document changed', () => {
+    const store = new ResultStore();
+    const listener = vi.fn();
+    store.onDidChange(listener);
+    store.addRestored(restored());
+    expect(listener).toHaveBeenCalledWith(FILE);
+  });
+
+  it('costs no memory: the budget does not push anything out for it', () => {
+    const store = new ResultStore({ maxCells: 4 });
+    const first = store.add(ran({ rows: [[1], [2], [3], [4]] }));
+    store.addRestored(restored());
+    expect(store.get(first.id)).toBeDefined();
+  });
+
+  it('is replaced by the run of that very tab, without a trace in the history', () => {
+    const store = new ResultStore();
+    const tab = store.addRestored(restored());
+    const fresh = store.add(ran(), { replace: tab.id });
+    expect(store.forDocument(FILE).map((one) => one.id)).toEqual([fresh.id]);
+    expect(store.history(FILE)).toEqual([]);
+    expect(store.successorOf(tab.id)).toBe(fresh.id);
+    expect(fresh.restored).toBeUndefined();
+  });
+
+  it('a pinned tab keeps its pin when its own run replaces it', () => {
+    const store = new ResultStore();
+    const tab = store.addRestored(restored({ pinned: true }));
+    const fresh = store.add(ran(), { replace: tab.id });
+    expect(store.get(fresh.id)?.pinned).toBe(true);
+    expect(store.forDocument(FILE)).toHaveLength(1);
+  });
+
+  it('a run elsewhere in the file keeps a pinned restored tab and replaces an unpinned one', () => {
+    const store = new ResultStore();
+    const pinned = store.addRestored(restored({ pinned: true, statement: 'SELECT 1' }));
+    const loose = store.addRestored(restored({ statement: 'SELECT 2' }));
+    const fresh = store.add(ran({ statement: 'SELECT 9' }), { replaceAll: true });
+    expect(store.forDocument(FILE).map((one) => one.id)).toEqual([pinned.id, fresh.id]);
+    expect(store.get(loose.id)).toBeUndefined();
+    expect(store.get(fresh.id)?.pinned).toBe(false);
+  });
+
+  it('an unpinned restored tab is not pinned after being replaced', () => {
+    const store = new ResultStore();
+    const tab = store.addRestored(restored());
+    const fresh = store.add(ran(), { replace: tab.id });
+    expect(store.get(fresh.id)?.pinned).toBe(false);
+  });
+
+  it('can be pinned like any result', () => {
+    const store = new ResultStore();
+    const tab = store.addRestored(restored());
+    expect(store.pin(tab.id)).toBe(true);
+    expect(store.get(tab.id)?.pinned).toBe(true);
+  });
+
+  it('goes with its document', () => {
+    const store = new ResultStore();
+    store.addRestored(restored());
+    store.clearDocument(FILE);
+    expect(store.forDocument(FILE)).toEqual([]);
+  });
+
+  it('respects the limit of tabs a document keeps', () => {
+    const store = new ResultStore();
+    for (let index = 0; index < MAX_RESULTS_PER_DOCUMENT + 3; index += 1) {
+      store.addRestored(restored({ statement: `SELECT ${index}` }));
+    }
+    expect(store.forDocument(FILE)).toHaveLength(MAX_RESULTS_PER_DOCUMENT);
+  });
+});

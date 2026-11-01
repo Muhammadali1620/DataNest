@@ -27,6 +27,17 @@ function summary(overrides: Partial<ResultSummary> = {}): ResultSummary {
 }
 
 describe('buildState', () => {
+  it('marks a restored tab, and only that one (V13.12)', () => {
+    const state = buildState(
+      [summary({ id: 'result-1', restored: true }), summary({ id: 'result-2' })],
+      undefined,
+      false,
+    );
+    expect(state.tabs[0]?.restored).toBe(true);
+    expect(state.tabs[1]).not.toHaveProperty('restored');
+    expect(() => resultGridProtocol.webview.events.state.parse(state)).not.toThrow();
+  });
+
   it('marks only pinned results (V12.5)', () => {
     const state = buildState(
       [summary(), summary({ id: 'result-2', pinned: true })],

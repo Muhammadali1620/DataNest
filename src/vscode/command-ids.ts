@@ -279,6 +279,9 @@ export const CONFIG_KEYS = {
   /** How roomy the result grid is by default (V13.3): row height and widest own column width. */
   resultsRowHeight: 'results.rowHeight',
   resultsMaxColumnWidth: 'results.maxColumnWidth',
+  /** Result tabs of saved SQL files come back after a restart, and whether they run again (V13.12). */
+  resultsRestore: 'results.restore',
+  resultsRestoreRun: 'results.restoreRun',
   /** Seconds a statement may run before it is cancelled; 0 means no limit. */
   queryTimeout: 'queryTimeout',
   /** How many executed statements the history keeps; 0 turns it off. */

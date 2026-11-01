@@ -1155,7 +1155,13 @@ import type { RowAction } from '../../../../src/shared/row-action';
             class:fail={tab.error !== undefined}
           >
             <Icon
-              name={tab.error !== undefined ? 'error' : tab.affectedRows !== undefined ? 'check' : 'table'}
+              name={tab.error !== undefined
+                ? 'error'
+                : tab.restored === true
+                  ? 'history'
+                  : tab.affectedRows !== undefined
+                    ? 'check'
+                    : 'table'}
               size={14}
             />
           </span>{#if tab.pinned === true}<span class="tab-pin" data-testid="tab-pin"><Icon name="pinned" size={12} /></span>{/if}<span class="tab-title">{tab.title}</span>
@@ -1910,6 +1916,25 @@ import type { RowAction } from '../../../../src/shared/row-action';
             />
           {/if}
         </div>
+      {:else if activeTab.restored === true}
+        <div class="empty" data-testid="restored">
+          <span class="empty-icon restored"><Icon name="history" size={28} /></span>
+          <p class="empty-title">{t('grid.restored')}</p>
+          <p class="empty-hint">{t('grid.restoredHint')}</p>
+          <button
+            type="button"
+            class="button"
+            data-testid="restored-run"
+            disabled={gridState.running}
+            onclick={() => {
+              if (gridState?.running !== true) {
+                void runSql(activeTab.statement);
+              }
+            }}
+          >
+            <Icon name="play" />{t('grid.restoredRun')}
+          </button>
+        </div>
       {:else}
         <div class="empty">
           <span class="empty-icon"><Icon name={activeTab.affectedRows !== undefined ? 'pass' : 'table'} size={28} /></span>
@@ -1947,7 +1972,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
             {/if}
           {/if}
           <span class="stat">
-            {#if activeTab.affectedRows !== undefined}
+            {#if activeTab.restored === true}
+              {t('grid.notRun')}
+            {:else if activeTab.affectedRows !== undefined}
               {view.showTime
                 ? t('grid.affected', activeTab.affectedRows, activeTab.durationMs)
                 : t('grid.affectedOnly', activeTab.affectedRows)}
@@ -2363,6 +2390,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
     padding: 24px;
     color: var(--dn-muted);
     text-align: center;
+  }
+
+  .empty-icon.restored {
+    color: var(--dn-accent, var(--vscode-textLink-foreground));
+    border-color: var(--dn-accent, var(--vscode-textLink-foreground));
   }
 
   .empty-icon {

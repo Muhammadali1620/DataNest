@@ -13,6 +13,8 @@ once, without a restart.
 | `datanest.tree.dragNames` | `true` | on / off | Dragging a database, schema, table, view or column from the tree into a text editor types its name, quoted for that database. |
 | `datanest.results.rowHeight` | `normal` | `compact`, `normal`, `comfortable` | How tall the rows of the result grid are: 24, 32 or 40 px. The **Density** button in the grid's toolbar changes it for you alone, and that choice wins. |
 | `datanest.results.maxColumnWidth` | `420` | 120 – 1600 px | The widest a column of the result grid gets on its own. Dragging a separator still makes it wider; **Fit to Content** may go up to 800 px, or further when this limit is larger. |
+| `datanest.results.restore` | `true` | on / off | After a restart, the result tabs of a saved SQL file come back, empty, with a **Run** button. Only the statement and its connection are kept — never rows or passwords — and only statements that merely read. |
+| `datanest.results.restoreRun` | `false` | on / off | Run the restored tabs again on their own. Only statements that merely read, and never on a production or switched-off connection. |
 | `datanest.queryTimeout` | `0` | 0 – 86 400 s | Seconds a statement may run before DataNest cancels it; `0` means no limit. A connection's own query timeout wins over this. |
 | `datanest.transactionMode` | `auto` | `auto`, `manual` | How a new SQL editor commits: every statement at once, or in a transaction that waits for **Commit** or **Roll Back**. |
 | `datanest.queryVariables` | `remember` | `remember`, `ask`, `off` | What `:name` and `${name}` in a statement do: ask for the value and offer the one given last time, ask every time and keep nothing, or leave them in the text. See [Variables](sql.md#variables). |

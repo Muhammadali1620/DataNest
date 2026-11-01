@@ -75,6 +75,8 @@ const tabSchema = object({
   affectedRows: optional(number({ integer: true, min: 0 })),
   durationMs: number({ min: 0 }),
   error: optional(errorSchema),
+  /** Brought back after an editor restart: the statement is known, the rows are not (V13.12). */
+  restored: optional(boolean()),
   /** Set for a table view: which page is shown and how big the table is. */
   page: optional(
     object({

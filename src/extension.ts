@@ -45,6 +45,10 @@ import { QueryVariableMemory } from './services/query-variables';
 import { BindingMemory } from './services/binding-memory';
 import { StatementView } from './vscode/editor/statement-view';
 import { ResultStore } from './services/result-store';
+import { ResultMemory, ResultRestorer } from './services/result-memory';
+import { isReadOnlyStatement } from './core/sql/read-only';
+import { syntaxOf } from './core/sql/tokenizer';
+import { registerResultRestore } from './vscode/result-restore';
 import { TableViewer, tableDocumentUri } from './services/table-view';
 import { QueryEditors } from './vscode/editor/query-editor';
 import { ObjectEditRegistry } from './vscode/editor/object-edit';
@@ -69,6 +73,8 @@ import {
   readSyncConnections,
   readQueryVariablesMode,
   readRemoteMaxBytes,
+  readResultsRestore,
+  readResultsRestoreRun,
   readRowLimit,
   readTransactionMode,
 } from './vscode/settings';
@@ -333,6 +339,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     showResults(documentUri);
     await tables.open({ target, table, kind: node.tableKind });
   };
+
+  // The result tabs of saved SQL files come back after a restart, empty (V13.12).
+  const resultMemory = new ResultMemory(context.workspaceState);
+  const rememberRules = {
+    isReadOnly: (statement: string, connectionId: string): boolean =>
+      isReadOnlyStatement(statement, syntaxOf(store.get(connectionId)?.driver)),
+  };
+  context.subscriptions.push(
+    registerResultRestore({
+      results,
+      memory: resultMemory,
+      restorer: new ResultRestorer({
+        memory: resultMemory,
+        results,
+        connectionOf: (connectionId) => {
+          const config = store.get(connectionId);
+          return config === undefined
+            ? undefined
+            : { disabled: config.disabled === true, production: config.production === true };
+        },
+        rules: rememberRules,
+        run: async (request) =>
+          (await pageActions.runSql?.(request)) ?? { ok: false, error: 'not ready' },
+        autoRun: () => readResultsRestoreRun(),
+        onError: (error) => {
+          logger.warn('Could not run a restored result tab', error);
+        },
+      }),
+      rules: rememberRules,
+      enabled: () => readResultsRestore(),
+      showResults,
+      onConnectionsChanged: (listener) => store.onDidChange(listener),
+      logger,
+    }),
+  );
 
   const diagnostics = new ErrorDiagnostics();
   context.subscriptions.push(diagnostics);

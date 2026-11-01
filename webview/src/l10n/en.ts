@@ -393,6 +393,11 @@ export const en = {
   'grid.loading': 'Loading…',
   'grid.running': 'Running…',
   'grid.empty': 'Run a query to see results here',
+  'grid.restored': 'Not run since the editor restarted',
+  'grid.restoredHint':
+    'This result came back after a restart. Its rows are not kept: run the statement to load them.',
+  'grid.restoredRun': 'Run',
+  'grid.notRun': 'Not run yet',
   'grid.cancel': 'Cancel',
   'grid.rows': '{0} rows · {1} ms',
   'grid.affected': '{0} rows affected · {1} ms',

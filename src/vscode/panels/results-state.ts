@@ -24,6 +24,7 @@ export function buildState(
     ...(summary.affectedRows === undefined ? {} : { affectedRows: summary.affectedRows }),
     durationMs: summary.durationMs,
     ...(summary.error === undefined ? {} : { error: summary.error }),
+    ...(summary.restored === true ? { restored: true } : {}),
     ...(summary.sort === undefined ? {} : { sort: summary.sort }),
     ...(summary.page === undefined ? {} : { page: summary.page }),
     ...(summary.filter === undefined ? {} : { filter: summary.filter }),

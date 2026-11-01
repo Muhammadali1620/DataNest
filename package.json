@@ -2108,6 +2108,18 @@
           "markdownDescription": "%configuration.results.maxColumnWidth.description%",
           "scope": "window"
         },
+        "datanest.results.restore": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.results.restore.description%",
+          "scope": "window"
+        },
+        "datanest.results.restoreRun": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%configuration.results.restoreRun.description%",
+          "scope": "window"
+        },
         "datanest.queryTimeout": {
           "type": "number",
           "default": 0,

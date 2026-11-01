@@ -47,6 +47,8 @@
   "configuration.results.rowHeight.normal": "Normal: 32 px.",
   "configuration.results.rowHeight.comfortable": "Comfortable: 40 px, more air around the text.",
   "configuration.results.maxColumnWidth.description": "The widest a column of the result grid gets on its own, in pixels (120–1600). Dragging a separator still makes it wider, and Fit to Content may go beyond it up to 800 px.",
+  "configuration.results.restore.description": "Bring back the result tabs of a saved SQL file after the editor restarts. Only the statement and its connection are kept, never rows or passwords, and only statements that merely read. A restored tab is empty until you click Run.",
+  "configuration.results.restoreRun.description": "Run the restored tabs again on their own after a restart. Only statements that merely read, and never on a production or switched-off connection. Off by default: a restored tab waits for you to click Run.",
   "commands.results.export.title": "Export Result",
   "configuration.queryTimeout.description": "Seconds a statement may run before DataNest cancels it. `0` means no limit.",
   "commands.history.show.title": "Query History",

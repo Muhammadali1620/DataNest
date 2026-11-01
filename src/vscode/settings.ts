@@ -196,6 +196,20 @@ export function affectsDataNest(event: vscode.ConfigurationChangeEvent): boolean
   return event.affectsConfiguration(CONFIG_SECTION);
 }
 
+/** Whether the result tabs of saved SQL files come back after a restart (V13.12). */
+export function readResultsRestore(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(CONFIG_KEYS.resultsRestore, true);
+}
+
+/** Whether restored tabs run again on their own; never for production or a switched-off connection. */
+export function readResultsRestoreRun(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(CONFIG_KEYS.resultsRestoreRun, false);
+}
+
 /** The row height and the widest own column width the settings ask the result grid for (V13.3). */
 export function readResultsLook(): ResultsLook {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);

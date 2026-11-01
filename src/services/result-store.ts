@@ -78,6 +78,8 @@ export interface ResultSummary {
   readonly revision: number;
   /** A pinned result stays: a re-run, the per-document limit and the memory budget leave it alone (V12.5). */
   readonly pinned: boolean;
+  /** Brought back after an editor restart: the statement is known, the rows are not (V13.12). */
+  readonly restored?: boolean;
 }
 
 export interface ResultError {
@@ -135,6 +137,15 @@ export interface ResultWindow {
   readonly changes: ChangedCell[];
   /** Which rows of the window are new or marked for deletion. */
   readonly states: RowMark[];
+}
+
+/** A tab remembered across a restart: only what is needed to run the statement again. */
+export interface RestoredResult {
+  readonly documentUri: string;
+  readonly statement: string;
+  readonly statementStart: number;
+  readonly target: SessionTarget;
+  readonly pinned: boolean;
 }
 
 export interface NewResult {
@@ -255,6 +266,40 @@ export class ResultStore {
   }
 
   /**
+   * Puts back a tab remembered before the editor restarted (V13.12): the statement and
+   * where it ran, no rows. Running it replaces it with a real result.
+   */
+  addRestored(result: RestoredResult): ResultSummary {
+    const id = `result-${this.nextId++}`;
+    const stored: StoredResult = {
+      id,
+      documentUri: result.documentUri,
+      statement: result.statement,
+      statementStart: Math.max(0, Math.trunc(result.statementStart)),
+      columns: [],
+      rows: [],
+      original: [],
+      pending: new PendingEdits(),
+      sortTicket: 0,
+      searchTicket: 0,
+      summaryTicket: 0,
+      pinned: result.pinned,
+      restored: true,
+      rowCount: 0,
+      truncated: false,
+      durationMs: 0,
+      origin: { target: result.target, owner: '' },
+    };
+    this.results.set(id, stored);
+    const ids = this.byDocument.get(result.documentUri) ?? [];
+    ids.push(id);
+    this.enforceLimit(ids, id);
+    this.byDocument.set(result.documentUri, ids);
+    this.notify(result.documentUri);
+    return summaryOf(stored);
+  }
+
+  /**
    * Drops the oldest unpinned results of a document until it is within the limit. The
    * result just added or brought back (`keep`) stays, so a document full of pins grows.
    */
@@ -275,15 +320,27 @@ export class ResultStore {
 
   /** Puts a new id into a document's list, dropping what the placement replaces. */
   private place(ids: string[], id: string, placement: Placement | undefined): void {
-    const droppable = (other: string): boolean => {
+    // Running a restored tab itself (`explicit`) fills it in even when it is pinned; a run
+    // elsewhere in the document leaves a pinned one alone, like any pinned result (V12.5).
+    const droppable = (other: string, explicit = false): boolean => {
       const stored = this.results.get(other);
-      return stored !== undefined && !hasPending(stored) && !stored.pinned;
+      return (
+        stored !== undefined &&
+        !hasPending(stored) &&
+        (!stored.pinned || (explicit && stored.restored === true))
+      );
     };
     const drop = (other: string): void => {
       const stored = this.results.get(other);
       this.results.delete(other);
       this.rememberSuccessor(other, id);
-      if (stored !== undefined) {
+      if (stored?.restored === true) {
+        // Nothing to bring back from the history: the run that fills the tab keeps its pin.
+        const fresh = this.results.get(id);
+        if (stored.pinned && fresh !== undefined) {
+          fresh.pinned = true;
+        }
+      } else if (stored !== undefined) {
         this.remember(stored);
       }
     };
@@ -299,7 +356,7 @@ export class ResultStore {
     }
     if (placement !== undefined && 'replace' in placement) {
       const at = ids.indexOf(placement.replace);
-      if (at !== -1 && droppable(placement.replace)) {
+      if (at !== -1 && droppable(placement.replace, true)) {
         drop(placement.replace);
         ids.splice(at, 1, id);
         return;

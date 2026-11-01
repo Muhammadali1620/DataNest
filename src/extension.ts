@@ -73,6 +73,8 @@ import {
   readSyncConnections,
   readQueryVariablesMode,
   readRemoteMaxBytes,
+  readServersMaxOpenBytes,
+  readServersShowHidden,
   readAiEnabled,
   readResultsRestore,
   readResultsRestoreRun,
@@ -89,6 +91,12 @@ import { registerAiTools } from './vscode/ai-tools';
 import { registerChatParticipant } from './vscode/ai-chat';
 import { FavoritesStore } from './vscode/tree/favorites';
 import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
+import { ServerStore } from './services/server-store';
+import { SftpHub } from './services/sftp-hub';
+import { SFTP_SCHEME } from './vscode/servers/server-model';
+import { SftpFileSystem } from './vscode/servers/sftp-file-system';
+import { type ServerCommands, serverCommandHandlers } from './vscode/servers/server-commands';
+import { SERVERS_VIEW_ID, ServersTree } from './vscode/servers/servers-tree';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
 export async function activate(context: vscode.ExtensionContext): Promise<DataNestApi> {
@@ -154,12 +162,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
       void snapshots.dispose();
     },
   });
+  const hostKeyCheck = createHostKeyCheck(new KnownHosts(context.globalState, logger));
   const manager = new ConnectionManager({
     store,
     drivers,
     logger,
     tunnels,
-    checkHostKey: createHostKeyCheck(new KnownHosts(context.globalState, logger)),
+    checkHostKey: hostKeyCheck,
     snapshots,
     remoteMaxBytes: readRemoteMaxBytes,
   });
@@ -493,9 +502,57 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
   const objectEdits = new ObjectEditRegistry();
   context.subscriptions.push(new ObjectEditors(objectEdits));
 
+  // Saved SSH servers and their files over SFTP, a view of their own (V13.16).
+  const serverStore = new ServerStore({
+    state: context.globalState,
+    secrets: context.secrets,
+    logger,
+  });
+  const sftpHub = new SftpHub({
+    store: serverStore,
+    opener: tunnels,
+    checkHostKey: hostKeyCheck,
+    logger,
+  });
+  const serverTreeBridge: { drop?: ServerCommands['drop'] } = {};
+  const serversTree = new ServersTree({
+    store: serverStore,
+    hub: sftpHub,
+    showHidden: readServersShowHidden,
+    onDropFiles: async (target, paths) => {
+      await serverTreeBridge.drop?.(target, paths);
+    },
+  });
+  const serverCommands = serverCommandHandlers({
+    store: serverStore,
+    hub: sftpHub,
+    tree: serversTree,
+    logger,
+    maxOpenBytes: readServersMaxOpenBytes,
+  });
+  serverTreeBridge.drop = serverCommands.drop;
+  const sftpFiles = new SftpFileSystem({
+    hub: sftpHub,
+    store: serverStore,
+    maxOpenBytes: readServersMaxOpenBytes,
+  });
+  context.subscriptions.push(
+    sftpHub,
+    serversTree,
+    sftpFiles,
+    vscode.window.createTreeView(SERVERS_VIEW_ID, {
+      treeDataProvider: serversTree,
+      showCollapseAll: true,
+      canSelectMany: true,
+      dragAndDropController: serversTree,
+    }),
+    vscode.workspace.registerFileSystemProvider(SFTP_SCHEME, sftpFiles, { isCaseSensitive: true }),
+  );
+
   const variableMemory = new QueryVariableMemory(context.workspaceState);
   context.subscriptions.push(
     ...registerCommands({
+      servers: serverCommands.handlers,
       extensionVersion:
         (context.extension.packageJSON as { version?: string }).version ?? 'unknown',
       logger,

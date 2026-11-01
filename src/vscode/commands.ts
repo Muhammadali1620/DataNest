@@ -106,6 +106,7 @@ import type { RedisKeyBrowser } from '../services/redis/key-browser';
 import { describeTarget, type DriverId } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
 import { redisKeyFileCommandHandlers } from './redis/redis-key-file-commands';
+import type { ServerCommands } from './servers/server-commands';
 import { keyFileEditorDeps } from './redis/redis-key-file-ui';
 import { askNewKey } from './redis/new-key';
 import { RedisKeyPanel } from './panels/redis-key-panel';
@@ -156,6 +157,8 @@ export interface CommandDeps {
   readonly resultHistory: ResultHistoryHandlers;
   /** Connections of drivers that other extensions registered (V12.7). */
   readonly pluginConnections: PluginConnectionHandlers;
+  /** The commands of the Servers view and its files (V13.16). */
+  readonly servers: ServerCommands['handlers'];
   /** The connections of the project files; notebooks name them by their id there (V12.1). */
   readonly projectConnections: ProjectConnections;
   readonly results: ResultStore;
@@ -1017,6 +1020,27 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
     [COMMAND_IDS.redisLoadMoreKeys]: redisKeyCommands.loadMoreKeys,
     [COMMAND_IDS.redisCountKeys]: redisKeyCommands.countKeys,
+    [COMMAND_IDS.addServer]: deps.servers.addServer,
+    [COMMAND_IDS.editServer]: deps.servers.editServer,
+    [COMMAND_IDS.removeServer]: deps.servers.removeServer,
+    [COMMAND_IDS.disconnectServer]: deps.servers.disconnectServer,
+    [COMMAND_IDS.toggleServerReadOnly]: deps.servers.toggleServerReadOnly,
+    [COMMAND_IDS.refreshServers]: deps.servers.refreshServers,
+    [COMMAND_IDS.exportServers]: deps.servers.exportServers,
+    [COMMAND_IDS.importServers]: deps.servers.importServers,
+    [COMMAND_IDS.sftpOpen]: deps.servers.open,
+    [COMMAND_IDS.sftpUpload]: deps.servers.upload,
+    [COMMAND_IDS.sftpUploadFolder]: deps.servers.uploadFolder,
+    [COMMAND_IDS.sftpDownload]: deps.servers.download,
+    [COMMAND_IDS.sftpRename]: deps.servers.rename,
+    [COMMAND_IDS.sftpDelete]: deps.servers.delete,
+    [COMMAND_IDS.sftpNewFolder]: deps.servers.newFolder,
+    [COMMAND_IDS.sftpNewFile]: deps.servers.newFile,
+    [COMMAND_IDS.sftpChmod]: deps.servers.chmod,
+    [COMMAND_IDS.sftpCopyPath]: deps.servers.copyPath,
+    [COMMAND_IDS.sftpCopyTo]: deps.servers.copyTo,
+    [COMMAND_IDS.sftpMoveTo]: deps.servers.moveTo,
+    [COMMAND_IDS.sftpRefresh]: deps.servers.refresh,
     [COMMAND_IDS.redisExportKeys]: redisKeyFileCommands.exportKeys,
     [COMMAND_IDS.redisRestoreKeys]: redisKeyFileCommands.restoreKeys,
     [COMMAND_IDS.redisFilterKeys]: redisKeyCommands.filterKeys,

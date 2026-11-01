@@ -193,6 +193,7 @@ function fakeModule(): SshModule & {
         copied: requests.map((request) => ({ remote: request.remote, bytes: 7 })),
       });
     },
+    openSftp: () => Promise.reject(new Error('no SFTP in this fake')),
     openTunnel: (value: TunnelSpec) => {
       if (module.failNext !== undefined) {
         const error = module.failNext;

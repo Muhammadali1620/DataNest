@@ -241,6 +241,28 @@ export const COMMAND_IDS = {
   mongoImportCollection: 'datanest.mongo.importCollection',
   /** Diagnostic page for webview + RPC; in the palette only in development mode. */
   openPing: 'datanest.dev.openPing',
+  // Servers and their files over SFTP (V13.16).
+  addServer: 'datanest.servers.add',
+  editServer: 'datanest.servers.edit',
+  removeServer: 'datanest.servers.remove',
+  disconnectServer: 'datanest.servers.disconnect',
+  toggleServerReadOnly: 'datanest.servers.toggleReadOnly',
+  refreshServers: 'datanest.servers.refresh',
+  exportServers: 'datanest.servers.export',
+  importServers: 'datanest.servers.import',
+  sftpOpen: 'datanest.sftp.open',
+  sftpUpload: 'datanest.sftp.upload',
+  sftpUploadFolder: 'datanest.sftp.uploadFolder',
+  sftpDownload: 'datanest.sftp.download',
+  sftpRename: 'datanest.sftp.rename',
+  sftpDelete: 'datanest.sftp.delete',
+  sftpNewFolder: 'datanest.sftp.newFolder',
+  sftpNewFile: 'datanest.sftp.newFile',
+  sftpChmod: 'datanest.sftp.chmod',
+  sftpCopyPath: 'datanest.sftp.copyPath',
+  sftpCopyTo: 'datanest.sftp.copyTo',
+  sftpMoveTo: 'datanest.sftp.moveTo',
+  sftpRefresh: 'datanest.sftp.refresh',
 } as const;
 
 /** Context keys set with `setContext`, used in `when` clauses of package.json. */
@@ -312,4 +334,8 @@ export const CONFIG_KEYS = {
   redisKeysPerLoad: 'redis.keysPerLoad',
   /** The most a SQLite file on a server may weigh to be copied and opened, in MB (V12.8). */
   sqliteRemoteMaxSizeMb: 'sqlite.remoteMaxSizeMb',
+  /** The largest file of a server that opens in the editor, in MB (V13.16). */
+  serversMaxOpenSizeMb: 'servers.maxOpenSizeMb',
+  /** Hidden files (names starting with a dot) are listed on servers. */
+  serversShowHidden: 'servers.showHidden',
 } as const;

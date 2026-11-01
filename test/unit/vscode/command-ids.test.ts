@@ -99,13 +99,18 @@ describe('command palette', () => {
 });
 
 describe('tree menus', () => {
-  const title = contributes.menus['view/title'];
+  // The Servers view has its own menus (V13.16), checked in servers-manifest.test.ts.
+  const ofConnections = <T extends { when: string }>(list: T[]): T[] =>
+    list.filter((entry) => entry.when.includes(`view == ${CONNECTIONS_VIEW_ID}`));
+  const title = ofConnections(contributes.menus['view/title']);
   /** A submenu entry of the tree, as written: `{ submenu, when, group }` without a command. */
   interface SubmenuEntry {
     submenu?: string;
     when: string;
   }
-  const entries = contributes.menus['view/item/context'] as (MenuEntry & SubmenuEntry)[];
+  const entries = ofConnections(
+    contributes.menus['view/item/context'] as (MenuEntry & SubmenuEntry)[],
+  );
   // The commands of the tree's context menu: its own and those of its submenus.
   const items: MenuEntry[] = [
     ...entries.filter((entry) => entry.submenu === undefined),

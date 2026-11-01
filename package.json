@@ -69,7 +69,9 @@
     "onView:datanest.connections",
     "onLanguage:datanest-mongo",
     "onLanguage:datanest-es",
-    "onNotebook:datanest-sql"
+    "onNotebook:datanest-sql",
+    "onView:datanest.servers",
+    "onFileSystem:datanest-sftp"
   ],
   "contributes": {
     "notebooks": [
@@ -97,6 +99,10 @@
         {
           "id": "datanest.connections",
           "name": "%views.connections.name%"
+        },
+        {
+          "id": "datanest.servers",
+          "name": "%views.servers.name%"
         }
       ]
     },
@@ -104,6 +110,10 @@
       {
         "view": "datanest.connections",
         "contents": "%viewsWelcome.connections.empty%"
+      },
+      {
+        "view": "datanest.servers",
+        "contents": "%viewsWelcome.servers.empty%"
       }
     ],
     "commands": [
@@ -939,6 +949,132 @@
         "title": "%commands.account.open.title%",
         "category": "DataNest",
         "icon": "$(organization)"
+      },
+      {
+        "command": "datanest.servers.add",
+        "title": "%commands.servers.add.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.servers.edit",
+        "title": "%commands.servers.edit.title%",
+        "category": "DataNest",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "datanest.servers.remove",
+        "title": "%commands.servers.remove.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.servers.disconnect",
+        "title": "%commands.servers.disconnect.title%",
+        "category": "DataNest",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "datanest.servers.toggleReadOnly",
+        "title": "%commands.servers.toggleReadOnly.title%",
+        "category": "DataNest",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "datanest.servers.refresh",
+        "title": "%commands.servers.refresh.title%",
+        "category": "DataNest",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "datanest.servers.export",
+        "title": "%commands.servers.export.title%",
+        "category": "DataNest",
+        "icon": "$(export)"
+      },
+      {
+        "command": "datanest.servers.import",
+        "title": "%commands.servers.import.title%",
+        "category": "DataNest",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "datanest.sftp.open",
+        "title": "%commands.sftp.open.title%",
+        "category": "DataNest",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "datanest.sftp.upload",
+        "title": "%commands.sftp.upload.title%",
+        "category": "DataNest",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "datanest.sftp.uploadFolder",
+        "title": "%commands.sftp.uploadFolder.title%",
+        "category": "DataNest",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "datanest.sftp.download",
+        "title": "%commands.sftp.download.title%",
+        "category": "DataNest",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "datanest.sftp.rename",
+        "title": "%commands.sftp.rename.title%",
+        "category": "DataNest",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "datanest.sftp.delete",
+        "title": "%commands.sftp.delete.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "datanest.sftp.newFolder",
+        "title": "%commands.sftp.newFolder.title%",
+        "category": "DataNest",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "datanest.sftp.newFile",
+        "title": "%commands.sftp.newFile.title%",
+        "category": "DataNest",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "datanest.sftp.chmod",
+        "title": "%commands.sftp.chmod.title%",
+        "category": "DataNest",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "datanest.sftp.copyPath",
+        "title": "%commands.sftp.copyPath.title%",
+        "category": "DataNest",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "datanest.sftp.copyTo",
+        "title": "%commands.sftp.copyTo.title%",
+        "category": "DataNest",
+        "icon": "$(files)"
+      },
+      {
+        "command": "datanest.sftp.moveTo",
+        "title": "%commands.sftp.moveTo.title%",
+        "category": "DataNest",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "datanest.sftp.refresh",
+        "title": "%commands.sftp.refresh.title%",
+        "category": "DataNest",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -1217,6 +1353,66 @@
         {
           "command": "datanest.favorites.remove",
           "when": "false"
+        },
+        {
+          "command": "datanest.servers.disconnect",
+          "when": "false"
+        },
+        {
+          "command": "datanest.servers.refresh",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.open",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.upload",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.uploadFolder",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.download",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.rename",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.delete",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.newFolder",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.newFile",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.chmod",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.copyTo",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.moveTo",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.refresh",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -1279,6 +1475,26 @@
           "command": "datanest.help.reportIssue",
           "when": "view == datanest.connections",
           "group": "9_help@1"
+        },
+        {
+          "command": "datanest.servers.add",
+          "when": "view == datanest.servers",
+          "group": "navigation@1"
+        },
+        {
+          "command": "datanest.servers.refresh",
+          "when": "view == datanest.servers",
+          "group": "navigation@2"
+        },
+        {
+          "command": "datanest.servers.export",
+          "when": "view == datanest.servers",
+          "group": "1_transfer@1"
+        },
+        {
+          "command": "datanest.servers.import",
+          "when": "view == datanest.servers",
+          "group": "1_transfer@2"
         }
       ],
       "view/item/context": [
@@ -1846,6 +2062,111 @@
           "command": "datanest.folders.createSub",
           "when": "view == datanest.connections && viewItem == datanest.connectionFolder",
           "group": "inline@0"
+        },
+        {
+          "command": "datanest.servers.disconnect",
+          "when": "view == datanest.servers && viewItem == datanest.server.open",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.servers.disconnect",
+          "when": "view == datanest.servers && viewItem == datanest.server.open",
+          "group": "1_state@1"
+        },
+        {
+          "command": "datanest.sftp.refresh",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.server(\\.open)?$/",
+          "group": "1_state@2"
+        },
+        {
+          "command": "datanest.servers.edit",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.server(\\.open)?$/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "datanest.servers.toggleReadOnly",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.server(\\.open)?$/",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "datanest.servers.remove",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.server(\\.open)?$/",
+          "group": "3_remove@1"
+        },
+        {
+          "command": "datanest.sftp.upload",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.(server(\\.open)?|sftpDir)$/",
+          "group": "1_transfer@1"
+        },
+        {
+          "command": "datanest.sftp.uploadFolder",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.(server(\\.open)?|sftpDir)$/",
+          "group": "1_transfer@2"
+        },
+        {
+          "command": "datanest.sftp.newFolder",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.(server(\\.open)?|sftpDir)$/",
+          "group": "2_new@1"
+        },
+        {
+          "command": "datanest.sftp.newFile",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.(server(\\.open)?|sftpDir)$/",
+          "group": "2_new@2"
+        },
+        {
+          "command": "datanest.sftp.upload",
+          "when": "view == datanest.servers && viewItem == datanest.sftpDir",
+          "group": "inline@2"
+        },
+        {
+          "command": "datanest.sftp.open",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftpFile(\\.ro)?$/",
+          "group": "0_open@1"
+        },
+        {
+          "command": "datanest.sftp.download",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)(\\.ro)?$/",
+          "group": "1_transfer@3"
+        },
+        {
+          "command": "datanest.sftp.download",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)(\\.ro)?$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "datanest.sftp.refresh",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftpDir(\\.ro)?$/",
+          "group": "1_state@2"
+        },
+        {
+          "command": "datanest.sftp.rename",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)$/",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "datanest.sftp.chmod",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)$/",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "datanest.sftp.copyTo",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)(\\.ro)?$/",
+          "group": "3_edit@3"
+        },
+        {
+          "command": "datanest.sftp.moveTo",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)$/",
+          "group": "3_edit@4"
+        },
+        {
+          "command": "datanest.sftp.copyPath",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)(\\.ro)?$/",
+          "group": "5_path@1"
+        },
+        {
+          "command": "datanest.sftp.delete",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)$/",
+          "group": "9_delete@1"
         }
       ],
       "editor/title": [
@@ -2316,6 +2637,20 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%configuration.ai.enabled.description%",
+          "scope": "window"
+        },
+        "datanest.servers.maxOpenSizeMb": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 512,
+          "markdownDescription": "%configuration.servers.maxOpenSizeMb.description%",
+          "scope": "window"
+        },
+        "datanest.servers.showHidden": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.servers.showHidden.description%",
           "scope": "window"
         }
       }

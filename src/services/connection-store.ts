@@ -988,7 +988,7 @@ function usesSentinels(config: ConnectionInput): boolean {
   return config.driver === 'redis' && config.redis?.mode === 'sentinel';
 }
 
-function normalizeProxy(proxy: ProxySettings): ProxySettings {
+export function normalizeProxy(proxy: ProxySettings): ProxySettings {
   const user = proxy.user?.trim();
   return {
     kind: proxy.kind,
@@ -1010,7 +1010,7 @@ function normalizeSsl(ssl: SslSettings): SslSettings {
   };
 }
 
-function normalizeTunnel(ssh: SshTunnelConfig): SshTunnelConfig {
+export function normalizeTunnel(ssh: SshTunnelConfig): SshTunnelConfig {
   const jumps = (ssh.jumps ?? []).map(normalizeHop);
   return { ...normalizeHop(ssh), ...(jumps.length === 0 ? {} : { jumps }) };
 }

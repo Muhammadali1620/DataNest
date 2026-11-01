@@ -13,6 +13,7 @@ import {
   effectiveProxyPort,
   effectiveSshPort,
   type SshAuthMethod,
+  hopsOfTunnel,
   type SshHopSecrets,
   sshHopsOf,
 } from '../shared/connection';
@@ -26,6 +27,7 @@ import type {
   RemoteFileSpec,
 } from './remote-snapshots';
 import { openProxyTunnel } from './proxy/proxy-tunnel';
+import type { SftpSession } from './sftp-types';
 
 /** How long each SSH server may take to answer and log us in. */
 export const SSH_TIMEOUT_MS = 10_000;
@@ -111,12 +113,12 @@ export function tunnelSpecOf(
   };
 }
 
-function timeoutOf(config: ConnectionInput): number {
+function timeoutOf(config: Pick<ConnectionInput, 'options'>): number {
   return (config.options?.connectTimeout ?? SSH_TIMEOUT_MS / 1000) * 1000;
 }
 
 function proxyOf(
-  config: ConnectionInput,
+  config: Pick<ConnectionInput, 'proxy'>,
   proxyPassword: string | undefined,
 ): { proxy?: ProxySpec } {
   const proxy = config.proxy;
@@ -137,10 +139,10 @@ function proxyOf(
 
 /** The SSH servers of a config with their secrets joined in by hop id. */
 function tunnelHopsOf(
-  config: ConnectionInput,
+  config: Pick<ConnectionInput, 'ssh'>,
   secrets: Readonly<Record<string, SshHopSecrets>>,
 ): TunnelHop[] {
-  return sshHopsOf(config).map((hop) => {
+  return hopsOfTunnel(config.ssh).map((hop) => {
     const secret = secrets[hop.id] ?? {};
     return {
       host: hop.host,
@@ -184,6 +186,24 @@ export function remoteFileSpecOf(
 }
 
 /**
+ * The chain of hops to a saved SSH server for browsing its files (V13.16): the same as for a
+ * file of a database connection, from a server entry instead.
+ */
+export function serverFileSpecOf(
+  server: Pick<ConnectionInput, 'ssh' | 'proxy'>,
+  secrets: Readonly<Record<string, SshHopSecrets>>,
+  checkHostKey: HostKeyCheck,
+  proxyPassword?: string,
+): RemoteFileSpec {
+  return {
+    ...proxyOf(server, proxyPassword),
+    hops: tunnelHopsOf(server, secrets),
+    checkHostKey,
+    timeoutMs: SSH_TIMEOUT_MS,
+  };
+}
+
+/**
  * Names the shared tunnel of a saved connection. Built from everything that decides
  * where the tunnel leads, so editing the settings never reuses an old tunnel.
  */
@@ -200,6 +220,8 @@ export function tunnelKeyOf(connectionId: string, config: ConnectionInput): stri
 /** The shape of dist/ssh.js. */
 export interface SshModule extends FileDownloader {
   openTunnel(spec: TunnelSpec, logger: Logger): Promise<Tunnel>;
+  /** An SFTP session for the file browser (V13.16). */
+  openSftp(spec: RemoteFileSpec, logger: Logger): Promise<SftpSession>;
 }
 
 export type SshLoader = () => Promise<SshModule>;
@@ -303,6 +325,14 @@ export class TunnelPool {
       throw new DbError('internal', msg('The tunnel pool is disposed'));
     }
     return await (await this.sshModule()).downloadFiles(spec, requests, limits, this.logger);
+  }
+
+  /** An SFTP session of its own for the file browser (V13.16); the caller closes it. */
+  async openSftp(spec: RemoteFileSpec): Promise<SftpSession> {
+    if (this.disposed) {
+      throw new DbError('internal', msg('The tunnel pool is disposed'));
+    }
+    return await (await this.sshModule()).openSftp(spec, this.logger);
   }
 
   /** A tunnel of its own, for "Test connection": never shared, closed by the caller. */

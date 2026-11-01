@@ -577,10 +577,15 @@ export interface SshHopSecrets {
 
 /** The SSH hops of a config, in the order they are connected: jumps, then the server. */
 export function sshHopsOf(config: ConnectionInput): readonly SshHop[] {
-  if (config.ssh === undefined) {
+  return hopsOfTunnel(config.ssh);
+}
+
+/** The hops of one SSH server entry: jump hosts first, then the server itself. */
+export function hopsOfTunnel(ssh: SshTunnelConfig | undefined): readonly SshHop[] {
+  if (ssh === undefined) {
     return [];
   }
-  const { jumps = [], ...server } = config.ssh;
+  const { jumps = [], ...server } = ssh;
   return [...jumps, server];
 }
 

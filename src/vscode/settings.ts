@@ -51,6 +51,7 @@ export function createRedisKeySettings(): KeyBrowserSettings {
 
 /** The default of `datanest.sqlite.remoteMaxSizeMb`, in megabytes. */
 export const DEFAULT_REMOTE_MAX_MB = 512;
+export const DEFAULT_SERVERS_MAX_OPEN_MB = 5;
 
 /** The most a SQLite file on a server may weigh to be copied (V12.8), in bytes. */
 export function readRemoteMaxBytes(): number {
@@ -59,6 +60,22 @@ export function readRemoteMaxBytes(): number {
     .get<number>(CONFIG_KEYS.sqliteRemoteMaxSizeMb, DEFAULT_REMOTE_MAX_MB);
   const megabytes = Number.isInteger(value) && value >= 1 ? value : DEFAULT_REMOTE_MAX_MB;
   return megabytes * 1_048_576;
+}
+
+/** The largest file of a server that opens in the editor, in bytes (V13.16). */
+export function readServersMaxOpenBytes(): number {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<number>(CONFIG_KEYS.serversMaxOpenSizeMb, DEFAULT_SERVERS_MAX_OPEN_MB);
+  const megabytes = Number.isFinite(value) && value >= 1 ? value : DEFAULT_SERVERS_MAX_OPEN_MB;
+  return Math.floor(megabytes * 1_048_576);
+}
+
+/** Whether hidden files (names starting with a dot) are listed on servers (V13.16). */
+export function readServersShowHidden(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(CONFIG_KEYS.serversShowHidden, true);
 }
 
 /** How many rows one statement may bring back; the rest needs a bigger limit. */

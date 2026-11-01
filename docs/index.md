@@ -24,8 +24,9 @@ no telemetry.
 9. [Manager](guide/manager.md) — log, dashboard, processes, dump and structure sync of a connection.
 10. [The assistant](guide/assistant.md) — tools for the editor's language model and the
     `@datanest` chat participant.
-11. [Keyboard and accessibility](guide/keyboard.md)
-12. [Settings](guide/settings.md)
+11. [Servers and files](guide/servers.md) — browse, edit, upload and download files over SSH/SFTP.
+12. [Keyboard and accessibility](guide/keyboard.md)
+13. [Settings](guide/settings.md)
 
 ## Help
 

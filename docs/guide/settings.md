@@ -41,6 +41,8 @@ once, without a restart.
 | `datanest.tree.tableStats` | `true` | | Show each table's estimated rows in the tree, and its size and comment in the tooltip, from the server's statistics. |
 | `datanest.redis.keySeparator` | `:` | | What splits Redis key names into folders, e.g. `user:1:name` → `user` → `1`. Empty: no folders. |
 | `datanest.sqlite.remoteMaxSizeMb` | `512` | 1 – 8192 | The most a SQLite file on a server may weigh for DataNest to copy it over SSH and open it. A bigger file is refused before anything is copied. See [Remote SQLite files](connections.md#sqlite-file-on-a-server). |
+| `datanest.servers.maxOpenSizeMb` | `5` | 1 – 512 | The largest file of a server that opens in the editor from the Servers view; a bigger one is offered for download. See [Servers and files](servers.md). |
+| `datanest.servers.showHidden` | `true` | | List hidden files (names starting with a dot) in the Servers view. |
 | `datanest.redis.keysPerLoad` | `5000` | 100 – 100 000 | How many Redis keys are loaded at a time with `SCAN`; **Load More Keys** brings the next portion. |
 
 ## Formatting SQL

@@ -103,6 +103,11 @@ export async function startSshServer(options: {
    * Without the option the server has no SFTP subsystem at all.
    */
   readonly files?: ReadonlyMap<string, TestSshFile>;
+  /**
+   * Serves SFTP with a subsystem of the test's own, e.g. `new MemorySftpFs().serve` (V13.16);
+   * wins over `files`.
+   */
+  readonly sftp?: (sftp: SFTPWrapper) => void;
   /** Restricts the methods the server speaks, e.g. an old one with only SHA-1 key exchange. */
   readonly algorithms?: ServerConfig['algorithms'];
 }): Promise<TestSshServer> {
@@ -178,6 +183,10 @@ export async function startSshServer(options: {
         client.on('session', (accept) => {
           const session = accept();
           session.on('sftp', (acceptSftp, rejectSftp) => {
+            if (options.sftp !== undefined) {
+              options.sftp(acceptSftp());
+              return;
+            }
             if (options.files === undefined) {
               rejectSftp();
               return;

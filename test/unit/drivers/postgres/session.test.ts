@@ -5,6 +5,7 @@ import {
   clientConfig,
   postgresAddress,
   postgresSsl,
+  spatialTypes,
 } from '../../../../src/drivers/postgres/session';
 import type { ResolvedConnectionConfig } from '../../../../src/shared/connection';
 
@@ -103,5 +104,46 @@ describe('postgresAddress (V10.2.5)', () => {
 
   it('reaches clientConfig', () => {
     expect(clientConfig({ ...config, socket: '/tmp' }, undefined)).toMatchObject({ host: '/tmp' });
+  });
+});
+
+describe('spatialTypes (V13.13)', () => {
+  it('maps the OIDs of geometry and geography to their names', async () => {
+    const client = {
+      query: () =>
+        Promise.resolve({
+          rows: [
+            ['16500', 'geometry'],
+            ['16501', 'geography'],
+          ],
+        }),
+    };
+    expect(await spatialTypes(client as never)).toEqual(
+      new Map([
+        [16_500, 'geometry'],
+        [16_501, 'geography'],
+      ]),
+    );
+  });
+
+  it('has none on a server without PostGIS', async () => {
+    expect(await spatialTypes({ query: () => Promise.resolve({ rows: [] }) } as never)).toEqual(
+      new Map(),
+    );
+  });
+
+  it('skips rows that are not an OID and a name', async () => {
+    const client = {
+      query: () =>
+        Promise.resolve({
+          rows: [['x', 'geometry'], ['16500', ''], ['0', 'geometry'], [16_500, 'geometry'], []],
+        }),
+    };
+    expect(await spatialTypes(client as never)).toEqual(new Map());
+  });
+
+  it('has none when the catalog query fails: that must not refuse the connection', async () => {
+    const client = { query: () => Promise.reject(new Error('permission denied for pg_type')) };
+    expect(await spatialTypes(client as never)).toEqual(new Map());
   });
 });

@@ -193,6 +193,34 @@ describe('SqlDumper', () => {
     expect(harness.sink.text).not.toContain('CREATE VIEW');
   });
 
+  it('writes the values of spatial columns as geometries, and of text columns as text (V13.13)', async () => {
+    const harness = new Harness();
+    harness.session.metadata.structure = {
+      ...STRUCTURE,
+      columns: [
+        { name: 'id', dataType: 'int', nullable: false, autoIncrement: false, generated: false },
+        {
+          name: 'place',
+          dataType: 'point',
+          nullable: true,
+          autoIncrement: false,
+          generated: false,
+        },
+        { name: 'note', dataType: 'text', nullable: true, autoIncrement: false, generated: false },
+      ],
+    };
+    harness.driver.dialect = {
+      ...harness.driver.dialect,
+      literal: (value) => (typeof value === 'string' ? `'${value}'` : JSON.stringify(value)),
+      spatialLiteral: (text) => `GEOM(${text})`,
+    };
+    harness.rows = [[1, 'SRID=4326;POINT(1 2)', 'SRID=4326;POINT(1 2)']];
+    await harness.dumper().dump(harness.request({ content: 'data' }));
+    expect(harness.sink.text).toContain(
+      "VALUES (1, GEOM(SRID=4326;POINT(1 2)), 'SRID=4326;POINT(1 2)');",
+    );
+  });
+
   it('splits many rows into several INSERT statements', async () => {
     const harness = new Harness();
     harness.rows = Array.from({ length: INSERT_ROWS * 2 + 1 }, (_, i) => [i, 'x']);

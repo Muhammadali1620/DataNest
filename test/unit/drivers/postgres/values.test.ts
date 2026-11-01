@@ -86,3 +86,41 @@ describe('pgTypeName', () => {
     expect(pgTypeName(424_242)).toBeUndefined();
   });
 });
+
+describe('PostGIS values (V13.13)', () => {
+  const POSTGIS = new Map([
+    [16_500, 'geometry'],
+    [16_501, 'geography'],
+  ]);
+  // POINT(13.4 52.5) in SRID 4326, as the server sends it: little-endian EWKB in hex.
+  const EWKB = '0101000020E6100000CDCCCCCCCCCC2A4000000000004049 40'.replaceAll(' ', '');
+  const POINT_HEX = '0101000020e6100000cdcccccccccc2a400000000000404a40';
+
+  it('shows geometry and geography as extended WKT', () => {
+    expect(toCellValue(POINT_HEX, 16_500, POSTGIS)).toBe('SRID=4326;POINT(13.4 52.5)');
+    expect(toCellValue(POINT_HEX, 16_501, POSTGIS)).toBe('SRID=4326;POINT(13.4 52.5)');
+  });
+
+  it('keeps what it cannot read as the server sent it', () => {
+    expect(toCellValue(EWKB.slice(0, -2), 16_500, POSTGIS)).toBe(EWKB.slice(0, -2));
+    expect(toCellValue('not hex', 16_500, POSTGIS)).toBe('not hex');
+  });
+
+  it('leaves a type that is not a known extension type alone', () => {
+    expect(toCellValue(POINT_HEX, 16_999, POSTGIS)).toBe(POINT_HEX);
+    expect(toCellValue(POINT_HEX, PG_OID.TEXT, POSTGIS)).toBe(POINT_HEX);
+    expect(toCellValue(POINT_HEX, 16_500)).toBe(POINT_HEX);
+  });
+
+  it('keeps null as null', () => {
+    expect(toCellValue(null, 16_500, POSTGIS)).toBeNull();
+  });
+
+  it('names the types of the columns', () => {
+    expect(pgTypeName(16_500, POSTGIS)).toBe('geometry');
+    expect(pgTypeName(16_501, POSTGIS)).toBe('geography');
+    expect(pgTypeName(16_502, POSTGIS)).toBeUndefined();
+    expect(pgTypeName(PG_OID.TEXT, POSTGIS)).toBe('text');
+    expect(pgTypeName(16_500)).toBeUndefined();
+  });
+});

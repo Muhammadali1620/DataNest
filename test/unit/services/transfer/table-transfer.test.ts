@@ -182,6 +182,72 @@ describe('TableTransferService', () => {
     expect(sql).not.toContain('INSERT');
   });
 
+  it('writes the geometries of a spatial column as geometries, not as strings (V13.13)', async () => {
+    const harness = new Harness('mysql', 'mysql');
+    harness.reader.metadata.structure = {
+      columns: [
+        { name: 'id', dataType: 'int', nullable: false, autoIncrement: false, generated: false },
+        {
+          name: 'place',
+          dataType: 'point',
+          nullable: true,
+          autoIncrement: false,
+          generated: false,
+        },
+        { name: 'note', dataType: 'text', nullable: true, autoIncrement: false, generated: false },
+      ],
+      primaryKey: ['id'],
+      indexes: [],
+      foreignKeys: [],
+    };
+    harness.reader.rowsFor = (sql) =>
+      sql.startsWith('SELECT `id`')
+        ? [
+            [1, 'SRID=4326;POINT(52.5 13.4)', 'SRID=4326;POINT(52.5 13.4)'],
+            [2, null, 'POINT(1 2)'],
+          ]
+        : [];
+    // A server of another kind copies row by row, as between two connections.
+    const report = await harness.run({ tables: ['places'] });
+    const sql = harness.writer.executed.join('\n');
+    expect(sql).toContain(
+      "(1, x'e610000001010000000000000000404a40cdcccccccccc2a40', 'SRID=4326;POINT(52.5 13.4)')",
+    );
+    expect(sql).toContain("(2, NULL, 'POINT(1 2)')");
+    expect(report.tables[0]).toMatchObject({ outcome: 'copied', rows: 2 });
+  });
+
+  it('writes a geometry from PostgreSQL into a text column as text (V13.13)', async () => {
+    const harness = new Harness('postgres', 'mysql');
+    harness.reader.metadata.structure = {
+      columns: [
+        {
+          name: 'id',
+          dataType: 'integer',
+          nullable: false,
+          autoIncrement: false,
+          generated: false,
+        },
+        {
+          name: 'place',
+          dataType: 'geometry(Point,4326)',
+          nullable: true,
+          autoIncrement: false,
+          generated: false,
+        },
+      ],
+      primaryKey: ['id'],
+      indexes: [],
+      foreignKeys: [],
+    };
+    harness.reader.rowsFor = (sql) =>
+      sql.startsWith('SELECT "id"') ? [[1, 'SRID=4326;POINT(13.4 52.5)']] : [];
+    await harness.run({ tables: ['places'] });
+    const sql = harness.writer.executed.join('\n');
+    expect(sql).toMatch(/CREATE TABLE `places`[\s\S]*`place` (longtext|text)/u);
+    expect(sql).toContain("(1, 'SRID=4326;POINT(13.4 52.5)')");
+  });
+
   it('drops and creates a table that is there, or leaves it, or adds to it', async () => {
     const replace = new Harness();
     replace.writer.metadata.tables = [{ name: 'orders', kind: 'table' }];

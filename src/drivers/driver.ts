@@ -219,6 +219,13 @@ export interface Dialect {
   quoteTable(table: TableRef): string;
   /** Renders a value as a SQL literal; used only where parameters cannot be. */
   literal(value: CellValue): string;
+  /**
+   * A spatial value, shown as text (`SRID=4326;POINT(1 2)`), as a literal the server reads
+   * back as a geometry (V13.13); undefined when the text is no geometry, or when a plain
+   * string literal does the job (PostGIS reads that text itself). Only for columns known
+   * to be spatial: a text column holding such words must stay text.
+   */
+  spatialLiteral?(text: string): string | undefined;
   /** Wraps or extends a SELECT so it returns `limit` rows starting at `offset`. */
   paginate(sql: string, limit: number, offset: number): string;
   /**

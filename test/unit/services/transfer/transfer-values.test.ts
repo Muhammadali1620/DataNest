@@ -28,6 +28,13 @@ describe('transferValue', () => {
     expect(transferValue('maybe', { kind: 'boolean' })).toBe('maybe');
   });
 
+  it('passes a geometry through as it is', () => {
+    expect(transferValue('SRID=4326;POINT(1 2)', { kind: 'geometry' })).toBe(
+      'SRID=4326;POINT(1 2)',
+    );
+    expect(transferValue(null, { kind: 'geometry' })).toBeNull();
+  });
+
   it('turns booleans into numbers for a number column', () => {
     expect(transferValue(true, { kind: 'integer', bytes: 1, unsigned: false })).toBe(1);
     expect(transferValue(false, { kind: 'decimal' })).toBe(0);

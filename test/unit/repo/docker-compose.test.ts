@@ -44,7 +44,7 @@ describe('docker/compose.yml (D17)', () => {
     expect(compose.name).toBe('datanest');
   });
 
-  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, MongoDB, Elasticsearch and two SSH servers', () => {
+  it('provides MySQL, MariaDB, PostgreSQL, SQL Server, ClickHouse, Oracle, the compatible servers, Redis, MongoDB, Elasticsearch, PostGIS and two SSH servers', () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       'clickhouse',
       'cockroach',
@@ -54,6 +54,7 @@ describe('docker/compose.yml (D17)', () => {
       'mssql',
       'mysql',
       'oracle',
+      'postgis',
       'postgres',
       'redis',
       'redis-cluster',
@@ -118,7 +119,9 @@ describe('docker/compose.yml (D17)', () => {
 
   it.each(services)('waits for the %s seed with a healthcheck', (_id, service) => {
     // SQL Server loads its seed after the server is up, so it waits for the last table.
-    expect(service.healthcheck?.test.join(' ')).toMatch(/big_table|inventory\.stock_levels/);
+    expect(service.healthcheck?.test.join(' ')).toMatch(
+      /big_table|inventory\.stock_levels|spatial_places/,
+    );
   });
 
   // SQL Server and Oracle keep their data in the container, which db:down removes.

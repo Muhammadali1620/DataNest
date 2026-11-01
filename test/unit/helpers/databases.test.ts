@@ -19,6 +19,7 @@ const IDS: TestDatabaseId[] = [
   'tidb',
   'cockroach',
   'yugabyte',
+  'postgis',
 ];
 
 describe('test database settings', () => {

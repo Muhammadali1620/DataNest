@@ -325,6 +325,40 @@ services:
           '/home/yugabyte/bin/ysqlsh -h "$(hostname)" -U yugabyte -d datanest_test -tAc "SELECT count(*) FROM big_table" | grep -qx 10000',
         ]
 
+  # PostgreSQL with PostGIS (V13.13), group `postgis`: spatial values as WKT in the grid, in
+  # dumps and in transfers. A group of its own, so the other PostgreSQL jobs stay light.
+  postgis:
+    image: postgis/postgis:17-3.5-alpine
+    container_name: datanest-postgis
+    profiles: [postgis]
+    environment:
+      POSTGRES_USER: datanest
+      POSTGRES_PASSWORD: datanest
+      POSTGRES_DB: datanest_test
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - 127.0.0.1:7434:5432
+    volumes:
+      - ./seed/postgis:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'psql',
+          '-h',
+          '127.0.0.1',
+          '-U',
+          'datanest',
+          '-d',
+          'datanest_test',
+          '-c',
+          'SELECT 1 FROM spatial_places LIMIT 1',
+        ]
+
   # Redis (V7.1), group `redis`: a server with ACL users and TLS on 7380, a master watched by
   # a Sentinel, and a cluster of three masters. Sentinel and cluster nodes listen on the
   # same port inside and outside, so the addresses they hand out work from the host.

@@ -2,6 +2,7 @@
 // so almost everything arrives as the server's text and only needs tagging by OID;
 // precision is never lost on the way to the grid.
 
+import { postgisGeometryText } from '../../core/geo/wkb';
 import type { CellValue } from '../../shared/cell-value';
 import { binaryValue, safeIntOrTag } from '../common/values';
 
@@ -56,8 +57,17 @@ const TYPE_NAMES: Readonly<Record<number, string>> = {
   [PG_OID.JSONB]: 'jsonb',
 };
 
-export function pgTypeName(oid: number | undefined): string | undefined {
-  return oid === undefined ? undefined : TYPE_NAMES[oid];
+/**
+ * Types whose OID the server decides, by OID: `geometry` and `geography` of PostGIS
+ * (V13.13). A session finds them in `pg_type` and passes them on.
+ */
+export type ExtensionTypes = ReadonlyMap<number, string>;
+
+export function pgTypeName(
+  oid: number | undefined,
+  extensions?: ExtensionTypes,
+): string | undefined {
+  return oid === undefined ? undefined : (TYPE_NAMES[oid] ?? extensions?.get(oid));
 }
 
 /**
@@ -88,7 +98,7 @@ const DATETIME_OIDS: ReadonlySet<number> = new Set([
   PG_OID.TIMESTAMPTZ,
 ]);
 
-export function toCellValue(value: unknown, oid?: number): CellValue {
+export function toCellValue(value: unknown, oid?: number, extensions?: ExtensionTypes): CellValue {
   if (value === null || value === undefined) {
     return null;
   }
@@ -111,6 +121,10 @@ export function toCellValue(value: unknown, oid?: number): CellValue {
       }
       if (oid === PG_OID.BYTEA) {
         return byteaToBinary(value);
+      }
+      if (extensions?.has(oid) === true) {
+        // PostGIS sends hex EWKB; people read WKT, and PostGIS accepts that text back.
+        return postgisGeometryText(value) ?? value;
       }
     }
     return value;

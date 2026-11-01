@@ -101,6 +101,20 @@ NULL in a NOT NULL column, `abc` in an integer column) are skipped and counted, 
 fails only when no cell took it. Nothing reaches the database until you save, and **Revert**
 undoes the fill. One fill covers up to 100,000 cells.
 
+## Spatial values
+
+Geometry and geography columns show their value as text: `SRID=4326;POINT(13.4 52.5)`, or
+`POLYGON((0 0, 4 0, 4 4, 0 0))` when there is no SRID. This holds for MySQL, MariaDB and for
+PostgreSQL with PostGIS, which is looked up once when the connection opens. A cell is
+edited and copied as that text, and PostGIS reads it back as the same value. A value the
+reader does not know (a circular string, a TIN) stays what the server sent.
+
+Dumps and table copies write a MySQL or MariaDB geometry in the form the server keeps it, so
+it comes back exactly, whichever SRID it has; PostGIS reads the text itself. Between the two
+kinds of database the coordinates travel in the order the source stores them: for a
+geographic SRID MySQL keeps the east-west axis first, as PostGIS does, so points keep their
+place.
+
 ## Pin and history
 
 **Pin** (the pin button of the toolbar, or **Pin or Unpin Result** in the Command Palette)

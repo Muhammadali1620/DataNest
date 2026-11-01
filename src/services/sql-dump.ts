@@ -17,6 +17,7 @@ import type { Dialect, Driver, MetadataReader, Session, TableDump } from '../dri
 import { ConnectionManager, type SessionTarget } from './connection-manager';
 import { commentLine, orderViews, RowBatcher, scriptStatement } from './dump-script';
 import type { TextSink } from './file-sink';
+import { isSpatialType } from '../core/geo/wkb';
 import { exactLiteralOf } from './sql-literal';
 import { msg } from '../core/user-message';
 
@@ -347,6 +348,7 @@ class DumpWriter {
     const quotedTable = this.dialect.quoteTable(this.local(table));
     const quotedColumns = columns.map((column) => this.dialect.quoteIdentifier(column.name));
     const identity = columns.some((column) => column.autoIncrement);
+    const spatial = columns.map((column) => isSpatialType(column.dataType));
     await this.section(`Rows of ${table.name}`);
     const batcher = new RowBatcher();
     const flush = async (rows: string[]): Promise<void> => {
@@ -361,7 +363,7 @@ class DumpWriter {
       }
       this.checkCancelled();
       for (const row of event.rows) {
-        const tuple = `(${columns.map((_column, index) => exactLiteralOf(this.dialect, row[index] ?? null)).join(', ')})`;
+        const tuple = `(${columns.map((_column, index) => exactLiteralOf(this.dialect, row[index] ?? null, spatial[index])).join(', ')})`;
         const full = batcher.add(tuple);
         if (full !== undefined) {
           await flush(full);

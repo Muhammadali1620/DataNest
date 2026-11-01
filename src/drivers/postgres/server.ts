@@ -21,6 +21,13 @@ export const CURRENT_POSTGRES: PgServer = { flavor: 'postgres', version: 170_000
 export const SERVER_SQL = "SELECT version(), current_setting('server_version_num')";
 
 /**
+ * The types of PostGIS (and CockroachDB's own): they come from an extension, so their OIDs
+ * differ from server to server and are looked up once per session (V13.13).
+ */
+export const SPATIAL_TYPES_SQL =
+  "SELECT oid::text, typname::text FROM pg_type WHERE typname IN ('geometry', 'geography')";
+
+/**
  * Reads version() and server_version_num: `CockroachDB CCL v24.3.6 …` (which says it is
  * PostgreSQL 13), `PostgreSQL 11.2-YB-2024.2.2.1-b0 …`, `PostgreSQL 17.2 on …`.
  */

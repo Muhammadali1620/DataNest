@@ -17,8 +17,8 @@ import type {
 } from '../driver';
 import { toPgDbError } from './errors';
 import { PostgresMetadata } from './metadata';
-import { forServer, type PgServer, pgServer, SERVER_SQL } from './server';
-import { pgTypeName, pgTypeParser, toCellValue } from './values';
+import { forServer, type PgServer, pgServer, SERVER_SQL, SPATIAL_TYPES_SQL } from './server';
+import { type ExtensionTypes, pgTypeName, pgTypeParser, toCellValue } from './values';
 import { msg } from '../../core/user-message';
 
 /** Rows travel from the driver in batches of this size. */
@@ -108,6 +108,7 @@ export async function openPostgresSession(config: ResolvedConnectionConfig): Pro
   client.on('error', () => undefined);
   let server: PgServer;
   let cancelKey: string | undefined;
+  let extensions: ExtensionTypes;
   try {
     const [row] = (await client.query({ text: SERVER_SQL, rowMode: 'array' })).rows as unknown[][];
     server = pgServer(textOf(row?.[0]), textOf(row?.[1]));
@@ -117,6 +118,7 @@ export async function openPostgresSession(config: ResolvedConnectionConfig): Pro
         .rows as unknown[][];
       cancelKey = typeof id?.[0] === 'string' ? id[0] : undefined;
     }
+    extensions = await spatialTypes(client);
     if (config.readOnly === true) {
       // Every later transaction of the session is read-only; the server refuses writes.
       await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
@@ -125,7 +127,31 @@ export async function openPostgresSession(config: ResolvedConnectionConfig): Pro
     await client.end().catch(() => undefined);
     throw toPgDbError(error);
   }
-  return new PostgresSession(client, config, tls, server, cancelKey);
+  return new PostgresSession(client, config, tls, server, cancelKey, extensions);
+}
+
+/**
+ * The OIDs of `geometry` and `geography` (V13.13), so their values can be read as WKT. A
+ * server without them, or one that refuses the catalog query, has none: the values then
+ * stay what the server sends.
+ */
+export async function spatialTypes(client: Pick<pg.Client, 'query'>): Promise<ExtensionTypes> {
+  const found = new Map<number, string>();
+  try {
+    const { rows } = (await client.query({ text: SPATIAL_TYPES_SQL, rowMode: 'array' })) as {
+      rows: unknown[][];
+    };
+    for (const row of rows) {
+      const oid = Number(textOf(row[0]));
+      const name = textOf(row[1]);
+      if (Number.isInteger(oid) && oid > 0 && name !== '') {
+        found.set(oid, name);
+      }
+    }
+  } catch {
+    // Not having the types is no reason to refuse the connection.
+  }
+  return found;
 }
 
 /** A catalog value as text; anything that is not a string reads as empty. */
@@ -166,6 +192,8 @@ class PostgresSession implements Session {
     private readonly server: PgServer,
     /** CockroachDB's session id, which its CANCEL QUERIES takes. */
     private readonly cancelKey?: string,
+    /** PostGIS types by OID (V13.13). */
+    private readonly extensions: ExtensionTypes = new Map(),
   ) {
     this.client = client;
     this.config = config;
@@ -241,7 +269,7 @@ class PostgresSession implements Session {
       columnsSent = true;
       fieldOids = fields.map((field) => field.dataTypeID);
       const columns: ResultColumn[] = fields.map((field, index) => {
-        const dataType = pgTypeName(fieldOids[index]);
+        const dataType = pgTypeName(fieldOids[index], this.extensions);
         return dataType === undefined
           ? { name: field.name ?? `column${index + 1}` }
           : { name: field.name ?? `column${index + 1}`, dataType };
@@ -275,7 +303,9 @@ class PostgresSession implements Session {
         return;
       }
       rowCount += 1;
-      batch.push(row.map((value: unknown, index) => toCellValue(value, fieldOids[index])));
+      batch.push(
+        row.map((value: unknown, index) => toCellValue(value, fieldOids[index], this.extensions)),
+      );
       if (batch.length >= ROW_BATCH_SIZE) {
         flush();
       }

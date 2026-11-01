@@ -6,6 +6,7 @@
 import { clickhouseBareType } from '../../shared/clickhouse-types';
 import type { DriverId } from '../../shared/connection';
 import { DbError } from '../../core/errors';
+import { isSpatialType } from '../../core/geo/wkb';
 import { enumOptions } from '../../shared/cell-input';
 import { splitType } from '../../shared/table-design';
 import { msg } from '../../core/user-message';
@@ -23,6 +24,8 @@ export type NeutralType =
   | { readonly kind: 'json' }
   | { readonly kind: 'binary' }
   | { readonly kind: 'uuid' }
+  /** A spatial column (V13.13): its values are carried as text, `SRID=n;POINT(1 2)`. */
+  | { readonly kind: 'geometry' }
   | { readonly kind: 'enum'; readonly values: readonly string[] };
 
 const INT_BYTES: readonly (readonly [RegExp, 1 | 2 | 3 | 4 | 8])[] = [
@@ -53,6 +56,10 @@ export function neutralType(dataType: string, driver: DriverId): NeutralType {
   }
   if (/\[\]$|^array/u.test(type)) {
     return { kind: 'text' };
+  }
+  // Only MySQL and PostgreSQL have spatial columns here; the others keep such values as text.
+  if ((driver === 'mysql' || driver === 'postgres') && isSpatialType(type)) {
+    return { kind: 'geometry' };
   }
   if (driver === 'mssql') {
     const own = mssqlNeutral(type);
@@ -384,6 +391,7 @@ function oracleType(neutral: NeutralType, indexed: boolean): { type: string; len
         return t('VARCHAR2', `${neutral.length} CHAR`);
       }
       return indexed ? t('VARCHAR2', `${ORACLE_INDEXED_VARCHAR} CHAR`) : t('CLOB');
+    case 'geometry':
     case 'text':
     case 'json':
       return indexed ? t('VARCHAR2', `${ORACLE_INDEXED_VARCHAR} CHAR`) : t('CLOB');
@@ -422,6 +430,7 @@ function clickhouseType(neutral: NeutralType): { type: string; length: string } 
     case 'float':
       return t(neutral.double ? 'Float64' : 'Float32');
     case 'string':
+    case 'geometry':
     case 'text':
     case 'json':
     case 'binary':
@@ -466,6 +475,7 @@ function mysqlType(neutral: NeutralType, indexed: boolean): { type: string; leng
       return neutral.length <= 16_383
         ? t('varchar', String(neutral.length))
         : t(indexed ? 'varchar' : 'longtext', indexed ? '255' : '');
+    case 'geometry':
     case 'text':
       return indexed ? t('varchar', '255') : t('longtext');
     case 'date':
@@ -507,6 +517,7 @@ function postgresType(neutral: NeutralType): { type: string; length: string } {
       return t(neutral.double ? 'double precision' : 'real');
     case 'string':
       return t(neutral.fixed ? 'char' : 'varchar', String(neutral.length));
+    case 'geometry':
     case 'text':
     case 'enum':
       return t('text');
@@ -541,6 +552,7 @@ function sqliteType(neutral: NeutralType): { type: string; length: string } {
       return t('real');
     case 'string':
       return t(neutral.fixed ? 'char' : 'varchar', String(neutral.length));
+    case 'geometry':
     case 'text':
     case 'enum':
     case 'uuid':
@@ -590,6 +602,7 @@ function mssqlType(neutral: NeutralType, indexed: boolean): { type: string; leng
         return t(neutral.fixed ? 'nchar' : 'nvarchar', String(neutral.length));
       }
       return t('nvarchar', indexed ? String(MSSQL_INDEXED_NVARCHAR) : 'max');
+    case 'geometry':
     case 'text':
     case 'json':
       return t('nvarchar', indexed ? String(MSSQL_INDEXED_NVARCHAR) : 'max');

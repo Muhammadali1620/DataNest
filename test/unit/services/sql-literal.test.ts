@@ -39,3 +39,36 @@ describe('exactLiteralOf', () => {
     expect(exactLiteralOf(mysqlDialect, { kind: 'decimal', text: '1.50' })).toBe('1.50');
   });
 });
+
+describe('exactLiteralOf for spatial columns (V13.13)', () => {
+  it('writes a geometry shown as text so the server reads it back as a geometry', () => {
+    expect(exactLiteralOf(mysqlDialect, 'SRID=4326;POINT(1 2)', true)).toBe(
+      "x'e61000000101000000000000000000f03f0000000000000040'",
+    );
+    expect(exactLiteralOf(mysqlDialect, 'POINT(1 2)', true)).toBe(
+      "x'000000000101000000000000000000f03f0000000000000040'",
+    );
+  });
+
+  it('keeps the text of any other column a string, even one that looks like a geometry', () => {
+    expect(exactLiteralOf(mysqlDialect, 'SRID=4326;POINT(1 2)')).toBe("'SRID=4326;POINT(1 2)'");
+    expect(exactLiteralOf(mysqlDialect, 'POINT(1 2)', false)).toBe("'POINT(1 2)'");
+  });
+
+  it('falls back to a string for text in a spatial column that is no geometry', () => {
+    expect(exactLiteralOf(mysqlDialect, 'not a point', true)).toBe("'not a point'");
+    expect(exactLiteralOf(mysqlDialect, "POINT(1 2)'); DROP TABLE t; --", true)).toBe(
+      "'POINT(1 2)''); DROP TABLE t; --'",
+    );
+  });
+
+  it('writes NULL and other values of a spatial column as always', () => {
+    expect(exactLiteralOf(mysqlDialect, null, true)).toBe('NULL');
+    expect(exactLiteralOf(mysqlDialect, binary([0xff]), true)).toBe("x'ff'");
+  });
+
+  it('leaves a dialect without spatial literals to its string', () => {
+    const plain = { ...mysqlDialect, spatialLiteral: undefined };
+    expect(exactLiteralOf(plain, 'SRID=4326;POINT(1 2)', true)).toBe("'SRID=4326;POINT(1 2)'");
+  });
+});

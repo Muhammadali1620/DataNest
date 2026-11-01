@@ -120,6 +120,7 @@ export function transferValue(cell: CellValue, target: NeutralType): CellValue {
     case 'date':
     case 'time':
     case 'binary':
+    case 'geometry':
       return cell;
   }
 }

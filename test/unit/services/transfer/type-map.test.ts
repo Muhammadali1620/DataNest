@@ -97,6 +97,38 @@ describe('neutralType', () => {
   });
 });
 
+describe('spatial columns (V13.13)', () => {
+  it('reads the spatial types of MySQL and PostgreSQL as geometry', () => {
+    for (const type of ['geometry', 'point', 'multipolygon', 'geomcollection', 'POINT']) {
+      expect(neutralType(type, 'mysql')).toEqual({ kind: 'geometry' });
+    }
+    expect(neutralType('geometry(Point,4326)', 'postgres')).toEqual({ kind: 'geometry' });
+    expect(neutralType('geography', 'postgres')).toEqual({ kind: 'geometry' });
+  });
+
+  it('leaves the other databases and other types to text', () => {
+    expect(neutralType('geometry', 'mssql')).toEqual({ kind: 'text' });
+    expect(neutralType('geometry', 'sqlite')).toEqual({ kind: 'text' });
+    expect(neutralType('pointer', 'mysql')).toEqual({ kind: 'text' });
+  });
+
+  it('writes a geometry as text for a database of another kind', () => {
+    for (const to of ['mysql', 'postgres', 'sqlite', 'mssql', 'oracle', 'clickhouse'] as const) {
+      expect(targetType({ kind: 'geometry' }, to, false)).toEqual(
+        targetType({ kind: 'text' }, to, false),
+      );
+    }
+  });
+
+  it('keeps the type as it was between databases of one kind', () => {
+    expect(mapColumnType('point', 'mysql', 'mysql', false)).toEqual({ type: 'point', length: '' });
+    expect(mapColumnType('geometry(Point,4326)', 'postgres', 'postgres', false)).toEqual({
+      type: 'geometry',
+      length: 'Point,4326',
+    });
+  });
+});
+
 describe('targetType', () => {
   it('writes MySQL types, keeping indexed columns indexable', () => {
     expect(targetType({ kind: 'boolean' }, 'mysql', false)).toEqual({

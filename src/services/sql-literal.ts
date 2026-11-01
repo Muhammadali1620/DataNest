@@ -26,8 +26,9 @@ export function literalOf(dialect: Dialect, cell: CellValue): string {
 /**
  * Like `literalOf`, but refuses a binary value whose bytes were not kept (larger than
  * the host keeps): a dump must never write a cut value as if it were the whole one.
+ * `spatial` says the column holds geometries, whose text the dialect may turn into one.
  */
-export function exactLiteralOf(dialect: Dialect, cell: CellValue): string {
+export function exactLiteralOf(dialect: Dialect, cell: CellValue, spatial = false): string {
   if (
     typeof cell === 'object' &&
     cell !== null &&
@@ -39,6 +40,13 @@ export function exactLiteralOf(dialect: Dialect, cell: CellValue): string {
       'unsupported',
       msg('A binary value of {0} bytes is larger than DataNest can copy', cell.size),
     );
+  }
+  if (spatial && typeof cell === 'string') {
+    // A geometry the driver showed as text goes back as a geometry (V13.13).
+    const geometry = dialect.spatialLiteral?.(cell);
+    if (geometry !== undefined) {
+      return geometry;
+    }
   }
   return literalOf(dialect, cell);
 }

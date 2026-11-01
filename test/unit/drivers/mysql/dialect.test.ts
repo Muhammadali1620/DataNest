@@ -64,6 +64,33 @@ describe('mysqlDialect.literal', () => {
   });
 });
 
+describe('mysqlDialect.spatialLiteral (V13.13)', () => {
+  const literal = (text: string): string | undefined => mysqlDialect.spatialLiteral?.(text);
+
+  it('writes a geometry the driver showed as the hex of the value the server keeps', () => {
+    expect(literal('SRID=4326;POINT(1 2)')).toBe(
+      "x'e61000000101000000000000000000f03f0000000000000040'",
+    );
+    expect(literal('POINT(1 2)')).toBe("x'000000000101000000000000000000f03f0000000000000040'");
+    expect(literal('SRID=0;POINT(1 2)')).toBe(
+      "x'000000000101000000000000000000f03f0000000000000040'",
+    );
+  });
+
+  it('writes every other kind of geometry the same way', () => {
+    expect(literal('POLYGON((0 0, 4 0, 4 4, 0 0))')).toMatch(/^x'0{8}0103000000[0-9a-f]+'$/u);
+    expect(literal('GEOMETRYCOLLECTION EMPTY')).toBe("x'00000000010700000000000000'");
+  });
+
+  it('writes nothing for text that is not a plain geometry, so it cannot carry SQL', () => {
+    expect(literal('hello')).toBeUndefined();
+    expect(literal("POINT(1 2)'); DROP TABLE t; --")).toBeUndefined();
+    expect(literal('POINT(1 2) UNION SELECT 1')).toBeUndefined();
+    expect(literal('POINT Z (1 2 3)')).toBeUndefined();
+    expect(literal('')).toBeUndefined();
+  });
+});
+
 describe('mysqlDialect.paginate', () => {
   it('appends LIMIT and OFFSET, dropping a trailing semicolon', () => {
     expect(mysqlDialect.paginate('SELECT * FROM t;', 100, 0)).toBe('SELECT * FROM t LIMIT 100');

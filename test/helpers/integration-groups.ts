@@ -63,6 +63,14 @@ const DEFINITIONS = {
         return { name: id, host: db.host, port: db.port };
       }),
   },
+  postgis: {
+    always: false,
+    folders: ['postgis'],
+    endpoints: (env) => {
+      const db = testDatabase('postgis', env);
+      return [{ name: 'postgis', host: db.host, port: db.port }];
+    },
+  },
   clickhouse: {
     always: false,
     folders: ['clickhouse'],

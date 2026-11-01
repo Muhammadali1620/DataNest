@@ -479,7 +479,11 @@ class Job {
         }
         for (const row of event.rows) {
           const literals = table.columns.map((column, index) =>
-            exactLiteralOf(this.to, transferValue(row[index] ?? null, column.neutral)),
+            exactLiteralOf(
+              this.to,
+              transferValue(row[index] ?? null, column.neutral),
+              column.neutral.kind === 'geometry',
+            ),
           );
           const full = batcher.add(`(${literals.join(', ')})`);
           if (full !== undefined) {

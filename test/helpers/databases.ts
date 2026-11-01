@@ -13,7 +13,8 @@ export type TestDatabaseId =
   | 'oracle'
   | 'tidb'
   | 'cockroach'
-  | 'yugabyte';
+  | 'yugabyte'
+  | 'postgis';
 
 /** The databases of the `core` group, which the SSH server can reach. */
 export type CoreDatabaseId = 'mysql' | 'mariadb' | 'postgres';
@@ -41,6 +42,7 @@ export const DEFAULT_PORTS: Readonly<Record<TestDatabaseId, number>> = {
   tidb: 7400,
   cockroach: 7257,
   yugabyte: 7533,
+  postgis: 7434,
 };
 
 export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
@@ -53,6 +55,7 @@ export const PORT_ENV: Readonly<Record<TestDatabaseId, string>> = {
   tidb: 'DATANEST_TIDB_PORT',
   cockroach: 'DATANEST_COCKROACH_PORT',
   yugabyte: 'DATANEST_YUGABYTE_PORT',
+  postgis: 'DATANEST_POSTGIS_PORT',
 };
 
 /**

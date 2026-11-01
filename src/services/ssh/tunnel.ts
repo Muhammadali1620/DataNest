@@ -11,6 +11,9 @@ import { DbError, errorMessage } from '../../core/errors';
 import { expandHome, readUserFile } from '../../drivers/common/files';
 import type { Logger } from '../../core/logging/logger';
 import type { HostKeyInfo, Tunnel, TunnelHop, TunnelSpec } from '../tunnels';
+
+/** What it takes to log in along a chain of hops; a tunnel adds its target, a copy its files. */
+export type ChainSpec = Pick<TunnelSpec, 'hops' | 'proxy' | 'checkHostKey' | 'timeoutMs'>;
 import { msg } from '../../core/user-message';
 
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -144,7 +147,7 @@ export function sshError(hop: TunnelHop, error: unknown, hostKeyRejected: boolea
 /** Logs in to one hop, over `sock` when it is reached through the previous hop. */
 async function login(
   hop: TunnelHop,
-  spec: TunnelSpec,
+  spec: ChainSpec,
   sock: Duplex | undefined,
   logger: Logger,
 ): Promise<Client> {
@@ -219,17 +222,15 @@ async function forward(
   });
 }
 
-/** Opens the chain of hops and a local port in front of the target. */
-export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<Tunnel> {
+/**
+ * Logs in to every hop of the chain, each through the one before it, and returns the
+ * clients in order. A failure closes what was opened and says which hop it was.
+ */
+export async function connectChain(spec: ChainSpec, logger: Logger): Promise<Client[]> {
   if (spec.hops.length === 0) {
     throw new DbError('internal', msg('An SSH tunnel needs at least one server'));
   }
   const clients: Client[] = [];
-  const closeClients = (): void => {
-    for (const client of [...clients].reverse()) {
-      client.end();
-    }
-  };
   try {
     for (const [index, hop] of spec.hops.entries()) {
       const previous = clients.at(-1);
@@ -259,9 +260,22 @@ export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<T
       logger.debug(`SSH logged in to ${hop.host}:${hop.port}`);
     }
   } catch (error) {
-    closeClients();
+    for (const client of [...clients].reverse()) {
+      client.end();
+    }
     throw error;
   }
+  return clients;
+}
+
+/** Opens the chain of hops and a local port in front of the target. */
+export async function openSshTunnel(spec: TunnelSpec, logger: Logger): Promise<Tunnel> {
+  const clients = await connectChain(spec, logger);
+  const closeClients = (): void => {
+    for (const client of [...clients].reverse()) {
+      client.end();
+    }
+  };
   const last = clients.at(-1);
   const lastHop = spec.hops.at(-1);
   if (last === undefined || lastHop === undefined) {

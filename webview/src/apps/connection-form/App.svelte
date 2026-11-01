@@ -88,6 +88,7 @@
     redis: 'form.driver.redis',
     mongodb: 'form.driver.mongodb',
     elasticsearch: 'form.driver.elasticsearch',
+    plugin: 'form.driver.plugin',
   };
 
   const REDIS_MODE_LABELS: Readonly<Record<RedisMode, MessageKey>> = {
@@ -356,22 +357,31 @@
         <section class="card">
           <h2 class="section-title"><Icon name="plug" tone="green" />{t('form.section.connection')}</h2>
           {#if isFile}
-            <Field label={t('form.file')} error={errorFor('file-empty')} required>
+            <Field
+              label={fields.useSsh ? t('form.fileRemote') : t('form.file')}
+              error={errorFor('file-empty')}
+              hint={fields.useSsh ? t('form.fileRemoteHint') : undefined}
+              required
+            >
               <span class="row">
                 <input
                   class="control grow"
                   bind:value={fields.file}
                   maxlength={CONNECTION_LIMITS.file}
                   aria-invalid={errorFor('file-empty') !== undefined}
-                  aria-label={t('form.file')}
+                  aria-label={fields.useSsh ? t('form.fileRemote') : t('form.file')}
+                  data-testid="file"
                   autocomplete="off"
                 />
-                <button type="button" class="button secondary" onclick={() => void browse(false)}>
-                  {t('form.browse')}
-                </button>
-                <button type="button" class="button secondary" onclick={() => void browse(true)}>
-                  {t('form.createFile')}
-                </button>
+                <!-- A path on a server cannot be browsed from here. -->
+                {#if !fields.useSsh}
+                  <button type="button" class="button secondary" onclick={() => void browse(false)}>
+                    {t('form.browse')}
+                  </button>
+                  <button type="button" class="button secondary" onclick={() => void browse(true)}>
+                    {t('form.createFile')}
+                  </button>
+                {/if}
               </span>
             </Field>
           {:else}
@@ -721,7 +731,6 @@
           </div>
         </section>
 
-        {#if !isFile}
           <h2 class="group-title"><Icon name="shield" tone="red" />{t('form.section.security')}</h2>
             {#if optionSupport(fields.driver).tls}
             <fieldset class="section">
@@ -744,7 +753,7 @@
               <legend>
                 <label class="check">
                   <input type="checkbox" bind:checked={fields.useSsh} />
-                  <Icon name="terminal" tone="teal" />{t('form.ssh.use')}
+                  <Icon name="terminal" tone="teal" />{isFile ? t('form.ssh.useFile') : t('form.ssh.use')}
                 </label>
               </legend>
               {#if fields.useSsh}
@@ -822,6 +831,7 @@
               {/if}
             </fieldset>
 
+            {#if !isFile}
             <fieldset class="section">
               <legend>
                 <label class="check">
@@ -905,7 +915,7 @@
               {/if}
             </fieldset>
             {/if}
-        {/if}
+            {/if}
 
         <h2 class="group-title"><Icon name="settings-gear" tone="purple" />{t('form.section.advanced')}</h2>
           <details class="section options" open={hasOptions}>

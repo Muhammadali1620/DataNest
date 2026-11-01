@@ -34,4 +34,5 @@ no telemetry.
 ## Contributing
 
 - [Adding a database driver](contributing/adding-a-driver.md)
+- [Adding a database from another extension](contributing/plugin-api.md)
 - [How to contribute](../CONTRIBUTING.md)

@@ -4,10 +4,16 @@
 import { createRequire } from 'node:module';
 import { DbError, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
-import { type DriverId, isDriverId, isSqlDriver, type SqlDriverId } from '../shared/connection';
+import {
+  type BuiltInSqlDriverId,
+  type DriverId,
+  isDriverId,
+  isSqlDriver,
+} from '../shared/connection';
 import type { Driver, DriverModule } from './driver';
 import type { ElasticDriver, ElasticDriverModule } from './elastic-driver';
 import type { MongoDriver, MongoDriverModule } from './mongo-driver';
+import type { PluginDrivers } from './plugin/plugin-drivers';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
 import { msg } from '../core/user-message';
 
@@ -32,15 +38,32 @@ export class DriverRegistry {
   private readonly logger: Logger;
   private readonly loading = new Map<DriverId, Promise<AnyDriver>>();
 
-  constructor(deps: { loader: DriverLoader; logger: Logger }) {
+  private readonly plugins: PluginDrivers | undefined;
+
+  constructor(deps: { loader: DriverLoader; logger: Logger; plugins?: PluginDrivers }) {
     this.loader = deps.loader;
     this.logger = deps.logger.child('drivers');
+    this.plugins = deps.plugins;
+  }
+
+  /** A driver another extension registered (V12.7); throws when it is not there. */
+  getPlugin(id: string): Promise<Driver> {
+    if (this.plugins === undefined) {
+      return Promise.reject(
+        new DbError('unsupported', msg('This build has no drivers from other extensions')),
+      );
+    }
+    try {
+      return Promise.resolve(this.plugins.get(id));
+    } catch (error) {
+      return Promise.reject(toDbError(error, 'unsupported'));
+    }
   }
 
   /** Loads a SQL driver on first use; concurrent calls share one load. */
-  async get(id: SqlDriverId): Promise<Driver> {
-    if (!isDriverId(id) || !isSqlDriver(id)) {
-      throw new DbError('unsupported', msg('Unknown SQL driver "{0}"', String(id)));
+  async get(id: BuiltInSqlDriverId): Promise<Driver> {
+    if (!isDriverId(id) || !isSqlDriver(id) || (id as string) === 'plugin') {
+      throw new DbError('unsupported', msg('Unknown SQL driver "{0}"', id));
     }
     const driver = await this.loadOnce(id);
     if (!isSqlDriverShaped(driver)) {

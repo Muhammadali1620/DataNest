@@ -95,6 +95,7 @@ import {
   readSafeMode,
 } from './settings';
 import { ResultsPanel } from './panels/results-panel';
+import type { PluginConnectionHandlers } from './plugin-connection-commands';
 import type { ResultHistoryHandlers } from './result-history-commands';
 import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
@@ -149,6 +150,8 @@ export interface CommandDeps {
   /** Compares two results picked from the ones of this session (V12.4). */
   readonly compareResults: () => Promise<void>;
   readonly resultHistory: ResultHistoryHandlers;
+  /** Connections of drivers that other extensions registered (V12.7). */
+  readonly pluginConnections: PluginConnectionHandlers;
   /** The connections of the project files; notebooks name them by their id there (V12.1). */
   readonly projectConnections: ProjectConnections;
   readonly results: ResultStore;
@@ -207,6 +210,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     store: deps.store,
     manager: deps.manager,
     logger: deps.logger,
+    plugins: deps.pluginConnections,
   };
   const connections = connectionCommandHandlers(importDeps);
   const folders = folderCommandHandlers({ store: deps.store });
@@ -884,6 +888,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       return undefined;
     },
     [COMMAND_IDS.compareResults]: () => deps.compareResults(),
+    [COMMAND_IDS.addPluginConnection]: () => deps.pluginConnections.add(),
     [COMMAND_IDS.resultHistory]: () => deps.resultHistory.showHistory(),
     [COMMAND_IDS.pinResult]: () => {
       const document = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find(

@@ -41,7 +41,10 @@ describe('NEW_CONNECTION', () => {
 
 describe('driverOptions', () => {
   it('offers every driver the extension ships', () => {
-    expect(driverOptions().map((option) => option.id)).toEqual([...DRIVER_IDS]);
+    // A driver another extension registered is made outside the form (V12.7).
+    expect(driverOptions().map((option) => option.id)).toEqual(
+      DRIVER_IDS.filter((id) => id !== 'plugin'),
+    );
   });
 
   it('marks file drivers and gives network drivers a default port', () => {
@@ -118,6 +121,7 @@ describe('toInput', () => {
       user: 'app',
       database: 'shop',
       file: '/tmp/x.db',
+      plugin: 'acme.duckdb',
       ssh: { id: 'main', host: 'b', user: 'u', auth: 'agent' },
       socket: '/run/postgresql',
       proxy: { kind: 'http', host: 'p', port: 3128, user: 'me' },

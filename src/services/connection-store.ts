@@ -651,8 +651,11 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     port: file ? undefined : input.port,
     user: file ? undefined : trim(input.user),
     database: file ? undefined : trim(input.database),
-    file: file ? trim(input.file) : undefined,
-    ssh: file || input.ssh === undefined ? undefined : normalizeTunnel(input.ssh),
+    // A plugin driver may read a file as well as connect to a server (V12.7).
+    file: file || input.driver === 'plugin' ? trim(input.file) : undefined,
+    plugin: input.driver === 'plugin' ? input.plugin : undefined,
+    // Only SQLite among the file databases may sit behind SSH: its file is then remote (V12.8).
+    ssh: input.ssh === undefined ? undefined : normalizeTunnel(input.ssh),
     socket: file || !supportsSocket(input.driver) ? undefined : trim(input.socket),
     proxy: file || input.proxy === undefined ? undefined : normalizeProxy(input.proxy),
     ssl: file || input.ssl === undefined ? undefined : normalizeSsl(input.ssl),

@@ -4,7 +4,8 @@ import { SQL_DRIVER_IDS } from '../../../../src/shared/connection';
 
 describe('KEYWORDS', () => {
   it('has a list for every driver', () => {
-    expect(Object.keys(KEYWORDS).sort()).toEqual([...SQL_DRIVER_IDS].sort());
+    // The plain-SQL list of a plugin driver (V12.7) is the one extra.
+    expect(Object.keys(KEYWORDS).sort()).toEqual([...SQL_DRIVER_IDS, 'plugin'].sort());
   });
 
   it('is uppercase everywhere, so completion looks consistent', () => {

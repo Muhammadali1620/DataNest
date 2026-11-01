@@ -11,6 +11,7 @@ export const DRIVER_IDS = [
   'redis',
   'mongodb',
   'elasticsearch',
+  'plugin',
 ] as const;
 
 export type DriverId = (typeof DRIVER_IDS)[number];
@@ -37,8 +38,24 @@ export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
   return driverFamily(driver) === 'sql';
 }
 
+/** The SQL drivers DataNest ships, without the ones other extensions register (V12.7). */
+export type BuiltInSqlDriverId = Exclude<SqlDriverId, 'plugin'>;
+
 /** The SQL drivers, in the order of `DRIVER_IDS`. */
-export const SQL_DRIVER_IDS: readonly SqlDriverId[] = DRIVER_IDS.filter(isSqlDriver);
+export const SQL_DRIVER_IDS: readonly BuiltInSqlDriverId[] = DRIVER_IDS.filter(
+  (id): id is BuiltInSqlDriverId => isSqlDriver(id) && id !== 'plugin',
+);
+
+/**
+ * Ids of drivers that other extensions register through the public API (V12.7):
+ * lowercase words joined by dots and dashes, the extension's own id first, e.g.
+ * `acme.duckdb`. The id is stored in the connection, so it stays stable.
+ */
+export const PLUGIN_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+
+export function isPluginId(value: unknown): value is string {
+  return typeof value === 'string' && PLUGIN_ID.test(value);
+}
 
 /** Drivers that open a local file instead of a network connection. */
 export function isFileDriver(driver: DriverId): boolean {
@@ -334,6 +351,17 @@ export function optionSupport(driver: DriverId): OptionSupport {
         queryTimeout: true,
         init: true,
       };
+    // A plugin's session options are its own; DataNest offers only the timeout of connecting.
+    case 'plugin':
+      return {
+        connectTimeout: true,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: false,
+        queryTimeout: false,
+        init: false,
+      };
     // A file has no network to wait for or keep alive, and no session time zone.
     case 'sqlite':
       return {
@@ -425,6 +453,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     case 'postgres':
       return { databases: true, schemas: true };
     case 'sqlite':
+    case 'plugin':
       return { databases: false, schemas: false };
     case 'mssql':
       return { databases: true, schemas: true };
@@ -458,7 +487,12 @@ export interface ConnectionInput {
   readonly database?: string;
   /** Path to the database file for file-based drivers. */
   readonly file?: string;
-  /** Reach the server through an SSH tunnel; network drivers only. */
+  /** The driver another extension registered (V12.7); set with `driver: 'plugin'` only. */
+  readonly plugin?: string;
+  /**
+   * Reach the server through an SSH tunnel; network drivers. For SQLite it means the file
+   * is on that server (V12.8): it is copied over SFTP and opened read-only.
+   */
   readonly ssh?: SshTunnelConfig;
   /**
    * A Unix socket on this machine instead of host and port (V10.2.5): the socket file of
@@ -548,6 +582,8 @@ export type ConnectionProblem =
   | 'host-empty'
   | 'port-invalid'
   | 'file-empty'
+  /** A plugin connection names no driver, or one with a malformed id (V12.7). */
+  | 'plugin-invalid'
   | 'ssl-cert-without-key'
   | 'ssl-key-without-cert'
   | OptionProblem
@@ -613,7 +649,7 @@ export type SshProblem =
   | 'ssh-id-invalid'
   | 'ssh-too-many-jumps';
 
-function isPortValid(port: number | undefined): boolean {
+export function isPortValid(port: number | undefined): boolean {
   return port === undefined || (Number.isInteger(port) && port >= 1 && port <= 65_535);
 }
 
@@ -737,6 +773,33 @@ export function mongoProblems(input: ConnectionInput): MongoProblem[] {
   return problems;
 }
 
+/** What is wrong with the SSH servers of a config; empty when it has none. */
+function sshProblems(input: ConnectionInput): SshProblem[] {
+  const problems: SshProblem[] = [];
+  const ids = new Set<string>();
+  for (const hop of sshHopsOf(input)) {
+    for (const problem of sshHopProblems(hop)) {
+      if (!problems.includes(problem)) {
+        problems.push(problem);
+      }
+    }
+    // Two hops with one id would share their secrets.
+    if (ids.has(hop.id) && !problems.includes('ssh-id-invalid')) {
+      problems.push('ssh-id-invalid');
+    }
+    ids.add(hop.id);
+  }
+  if ((input.ssh?.jumps?.length ?? 0) > MAX_SSH_JUMPS) {
+    problems.push('ssh-too-many-jumps');
+  }
+  return problems;
+}
+
+/** A SQLite file on a server, read through SSH (V12.8). */
+export function isRemoteFile(input: Pick<ConnectionInput, 'driver' | 'ssh'>): boolean {
+  return input.driver === 'sqlite' && input.ssh !== undefined;
+}
+
 export function connectionProblems(input: ConnectionInput): ConnectionProblem[] {
   const problems: ConnectionProblem[] = [];
   if (input.name.trim() === '') {
@@ -753,15 +816,22 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
       }
     }
   }
+  if (input.driver === 'plugin' && !isPluginId(input.plugin)) {
+    problems.push('plugin-invalid');
+  }
   if (isFileDriver(input.driver)) {
     if (input.file === undefined || input.file.trim() === '') {
       problems.push('file-empty');
     }
+    // The file may be on a server that is reached through SSH (V12.8).
+    problems.push(...sshProblems(input));
   } else {
     const socket = (input.socket ?? '').trim() !== '';
     // A socket stands in for the host only where the driver can use one.
     const hostless = socket && supportsSocket(input.driver);
-    if (!hostless && (input.host === undefined || input.host.trim() === '')) {
+    // Which fields a plugin needs is its own business: its driver says so when it connects.
+    const needsHost = input.driver !== 'plugin';
+    if (needsHost && !hostless && (input.host === undefined || input.host.trim() === '')) {
       problems.push('host-empty');
     }
     if (socket && !supportsSocket(input.driver)) {
@@ -781,22 +851,7 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     if (!isPortValid(input.port)) {
       problems.push('port-invalid');
     }
-    const ids = new Set<string>();
-    for (const hop of sshHopsOf(input)) {
-      for (const problem of sshHopProblems(hop)) {
-        if (!problems.includes(problem)) {
-          problems.push(problem);
-        }
-      }
-      // Two hops with one id would share their secrets.
-      if (ids.has(hop.id) && !problems.includes('ssh-id-invalid')) {
-        problems.push('ssh-id-invalid');
-      }
-      ids.add(hop.id);
-    }
-    if ((input.ssh?.jumps?.length ?? 0) > MAX_SSH_JUMPS) {
-      problems.push('ssh-too-many-jumps');
-    }
+    problems.push(...sshProblems(input).filter((problem) => !problems.includes(problem)));
     // A client certificate is useless without its key, and the other way round.
     const hasCert = (input.ssl?.cert ?? '').trim() !== '';
     const hasKey = (input.ssl?.key ?? '').trim() !== '';
@@ -821,6 +876,9 @@ export function describeTarget(config: ConnectionInput): string {
   if (isFileDriver(config.driver)) {
     return config.file ?? '';
   }
+  if (config.driver === 'plugin' && (config.host ?? '') === '') {
+    return config.file ?? config.database ?? config.plugin ?? '';
+  }
   const socket = config.socket?.trim() ?? '';
   if (socket !== '') {
     return config.user === undefined || config.user === '' ? socket : `${config.user}@${socket}`;
@@ -835,7 +893,10 @@ export function describeTarget(config: ConnectionInput): string {
 export function describeTunnel(config: ConnectionInput): string | undefined {
   const hops = sshHopsOf(config);
   const proxy = config.proxy;
-  if ((hops.length === 0 && proxy === undefined) || isFileDriver(config.driver)) {
+  if (
+    (hops.length === 0 && proxy === undefined) ||
+    (isFileDriver(config.driver) && !isRemoteFile(config))
+  ) {
     return undefined;
   }
   return [

@@ -260,6 +260,7 @@ export const ru: Record<MessageKey, string> = {
   'elastic.truncated':
     'Ответ слишком большой, чтобы показать его здесь целиком; скопируйте, чтобы увидеть весь',
   'form.driver.elasticsearch': 'Elasticsearch / OpenSearch',
+  'form.driver.plugin': 'База из другого расширения',
   'form.elastic.auth': 'Вход',
   'form.elastic.auth.basic': 'Пользователь и пароль',
   'form.elastic.auth.apiKey': 'API-ключ',
@@ -328,6 +329,9 @@ export const ru: Record<MessageKey, string> = {
   'form.error.portInvalid': 'Порт — число от 1 до 65535',
   'form.error.fileEmpty': 'Выберите файл базы',
   'form.ssh.use': 'Подключаться через SSH-туннель',
+  'form.ssh.useFile': 'Файл на сервере: открывать его через SSH',
+  'form.fileRemote': 'Путь к файлу на сервере',
+  'form.fileRemoteHint': 'Копируется по SFTP при подключении и открывается только для чтения',
   'form.ssh.title': 'SSH-сервер',
   'form.ssh.host': 'SSH-хост',
   'form.ssh.port': 'SSH-порт',

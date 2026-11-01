@@ -17,6 +17,13 @@ import {
 } from '../shared/connection';
 import { msg } from '../core/user-message';
 import type { ProxySpec } from './proxy/proxy-client';
+import type {
+  DownloadLimits,
+  DownloadReport,
+  DownloadRequest,
+  FileDownloader,
+  RemoteFileSpec,
+} from './remote-snapshots';
 import { openProxyTunnel } from './proxy/proxy-tunnel';
 
 /** How long each SSH server may take to answer and log us in. */
@@ -93,41 +100,82 @@ export function tunnelSpecOf(
     return undefined;
   }
   return {
-    ...(proxy === undefined
-      ? {}
-      : {
-          proxy: {
-            kind: proxy.kind,
-            host: proxy.host,
-            port: effectiveProxyPort(proxy),
-            ...(proxy.user === undefined ? {} : { user: proxy.user }),
-            ...(proxyPassword === undefined || proxyPassword === ''
-              ? {}
-              : { password: proxyPassword }),
-          },
-        }),
-    hops: hops.map((hop) => {
-      const secret = secrets[hop.id] ?? {};
-      return {
-        host: hop.host,
-        port: effectiveSshPort(hop),
-        user: hop.user,
-        auth: hop.auth,
-        ...(hop.auth === 'password' && secret.password !== undefined
-          ? { password: secret.password }
-          : {}),
-        ...(hop.auth === 'key' && hop.keyFile !== undefined ? { keyFile: hop.keyFile } : {}),
-        ...(hop.auth === 'key' && secret.passphrase !== undefined
-          ? { passphrase: secret.passphrase }
-          : {}),
-        ...(hop.auth === 'agent' && hop.agentSocket !== undefined
-          ? { agentSocket: hop.agentSocket }
-          : {}),
-      };
-    }),
+    ...proxyOf(config, proxyPassword),
+    hops: tunnelHopsOf(config, secrets),
     target: { host: config.host, port },
     checkHostKey,
-    timeoutMs: (config.options?.connectTimeout ?? SSH_TIMEOUT_MS / 1000) * 1000,
+    timeoutMs: timeoutOf(config),
+  };
+}
+
+function timeoutOf(config: ConnectionInput): number {
+  return (config.options?.connectTimeout ?? SSH_TIMEOUT_MS / 1000) * 1000;
+}
+
+function proxyOf(
+  config: ConnectionInput,
+  proxyPassword: string | undefined,
+): { proxy?: ProxySpec } {
+  const proxy = config.proxy;
+  return proxy === undefined
+    ? {}
+    : {
+        proxy: {
+          kind: proxy.kind,
+          host: proxy.host,
+          port: effectiveProxyPort(proxy),
+          ...(proxy.user === undefined ? {} : { user: proxy.user }),
+          ...(proxyPassword === undefined || proxyPassword === ''
+            ? {}
+            : { password: proxyPassword }),
+        },
+      };
+}
+
+/** The SSH servers of a config with their secrets joined in by hop id. */
+function tunnelHopsOf(
+  config: ConnectionInput,
+  secrets: Readonly<Record<string, SshHopSecrets>>,
+): TunnelHop[] {
+  return sshHopsOf(config).map((hop) => {
+    const secret = secrets[hop.id] ?? {};
+    return {
+      host: hop.host,
+      port: effectiveSshPort(hop),
+      user: hop.user,
+      auth: hop.auth,
+      ...(hop.auth === 'password' && secret.password !== undefined
+        ? { password: secret.password }
+        : {}),
+      ...(hop.auth === 'key' && hop.keyFile !== undefined ? { keyFile: hop.keyFile } : {}),
+      ...(hop.auth === 'key' && secret.passphrase !== undefined
+        ? { passphrase: secret.passphrase }
+        : {}),
+      ...(hop.auth === 'agent' && hop.agentSocket !== undefined
+        ? { agentSocket: hop.agentSocket }
+        : {}),
+    };
+  });
+}
+
+/**
+ * The SSH servers to reach a file on one (V12.8): the same chain a tunnel uses, without a
+ * database port. Undefined when the config has no SSH server.
+ */
+export function remoteFileSpecOf(
+  config: ConnectionInput,
+  secrets: Readonly<Record<string, SshHopSecrets>>,
+  checkHostKey: HostKeyCheck,
+  proxyPassword?: string,
+): RemoteFileSpec | undefined {
+  if (sshHopsOf(config).length === 0) {
+    return undefined;
+  }
+  return {
+    ...proxyOf(config, proxyPassword),
+    hops: tunnelHopsOf(config, secrets),
+    checkHostKey,
+    timeoutMs: timeoutOf(config),
   };
 }
 
@@ -146,7 +194,7 @@ export function tunnelKeyOf(connectionId: string, config: ConnectionInput): stri
 }
 
 /** The shape of dist/ssh.js. */
-export interface SshModule {
+export interface SshModule extends FileDownloader {
   openTunnel(spec: TunnelSpec, logger: Logger): Promise<Tunnel>;
 }
 
@@ -241,6 +289,18 @@ export class TunnelPool {
     };
   }
 
+  /** Copies files from a server over SFTP, through the chain of hops of a config (V12.8). */
+  async downloadFiles(
+    spec: RemoteFileSpec,
+    requests: readonly DownloadRequest[],
+    limits: DownloadLimits,
+  ): Promise<DownloadReport> {
+    if (this.disposed) {
+      throw new DbError('internal', msg('The tunnel pool is disposed'));
+    }
+    return await (await this.sshModule()).downloadFiles(spec, requests, limits, this.logger);
+  }
+
   /** A tunnel of its own, for "Test connection": never shared, closed by the caller. */
   async openPrivate(spec: TunnelSpec): Promise<Tunnel> {
     return await this.open(spec);
@@ -263,16 +323,18 @@ export class TunnelPool {
         this.logger.child('proxy'),
       );
     }
-    let module: SshModule;
+    return await (await this.sshModule()).openTunnel(spec, this.logger);
+  }
+
+  private async sshModule(): Promise<SshModule> {
     try {
       this.module ??= this.load();
-      module = await this.module;
+      return await this.module;
     } catch (error) {
       this.module = undefined;
       this.logger.error('The SSH module failed to load', error);
       throw toDbError(error, 'internal');
     }
-    return await module.openTunnel(spec, this.logger);
   }
 
   private async forgetWhenClosed(key: string, entry: Shared): Promise<void> {

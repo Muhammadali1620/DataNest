@@ -18,7 +18,7 @@ import { ConnectionStore } from '../../../src/services/connection-store';
 import { MetadataCache } from '../../../src/services/metadata-cache';
 import { SchemaActions, type SchemaAction } from '../../../src/services/schema-actions';
 import { newTableDesign } from '../../../src/shared/table-design';
-import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, BuiltInSqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { runAll } from '../../helpers/driver-run';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
@@ -35,7 +35,7 @@ interface Harness {
 }
 
 async function harness(
-  drivers: Record<SqlDriverId, Driver>,
+  drivers: Record<BuiltInSqlDriverId, Driver>,
   input: ConnectionInput,
   password?: string,
 ): Promise<Harness> {
@@ -81,7 +81,7 @@ function serverInput(id: TestDatabaseId, driver: DriverId): ConnectionInput {
 }
 
 let worker: BuiltWorker;
-let drivers: Record<SqlDriverId, Driver>;
+let drivers: Record<BuiltInSqlDriverId, Driver>;
 
 beforeAll(async () => {
   worker = await buildSqliteWorker();

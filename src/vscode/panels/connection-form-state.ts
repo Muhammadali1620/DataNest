@@ -28,7 +28,9 @@ export const NEW_CONNECTION: ConnectionInput = {
 
 /** Drivers the form may offer, with what the page needs to lay out its fields. */
 export function driverOptions(): ConnectionFormState['drivers'] {
-  return DRIVER_IDS.map((id) => {
+  // A driver another extension registered has no card in the form: it is made and edited
+  // with the editor's own input boxes (V12.7).
+  return DRIVER_IDS.filter((id) => id !== 'plugin').map((id) => {
     const defaultPort = DEFAULT_PORTS[id];
     return {
       id,

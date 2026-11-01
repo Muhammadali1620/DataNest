@@ -77,6 +77,11 @@ export async function planServerOf(session: Session, driver: SqlDriverId): Promi
     case 'clickhouse':
     case 'oracle':
       return driver;
+    case 'plugin':
+      throw new DbError(
+        'unsupported',
+        msg('The plan of a statement is not available for this driver'),
+      );
   }
 }
 

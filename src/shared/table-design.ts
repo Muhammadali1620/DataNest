@@ -228,6 +228,7 @@ const INTEGER_TYPES: Readonly<Record<SqlDriverId, ReadonlySet<string>>> = {
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
   // Nothing numbers itself: rows have no identity, only a sorting key.
   clickhouse: new Set(),
+  plugin: new Set(),
   // Identity columns: NUMBER, or INTEGER (NUMBER(38)).
   oracle: new Set(['number', 'integer']),
 };

@@ -48,6 +48,18 @@ export function createRedisKeySettings(): KeyBrowserSettings {
   };
 }
 
+/** The default of `datanest.sqlite.remoteMaxSizeMb`, in megabytes. */
+export const DEFAULT_REMOTE_MAX_MB = 512;
+
+/** The most a SQLite file on a server may weigh to be copied (V12.8), in bytes. */
+export function readRemoteMaxBytes(): number {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<number>(CONFIG_KEYS.sqliteRemoteMaxSizeMb, DEFAULT_REMOTE_MAX_MB);
+  const megabytes = Number.isInteger(value) && value >= 1 ? value : DEFAULT_REMOTE_MAX_MB;
+  return megabytes * 1_048_576;
+}
+
 /** How many rows one statement may bring back; the rest needs a bigger limit. */
 export const DEFAULT_ROW_LIMIT = 1000;
 

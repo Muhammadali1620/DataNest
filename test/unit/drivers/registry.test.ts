@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DriverId, SqlDriverId } from '../../../src/shared/connection';
+import type { DriverId, BuiltInSqlDriverId } from '../../../src/shared/connection';
 import type { Driver, DriverModule } from '../../../src/drivers/driver';
 import type { RedisDriver, RedisDriverModule } from '../../../src/drivers/redis-driver';
 import { DriverRegistry } from '../../../src/drivers/registry';
@@ -83,7 +83,7 @@ describe('DriverRegistry', () => {
   it('rejects unknown driver ids without calling the loader', async () => {
     const loader = vi.fn();
     const registry = registryWith(loader as never);
-    await expect(registry.get('db2' as SqlDriverId)).rejects.toMatchObject({
+    await expect(registry.get('db2' as BuiltInSqlDriverId)).rejects.toMatchObject({
       name: 'DbError',
       code: 'unsupported',
     });
@@ -135,7 +135,7 @@ describe('DriverRegistry', () => {
     it('never hands Redis out as a SQL driver', async () => {
       const loader = vi.fn(() => Promise.resolve({ driver: redis }));
       const registry = registryWith(loader);
-      await expect(registry.get('redis' as SqlDriverId)).rejects.toMatchObject({
+      await expect(registry.get('redis' as BuiltInSqlDriverId)).rejects.toMatchObject({
         code: 'unsupported',
       });
       expect(loader).not.toHaveBeenCalled();
@@ -163,7 +163,7 @@ describe('DriverRegistry', () => {
       expect(b).toBe(mongo);
       expect(loader).toHaveBeenCalledTimes(1);
       expect(loader).toHaveBeenCalledWith('mongodb');
-      await expect(registry.get('mongodb' as SqlDriverId)).rejects.toMatchObject({
+      await expect(registry.get('mongodb' as BuiltInSqlDriverId)).rejects.toMatchObject({
         code: 'unsupported',
       });
       // The Redis bundle is not the MongoDB driver, and the other way round.
@@ -189,7 +189,7 @@ describe('DriverRegistry', () => {
       const registry = registryWith(loader as never);
       expect(await registry.getElastic()).toBe(elastic);
       expect(loader).toHaveBeenCalledWith('elasticsearch');
-      await expect(registry.get('elasticsearch' as SqlDriverId)).rejects.toMatchObject({
+      await expect(registry.get('elasticsearch' as BuiltInSqlDriverId)).rejects.toMatchObject({
         code: 'unsupported',
       });
       await expect(

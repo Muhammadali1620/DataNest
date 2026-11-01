@@ -38,6 +38,7 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   mssql: ['sqlcmd'],
   clickhouse: ['clickhouse-client', 'clickhouse'],
   oracle: ['sql', 'sqlplus'],
+  plugin: [],
   redis: ['redis-cli', 'valkey-cli'],
   mongodb: ['mongosh'],
   elasticsearch: [],
@@ -212,6 +213,7 @@ export function cliCommand(
         asksPassword: user !== '',
       };
     }
+    case 'plugin':
     case 'elasticsearch':
       return undefined;
   }

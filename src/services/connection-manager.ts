@@ -13,8 +13,11 @@ import type {
 import {
   type DriverFamily,
   driverFamily,
+  isRemoteFile,
   isSqlDriver,
   optionSupport,
+  sshHopsOf,
+  type BuiltInSqlDriverId,
   type SqlDriverId,
 } from '../shared/connection';
 import { setUpSession } from './session-setup';
@@ -32,11 +35,13 @@ import {
   type HostKeyCheck,
   type Tunnel,
   type TunnelLease,
+  remoteFileSpecOf,
   tunnelKeyOf,
   type TunnelSpec,
   tunnelSpecOf,
 } from './tunnels';
 import { msg } from '../core/user-message';
+import type { SnapshotLease, SnapshotProvider } from './remote-snapshots';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -55,7 +60,9 @@ export interface SessionTarget {
 
 /** The slice of DriverRegistry the manager needs (`DriverRegistry` satisfies it). */
 export interface DriverProvider {
-  get(id: SqlDriverId): Promise<Driver>;
+  get(id: BuiltInSqlDriverId): Promise<Driver>;
+  /** A driver another extension registered (V12.7); needed only by `plugin` connections. */
+  getPlugin?(id: string): Promise<Driver>;
   /** Needed only by Redis connections. */
   getRedis?(): Promise<RedisDriver>;
   /** Needed only by MongoDB connections. */
@@ -78,9 +85,16 @@ export interface ConnectionManagerDeps {
   readonly tunnels?: TunnelProvider;
   /** Asked before trusting an SSH server's key; without it every key is refused. */
   readonly checkHostKey?: HostKeyCheck;
+  /** Copies of SQLite files that live on a server (V12.8); needed only by those connections. */
+  readonly snapshots?: SnapshotProvider;
+  /** The most a copied file may weigh, asked at connect time so a setting change counts. */
+  readonly remoteMaxBytes?: () => number;
 }
 
 const REFUSE_HOST_KEY: HostKeyCheck = () => Promise.resolve(false);
+
+/** The most a copy of a remote SQLite file may weigh when nothing says otherwise. */
+export const DEFAULT_REMOTE_MAX_BYTES = 512 * 1_048_576;
 
 /** Where a driver should connect instead of the saved host: a local tunnel port. */
 interface Endpoint {
@@ -122,6 +136,8 @@ export class ConnectionManager implements Disposable {
   private readonly logger: Logger;
   private readonly tunnels: TunnelProvider | undefined;
   private readonly checkHostKey: HostKeyCheck;
+  private readonly snapshots: SnapshotProvider | undefined;
+  private readonly remoteMaxBytes: () => number;
   private readonly holders = new Map<string, Holder>();
   private readonly opening = new Map<string, Promise<Holder>>();
   private readonly states = new Map<string, ConnectionState>();
@@ -135,6 +151,8 @@ export class ConnectionManager implements Disposable {
     this.logger = deps.logger.child('connections');
     this.tunnels = deps.tunnels;
     this.checkHostKey = deps.checkHostKey ?? REFUSE_HOST_KEY;
+    this.snapshots = deps.snapshots;
+    this.remoteMaxBytes = deps.remoteMaxBytes ?? (() => DEFAULT_REMOTE_MAX_BYTES);
   }
 
   /**
@@ -388,11 +406,18 @@ export class ConnectionManager implements Disposable {
       await this.testElastic(input, password, ssh, proxyPassword);
       return;
     }
-    const driver = await this.drivers.get(input.driver);
+    const driver = await this.sqlDriver(input.driver, input.plugin);
     const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
+    // A file on a server is copied for the test and the copy thrown away (V12.8).
+    const remote = await this.leaseRemoteFile(
+      input,
+      `test:${crypto.randomUUID()}`,
+      ssh,
+      proxyPassword,
+    );
     try {
-      const resolved = resolve({ ...input, id: 'test' }, {}, password, tunnel);
+      const resolved = withCopy(resolve({ ...input, id: 'test' }, {}, password, tunnel), remote);
       let session: Session;
       try {
         session = await driver.openSession(resolved);
@@ -409,6 +434,7 @@ export class ConnectionManager implements Disposable {
       }
     } finally {
       await tunnel?.close();
+      await remote?.release();
     }
   }
 
@@ -496,13 +522,24 @@ export class ConnectionManager implements Disposable {
     return this.store.get(connectionId)?.readOnly === true;
   }
 
+  /** The built-in SQL driver, or the one another extension registered for a `plugin` connection. */
+  private async sqlDriver(id: SqlDriverId, plugin: string | undefined): Promise<Driver> {
+    if (id !== 'plugin') {
+      return await this.drivers.get(id);
+    }
+    if (this.drivers.getPlugin === undefined || plugin === undefined) {
+      throw new DbError('unsupported', msg('This connection needs a driver that is not installed'));
+    }
+    return await this.drivers.getPlugin(plugin);
+  }
+
   /** The SQL driver of a saved connection, for its dialect and capabilities. */
   async driverOf(connectionId: string): Promise<Driver> {
     const config = this.configOf(connectionId);
     if (!isSqlDriver(config.driver)) {
       throw new DbError('unsupported', familyMismatch(config, 'sql'));
     }
-    return await this.drivers.get(config.driver);
+    return await this.sqlDriver(config.driver, config.plugin);
   }
 
   dispose(): void {
@@ -553,14 +590,31 @@ export class ConnectionManager implements Disposable {
     driverId: SqlDriverId,
   ): Promise<Holder> {
     const { connectionId } = target;
-    const driver = await this.drivers.get(driverId);
+    const driver = await this.sqlDriver(driverId, config.plugin);
     const password = await this.store.getPassword(connectionId);
-    const lease = await this.leaseTunnel(config);
+    // A SQLite file on a server comes over first; sessions of one connection share the copy.
+    const remote = await this.leaseRemoteFile(
+      config,
+      config.id,
+      await this.store.getSshSecrets(config.id),
+      config.proxy === undefined ? undefined : await this.store.getProxyPassword(config.id),
+    );
+    let lease: TunnelLease | undefined;
+    try {
+      lease = await this.leaseTunnel(config);
+    } catch (error) {
+      await remote?.release();
+      throw error;
+    }
+    const releaseAll = async (): Promise<void> => {
+      await lease?.release();
+      await remote?.release();
+    };
     let opened: Session;
     try {
-      opened = await driver.openSession(resolve(config, target, password, lease));
+      opened = await driver.openSession(withCopy(resolve(config, target, password, lease), remote));
     } catch (error) {
-      await lease?.release();
+      await releaseAll();
       // "Connection reset" says little; the SSH server's reason says what is wrong.
       throw lease?.forwardError() ?? error;
     }
@@ -568,17 +622,15 @@ export class ConnectionManager implements Disposable {
       await setUpSession(opened, config, driver.dialect);
     } catch (error) {
       await opened.close().catch(() => undefined);
-      await lease?.release();
+      await releaseAll();
       throw error;
     }
-    await this.closeIfDisposed(opened, lease);
+    await this.closeIfDisposed(opened, { release: releaseAll });
     const session = new ManagedSession(opened, {
       onLinkLost: (error) => {
         this.forget(owner, error);
       },
-      onClosed: async () => {
-        await lease?.release();
-      },
+      onClosed: releaseAll,
       onTransaction: (state) => {
         this.notifyTransaction({ owner, connectionId, state });
       },
@@ -689,7 +741,7 @@ export class ConnectionManager implements Disposable {
   /** A connect that finished after dispose() must not leave a live link behind. */
   private async closeIfDisposed(
     opened: { close(): Promise<void> },
-    lease: TunnelLease | undefined,
+    lease: { release(): Promise<void> } | undefined,
   ): Promise<void> {
     if (this.disposed) {
       await opened.close().catch(() => undefined);
@@ -752,6 +804,34 @@ export class ConnectionManager implements Disposable {
     return lease === undefined
       ? { release: () => Promise.resolve() }
       : { endpoint: { host: '127.0.0.1', port: lease.port }, release: () => lease.release() };
+  }
+
+  /**
+   * The local copy of a SQLite file that lives on a server, or undefined for every other
+   * connection (V12.8). `key` names the copy: the connection id, so its sessions share one.
+   */
+  private async leaseRemoteFile(
+    config: ConnectionInput,
+    key: string,
+    secrets: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
+  ): Promise<SnapshotLease | undefined> {
+    if (!isRemoteFile(config)) {
+      return undefined;
+    }
+    const spec = remoteFileSpecOf(config, secrets, this.checkHostKey, proxyPassword);
+    if (spec === undefined || config.file === undefined) {
+      return undefined;
+    }
+    if (this.snapshots === undefined) {
+      throw new DbError('unsupported', msg('Files on a server are not available'));
+    }
+    return await this.snapshots.acquire(
+      JSON.stringify([key, config.file, sshHopsOf(config)]),
+      spec,
+      config.file,
+      this.remoteMaxBytes(),
+    );
   }
 
   private async leaseTunnel(config: ConnectionConfig): Promise<TunnelLease | undefined> {
@@ -872,6 +952,18 @@ export function redisDatabaseOf(config: Pick<ConnectionInput, 'database'>): stri
 
 function sameTarget(a: SessionTarget, b: SessionTarget): boolean {
   return a.connectionId === b.connectionId && a.database === b.database;
+}
+
+/**
+ * Points a SQLite connection at its local copy of a file from a server (V12.8). The copy is
+ * a snapshot, so it opens read-only whatever the connection says: nothing written to it
+ * would ever reach the server.
+ */
+function withCopy(
+  resolved: ResolvedConnectionConfig,
+  copy: SnapshotLease | undefined,
+): ResolvedConnectionConfig {
+  return copy === undefined ? resolved : { ...resolved, file: copy.path, readOnly: true };
 }
 
 function resolve(

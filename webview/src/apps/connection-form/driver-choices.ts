@@ -29,6 +29,8 @@ const DRIVER_MARKS: Readonly<Record<DriverId, readonly [string, Tone]>> = {
   redis: ['Rd', 'red'],
   mongodb: ['Mg', 'green'],
   elasticsearch: ['Es', 'purple'],
+  // Never offered as a card: connections of this kind are made outside the form.
+  plugin: ['Pl', 'purple'],
 };
 
 const PRESET_MARKS: Readonly<Record<ServerPresetId, string>> = {

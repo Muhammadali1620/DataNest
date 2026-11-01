@@ -6,7 +6,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { createConnection, createServer, type Server as NetServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentProtocol, type ParsedKey, Server, utils } from 'ssh2';
+import {
+  AgentProtocol,
+  type Attributes,
+  type ParsedKey,
+  Server,
+  type SFTPWrapper,
+  utils,
+} from 'ssh2';
 import { describeHostKey } from '../../src/services/ssh/tunnel';
 
 export interface TestSshUser {
@@ -18,8 +25,13 @@ export interface TestSshUser {
   readonly keyboardOnly?: boolean;
 }
 
+/** What a path on the test server's file system holds. */
+export type TestSshFile = Buffer | 'directory' | 'denied';
+
 export interface TestSshServer {
   readonly port: number;
+  /** Paths that were opened over SFTP, in order. */
+  readonly opened: string[];
   /** The fingerprint a client should see, as `describeHostKey` reports it. */
   readonly fingerprint: string;
   /** `host:port` of every forward request, in order. */
@@ -85,7 +97,13 @@ export async function startSshServer(options: {
   readonly users: readonly TestSshUser[];
   /** Destinations the server refuses to reach. */
   readonly refuse?: (host: string, port: number) => boolean;
+  /**
+   * Files served over SFTP, by absolute path; a path that is not here does not exist.
+   * Without the option the server has no SFTP subsystem at all.
+   */
+  readonly files?: ReadonlyMap<string, TestSshFile>;
 }): Promise<TestSshServer> {
+  const opened: string[] = [];
   const forwards: string[] = [];
   const logins: string[] = [];
   const clients = new Set<{ end(): void }>();
@@ -149,6 +167,20 @@ export async function startSshServer(options: {
       ctx.reject(methods);
     });
     client.on('ready', () => {
+      client.on('session', (accept) => {
+        const session = accept();
+        session.on('sftp', (acceptSftp, rejectSftp) => {
+          if (options.files === undefined) {
+            rejectSftp();
+            return;
+          }
+          serveSftp(acceptSftp(), options.files, opened);
+        });
+        // Nothing else (a shell, a command) is offered.
+        session.on('exec', (_accept, rejectExec) => {
+          rejectExec();
+        });
+      });
       client.on('tcpip', (accept, reject, info) => {
         forwards.push(`${info.destIP}:${info.destPort}`);
         if (options.refuse?.(info.destIP, info.destPort) === true) {
@@ -175,6 +207,7 @@ export async function startSshServer(options: {
   const publicKey = parsed(key).getPublicSSH();
   return {
     port,
+    opened,
     fingerprint: describeHostKey('127.0.0.1', port, publicKey).fingerprint,
     forwards,
     logins,
@@ -194,6 +227,90 @@ export async function startSshServer(options: {
       });
     },
   };
+}
+
+const { STATUS_CODE, OPEN_MODE } = utils.sftp;
+const S_IFREG = 0o100000;
+const S_IFDIR = 0o040000;
+
+/** A read-only SFTP subsystem over a map of paths, enough for `fastGet` and `stat`. */
+function serveSftp(
+  sftp: SFTPWrapper,
+  files: ReadonlyMap<string, TestSshFile>,
+  opened: string[],
+): void {
+  const handles = new Map<string, Buffer>();
+  const attrsOf = (file: Buffer | 'directory'): Attributes => ({
+    mode: file === 'directory' ? S_IFDIR | 0o755 : S_IFREG | 0o644,
+    uid: 1000,
+    gid: 1000,
+    size: file === 'directory' ? 4096 : file.length,
+    atime: 0,
+    mtime: 0,
+  });
+  const lookup = (path: string, reqid: number): Buffer | 'directory' | undefined => {
+    const file = files.get(path);
+    if (file === undefined) {
+      sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+      return undefined;
+    }
+    if (file === 'denied') {
+      sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
+      return undefined;
+    }
+    return file;
+  };
+  const stat = (reqid: number, path: string): void => {
+    const file = lookup(path, reqid);
+    if (file !== undefined) {
+      sftp.attrs(reqid, attrsOf(file));
+    }
+  };
+  sftp.on('REALPATH', (reqid, path) => {
+    sftp.name(reqid, [{ filename: path, longname: path, attrs: {} as Attributes }]);
+  });
+  sftp.on('STAT', stat);
+  sftp.on('LSTAT', stat);
+  sftp.on('OPEN', (reqid, path, flags) => {
+    if ((flags & OPEN_MODE.READ) === 0) {
+      sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
+      return;
+    }
+    const file = lookup(path, reqid);
+    if (file === undefined) {
+      return;
+    }
+    if (file === 'directory') {
+      sftp.status(reqid, STATUS_CODE.FAILURE);
+      return;
+    }
+    opened.push(path);
+    const handle = Buffer.from(String(handles.size + 1));
+    handles.set(handle.toString(), file);
+    sftp.handle(reqid, handle);
+  });
+  sftp.on('FSTAT', (reqid, handle) => {
+    const file = handles.get(handle.toString());
+    if (file === undefined) {
+      sftp.status(reqid, STATUS_CODE.FAILURE);
+    } else {
+      sftp.attrs(reqid, attrsOf(file));
+    }
+  });
+  sftp.on('READ', (reqid, handle, offset, length) => {
+    const file = handles.get(handle.toString());
+    if (file === undefined) {
+      sftp.status(reqid, STATUS_CODE.FAILURE);
+    } else if (offset >= file.length) {
+      sftp.status(reqid, STATUS_CODE.EOF);
+    } else {
+      sftp.data(reqid, file.subarray(offset, offset + length));
+    }
+  });
+  sftp.on('CLOSE', (reqid, handle) => {
+    handles.delete(handle.toString());
+    sftp.status(reqid, STATUS_CODE.OK);
+  });
 }
 
 /** A TCP server that answers every line with the same line: the "database". */

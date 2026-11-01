@@ -14,6 +14,7 @@ const SYSTEM_DATABASES: Readonly<Record<SqlDriverId, readonly string[]>> = {
   // `system_platform` (V6.5).
   postgres: ['template0', 'template1', 'system', 'system_platform'],
   sqlite: [],
+  plugin: [],
   // The server's own tools keep these four apart as "system databases" too.
   mssql: ['master', 'model', 'msdb', 'tempdb'],
   clickhouse: ['system', 'INFORMATION_SCHEMA', 'information_schema'],
@@ -27,6 +28,7 @@ const SYSTEM_SCHEMAS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   // CockroachDB's own views and extension types (V6.5).
   postgres: ['pg_catalog', 'information_schema', 'crdb_internal', 'pg_extension'],
   sqlite: [],
+  plugin: [],
   mssql: ['sys', 'INFORMATION_SCHEMA', 'guest'],
   clickhouse: [],
   // The reader lists only schemas Oracle does not maintain itself; these two are for sure.
@@ -38,6 +40,7 @@ const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<SqlDriverId, readonly string[]>> =
   mysql: [],
   postgres: ['pg_toast', 'pg_temp_', 'pg_toast_temp_'],
   sqlite: [],
+  plugin: [],
   mssql: [],
   clickhouse: [],
   oracle: [],

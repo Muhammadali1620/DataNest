@@ -88,9 +88,10 @@
             "oracle",
             "redis",
             "mongodb",
-            "elasticsearch"
+            "elasticsearch",
+            "plugin"
           ],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL."
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; plugin is a database that another extension added, named in \"plugin\"."
         },
         "host": {
           "type": "string"
@@ -110,6 +111,11 @@
         "file": {
           "type": "string",
           "description": "SQLite database file. A relative path starts at the workspace folder."
+        },
+        "plugin": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "description": "With driver \"plugin\": the id of the driver another extension registered, e.g. acme.duckdb."
         },
         "ssh": {
           "type": "object",

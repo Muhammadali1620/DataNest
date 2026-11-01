@@ -7,6 +7,7 @@ import { PROJECT_FILE_PATH } from '../services/project-connections';
 import { describeTarget, type ConnectionConfig } from '../shared/connection';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 import { connectionIdOf } from './tree/nodes';
+import type { PluginConnectionHandlers } from './plugin-connection-commands';
 import type { CommandTarget } from './tree/tree-commands';
 
 export interface ConnectionCommandDeps {
@@ -14,6 +15,8 @@ export interface ConnectionCommandDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly logger: Logger;
+  /** Connections of drivers that other extensions registered (V12.7). */
+  readonly plugins?: PluginConnectionHandlers;
 }
 
 export type ConnectionCommandName = 'add' | 'edit' | 'duplicate' | 'remove';
@@ -29,14 +32,44 @@ export function connectionCommandHandlers(
     await pickConnection(deps.store, placeholder);
 
   return {
-    add: () => ConnectionFormPanel.show(deps),
+    add: async () => {
+      // With drivers from other extensions around, the user first says which kind of database.
+      if (deps.plugins?.available() === true) {
+        const own = vscode.l10n.t('Built-in databases');
+        const choice = await vscode.window.showQuickPick(
+          [
+            {
+              label: own,
+              description: vscode.l10n.t('MySQL, PostgreSQL, SQLite, …'),
+              plugin: false,
+            },
+            {
+              label: vscode.l10n.t('From another extension'),
+              description: vscode.l10n.t('Databases that other extensions added'),
+              plugin: true,
+            },
+          ],
+          { placeHolder: vscode.l10n.t('What kind of database?') },
+        );
+        if (choice === undefined) {
+          return undefined;
+        }
+        if (choice.plugin) {
+          return await deps.plugins.add();
+        }
+      }
+      return ConnectionFormPanel.show(deps);
+    },
 
     edit: async (clicked?: CommandTarget) => {
       const target = connectionIdOf(clicked) ?? (await pick(vscode.l10n.t('Pick a connection')));
       if (target === undefined) {
         return undefined;
       }
-      requireConnection(deps.store, target);
+      const config = requireConnection(deps.store, target);
+      if (config.driver === 'plugin' && deps.plugins !== undefined) {
+        return await deps.plugins.edit(target);
+      }
       return ConnectionFormPanel.show(deps, target);
     },
 
@@ -47,6 +80,9 @@ export function connectionCommandHandlers(
       }
       requireConnection(deps.store, target);
       const copy = await deps.store.duplicate(target);
+      if (copy.driver === 'plugin' && deps.plugins !== undefined) {
+        return await deps.plugins.edit(copy.id);
+      }
       return ConnectionFormPanel.show(deps, copy.id);
     },
 

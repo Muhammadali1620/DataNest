@@ -33,6 +33,7 @@ once, without a restart.
 | `datanest.tree.showSizes` | `true` | | Show the size of a database or schema after its name (`public 2.4M`). It is read lazily with one small query and never blocks the tree. The server version after a connection (`15.19 · user@host:5432`) is always shown, and kept for the next start, so it is there before you connect. |
 | `datanest.tree.tableStats` | `true` | | Show each table's estimated rows in the tree, and its size and comment in the tooltip, from the server's statistics. |
 | `datanest.redis.keySeparator` | `:` | | What splits Redis key names into folders, e.g. `user:1:name` → `user` → `1`. Empty: no folders. |
+| `datanest.sqlite.remoteMaxSizeMb` | `512` | 1 – 8192 | The most a SQLite file on a server may weigh for DataNest to copy it over SSH and open it. A bigger file is refused before anything is copied. See [Remote SQLite files](connections.md#sqlite-file-on-a-server). |
 | `datanest.redis.keysPerLoad` | `5000` | 100 – 100 000 | How many Redis keys are loaded at a time with `SCAN`; **Load More Keys** brings the next portion. |
 
 ## Formatting SQL

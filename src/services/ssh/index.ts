@@ -2,6 +2,7 @@
 // through an SSH tunnel opens (ARCHITECTURE.md §7).
 
 import type { SshModule } from '../tunnels';
+import { downloadFiles } from './sftp';
 import { openSshTunnel } from './tunnel';
 
-export const ssh: SshModule = { openTunnel: openSshTunnel };
+export const ssh: SshModule = { openTunnel: openSshTunnel, downloadFiles };

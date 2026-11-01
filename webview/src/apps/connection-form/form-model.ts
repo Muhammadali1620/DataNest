@@ -514,6 +514,15 @@ export function toInput(fields: FormFields): ConnectionInput {
       name,
       driver: fields.driver,
       ...(file === undefined ? {} : { file }),
+      // The file is on a server that SSH leads to (V12.8).
+      ...(fields.useSsh
+        ? {
+            ssh: {
+              ...toHop(fields.ssh),
+              ...(fields.jumps.length === 0 ? {} : { jumps: fields.jumps.map(toHop) }),
+            },
+          }
+        : {}),
       ...arrangement(fields),
       ...(options === undefined ? {} : { options }),
     };
@@ -663,7 +672,7 @@ export function problemsOf(fields: FormFields): ConnectionProblem[] {
   ) {
     problems.push('proxy-port-invalid');
   }
-  if (!isFileDriver(fields.driver) && fields.useSsh && sshAllowed(fields)) {
+  if (fields.useSsh && sshAllowed(fields)) {
     for (const hop of [...fields.jumps, fields.ssh]) {
       for (const problem of hopProblemsOf(hop)) {
         if (!problems.includes(problem)) {
@@ -681,6 +690,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'host-empty': 'form.error.hostEmpty',
   'port-invalid': 'form.error.portInvalid',
   'file-empty': 'form.error.fileEmpty',
+  'plugin-invalid': 'form.driver.plugin',
   'ssh-host-empty': 'form.error.hostEmpty',
   'ssh-port-invalid': 'form.error.portInvalid',
   'ssh-user-empty': 'form.ssh.error.userEmpty',

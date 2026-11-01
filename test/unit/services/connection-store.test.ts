@@ -291,9 +291,9 @@ describe('ConnectionStore', () => {
       });
     });
 
-    it('drops SSH settings for file databases', async () => {
+    it('keeps SSH settings for a SQLite file: it is then on that server (V12.8)', async () => {
       const config = await store.add({ name: 'f', driver: 'sqlite', file: '/db', ssh: viaSsh.ssh });
-      expect(config.ssh).toBeUndefined();
+      expect(config.ssh).toMatchObject({ host: 'bastion' });
     });
 
     it('refuses a hop that cannot be used', async () => {
@@ -1244,5 +1244,113 @@ describe('ConnectionStore: sockets and proxies (V10.2.5)', () => {
       'From the other machine',
     ]);
     expect(changes).toBe(1);
+  });
+
+  describe('plugin connections (V12.7)', () => {
+    const plugin: ConnectionInput = {
+      name: 'DuckDB',
+      driver: 'plugin',
+      plugin: 'acme.duckdb',
+      host: ' h ',
+      port: 4000,
+      user: 'u',
+      database: 'd',
+      file: ' /data/x.duckdb ',
+    };
+
+    it('keeps the driver id and the fields the driver asked for, trimmed', async () => {
+      const config = await store.add(plugin, 'secret');
+      expect(config).toMatchObject({
+        driver: 'plugin',
+        plugin: 'acme.duckdb',
+        host: 'h',
+        port: 4000,
+        user: 'u',
+        database: 'd',
+        file: '/data/x.duckdb',
+      });
+      expect(await store.getPassword(config.id)).toBe('secret');
+    });
+
+    it('survives a reload from storage', async () => {
+      const config = await store.add(plugin);
+      const other = new ConnectionStore({
+        state,
+        secrets,
+        logger: new RecordingLogger(),
+      });
+      expect(other.get(config.id)).toMatchObject({ driver: 'plugin', plugin: 'acme.duckdb' });
+    });
+
+    it('does not store a plugin id on a built-in connection', async () => {
+      const config = await store.add({ ...mysqlInput, plugin: 'acme.duckdb' });
+      expect(config.plugin).toBeUndefined();
+    });
+
+    it('does not keep a file on a network connection', async () => {
+      const config = await store.add({ ...mysqlInput, file: '/x' });
+      expect(config.file).toBeUndefined();
+    });
+
+    it('refuses a plugin connection without a valid driver id', async () => {
+      await expect(store.add({ name: 'x', driver: 'plugin' })).rejects.toThrow('plugin-invalid');
+      await expect(store.add({ name: 'x', driver: 'plugin', plugin: 'Bad Id' })).rejects.toThrow(
+        'plugin-invalid',
+      );
+    });
+
+    it('needs no host: the driver says what it needs when it connects', async () => {
+      const config = await store.add({ name: 'x', driver: 'plugin', plugin: 'acme.x' });
+      expect(config.host).toBeUndefined();
+    });
+
+    it('updates the fields and keeps the password unless told otherwise', async () => {
+      const config = await store.add(plugin, 'secret');
+      const { id: _id, ...input } = config;
+      const updated = await store.update(config.id, { ...input, host: 'other' });
+      expect(updated).toMatchObject({ plugin: 'acme.duckdb', host: 'other' });
+      expect(await store.getPassword(config.id)).toBe('secret');
+    });
+  });
+
+  describe('SQLite file on a server (V12.8)', () => {
+    const ssh = { id: 'main', host: 'bastion', user: 'deploy', auth: 'password' } as const;
+
+    it('keeps the SSH server of a SQLite file, and its secrets', async () => {
+      const config = await store.add(
+        { name: 'R', driver: 'sqlite', file: ' /srv/app/data.db ', ssh },
+        undefined,
+        { main: { password: 'pw' } },
+      );
+      expect(config).toMatchObject({ file: '/srv/app/data.db', ssh: { host: 'bastion' } });
+      expect(await store.getSshSecrets(config.id)).toEqual({ main: { password: 'pw' } });
+    });
+
+    it('still drops what a file cannot use: proxy and TLS', async () => {
+      const config = await store.add({
+        name: 'R',
+        driver: 'sqlite',
+        file: '/f.db',
+        ssh,
+        proxy: { kind: 'socks5', host: 'p', port: 1080 },
+        ssl: { mode: 'require' },
+      });
+      expect(config.ssh).toBeDefined();
+      expect(config.proxy).toBeUndefined();
+      expect(config.ssl).toBeUndefined();
+    });
+
+    it('refuses an SSH server that is not whole', async () => {
+      await expect(
+        store.add({ name: 'R', driver: 'sqlite', file: '/f.db', ssh: { ...ssh, host: '' } }),
+      ).rejects.toThrow('ssh-host-empty');
+    });
+
+    it('can turn the SSH server off again', async () => {
+      const config = await store.add({ name: 'R', driver: 'sqlite', file: '/f.db', ssh });
+      const { id: _id, ssh: _ssh, ...input } = config;
+      const local = await store.update(config.id, input);
+      expect(local.ssh).toBeUndefined();
+    });
   });
 });

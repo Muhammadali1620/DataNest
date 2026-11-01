@@ -6,7 +6,7 @@
 |---|---|
 | MySQL, MariaDB | Also TiDB and Amazon Aurora MySQL, through presets in the form. |
 | PostgreSQL | Also CockroachDB, YugabyteDB and Amazon Aurora PostgreSQL. |
-| SQLite | A database file on this machine. |
+| SQLite | A database file on this machine, or on a server through SSH (read-only copy). |
 | Microsoft SQL Server | 2016 and newer, and Azure SQL. |
 | ClickHouse | Over its HTTP interface (8123, or 8443 with TLS). |
 | Oracle | 12.2 and newer, no Instant Client needed. TLS is not supported yet: connect directly or through SSH. |
@@ -37,6 +37,24 @@ In the **SSH** section, give the SSH server and sign in with a password, a priva
 and the database. The server's host key is checked the way OpenSSH does: the first time you
 are asked to trust it, and a changed key is connected to only after a warning and your
 choice.
+
+### SQLite file on a server
+
+A SQLite database that lives on a server can be opened through SSH: pick **SQLite**, turn on
+**Connect through SSH**, and give the path of the file **on the server**. DataNest logs in
+(jump hosts and the host-key check work as for a tunnel), copies the file — and its
+`-wal` log, if there is one — over SFTP into a private folder of this machine, and opens the
+copy.
+
+- The copy is **read-only** and is a snapshot of the moment you connected. Changes made on
+  the server afterwards appear when you disconnect and connect again. Nothing you do can reach
+  the original, so there is no risk to an application that has the file open.
+- The copy is deleted when the last session of the connection closes; anything left behind by
+  a crash is swept at the next start.
+- A file larger than `datanest.sqlite.remoteMaxSizeMb` (512 MB by default) is refused
+  before anything is copied. The server needs an SFTP subsystem, which OpenSSH has by default.
+- A file that is not a SQLite database, an empty one, or one that changed while it was
+  being copied reports it; connect again.
 
 ## Proxies
 

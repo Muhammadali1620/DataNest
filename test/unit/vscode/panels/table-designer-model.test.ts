@@ -14,7 +14,7 @@ import type {
 } from '../../../../src/core/model/objects';
 import { DbError } from '../../../../src/core/errors';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
-import type { SqlDriverId } from '../../../../src/shared/connection';
+import type { BuiltInSqlDriverId } from '../../../../src/shared/connection';
 import type { TableTab } from '../../../../src/shared/protocols/table-designer';
 import { newTableDesign, type TableDesign } from '../../../../src/shared/table-design';
 import { TableDesignerModel } from '../../../../src/vscode/panels/table-designer-model';
@@ -47,7 +47,7 @@ const ORDERS: TableStructure = {
 };
 
 function harness(
-  driver: SqlDriverId,
+  driver: BuiltInSqlDriverId,
   options: {
     scope?: ObjectScope;
     table?: string;

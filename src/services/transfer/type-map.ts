@@ -339,6 +339,11 @@ export function targetType(
       return clickhouseType(neutral);
     case 'oracle':
       return oracleType(neutral, indexed);
+    case 'plugin':
+      throw new DbError(
+        'unsupported',
+        msg('Tables cannot be copied to a driver from another extension'),
+      );
     case 'redis':
       throw new DbError('unsupported', msg('Tables cannot be copied to Redis'));
     case 'mongodb':

@@ -93,6 +93,7 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlSnippet[]>> = {
       body: 'CREATE OR ALTER PROCEDURE ${1:name}\n  @${2:id} INT\nAS\nBEGIN\n  SET NOCOUNT ON;\n  ${3:SELECT 1;}\nEND\nGO',
     },
   ],
+  plugin: [],
   clickhouse: [
     {
       prefix: 'table',

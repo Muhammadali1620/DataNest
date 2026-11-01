@@ -167,6 +167,7 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, SqlSyntax>> = {
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,
+  plugin: SQLITE,
   mssql: MSSQL,
   clickhouse: CLICKHOUSE,
   oracle: ORACLE,

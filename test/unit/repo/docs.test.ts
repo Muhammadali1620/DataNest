@@ -69,6 +69,31 @@ describe('documentation', () => {
     }
     expect(index).toContain('](faq.md)');
     expect(index).toContain('](contributing/adding-a-driver.md)');
+    expect(index).toContain('](contributing/plugin-api.md)');
+  });
+
+  it('shows the plugin guide the values and members the API really has (V12.7)', () => {
+    const guide = read('docs/contributing/plugin-api.md');
+    const types = read('src/api/types.ts');
+    for (const member of [
+      'registerDriver',
+      'registeredDrivers',
+      'openSession',
+      'execute',
+      'listTables',
+      'listColumns',
+      'identifierQuote',
+      'defaultPort',
+    ]) {
+      expect(types, member).toContain(member);
+      expect(guide, member).toContain(member);
+    }
+    expect(guide).toContain('apiVersion');
+    expect(guide).toContain('](../../src/api/types.ts)');
+  });
+
+  it('keeps the public types free of imports, so they can be copied as they are (V12.7)', () => {
+    expect(read('src/api/types.ts')).not.toMatch(/^\s*import\s/mu);
   });
 
   it('links only to files that exist', () => {

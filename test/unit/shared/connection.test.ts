@@ -18,6 +18,8 @@ import {
   DRIVER_IDS,
   effectivePort,
   isDriverId,
+  isPluginId,
+  isRemoteFile,
   isFileDriver,
   driverFamily,
   isSqlDriver,
@@ -182,14 +184,14 @@ describe('SSH hops', () => {
     expect(sshHopProblems({ ...hop, id: 'a'.repeat(65) })).toEqual(['ssh-id-invalid']);
   });
 
-  it('adds hop problems to the connection, but not for file databases', () => {
+  it('adds hop problems to the connection, and to a SQLite file on a server too (V12.8)', () => {
     const broken = { ...hop, host: '' };
     expect(connectionProblems({ name: 'a', driver: 'mysql', host: 'h', ssh: broken })).toEqual([
       'ssh-host-empty',
     ]);
-    expect(connectionProblems({ name: 'a', driver: 'sqlite', file: '/f', ssh: broken })).toEqual(
-      [],
-    );
+    expect(connectionProblems({ name: 'a', driver: 'sqlite', file: '/f', ssh: broken })).toEqual([
+      'ssh-host-empty',
+    ]);
   });
 });
 
@@ -442,7 +444,8 @@ describe('Oracle connections (V6.4)', () => {
   });
 
   it('offers TLS to every network driver except Oracle, and never for files', () => {
-    for (const driver of DRIVER_IDS) {
+    // A plugin's own connection is its driver's business (V12.7).
+    for (const driver of DRIVER_IDS.filter((id) => id !== 'plugin')) {
       expect(optionSupport(driver).tls, driver).toBe(driver !== 'oracle' && !isFileDriver(driver));
     }
   });
@@ -463,7 +466,7 @@ describe('Redis connections (V7.1)', () => {
       expect(driverFamily(id)).toBe('sql');
       expect(isSqlDriver(id)).toBe(true);
     }
-    expect([...SQL_DRIVER_IDS, 'redis', 'mongodb', 'elasticsearch'].sort()).toEqual(
+    expect([...SQL_DRIVER_IDS, 'plugin', 'redis', 'mongodb', 'elasticsearch'].sort()).toEqual(
       [...DRIVER_IDS].sort(),
     );
     expect(isFileDriver('redis')).toBe(false);
@@ -764,5 +767,119 @@ describe('sockets and proxies (V10.2.5)', () => {
         ssh: { id: 'h', host: 'b', user: 'u', auth: 'agent' },
       }),
     ).toBe('http p:3128 → u@b:22');
+  });
+});
+
+describe('plugin connections (V12.7)', () => {
+  const base = { name: 'P', driver: 'plugin', plugin: 'acme.duckdb' } as const;
+
+  it('needs the id of the driver another extension registered', () => {
+    expect(connectionProblems(base)).toEqual([]);
+    expect(connectionProblems({ name: 'P', driver: 'plugin' })).toContain('plugin-invalid');
+    for (const plugin of ['', 'Bad Id', '-x', 'a'.repeat(65), 'a b']) {
+      expect(connectionProblems({ ...base, plugin })).toContain('plugin-invalid');
+    }
+  });
+
+  it('does not ask for a host: the driver decides which fields it needs', () => {
+    expect(connectionProblems(base)).not.toContain('host-empty');
+    expect(connectionProblems({ ...base, file: '/data/x.duckdb' })).toEqual([]);
+  });
+
+  it('still checks the port when there is one', () => {
+    expect(connectionProblems({ ...base, host: 'h', port: 70_000 })).toContain('port-invalid');
+    expect(connectionProblems({ ...base, host: 'h', port: 4000 })).toEqual([]);
+  });
+
+  it('accepts only well-formed ids', () => {
+    expect(isPluginId('acme.duckdb')).toBe(true);
+    expect(isPluginId('a')).toBe(true);
+    expect(isPluginId('a_b-c.d9')).toBe(true);
+    expect(isPluginId('A')).toBe(false);
+    expect(isPluginId('')).toBe(false);
+    expect(isPluginId(5)).toBe(false);
+    expect(isPluginId(undefined)).toBe(false);
+  });
+
+  it('is a SQL driver of its own kind, not a built-in one', () => {
+    expect(isDriverId('plugin')).toBe(true);
+    expect(driverFamily('plugin')).toBe('sql');
+    expect(isFileDriver('plugin')).toBe(false);
+    expect(SQL_DRIVER_IDS).not.toContain('plugin');
+  });
+
+  it('describes the target by host, file or the driver itself', () => {
+    expect(describeTarget({ ...base, host: 'h', port: 4000, user: 'u' })).toBe('u@h:4000');
+    expect(describeTarget({ ...base, file: '/x.db' })).toBe('/x.db');
+    expect(describeTarget({ ...base, database: 'main' })).toBe('main');
+    expect(describeTarget(base)).toBe('acme.duckdb');
+  });
+
+  it('has no default port and offers only the connect timeout of the session options', () => {
+    expect(effectivePort({ ...base, host: 'h' })).toBeUndefined();
+    expect(optionSupport('plugin')).toEqual({
+      connectTimeout: true,
+      keepAlive: false,
+      timeZone: false,
+      charset: false,
+      tls: false,
+      queryTimeout: false,
+      init: false,
+    });
+    expect(filterSupport('plugin')).toEqual({ databases: false, schemas: false });
+  });
+});
+
+describe('SQLite file on a server (V12.8)', () => {
+  const ssh = { id: 'main', host: 'bastion', user: 'deploy', auth: 'agent' } as const;
+  const remote = { name: 'R', driver: 'sqlite', file: '/srv/app/data.db', ssh } as const;
+
+  it('is a SQLite connection with an SSH server', () => {
+    expect(isRemoteFile(remote)).toBe(true);
+    expect(isRemoteFile({ driver: 'sqlite' })).toBe(false);
+    expect(isRemoteFile({ driver: 'mysql', ssh })).toBe(false);
+  });
+
+  it('needs the path of the file, and checks the SSH servers like a tunnel does', () => {
+    expect(connectionProblems(remote)).toEqual([]);
+    expect(connectionProblems({ ...remote, file: '' })).toEqual(['file-empty']);
+    expect(connectionProblems({ ...remote, ssh: { ...ssh, host: '' } })).toEqual([
+      'ssh-host-empty',
+    ]);
+    expect(connectionProblems({ ...remote, ssh: { ...ssh, user: ' ' } })).toEqual([
+      'ssh-user-empty',
+    ]);
+    expect(connectionProblems({ ...remote, ssh: { ...ssh, port: 70_000 } })).toEqual([
+      'ssh-port-invalid',
+    ]);
+  });
+
+  it('allows jump hosts, up to the usual limit, with distinct ids', () => {
+    const jump = (id: string) => ({ id, host: 'j', user: 'u', auth: 'agent' }) as const;
+    expect(
+      connectionProblems({ ...remote, ssh: { ...ssh, jumps: [jump('a'), jump('b')] } }),
+    ).toEqual([]);
+    expect(
+      connectionProblems({ ...remote, ssh: { ...ssh, jumps: [jump('a'), jump('a')] } }),
+    ).toEqual(['ssh-id-invalid']);
+    const many = Array.from({ length: MAX_SSH_JUMPS + 1 }, (_, i) => jump(`j${i}`));
+    expect(connectionProblems({ ...remote, ssh: { ...ssh, jumps: many } })).toContain(
+      'ssh-too-many-jumps',
+    );
+  });
+
+  it('reports every problem once', () => {
+    const problems = connectionProblems({ ...remote, ssh: { ...ssh, host: '', user: '' } });
+    expect(problems).toEqual(['ssh-host-empty', 'ssh-user-empty']);
+  });
+
+  it('still takes a local file with no SSH at all', () => {
+    expect(connectionProblems({ name: 'L', driver: 'sqlite', file: '/a.db' })).toEqual([]);
+  });
+
+  it('describes the way to the file for tooltips, and nothing for a local one', () => {
+    expect(describeTunnel(remote)).toBe('deploy@bastion:22');
+    expect(describeTunnel({ name: 'L', driver: 'sqlite', file: '/a.db' })).toBeUndefined();
+    expect(describeTarget(remote)).toBe('/srv/app/data.db');
   });
 });

@@ -128,6 +128,7 @@ export const connectionInputShape = {
   user: optional(string({ maxLength: CONNECTION_LIMITS.field })),
   database: optional(string({ maxLength: CONNECTION_LIMITS.field })),
   file: optional(string({ maxLength: CONNECTION_LIMITS.file })),
+  plugin: optional(string({ maxLength: 64 })),
   ssh: optional(sshTunnelSchema),
   socket: optional(string({ maxLength: CONNECTION_LIMITS.file })),
   proxy: optional(proxySchema),

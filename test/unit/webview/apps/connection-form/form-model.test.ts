@@ -401,9 +401,45 @@ describe('SSH fields', () => {
     expect(toDraft(fields({ ssh })).ssh).toBeUndefined();
     expect(toInput(fields({ ssh, useSsh: true })).ssh).toMatchObject({ host: 'b' });
     expect(toDraft(fields({ ssh, useSsh: true })).ssh).toHaveLength(1);
+    // A SQLite file may be on that server (V12.8).
+    expect(toInput(fields({ ssh, useSsh: true, driver: 'sqlite', file: '/f' })).ssh).toMatchObject({
+      host: 'b',
+    });
+  });
+
+  it('keeps a SQLite file local while SSH is off, and a proxy never goes with a file', () => {
+    const ssh = { ...newHopFields('h'), host: 'b', user: 'u' };
+    const local = toInput(fields({ ssh, driver: 'sqlite', file: '/f' }));
+    expect(local.ssh).toBeUndefined();
+    const remote = toInput(
+      fields({ ssh, useSsh: true, useProxy: true, proxyHost: 'p', driver: 'sqlite', file: '/f' }),
+    );
+    expect(remote.proxy).toBeUndefined();
+    expect(remote.file).toBe('/f');
+  });
+
+  it('carries the jump hosts of a SQLite file on a server', () => {
+    const ssh = { ...newHopFields('main'), host: 'inner', user: 'deploy' };
+    const jump = { ...newHopFields('edge'), host: 'edge', user: 'j' };
+    const input = toInput(
+      fields({ ssh, jumps: [jump], useSsh: true, driver: 'sqlite', file: '/srv/x.db' }),
+    );
+    expect(input.ssh?.jumps).toHaveLength(1);
+    expect(input.ssh?.jumps?.[0]).toMatchObject({ host: 'edge' });
+  });
+
+  it('blocks saving a SQLite file on a server when its SSH settings are not whole', () => {
+    const ssh = newHopFields('h');
+    expect(problemsOf(fields({ ssh, useSsh: true, driver: 'sqlite', file: '/f' }))).toEqual([
+      'ssh-host-empty',
+      'ssh-user-empty',
+    ]);
+    expect(problemsOf(fields({ ssh, driver: 'sqlite', file: '/f' }))).toEqual([]);
     expect(
-      toInput(fields({ ssh, useSsh: true, driver: 'sqlite', file: '/f' })).ssh,
-    ).toBeUndefined();
+      problemsOf(
+        fields({ ssh: { ...ssh, host: 'b', user: 'u' }, useSsh: true, driver: 'sqlite', file: '' }),
+      ),
+    ).toEqual(['file-empty']);
   });
 
   it('blocks saving on SSH problems only while SSH is on', () => {

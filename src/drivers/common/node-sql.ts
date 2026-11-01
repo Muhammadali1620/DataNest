@@ -132,6 +132,7 @@ export function columnSql(
         note('change column name'),
         rename,
       ]);
+    case 'plugin':
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
@@ -227,6 +228,7 @@ export function indexSql(
             `ALTER TABLE ${target} DROP INDEX ${name};`,
             `ALTER TABLE ${target} ADD INDEX ${name} (${columns}) TYPE ${index.method ?? 'minmax'} GRANULARITY 1;`,
           ]);
+    case 'plugin':
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
@@ -268,6 +270,7 @@ export function foreignKeySql(
       ]);
     case 'clickhouse':
       return script([note('ClickHouse has no foreign keys')]);
+    case 'plugin':
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':

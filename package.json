@@ -475,6 +475,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "datanest.connections.addPlugin",
+        "title": "%commands.connections.addPlugin.title%",
+        "category": "DataNest",
+        "icon": "$(plug)"
+      },
+      {
         "command": "datanest.results.pin",
         "title": "%commands.results.pin.title%",
         "category": "DataNest",
@@ -2069,6 +2075,14 @@
           "minimum": 100,
           "maximum": 100000,
           "markdownDescription": "%configuration.redis.keysPerLoad.description%",
+          "scope": "window"
+        },
+        "datanest.sqlite.remoteMaxSizeMb": {
+          "type": "integer",
+          "default": 512,
+          "minimum": 1,
+          "maximum": 8192,
+          "markdownDescription": "%configuration.sqlite.remoteMaxSizeMb.description%",
           "scope": "window"
         }
       }

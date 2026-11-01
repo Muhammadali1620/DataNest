@@ -29,6 +29,12 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<rect x="2" y="3" width="20" height="5" rx="1.500"/><rect x="2" y="9.500" width="20" height="5" rx="1.500"/><rect x="2" y="16" width="20" height="5" rx="1.500"/>',
   },
+  // A plug: the mark of a database that another extension added (V12.7).
+  plugin: {
+    hex: '#6d28d9',
+    ink: WHITE,
+    body: '<rect x="4" y="8" width="16" height="9" rx="2.500"/><rect x="7.500" y="2.500" width="3" height="6"/><rect x="13.500" y="2.500" width="3" height="6"/><rect x="10.500" y="16" width="3" height="5.500"/>',
+  },
   // A ring around a core.
   oracle: {
     hex: '#c74634',

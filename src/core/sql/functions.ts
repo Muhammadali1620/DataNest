@@ -113,6 +113,8 @@ const BY_DRIVER: Readonly<Record<SqlDriverId, readonly SqlFunction[]>> = {
     fn('SCOPE_IDENTITY'),
     fn('OBJECT_ID', 'name'),
   ],
+  // A plugin's own functions are not known: the editor offers only what the server tells.
+  plugin: [],
   clickhouse: [
     ...LENGTH_SUBSTR,
     fn('now'),

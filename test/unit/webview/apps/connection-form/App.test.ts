@@ -326,6 +326,51 @@ describe('connection form App', () => {
     });
   });
 
+  describe('SQLite file on a server (V12.8)', () => {
+    const remote = {
+      name: 'db',
+      driver: 'sqlite',
+      file: '/srv/app/data.db',
+      ssh: { id: 'main', host: 'bastion', user: 'deploy', auth: 'password' },
+    } as const;
+
+    it('offers SSH for a SQLite file, and no proxy or TLS', async () => {
+      await withState(newState({ input: { name: 'db', driver: 'sqlite', file: '/a.db' } }));
+      expect(screen.getByText('The file is on a server: open it through SSH')).toBeTruthy();
+      expect(screen.queryByTestId('use-proxy')).toBeNull();
+      expect(screen.queryByText('Connect through an SSH tunnel')).toBeNull();
+    });
+
+    it('asks for the path on the server and hides the file dialog when SSH is on', async () => {
+      await withState(newState({ input: remote }));
+      expect(field('Path of the file on the server').value).toBe('/srv/app/data.db');
+      expect(screen.queryByRole('button', { name: 'Browse…' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New file…' })).toBeNull();
+      expect(
+        screen.getByText('Copied over SFTP when you connect and opened read-only'),
+      ).toBeTruthy();
+    });
+
+    it('is a plain local file while SSH is off', async () => {
+      await withState(newState({ input: { name: 'db', driver: 'sqlite', file: '/a.db' } }));
+      expect(field('Database file').value).toBe('/a.db');
+      expect(screen.getByRole('button', { name: 'Browse…' })).toBeTruthy();
+    });
+
+    it('sends the SSH server with the path when saved', async () => {
+      const { host } = await withState(newState({ input: remote }));
+      const saved = vi.fn((_draft: unknown) => ({ connectionId: 'c1' }));
+      host.handle('save', saved);
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(saved).toHaveBeenCalledTimes(1);
+      });
+      expect(saved.mock.calls[0]?.[0]).toMatchObject({
+        input: { driver: 'sqlite', file: '/srv/app/data.db', ssh: { host: 'bastion' } },
+      });
+    });
+  });
+
   it('asks the host to close on Cancel', async () => {
     const { closed } = await withState();
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));

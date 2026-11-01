@@ -3,7 +3,11 @@ import { join } from 'node:path';
 import { SavedQueryStore } from './services/saved-queries';
 import { VersionMemory } from './services/version-memory';
 import { listAccounts } from './services/users/account-list';
+import type { DataNestApi } from './api/types';
+import { PluginDrivers } from './drivers/plugin/plugin-drivers';
+import { RemoteSnapshots } from './services/remote-snapshots';
 import { createBundleDriverLoader, DriverRegistry } from './drivers/registry';
+import { createDataNestApi } from './vscode/plugin-api';
 import { ConnectionManager, type SessionTarget } from './services/connection-manager';
 import { CONNECTIONS_STATE_KEY, ConnectionStore } from './services/connection-store';
 import { ProjectConnections } from './services/project-connections';
@@ -29,6 +33,7 @@ import {
   CompareListings,
   compareResultsHandler,
 } from './vscode/compare-results-commands';
+import { pluginConnectionHandlers } from './vscode/plugin-connection-commands';
 import { resultHistoryHandlers } from './vscode/result-history-commands';
 import { ResultLinks } from './services/result-links';
 import type { TableFilter } from './shared/table-filter';
@@ -63,6 +68,7 @@ import {
   readEditorSwitch,
   readSyncConnections,
   readQueryVariablesMode,
+  readRemoteMaxBytes,
   readRowLimit,
   readTransactionMode,
 } from './vscode/settings';
@@ -73,7 +79,7 @@ import { ConnectionDecorations } from './vscode/tree/connection-decorations';
 import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
 
 // The composition root: services are created and wired here, nowhere else (ARCHITECTURE.md §10).
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<DataNestApi> {
   // Reported in the log, so a slow start can be told from a slow editor (V9.1).
   const started = performance.now();
   // Messages of the layers below this one are translated with the editor's l10n bundle,
@@ -113,20 +119,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   // Read before the tree is drawn, so its first picture already has the project.
   await projectFiles.start();
+  // Drivers other extensions register through the public API (V12.7).
+  const plugins = new PluginDrivers();
   const drivers = new DriverRegistry({
     // Driver bundles sit next to the extension bundle and load on first use (§7).
     loader: createBundleDriverLoader(__filename),
     logger,
+    plugins,
   });
   // ssh2 is a bundle of its own, loaded with the first SSH connection (§7).
   const tunnels = new TunnelPool({ load: createBundleSshLoader(__filename), logger });
   context.subscriptions.push(tunnels);
+  // SQLite files on a server are copied here over SFTP and opened read-only (V12.8).
+  const snapshots = new RemoteSnapshots({
+    downloader: tunnels,
+    folder: join(context.globalStorageUri.fsPath, 'remote-sqlite'),
+    logger,
+  });
+  void snapshots.sweep();
+  context.subscriptions.push({
+    dispose: () => {
+      void snapshots.dispose();
+    },
+  });
   const manager = new ConnectionManager({
     store,
     drivers,
     logger,
     tunnels,
     checkHostKey: createHostKeyCheck(new KnownHosts(context.globalState, logger)),
+    snapshots,
+    remoteMaxBytes: readRemoteMaxBytes,
   });
   context.subscriptions.push(manager);
   const cache = new MetadataCache({ logger });
@@ -224,6 +247,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.workspace.registerTextDocumentContentProvider(COMPARE_SCHEME, compareListings),
   );
   const compareResults = compareResultsHandler({ results, listings: compareListings });
+  const pluginConnections = pluginConnectionHandlers({ store, plugins });
   const resultHistory = resultHistoryHandlers({
     results,
     show: (documentUri, resultId) => {
@@ -407,6 +431,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       chartResult,
       compareResults,
       resultHistory,
+      pluginConnections,
       projectConnections: projects,
       results,
       projectQueries: projectQueryHandlers({
@@ -453,6 +478,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const mode = vscode.ExtensionMode[context.extensionMode].toLowerCase();
   const took = Math.round(performance.now() - started);
   logger.info(`DataNest ${version} activated (${mode}) in ${took} ms`);
+  return createDataNestApi(plugins, logger);
 }
 
 export function deactivate(): void {

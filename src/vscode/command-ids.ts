@@ -159,6 +159,8 @@ export const COMMAND_IDS = {
   deleteProjectQuery: 'datanest.projectQueries.delete',
   /** Compares two results of queries: what is the same, what differs, what is in one only (V12.4). */
   compareResults: 'datanest.results.compare',
+  /** Adds a connection of a database that another extension registered (V12.7). */
+  addPluginConnection: 'datanest.connections.addPlugin',
   /** Pins the shown result, or lets go of the pin (V12.5). */
   pinResult: 'datanest.results.pin',
   /** Brings back a result that a re-run pushed aside (V12.5). */
@@ -278,4 +280,6 @@ export const CONFIG_KEYS = {
   redisKeySeparator: 'redis.keySeparator',
   /** How many Redis keys the tree loads at a time. */
   redisKeysPerLoad: 'redis.keysPerLoad',
+  /** The most a SQLite file on a server may weigh to be copied and opened, in MB (V12.8). */
+  sqliteRemoteMaxSizeMb: 'sqlite.remoteMaxSizeMb',
 } as const;

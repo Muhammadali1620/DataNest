@@ -24,7 +24,8 @@ describe('driver bundles', () => {
     const bundles = Object.keys(findDriverEntries(ROOT))
       .filter((entry) => !entry.endsWith('-worker'))
       .map((entry) => entry.replace(/^drivers\//u, ''));
-    expect(bundles.sort()).toEqual([...DRIVER_IDS].sort());
+    // A plugin driver has no bundle: it is registered at run time by another extension (V12.7).
+    expect(bundles.sort()).toEqual(DRIVER_IDS.filter((id) => id !== 'plugin').sort());
   });
 
   it.each(SQL_DRIVER_IDS.filter((id) => id !== 'sqlite'))(

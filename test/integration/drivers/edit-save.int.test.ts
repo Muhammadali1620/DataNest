@@ -24,7 +24,7 @@ import { ResultSaver } from '../../../src/services/result-saver';
 import { ResultStore } from '../../../src/services/result-store';
 import { cellText } from '../../../src/shared/cell-text';
 import type { CellValue } from '../../../src/shared/cell-value';
-import type { ConnectionInput, DriverId, SqlDriverId } from '../../../src/shared/connection';
+import type { ConnectionInput, DriverId, BuiltInSqlDriverId } from '../../../src/shared/connection';
 import { testDatabase, type TestDatabaseId } from '../../helpers/databases';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
 import { buildSqliteWorker, type BuiltWorker } from '../../helpers/sqlite-worker';
@@ -122,7 +122,7 @@ describe('editing a result and saving it', () => {
         logger,
       });
       const sqlite = createSqliteDriver({ workerPath: worker.workerPath });
-      const drivers: Record<SqlDriverId, Driver> = {
+      const drivers: Record<BuiltInSqlDriverId, Driver> = {
         mysql: mysqlDriver,
         postgres: postgresDriver,
         sqlite,

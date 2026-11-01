@@ -97,6 +97,13 @@ describe('results panel', () => {
     const all = await vscode.commands.getCommands(true);
     assert.ok(all.includes('datanest.results.show'));
     assert.ok(all.includes('datanest.results.export'));
+    assert.ok(all.includes('datanest.results.pin'));
+    assert.ok(all.includes('datanest.results.history'));
+  });
+
+  it('pinning without a result only says so (V12.5)', async () => {
+    await openQuery();
+    await vscode.commands.executeCommand('datanest.results.pin');
   });
 
   it('exporting without a result only says so', async () => {

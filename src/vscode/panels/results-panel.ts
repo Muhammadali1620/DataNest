@@ -76,6 +76,8 @@ export interface ResultsPanelDeps {
   readonly tableOf?: (
     documentUri: string,
   ) => { target: SessionTarget; table: TableRef; kind?: 'table' | 'view' } | undefined;
+  /** Lets the user bring back a result a re-run pushed aside (V12.5). */
+  readonly showHistory?: (documentUri: string) => Promise<void>;
   /** Opens a chart of a result (V8.7). */
   readonly chartResult?: (resultId: string) => void;
   /** Production and read-only flags of a connection, checked before saving edits. */
@@ -389,6 +391,12 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.on('selectTab', ({ resultId }) => {
       this.activeId = resultId;
     });
+    this.rpc.on('pinResult', ({ resultId, pinned }) => {
+      this.deps.results.pin(resultId, pinned);
+    });
+    this.rpc.on('openHistory', () => {
+      void this.deps.showHistory?.(this.documentUri);
+    });
     this.rpc.on('cancel', () => {
       void this.deps.runner.cancel(this.documentUri);
     });
@@ -466,6 +474,12 @@ export class ResultsPanel implements vscode.Disposable {
   /** The result the user is looking at, for commands outside the page. */
   get activeResultId(): string | undefined {
     return this.activeId;
+  }
+
+  /** Makes a result the shown tab, e.g. one just brought back from the history. */
+  select(resultId: string): void {
+    this.activeId = resultId;
+    this.update();
   }
 
   /** Brings the panel forward without stealing focus from the editor. */

@@ -76,6 +76,8 @@ export interface ResultSummary {
   readonly deletedRows: number;
   /** Grows with every change to the pending edits, so a page can tell its rows went stale. */
   readonly revision: number;
+  /** A pinned result stays: a re-run, the per-document limit and the memory budget leave it alone (V12.5). */
+  readonly pinned: boolean;
 }
 
 export interface ResultError {
@@ -99,6 +101,7 @@ interface StoredResult extends Omit<
   | 'insertedRows'
   | 'deletedRows'
   | 'revision'
+  | 'pinned'
   | 'columns'
   | 'rowCount'
   | 'truncated'
@@ -120,6 +123,7 @@ interface StoredResult extends Omit<
   searchTicket: number;
   /** Grows with every summary of a selection, for the same reason (V10.2.4). */
   summaryTicket: number;
+  pinned: boolean;
 }
 
 export interface ResultWindow {
@@ -163,6 +167,12 @@ export type Placement =
 export const MAX_RESULTS_PER_DOCUMENT = 20;
 
 /**
+ * How many results a document's re-runs push aside are remembered (V12.5). They leave the
+ * tabs but can be brought back from the history; they are the first to go when memory is short.
+ */
+export const MAX_HISTORY_PER_DOCUMENT = 10;
+
+/**
  * Cells all results together may hold — about a gigabyte of ordinary values. Twenty
  * runs of a million rows would otherwise take the extension host down; past this,
  * the oldest results go first (V9.1).
@@ -184,6 +194,8 @@ export interface ResultStoreOptions {
 export class ResultStore {
   private readonly results = new Map<string, StoredResult>();
   private readonly byDocument = new Map<string, string[]>();
+  /** Results pushed aside by a re-run, oldest first, per document (V12.5). */
+  private readonly archive = new Map<string, StoredResult[]>();
   private readonly listeners = new Set<(documentUri: string) => void>();
   private readonly maxCells: number;
   private readonly sortPause: PauseOptions | undefined;
@@ -215,6 +227,7 @@ export class ResultStore {
       sortTicket: 0,
       searchTicket: 0,
       summaryTicket: 0,
+      pinned: false,
       rowCount: result.rows.length,
       truncated: result.truncated,
       ...(result.affectedRows === undefined ? {} : { affectedRows: result.affectedRows }),
@@ -229,12 +242,7 @@ export class ResultStore {
     this.results.set(id, stored);
     const ids = this.byDocument.get(result.documentUri) ?? [];
     this.place(ids, id, placement);
-    while (ids.length > MAX_RESULTS_PER_DOCUMENT) {
-      const dropped = ids.shift();
-      if (dropped !== undefined) {
-        this.results.delete(dropped);
-      }
-    }
+    this.enforceLimit(ids, id);
     this.byDocument.set(result.documentUri, ids);
     const trimmed = this.trimToBudget(id);
     this.notify(result.documentUri);
@@ -246,15 +254,38 @@ export class ResultStore {
     return summaryOf(stored);
   }
 
+  /**
+   * Drops the oldest unpinned results of a document until it is within the limit. The
+   * result just added or brought back (`keep`) stays, so a document full of pins grows.
+   */
+  private enforceLimit(ids: string[], keep: string): void {
+    while (ids.length > MAX_RESULTS_PER_DOCUMENT) {
+      const at = ids.findIndex(
+        (other) => other !== keep && this.results.get(other)?.pinned !== true,
+      );
+      if (at === -1) {
+        return;
+      }
+      const [dropped] = ids.splice(at, 1);
+      if (dropped !== undefined) {
+        this.results.delete(dropped);
+      }
+    }
+  }
+
   /** Puts a new id into a document's list, dropping what the placement replaces. */
   private place(ids: string[], id: string, placement: Placement | undefined): void {
     const droppable = (other: string): boolean => {
       const stored = this.results.get(other);
-      return stored !== undefined && !hasPending(stored);
+      return stored !== undefined && !hasPending(stored) && !stored.pinned;
     };
     const drop = (other: string): void => {
+      const stored = this.results.get(other);
       this.results.delete(other);
       this.rememberSuccessor(other, id);
+      if (stored !== undefined) {
+        this.remember(stored);
+      }
     };
     if (placement !== undefined && 'replaceAll' in placement) {
       const kept = ids.filter((other) => !droppable(other) || other === id);
@@ -302,7 +333,7 @@ export class ResultStore {
   /**
    * Drops the oldest results until all of them fit the cell budget, and returns the
    * documents that lost one. The newest result always stays, however big, and so does
-   * any result with unsaved changes: dropping it would throw the user's edits away.
+   * any result with unsaved changes (dropping it would throw the user's edits away) or a pin.
    */
   private trimToBudget(newest: string): Set<string> {
     const touched = new Set<string>();
@@ -310,12 +341,29 @@ export class ResultStore {
     for (const stored of this.results.values()) {
       cells += cellsOf(stored);
     }
+    for (const stored of this.archivedInOrder()) {
+      cells += cellsOf(stored);
+    }
+    // The history is the cheapest thing to lose: it is not on screen.
+    for (const stored of this.archivedInOrder()) {
+      if (cells <= this.maxCells) {
+        break;
+      }
+      const left = (this.archive.get(stored.documentUri) ?? []).filter((other) => other !== stored);
+      if (left.length === 0) {
+        this.archive.delete(stored.documentUri);
+      } else {
+        this.archive.set(stored.documentUri, left);
+      }
+      cells -= cellsOf(stored);
+      touched.add(stored.documentUri);
+    }
     // Map order is insertion order, so this walks from the oldest result.
     for (const [id, stored] of this.results) {
       if (cells <= this.maxCells) {
         break;
       }
-      if (id === newest || hasPending(stored)) {
+      if (id === newest || hasPending(stored) || stored.pinned) {
         continue;
       }
       this.results.delete(id);
@@ -660,6 +708,71 @@ export class ResultStore {
     return summary === undefined || stale() ? undefined : summary;
   }
 
+  /** Pins a result, or lets go of the pin; false when there is no such result (V12.5). */
+  pin(id: string, pinned = true): boolean {
+    const stored = this.results.get(id);
+    if (stored === undefined) {
+      return false;
+    }
+    if (stored.pinned !== pinned) {
+      stored.pinned = pinned;
+      this.notify(stored.documentUri);
+    }
+    return true;
+  }
+
+  /**
+   * Results that a re-run pushed aside, the newest first; of one document, or of all
+   * when none is given (V12.5).
+   */
+  history(documentUri?: string): ResultSummary[] {
+    const stored =
+      documentUri === undefined
+        ? this.archivedInOrder()
+        : [...(this.archive.get(documentUri) ?? [])];
+    return stored.map(summaryOf).reverse();
+  }
+
+  /** Brings a result back from the history as a tab at the end of its document's list. */
+  restore(id: string): ResultSummary | undefined {
+    for (const [documentUri, list] of this.archive) {
+      const stored = list.find((candidate) => candidate.id === id);
+      if (stored === undefined) {
+        continue;
+      }
+      const left = list.filter((candidate) => candidate !== stored);
+      if (left.length === 0) {
+        this.archive.delete(documentUri);
+      } else {
+        this.archive.set(documentUri, left);
+      }
+      this.results.set(id, stored);
+      const ids = this.byDocument.get(documentUri) ?? [];
+      ids.push(id);
+      this.enforceLimit(ids, id);
+      this.byDocument.set(documentUri, ids);
+      // Memory use did not grow: the result only moved from the history to the screen.
+      this.notify(documentUri);
+      return summaryOf(stored);
+    }
+    return undefined;
+  }
+
+  /** Puts a result into its document's history, keeping only the latest ones. */
+  private remember(stored: StoredResult): void {
+    const list = this.archive.get(stored.documentUri) ?? [];
+    list.push(stored);
+    while (list.length > MAX_HISTORY_PER_DOCUMENT) {
+      list.shift();
+    }
+    this.archive.set(stored.documentUri, list);
+  }
+
+  /** Every remembered result, the oldest first. */
+  private archivedInOrder(): StoredResult[] {
+    return [...this.archive.values()].flat().sort((a, b) => idNumber(a.id) - idNumber(b.id));
+  }
+
   /** Every row of a result, for exporting it to a file. */
   allRows(id: string): ResultRow[] | undefined {
     const stored = this.results.get(id);
@@ -668,6 +781,7 @@ export class ResultStore {
 
   /** Drops every result of a document, e.g. when its editor closes. */
   clearDocument(documentUri: string): void {
+    this.archive.delete(documentUri);
     const ids = this.byDocument.get(documentUri);
     if (ids === undefined) {
       return;
@@ -683,6 +797,7 @@ export class ResultStore {
     const documents = [...this.byDocument.keys()];
     this.results.clear();
     this.byDocument.clear();
+    this.archive.clear();
     for (const documentUri of documents) {
       this.notify(documentUri);
     }
@@ -699,6 +814,10 @@ export class ResultStore {
       listener(documentUri);
     }
   }
+}
+
+function idNumber(id: string): number {
+  return Number(id.slice(id.lastIndexOf('-') + 1));
 }
 
 function cellsOf(stored: StoredResult): number {

@@ -1032,7 +1032,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
               name={tab.error !== undefined ? 'error' : tab.affectedRows !== undefined ? 'check' : 'table'}
               size={14}
             />
-          </span><span class="tab-title">{tab.title}</span>
+          </span>{#if tab.pinned === true}<span class="tab-pin" data-testid="tab-pin"><Icon name="pinned" size={12} /></span>{/if}<span class="tab-title">{tab.title}</span>
         </button>
       {/each}
     </div>
@@ -1300,6 +1300,27 @@ import type { RowAction } from '../../../../src/shared/row-action';
             />
           {:else}
             {#if hasColumns}
+              <IconButton
+                icon={activeTab.pinned === true ? 'pinned' : 'pin'}
+                tone="orange"
+                label={activeTab.pinned === true ? t('grid.unpin') : t('grid.pin')}
+                hint={activeTab.pinned === true ? t('grid.unpinHint') : t('grid.pinHint')}
+                pressed={activeTab.pinned === true}
+                data-testid="pin"
+                onclick={() => {
+                  rpc.emit('pinResult', { resultId: activeTab.id, pinned: activeTab.pinned !== true });
+                }}
+              />
+              <IconButton
+                icon="history"
+                tone="blue"
+                label={t('grid.history')}
+                hint={t('grid.historyHint')}
+                data-testid="result-history"
+                onclick={() => {
+                  rpc.emit('openHistory', {});
+                }}
+              />
               <IconButton
                 icon="graph"
                 tone="pink"
@@ -1944,6 +1965,12 @@ import type { RowAction } from '../../../../src/shared/row-action';
 
   .tab-icon.fail {
     color: var(--dn-danger);
+  }
+
+  .tab-pin {
+    display: inline-flex;
+    margin-right: 4px;
+    color: var(--vscode-charts-orange, var(--dn-warning));
   }
 
   .grid-wrap {

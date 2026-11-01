@@ -141,6 +141,8 @@
   "commands.server.users.title": "Пользователи и права",
   "commands.results.chart.title": "График по результату",
   "commands.results.compare.title": "Сравнить результаты…",
+  "commands.results.pin.title": "Закрепить или открепить результат",
+  "commands.results.history.title": "История результатов…",
   "commands.notebook.new.title": "Новый SQL-блокнот",
   "commands.notebook.selectConnection.title": "Выбрать подключение блокнота…",
   "notebook.displayName": "SQL-блокнот DataNest",

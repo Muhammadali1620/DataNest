@@ -1,6 +1,7 @@
 import type { EditableResult } from '../../../src/core/model/editability';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  MAX_HISTORY_PER_DOCUMENT,
   MAX_KEPT_CELLS,
   MAX_RESULTS_PER_DOCUMENT,
   ResultStore,
@@ -1045,6 +1046,272 @@ describe('ResultStore', () => {
       expect(store.successorOf(first)).toBeUndefined();
       expect(store.successorOf(last.id)).toBeUndefined();
       expect(ids(store)).toEqual([last.id]);
+    });
+  });
+  describe('pinned results (V12.5)', () => {
+    const ids = (store: ResultStore): string[] => store.forDocument(DOC).map((item) => item.id);
+
+    it('starts unpinned, pins and lets go', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      expect(a.pinned).toBe(false);
+      expect(store.pin(a.id)).toBe(true);
+      expect(store.get(a.id)?.pinned).toBe(true);
+      expect(store.pin(a.id, false)).toBe(true);
+      expect(store.get(a.id)?.pinned).toBe(false);
+    });
+
+    it('answers false for a result that is not there', () => {
+      expect(new ResultStore().pin('result-404')).toBe(false);
+    });
+
+    it('tells the document only when the pin changed', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const changed = vi.fn();
+      store.onDidChange(changed);
+      store.pin(a.id);
+      store.pin(a.id);
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(changed).toHaveBeenCalledWith(DOC);
+    });
+
+    it('is not replaced by a re-run: the new result goes beside it', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      store.pin(a.id);
+      const fresh = store.add(result({ statement: 'SELECT 2' }), { replace: a.id });
+      expect(ids(store)).toEqual([a.id, fresh.id]);
+      expect(store.successorOf(a.id)).toBeUndefined();
+    });
+
+    it('is kept when the whole document is replaced, the others are not', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result());
+      store.pin(b.id);
+      const fresh = store.add(result(), { replaceAll: true });
+      expect(ids(store)).toEqual([b.id, fresh.id]);
+      expect(store.get(a.id)).toBeUndefined();
+    });
+
+    it('survives the per-document limit while older unpinned results go', () => {
+      const store = new ResultStore();
+      const first = store.add(result());
+      const second = store.add(result());
+      store.pin(first.id);
+      for (let i = 0; i < MAX_RESULTS_PER_DOCUMENT; i += 1) {
+        store.add(result());
+      }
+      expect(store.get(first.id)).toBeDefined();
+      expect(store.get(second.id)).toBeUndefined();
+      expect(ids(store)).toHaveLength(MAX_RESULTS_PER_DOCUMENT);
+    });
+
+    it('may exceed the limit when everything is pinned', () => {
+      const store = new ResultStore();
+      for (let i = 0; i < MAX_RESULTS_PER_DOCUMENT + 3; i += 1) {
+        store.pin(store.add(result()).id);
+      }
+      expect(ids(store)).toHaveLength(MAX_RESULTS_PER_DOCUMENT + 3);
+    });
+
+    it('survives the memory budget, the next oldest goes instead', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const rows = (count: number): number[][] => Array.from({ length: count }, (_, i) => [i]);
+      const pinned = store.add(result({ documentUri: 'a', rows: rows(40) }));
+      store.pin(pinned.id);
+      const plain = store.add(result({ documentUri: 'b', rows: rows(40) }));
+      store.add(result({ documentUri: 'c', rows: rows(40) }));
+      expect(store.get(pinned.id)).toBeDefined();
+      expect(store.get(plain.id)).toBeUndefined();
+    });
+
+    it('goes with its document when the editor closes', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      store.pin(a.id);
+      store.clearDocument(DOC);
+      expect(store.get(a.id)).toBeUndefined();
+    });
+  });
+
+  describe('history of results (V12.5)', () => {
+    const rows = (count: number): number[][] => Array.from({ length: count }, (_, i) => [i]);
+
+    it('keeps a result that a re-run replaced, newest first', () => {
+      const store = new ResultStore();
+      const a = store.add(result({ statement: 'SELECT a' }));
+      const b = store.add(result({ statement: 'SELECT b' }), { replace: a.id });
+      const c = store.add(result({ statement: 'SELECT c' }), { replace: b.id });
+      expect(store.get(a.id)).toBeUndefined();
+      expect(store.history(DOC).map((item) => item.id)).toEqual([b.id, a.id]);
+      expect(store.history().map((item) => item.id)).toEqual([b.id, a.id]);
+      expect(store.get(c.id)).toBeDefined();
+    });
+
+    it('is empty at first, and never holds a result still on screen', () => {
+      const store = new ResultStore();
+      store.add(result());
+      expect(store.history()).toEqual([]);
+      expect(store.history('other')).toEqual([]);
+    });
+
+    it('keeps the results of replaceAll too', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result());
+      store.add(result(), { replaceAll: true });
+      expect(
+        store
+          .history(DOC)
+          .map((item) => item.id)
+          .sort(),
+      ).toEqual([a.id, b.id].sort());
+    });
+
+    it('keeps only the latest ones of a document', () => {
+      const store = new ResultStore();
+      let current = store.add(result());
+      const first = current.id;
+      for (let i = 0; i < MAX_HISTORY_PER_DOCUMENT + 2; i += 1) {
+        current = store.add(result(), { replace: current.id });
+      }
+      const kept = store.history(DOC);
+      expect(kept).toHaveLength(MAX_HISTORY_PER_DOCUMENT);
+      expect(kept.some((item) => item.id === first)).toBe(false);
+    });
+
+    it('lists the history of one document apart from the others', () => {
+      const store = new ResultStore();
+      const a = store.add(result({ documentUri: 'a' }));
+      const b = store.add(result({ documentUri: 'b' }));
+      store.add(result({ documentUri: 'a' }), { replace: a.id });
+      store.add(result({ documentUri: 'b' }), { replace: b.id });
+      expect(store.history('a').map((item) => item.id)).toEqual([a.id]);
+      expect(store.history('b').map((item) => item.id)).toEqual([b.id]);
+      expect(store.history().map((item) => item.id)).toEqual([b.id, a.id]);
+    });
+
+    it('brings a result back as the last tab, with its rows', () => {
+      const store = new ResultStore();
+      const a = store.add(result({ rows: [[1], [2]] }));
+      const b = store.add(result({ rows: [[3]] }), { replace: a.id });
+      const changed = vi.fn();
+      store.onDidChange(changed);
+      const back = store.restore(a.id);
+      expect(back?.id).toBe(a.id);
+      expect(store.forDocument(DOC).map((item) => item.id)).toEqual([b.id, a.id]);
+      expect(store.window(a.id, 0, 10)?.rows).toEqual([[1], [2]]);
+      expect(store.history(DOC)).toEqual([]);
+      expect(changed).toHaveBeenCalledWith(DOC);
+    });
+
+    it('cannot bring back a result twice or one that never was', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      store.add(result(), { replace: a.id });
+      expect(store.restore(a.id)).toBeDefined();
+      expect(store.restore(a.id)).toBeUndefined();
+      expect(store.restore('result-404')).toBeUndefined();
+    });
+
+    it('can be pinned once it is back', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      store.add(result(), { replace: a.id });
+      store.restore(a.id);
+      expect(store.pin(a.id)).toBe(true);
+    });
+
+    it('is the first to go when memory runs short', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const old = store.add(result({ rows: rows(40) }));
+      const live = store.add(result({ rows: rows(40) }), { replace: old.id });
+      expect(store.history(DOC)).toHaveLength(1);
+      const other = store.add(result({ documentUri: 'b', rows: rows(40) }));
+      expect(store.history(DOC)).toEqual([]);
+      expect(store.get(live.id)).toBeDefined();
+      expect(store.get(other.id)).toBeDefined();
+    });
+
+    it('tells the document that lost history to the budget', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const old = store.add(result({ rows: rows(40) }));
+      store.add(result({ rows: rows(40) }), { replace: old.id });
+      const changed = vi.fn();
+      store.onDidChange(changed);
+      store.add(result({ documentUri: 'b', rows: rows(40) }));
+      expect(changed.mock.calls.map(([uri]) => uri as string).sort()).toEqual(['b', DOC]);
+    });
+
+    it('drops from the history first, then from the screen', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const a = store.add(result({ rows: rows(30) }));
+      store.add(result({ rows: rows(30) }), { replace: a.id });
+      const b = store.add(result({ documentUri: 'b', rows: rows(30) }));
+      const c = store.add(result({ documentUri: 'c', rows: rows(30) }));
+      // 30 + 30 + 30 live + 30 history is over 100: only the history goes.
+      expect(store.history()).toEqual([]);
+      expect(store.get(b.id)).toBeDefined();
+      expect(store.get(c.id)).toBeDefined();
+    });
+
+    it('is forgotten with the document and by clear()', () => {
+      const store = new ResultStore();
+      const a = store.add(result({ documentUri: 'a' }));
+      store.add(result({ documentUri: 'a' }), { replace: a.id });
+      const b = store.add(result({ documentUri: 'b' }));
+      store.add(result({ documentUri: 'b' }), { replace: b.id });
+      store.clearDocument('a');
+      expect(store.history('a')).toEqual([]);
+      expect(store.history('b')).toHaveLength(1);
+      store.clear();
+      expect(store.history()).toEqual([]);
+    });
+
+    it('does not lose edited results: they are not replaced, so not archived', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      store.setChange(a.id, 0, 0, { kind: 'value', value: 'x' });
+      store.add(result(), { replace: a.id });
+      expect(store.history()).toEqual([]);
+      expect(store.get(a.id)?.changedCells).toBe(1);
+    });
+
+    it('keeps the rest of the history when one result comes back', () => {
+      const store = new ResultStore();
+      const a = store.add(result());
+      const b = store.add(result(), { replace: a.id });
+      store.add(result(), { replace: b.id });
+      expect(store.restore(a.id)).toBeDefined();
+      expect(store.history(DOC).map((item) => item.id)).toEqual([b.id]);
+    });
+
+    it('drops only as much history as the budget needs, oldest first', () => {
+      const store = new ResultStore({ maxCells: 100 });
+      const a = store.add(result({ rows: rows(25) }));
+      const b = store.add(result({ rows: rows(25) }), { replace: a.id });
+      const c = store.add(result({ rows: rows(25) }), { replace: b.id });
+      expect(store.history(DOC).map((item) => item.id)).toEqual([b.id, a.id]);
+      store.add(result({ documentUri: 'b', rows: rows(30) }));
+      // 25 live + 30 live + two of 25 in the history is 105: the oldest history entry goes.
+      expect(store.history(DOC).map((item) => item.id)).toEqual([b.id]);
+      expect(store.get(c.id)).toBeDefined();
+    });
+
+    it('applies the per-document limit when a result comes back', () => {
+      const store = new ResultStore();
+      const first = store.add(result());
+      const gone = first.id;
+      store.add(result(), { replace: first.id });
+      for (let i = 0; i < MAX_RESULTS_PER_DOCUMENT - 1; i += 1) {
+        store.add(result());
+      }
+      expect(store.forDocument(DOC)).toHaveLength(MAX_RESULTS_PER_DOCUMENT);
+      store.restore(gone);
+      expect(store.forDocument(DOC)).toHaveLength(MAX_RESULTS_PER_DOCUMENT);
+      expect(store.forDocument(DOC).at(-1)?.id).toBe(gone);
     });
   });
 });

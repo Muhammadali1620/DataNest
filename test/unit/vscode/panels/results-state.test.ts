@@ -21,11 +21,23 @@ function summary(overrides: Partial<ResultSummary> = {}): ResultSummary {
     insertedRows: 0,
     deletedRows: 0,
     revision: 0,
+    pinned: false,
     ...overrides,
   };
 }
 
 describe('buildState', () => {
+  it('marks only pinned results (V12.5)', () => {
+    const state = buildState(
+      [summary(), summary({ id: 'result-2', pinned: true })],
+      undefined,
+      false,
+    );
+    expect(state.tabs[0]).not.toHaveProperty('pinned');
+    expect(state.tabs[1]?.pinned).toBe(true);
+    expect(() => resultGridProtocol.webview.events.state.parse(state)).not.toThrow();
+  });
+
   it('turns a result into a tab the page can render', () => {
     const state = buildState([summary()], undefined, false);
     expect(state).toEqual({

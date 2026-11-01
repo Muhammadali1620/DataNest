@@ -159,6 +159,10 @@ export const COMMAND_IDS = {
   deleteProjectQuery: 'datanest.projectQueries.delete',
   /** Compares two results of queries: what is the same, what differs, what is in one only (V12.4). */
   compareResults: 'datanest.results.compare',
+  /** Pins the shown result, or lets go of the pin (V12.5). */
+  pinResult: 'datanest.results.pin',
+  /** Brings back a result that a re-run pushed aside (V12.5). */
+  resultHistory: 'datanest.results.history',
   /** Writes the shown result to a CSV or JSON file. */
   exportResult: 'datanest.results.export',
   /** Browses the history of executed statements. */

@@ -54,6 +54,7 @@ export function buildState(
     insertedRows: summary.insertedRows,
     deletedRows: summary.deletedRows,
     revision: summary.revision,
+    ...(summary.pinned ? { pinned: true } : {}),
   }));
   // The newest tab is the one the user just produced, unless they picked another.
   const active =

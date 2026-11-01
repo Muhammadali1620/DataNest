@@ -95,6 +95,7 @@ import {
   readSafeMode,
 } from './settings';
 import { ResultsPanel } from './panels/results-panel';
+import type { ResultHistoryHandlers } from './result-history-commands';
 import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
 import type { TransactionModes } from './editor/transaction-modes';
@@ -147,6 +148,7 @@ export interface CommandDeps {
   readonly chartResult: (resultId: string) => void;
   /** Compares two results picked from the ones of this session (V12.4). */
   readonly compareResults: () => Promise<void>;
+  readonly resultHistory: ResultHistoryHandlers;
   /** The connections of the project files; notebooks name them by their id there (V12.1). */
   readonly projectConnections: ProjectConnections;
   readonly results: ResultStore;
@@ -882,6 +884,21 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       return undefined;
     },
     [COMMAND_IDS.compareResults]: () => deps.compareResults(),
+    [COMMAND_IDS.resultHistory]: () => deps.resultHistory.showHistory(),
+    [COMMAND_IDS.pinResult]: () => {
+      const document = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find(
+        (editor) => editor?.document.languageId === 'sql',
+      )?.document;
+      const panel = document === undefined ? undefined : ResultsPanel.find(document.uri.toString());
+      const resultId = panel?.activeResultId;
+      const pinned = resultId === undefined ? undefined : deps.resultHistory.togglePin(resultId);
+      if (pinned === undefined) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Run a query first: there is no result to pin'),
+        );
+      }
+      return undefined;
+    },
     [COMMAND_IDS.newNotebook]: () => notebooks.create(),
     [COMMAND_IDS.selectNotebookConnection]: () => notebooks.selectConnection(),
     [COMMAND_IDS.saveProjectQuery]: () => deps.projectQueries.save(),

@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Pin a result: a re-run keeps it and shows the new result beside it. Result History brings back a result that a re-run replaced.
+
 ## [1.7.0] - 2026-11-01
 
 ### Added

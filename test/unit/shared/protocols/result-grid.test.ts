@@ -193,7 +193,9 @@ describe('protocol shape', () => {
       'copyText',
       'exportResult',
       'importInto',
+      'openHistory',
       'openTools',
+      'pinResult',
       'ready',
       'revealError',
       'selectTab',
@@ -205,6 +207,16 @@ describe('protocol shape', () => {
     const chart = resultGridProtocol.host.events.chartResult;
     expect(chart.parse({ resultId: 'result-1' })).toEqual({ resultId: 'result-1' });
     expect(() => chart.parse({})).toThrow();
+  });
+
+  it('takes the pin of a result by its id (V12.5)', () => {
+    const pin = resultGridProtocol.host.events.pinResult;
+    expect(pin.parse({ resultId: 'result-1', pinned: true })).toEqual({
+      resultId: 'result-1',
+      pinned: true,
+    });
+    expect(() => pin.parse({ resultId: 'result-1' })).toThrow();
+    expect(() => pin.parse({ pinned: true })).toThrow();
   });
 
   it('gives the page no requests, only the state event', () => {

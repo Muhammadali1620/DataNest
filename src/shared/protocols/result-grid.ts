@@ -128,6 +128,8 @@ const tabSchema = object({
   deletedRows: number({ integer: true, min: 0 }),
   /** Grows with every pending-change update; a page reloads its rows when it moves. */
   revision: number({ integer: true, min: 0 }),
+  /** Set when the result is pinned: a re-run keeps it and shows its own result beside it (V12.5). */
+  pinned: optional(boolean()),
   /** How the result is ordered right now; absent means the server's own order. */
   sort: optional(
     object({
@@ -452,6 +454,10 @@ export const resultGridProtocol = defineProtocol({
       copyText: object({ text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
       /** Page → host: put the cursor where this result's error is. */
       revealError: object({ resultId }),
+      /** Page → host: pin the result, or let go of the pin (V12.5). */
+      pinResult: object({ resultId, pinned: boolean() }),
+      /** Page → host: choose a result pushed aside by a re-run and bring it back (V12.5). */
+      openHistory: object({}),
       /** Page → host: open a chart of this result beside it (V8.7). */
       chartResult: object({ resultId }),
       /** Page → host: write this result to a file the user picks. */

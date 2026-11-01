@@ -51,6 +51,8 @@ function setup(lang = 'en') {
   const revealed = vi.fn();
   const exported = vi.fn();
   const charted = vi.fn();
+  const pinned = vi.fn();
+  const history = vi.fn();
   host.on('ready', ready);
   host.on('selectTab', selected);
   host.on('cancel', cancelled);
@@ -58,8 +60,23 @@ function setup(lang = 'en') {
   host.on('revealError', revealed);
   host.on('exportResult', exported);
   host.on('chartResult', charted);
+  host.on('pinResult', pinned);
+  host.on('openHistory', history);
   const view = render(App, { props: { rpc, t: createTranslator(lang) } });
-  return { host, rpc, ready, selected, cancelled, copied, revealed, exported, charted, view };
+  return {
+    host,
+    rpc,
+    ready,
+    selected,
+    cancelled,
+    copied,
+    revealed,
+    exported,
+    charted,
+    pinned,
+    history,
+    view,
+  };
 }
 
 const ROWS = [
@@ -1235,6 +1252,53 @@ describe('result grid App', () => {
       await waitFor(() => {
         expect(charted).toHaveBeenCalledWith({ resultId: 'result-2' });
       });
+    });
+
+    it('pins the shown result and lets go of the pin (V12.5)', async () => {
+      const { pinned, host } = await withState({
+        tabs: [tab(), tab({ id: 'result-2', title: 'SELECT 2' })],
+        activeId: 'result-2',
+        running: false,
+      });
+      await fireEvent.click(await screen.findByTestId('pin'));
+      await waitFor(() => {
+        expect(pinned).toHaveBeenCalledWith({ resultId: 'result-2', pinned: true });
+      });
+      host.emit('state', {
+        tabs: [tab(), tab({ id: 'result-2', title: 'SELECT 2', pinned: true })],
+        activeId: 'result-2',
+        running: false,
+      });
+      const button = await screen.findByRole('button', { name: 'Unpin' });
+      expect(button.getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getAllByTestId('tab-pin')).toHaveLength(1);
+      await fireEvent.click(button);
+      await waitFor(() => {
+        expect(pinned).toHaveBeenLastCalledWith({ resultId: 'result-2', pinned: false });
+      });
+    });
+
+    it('asks the host for the history of results (V12.5)', async () => {
+      const { history } = await withState({
+        tabs: [tab()],
+        activeId: 'result-1',
+        running: false,
+      });
+      await fireEvent.click(await screen.findByTestId('result-history'));
+      await waitFor(() => {
+        expect(history).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('offers no pin and no history for a statement without columns', async () => {
+      await withState({
+        tabs: [tab({ columns: [], rowCount: 0, affectedRows: 3 })],
+        activeId: 'result-1',
+        running: false,
+      });
+      await screen.findByTestId('export');
+      expect(screen.queryByTestId('pin')).toBeNull();
+      expect(screen.queryByTestId('result-history')).toBeNull();
     });
 
     it('offers no chart for a statement without columns', async () => {

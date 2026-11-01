@@ -141,6 +141,8 @@
   "commands.server.users.title": "Users and Privileges",
   "commands.results.chart.title": "Chart of Result",
   "commands.results.compare.title": "Compare Results…",
+  "commands.results.pin.title": "Pin or Unpin Result",
+  "commands.results.history.title": "Result History…",
   "commands.notebook.new.title": "New SQL Notebook",
   "commands.notebook.selectConnection.title": "Select Notebook Connection…",
   "notebook.displayName": "DataNest SQL Notebook",

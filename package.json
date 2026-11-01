@@ -475,6 +475,18 @@
         "icon": "$(diff)"
       },
       {
+        "command": "datanest.results.pin",
+        "title": "%commands.results.pin.title%",
+        "category": "DataNest",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "datanest.results.history",
+        "title": "%commands.results.history.title%",
+        "category": "DataNest",
+        "icon": "$(history)"
+      },
+      {
         "command": "datanest.results.export",
         "title": "%commands.results.export.title%",
         "category": "DataNest",

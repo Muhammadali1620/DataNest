@@ -77,6 +77,18 @@ and filters built from the cell's value; right-click inside any text box for cut
 select all, undo and redo. The value dialog colours JSON and XML/SVG and closes `{ [ ( < " '`
 as you type, like an editor.
 
+## Pin and history
+
+**Pin** (the pin button of the toolbar, or **Pin or Unpin Result** in the Command Palette)
+keeps a result: running the query again shows the new result in a tab beside it instead of
+replacing it, and the oldest results no longer push it out. A pinned result is marked with a
+pin on its tab. Unpin it to let the next run replace it again.
+
+A result that a re-run replaced is not lost. **Result History** (the clock button, or the
+Command Palette) lists the last ten such results of the editor; pick one to bring it back as a
+tab, with all its rows. The history lives in memory only and is the first thing given up when
+results take too much of it; closing the editor clears it.
+
 ## Charts
 
 **Chart of Result** (the **Chart** button, or the Command Palette) draws the current

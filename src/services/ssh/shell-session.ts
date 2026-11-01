@@ -252,9 +252,15 @@ export async function execRemoteCommand(
           ),
         );
       });
-      channel.once('close', () => {
+      // The status can arrive in the same packet as the reply to `exec`, before these listeners
+      // exist (a command that ends at once); `close` repeats it, as for a child process.
+      channel.once('close', (closeCode?: number | null, closeSignal?: string) => {
         control.signal?.removeEventListener('abort', abort);
         closed = true;
+        if (code === undefined && signal === undefined) {
+          code = typeof closeCode === 'number' ? closeCode : undefined;
+          signal = typeof closeSignal === 'string' ? closeSignal : undefined;
+        }
         if (aborted || code !== undefined || signal !== undefined) {
           settle();
         } else {

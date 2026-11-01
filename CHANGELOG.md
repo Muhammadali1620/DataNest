@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- Folders of connections can be nested, up to eight levels: New Subfolder…, Move Folder…, drag a folder onto another one, or write `Work/Prod` in the connection's Folder field. Removing a folder lifts what it held one level up.
+- Export Keys… and Restore Keys… on a Redis database, folder or the selected keys: a portable file with one JSON record per line (all types, TTLs, binary bytes), read with SCAN and cancellable; on restore, skip, overwrite or put keys that exist under a prefix.
 - SQL highlighting inside marked strings in JavaScript, TypeScript, Python, Go, PHP, Java, Kotlin and C#: a template tagged `sql`, a `/* sql */` or `// language=SQL` mark, `# sql` in Python, `<<<SQL` in PHP. Strings without a mark are untouched.
 - Count Keys on a Redis folder: counts every key under the prefix with SCAN (up to 100 000 keys or 30 seconds, then "≥ N"), with a cancellable progress and a live count in the tree.
 - Column headers can be dragged to reorder the columns (on by default; left half drops before, right half after, with an accent line). Alt+Shift+[ and ] move the focused column, and the Columns menu has left/right arrows. Pinned columns reorder among themselves.

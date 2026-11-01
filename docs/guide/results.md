@@ -77,6 +77,26 @@ and filters built from the cell's value; right-click inside any text box for cut
 select all, undo and redo. The value dialog colours JSON and XML/SVG and closes `{ [ ( < " '`
 as you type, like an editor.
 
+## Editing many cells
+
+An edit goes to every selected cell. **Delete** (or **Set NULL** and **Set empty string** in the
+cell menu) changes the whole selection, and **Ctrl+D** (**Fill down**) copies the top cell of the
+selection into the cells under it, column by column. **Fill selection…** (the button of the edit
+bar, or the cell menu) opens a window with more ways to fill:
+
+- one value, NULL, or the column's default;
+- the top cell, copied down;
+- a **series of numbers**: a start, a step (negative or decimal is fine), the least number of
+  digits (`007`) and a text around the number, e.g. `user{n}@example.com`;
+- a **series of dates**: a start (`2024-01-31`, with an optional time of day), a step and a unit
+  (days, weeks, months, years). A month step keeps the last day of a short month.
+
+The window shows the first values before anything is written. Each cell is an ordinary edit, so
+the column's type decides whether the text is accepted: cells that refuse (a computed column,
+NULL in a NOT NULL column, `abc` in an integer column) are skipped and counted, and the fill
+fails only when no cell took it. Nothing reaches the database until you save, and **Revert**
+undoes the fill. One fill covers up to 100,000 cells.
+
 ## Pin and history
 
 **Pin** (the pin button of the toolbar, or **Pin or Unpin Result** in the Command Palette)

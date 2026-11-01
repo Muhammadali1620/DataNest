@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 ### Added
 
 - Pin a result: a re-run keeps it and shows the new result beside it. Result History brings back a result that a re-run replaced.
+- Fill selected cells: Delete, Set NULL and Fill down (Ctrl+D) act on the whole selection; Fill Selection… writes one value, NULL, the default, the top cell copied down, or a series of numbers or dates.
 
 ## [1.7.0] - 2026-11-01
 

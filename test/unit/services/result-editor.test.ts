@@ -355,3 +355,258 @@ describe('ResultEditor.setFromFile (V10.2.4)', () => {
     });
   });
 });
+
+describe('ResultEditor.fillCells (V12.6)', () => {
+  const rows = (): NewResult['rows'] =>
+    [1, 2, 3, 4].map((id) => [id, `n${id}`, id * 10, 'new', null, id]);
+
+  /** What the grid would show in a column after the fill, top to bottom. */
+  function shown(store: ResultStore, id: string, column: number): unknown[] {
+    return (store.window(id, 0, 10)?.rows ?? []).map((row) => row[column]);
+  }
+
+  it('puts one value into every selected cell', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    const done = editor.fillCells(
+      id,
+      { top: 0, bottom: 2, columns: [1] },
+      { kind: 'value', input: { kind: 'text', text: 'x' } },
+    );
+    expect(done).toEqual({ ok: true, changed: 3, skipped: 0 });
+    expect(shown(store, id, 1)).toEqual(['x', 'x', 'x', 'n4']);
+    expect(store.get(id)?.changedCells).toBe(3);
+  });
+
+  it('sets NULL and the default across a block', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    expect(
+      editor.fillCells(
+        id,
+        { top: 1, bottom: 2, columns: [1, 2] },
+        { kind: 'value', input: { kind: 'null' } },
+      ),
+    ).toEqual({ ok: true, changed: 4, skipped: 0 });
+    expect(shown(store, id, 2)).toEqual([10, null, null, 40]);
+    expect(
+      editor.fillCells(
+        id,
+        { top: 0, bottom: 0, columns: [1] },
+        { kind: 'value', input: { kind: 'default' } },
+      ),
+    ).toEqual({ ok: true, changed: 1, skipped: 0 });
+    expect(store.changeAt(id, 0, 1)).toEqual({ kind: 'default' });
+  });
+
+  it('skips the cells a column refuses and says why', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    // id is NOT NULL, name takes NULL; photo is binary and total is computed.
+    const done = editor.fillCells(
+      id,
+      { top: 0, bottom: 1, columns: [0, 1, 4, 5] },
+      { kind: 'value', input: { kind: 'null' } },
+    );
+    expect(done).toEqual({ ok: true, changed: 2, skipped: 6, error: 'not-null' });
+    expect(shown(store, id, 1)).toEqual([null, null, 'n3', 'n4']);
+    expect(shown(store, id, 0)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('fails when no cell took the input, with the first reason', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    expect(
+      editor.fillCells(
+        id,
+        { top: 0, bottom: 1, columns: [2] },
+        { kind: 'value', input: { kind: 'text', text: 'abc' } },
+      ),
+    ).toEqual({ ok: false, error: 'invalid-integer' });
+    expect(
+      editor.fillCells(
+        id,
+        { top: 0, bottom: 1, columns: [5] },
+        { kind: 'value', input: { kind: 'text', text: '1' } },
+      ),
+    ).toEqual({ ok: false, error: 'read-only-column' });
+    expect(store.get(id)?.changedCells).toBe(0);
+  });
+
+  it('counts a cell that already holds the value as done, not skipped', () => {
+    const { id, editor } = setup({ rows: rows() });
+    expect(
+      editor.fillCells(
+        id,
+        { top: 0, bottom: 0, columns: [1] },
+        { kind: 'value', input: { kind: 'text', text: 'n1' } },
+      ),
+    ).toEqual({ ok: true, changed: 1, skipped: 0 });
+  });
+
+  it('copies the top cell down, column by column', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    const done = editor.fillCells(id, { top: 1, bottom: 3, columns: [1, 2] }, { kind: 'down' });
+    expect(done).toEqual({ ok: true, changed: 4, skipped: 0 });
+    expect(shown(store, id, 1)).toEqual(['n1', 'n2', 'n2', 'n2']);
+    expect(shown(store, id, 2)).toEqual([10, 20, 20, 20]);
+  });
+
+  it('copies a NULL and a value that was just edited', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    editor.editCell(id, 0, 1, { kind: 'null' });
+    editor.editCell(id, 0, 2, { kind: 'text', text: '99' });
+    editor.fillCells(id, { top: 0, bottom: 2, columns: [1, 2] }, { kind: 'down' });
+    expect(shown(store, id, 1)).toEqual([null, null, null, 'n4']);
+    expect(shown(store, id, 2)).toEqual([99, 99, 99, 40]);
+  });
+
+  it('copying down one row changes nothing', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    expect(editor.fillCells(id, { top: 2, bottom: 2, columns: [1] }, { kind: 'down' })).toEqual({
+      ok: true,
+      changed: 0,
+      skipped: 0,
+    });
+    expect(store.get(id)?.changedCells).toBe(0);
+  });
+
+  it('fills a number series, the same in every column', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    const done = editor.fillCells(
+      id,
+      { top: 0, bottom: 3, columns: [0, 2] },
+      { kind: 'series', start: '100', step: '5' },
+    );
+    expect(done).toEqual({ ok: true, changed: 8, skipped: 0 });
+    expect(shown(store, id, 0)).toEqual([100, 105, 110, 115]);
+    expect(shown(store, id, 2)).toEqual([100, 105, 110, 115]);
+  });
+
+  it('fills a text series from a template', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    editor.fillCells(
+      id,
+      { top: 1, bottom: 3, columns: [1] },
+      { kind: 'series', start: '1', step: '1', template: 'user{n}', pad: 2 },
+    );
+    expect(shown(store, id, 1)).toEqual(['n1', 'user01', 'user02', 'user03']);
+  });
+
+  it('fills a series of dates', () => {
+    const { store, id, editor } = setup({
+      columns: [{ name: 'id' }, { name: 'name' }, { name: 'born' }],
+      rows: [
+        [1, 'a', null],
+        [2, 'b', null],
+        [3, 'c', null],
+      ],
+      edit: {
+        ...EDIT,
+        columnMap: ['id', 'name', 'born'],
+        columns: [
+          EDIT.columns[0] ?? null,
+          EDIT.columns[1] ?? null,
+          { name: 'born', dataType: 'date', nullable: true, kind: 'date' },
+        ],
+      },
+    });
+    const done = editor.fillCells(
+      id,
+      { top: 0, bottom: 2, columns: [2] },
+      { kind: 'dates', start: '2024-01-31', step: 1, unit: 'month' },
+    );
+    expect(done).toEqual({ ok: true, changed: 3, skipped: 0 });
+    expect(shown(store, id, 2)).toEqual([
+      { kind: 'datetime', text: '2024-01-31' },
+      { kind: 'datetime', text: '2024-02-29' },
+      { kind: 'datetime', text: '2024-03-31' },
+    ]);
+  });
+
+  it('lets the column judge each text of a series', () => {
+    const { id, editor } = setup({ rows: rows() });
+    expect(
+      editor.fillCells(
+        id,
+        { top: 0, bottom: 1, columns: [3] },
+        { kind: 'series', start: '1', step: '1' },
+      ),
+    ).toEqual({ ok: false, error: 'invalid-enum' });
+  });
+
+  it('reports a series that cannot be made', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    const box = { top: 0, bottom: 1, columns: [2] };
+    expect(editor.fillCells(id, box, { kind: 'series', start: 'x', step: '1' })).toEqual({
+      ok: false,
+      error: 'invalid-start',
+    });
+    expect(
+      editor.fillCells(id, box, { kind: 'series', start: '1', step: '1', template: 'n' }),
+    ).toEqual({
+      ok: false,
+      error: 'invalid-template',
+    });
+    expect(editor.fillCells(id, box, { kind: 'dates', start: 'x', step: 1, unit: 'day' })).toEqual({
+      ok: false,
+      error: 'invalid-start-date',
+    });
+    expect(store.get(id)?.changedCells).toBe(0);
+  });
+
+  it('skips deleted rows and rows that are not there', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    editor.rowAction(id, 'delete', [1]);
+    const done = editor.fillCells(
+      id,
+      { top: 0, bottom: 5, columns: [1] },
+      { kind: 'value', input: { kind: 'text', text: 'x' } },
+    );
+    expect(done).toEqual({ ok: true, changed: 3, skipped: 3, error: 'row-deleted' });
+    expect(shown(store, id, 1)).toEqual(['x', 'n2', 'x', 'x']);
+  });
+
+  it('fills new rows too', () => {
+    const { store, id, editor } = setup({ rows: rows() });
+    editor.rowAction(id, 'add', []);
+    editor.fillCells(
+      id,
+      { top: 3, bottom: 4, columns: [1] },
+      { kind: 'series', start: '1', step: '1', template: 'x{n}' },
+    );
+    expect(shown(store, id, 1)).toEqual(['n1', 'n2', 'n3', 'x1', 'x2']);
+  });
+
+  it('refuses a read-only result, an empty or reversed block and too many cells', () => {
+    const readOnly = setup({ rows: rows(), edit: { editable: false, reason: 'no-key' } });
+    const value = { kind: 'value', input: { kind: 'null' } } as const;
+    expect(
+      readOnly.editor.fillCells(readOnly.id, { top: 0, bottom: 0, columns: [1] }, value),
+    ).toEqual({
+      ok: false,
+      error: 'not-editable',
+    });
+    const { id, editor } = setup({ rows: rows() });
+    expect(editor.fillCells(id, { top: 2, bottom: 1, columns: [1] }, value)).toEqual({
+      ok: false,
+      error: 'no-such-row',
+    });
+    expect(editor.fillCells(id, { top: 0, bottom: 1, columns: [] }, value)).toEqual({
+      ok: false,
+      error: 'no-such-row',
+    });
+    expect(editor.fillCells(id, { top: 0, bottom: 200_000, columns: [1] }, value)).toEqual({
+      ok: false,
+      error: 'too-many-cells',
+    });
+    expect(editor.fillCells('result-404', { top: 0, bottom: 0, columns: [1] }, value)).toEqual({
+      ok: false,
+      error: 'not-editable',
+    });
+  });
+
+  it('cannot copy down from a row that is not there', () => {
+    const { id, editor } = setup({ rows: rows() });
+    expect(editor.fillCells(id, { top: 50, bottom: 52, columns: [1] }, { kind: 'down' })).toEqual({
+      ok: false,
+      error: 'no-such-row',
+    });
+  });
+});

@@ -331,6 +331,8 @@ describe('cell menu', () => {
       'Edit in dialog',
       'Set NULL',
       'Set empty string',
+      'Fill selection…',
+      'Fill down Ctrl+D',
       'Load from file…',
       'Save to file…',
       "Filter: name = 'Main Hall'",

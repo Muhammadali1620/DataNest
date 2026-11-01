@@ -275,6 +275,17 @@ export class ResultsPanel implements vscode.Disposable {
     this.rpc.handle('rowAction', ({ resultId, action, rows }) =>
       this.deps.editor.rowAction(resultId, action, rows),
     );
+    this.rpc.handle('fillCells', ({ resultId, top, bottom, columns, fill }) => {
+      const done = this.deps.editor.fillCells(resultId, { top, bottom, columns }, fill);
+      return done.ok
+        ? {
+            ok: true,
+            changed: done.changed,
+            skipped: done.skipped,
+            ...(done.error === undefined ? {} : { error: done.error }),
+          }
+        : { ok: false, changed: 0, skipped: 0, error: done.error };
+    });
     this.rpc.handle('editCell', ({ resultId, row, column, input }) =>
       this.deps.editor.editCell(resultId, row, column, input),
     );

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { EditInput } from '../../../../src/shared/cell-input';
+  import type { FillSpec } from '../../../../src/shared/cell-fill';
   import type { RowAction } from '../../../../src/shared/row-action';
   import type { CellValue } from '../../../../src/shared/cell-value';
   import type { ResultColumnInfo } from '../../../../src/shared/protocols/result-grid';
@@ -25,6 +26,7 @@
     selectAll,
     selectCell,
     selectionBox,
+    selectionSize,
     type Selection,
     type SelectionInfo,
   } from './selection';
@@ -76,6 +78,13 @@
     onRowAction: (action: RowAction, rows: number[]) => Promise<void>;
     /** Saves the pending changes; bound to Ctrl+S. */
     onSave: () => Promise<void>;
+    /**
+     * Fills the selected cells (V12.6); resolves to the reason it failed, or a note when some
+     * cells were skipped. Absent when the grid cannot fill.
+     */
+    onFill?: ((selection: SelectionInfo, fill: FillSpec) => Promise<string | undefined>) | undefined;
+    /** Called to open the fill dialog for the current selection. */
+    onFillDialog?: (() => void) | undefined;
     /** Sends an edit to the host; resolves to the reason it was refused, if it was. */
     onEdit: (row: number, column: number, input: EditInput) => Promise<string | undefined>;
     /** Called when the focused cell changes, e.g. so the value panel can follow it. */
@@ -138,6 +147,8 @@
     changeAt,
     stateAt,
     onEdit,
+    onFill,
+    onFillDialog,
     onRowAction,
     onSave,
     onFocusChange,
@@ -438,6 +449,8 @@
     | 'dialog'
     | 'setNull'
     | 'setEmpty'
+    | 'fill'
+    | 'fillDown'
     | 'loadFile'
     | 'saveFile'
     | 'filterEq'
@@ -494,6 +507,12 @@
       { id: 'setNull', label: t('cellMenu.setNull'), icon: 'circle-slash', tone: 'purple', separated: true, disabled: !editable || !info.nullable },
       { id: 'setEmpty', label: t('cellMenu.setEmpty'), icon: 'symbol-string', tone: 'purple', disabled: !editable },
     );
+    if (onFill !== undefined && editColumns !== undefined) {
+      entries.push(
+        { id: 'fill', label: t('cellMenu.fill'), icon: 'list-ordered', tone: 'orange', separated: true, disabled: !editable || onFillDialog === undefined },
+        { id: 'fillDown', label: t('cellMenu.fillDown'), icon: 'arrow-down', tone: 'orange', keys: 'Ctrl+D', disabled: !editable || !spansRows },
+      );
+    }
     if (onCellFile !== undefined) {
       entries.push(
         { id: 'loadFile', label: t('cellMenu.loadFile'), icon: 'cloud-upload', tone: 'teal', separated: true, disabled: !editable },
@@ -556,10 +575,16 @@
         onOpenDialog?.(menu.row, menu.column);
         break;
       case 'setNull':
-        void setFocused({ kind: 'null' });
+        void setSelected({ kind: 'null' });
         break;
       case 'setEmpty':
-        void setFocused({ kind: 'text', text: '' });
+        void setSelected({ kind: 'text', text: '' });
+        break;
+      case 'fill':
+        onFillDialog?.();
+        break;
+      case 'fillDown':
+        void fillSelected({ kind: 'down' });
         break;
       case 'loadFile':
         onCellFile?.('load', { row: menu.row, column: menu.column });
@@ -647,6 +672,30 @@
     }
     actionError = await onEdit(focus.row, focus.column, input);
     viewport?.focus();
+  }
+
+  /** More than one cell is selected: an edit then goes to all of them (V12.6). */
+  const spansMany = $derived(selection !== undefined && selectionSize(selection) > 1);
+  const spansRows = $derived(
+    selection !== undefined && selectionBox(selection).bottom > selectionBox(selection).top,
+  );
+
+  async function fillSelected(fill: FillSpec): Promise<void> {
+    const current = selection;
+    if (current === undefined || onFill === undefined || editColumns === undefined) {
+      return;
+    }
+    actionError = await onFill(infoOf(current), fill);
+    viewport?.focus();
+  }
+
+  /** Sets NULL, empty or the default in the whole selection, or in its one cell. */
+  async function setSelected(input: EditInput): Promise<void> {
+    if (spansMany && onFill !== undefined) {
+      await fillSelected({ kind: 'value', input });
+    } else {
+      await setFocused(input);
+    }
   }
 
   /** Puts the caret in a freshly shown editor. */
@@ -761,7 +810,14 @@
     }
     if ((event.key === 'Delete' || event.key === 'Backspace') && selection !== undefined) {
       event.preventDefault();
-      void setFocused({ kind: 'null' });
+      void setSelected({ kind: 'null' });
+      return;
+    }
+    if (editColumns !== undefined && modifier && (event.key === 'd' || event.key === 'D')) {
+      event.preventDefault();
+      if (spansRows) {
+        void fillSelected({ kind: 'down' });
+      }
       return;
     }
     if (!isNavigationKey(event.key)) {
@@ -862,7 +918,7 @@
       label={t('grid.setNull')}
       disabled={!canSetNull}
       onclick={() => {
-        void setFocused({ kind: 'null' });
+        void setSelected({ kind: 'null' });
       }}
     />
     <IconButton
@@ -871,9 +927,19 @@
       label={t('grid.setDefault')}
       disabled={!canSetDefault}
       onclick={() => {
-        void setFocused({ kind: 'default' });
+        void setSelected({ kind: 'default' });
       }}
     />
+    {#if onFill !== undefined && onFillDialog !== undefined}
+      <IconButton
+        icon="list-ordered"
+        tone="orange"
+        label={t('cellMenu.fill')}
+        disabled={selection === undefined}
+        data-testid="fill-open"
+        onclick={onFillDialog}
+      />
+    {/if}
     <span class="toolbar-separator"></span>
     <IconButton
       icon="add"

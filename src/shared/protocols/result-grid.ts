@@ -6,6 +6,7 @@ import { COPY_ERRORS, COPY_FORMATS } from '../copy-format';
 import { LINK_ERRORS } from '../link-error';
 import { MAX_COLUMNS, resultRowSchema } from '../cell-value';
 import { INPUT_KINDS } from '../cell-input';
+import { DATE_UNITS, FILL_PROBLEMS } from '../cell-fill';
 import { READ_ONLY_REASONS } from '../read-only-reason';
 import { TABLE_ACTIONS } from '../table-actions';
 import { tableFilterSchema } from '../table-filter';
@@ -178,6 +179,25 @@ const editInput = union(
   object({ kind: literal('text'), text: string({ maxLength: MAX_CLIPBOARD_CHARS }) }),
   object({ kind: literal('null') }),
   object({ kind: literal('default') }),
+);
+
+/** How a block of selected cells is filled (V12.6). */
+const fillSchema = union(
+  object({ kind: literal('value'), input: editInput }),
+  object({ kind: literal('down') }),
+  object({
+    kind: literal('series'),
+    start: string({ maxLength: 100 }),
+    step: string({ maxLength: 100 }),
+    template: optional(string({ maxLength: 1000 })),
+    pad: optional(number({ integer: true, min: 0, max: 40 })),
+  }),
+  object({
+    kind: literal('dates'),
+    start: string({ maxLength: 100 }),
+    step: number({ integer: true, min: -100_000, max: 100_000 }),
+    unit: literal(...DATE_UNITS),
+  }),
 );
 
 /** Why an edit was refused; the page turns each into a sentence. */
@@ -358,6 +378,25 @@ export const resultGridProtocol = defineProtocol({
           input: editInput,
         }),
         result: object({ ok: boolean(), error: optional(literal(...EDIT_ERRORS)) }),
+      },
+      /**
+       * Page → host: fill a block of cells with one value, the top cell or a series; queued,
+       * not saved (V12.6). Cells that refuse are counted in `skipped`.
+       */
+      fillCells: {
+        params: object({
+          resultId,
+          top: number({ integer: true, min: 0 }),
+          bottom: number({ integer: true, min: 0 }),
+          columns: array(number({ integer: true, min: 0 }), { maxLength: MAX_COLUMNS }),
+          fill: fillSchema,
+        }),
+        result: object({
+          ok: boolean(),
+          changed: number({ integer: true, min: 0 }),
+          skipped: number({ integer: true, min: 0 }),
+          error: optional(literal(...EDIT_ERRORS, ...FILL_PROBLEMS)),
+        }),
       },
       /** Page → host: add, duplicate, delete or restore rows; queued, not saved. */
       rowAction: {

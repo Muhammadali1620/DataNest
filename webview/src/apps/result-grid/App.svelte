@@ -61,6 +61,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
   import ExportDialog from './ExportDialog.svelte';
   import ResultLayout from './ResultLayout.svelte';
   import InsertDialog from './InsertDialog.svelte';
+  import FillDialog from './FillDialog.svelte';
+  import type { FillSpec } from '../../../../src/shared/cell-fill';
   import {
     type ExportFormatId,
     type ExportScope,
@@ -114,6 +116,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   let viewOpen = $state(false);
   let exportOpen = $state(false);
   let insertOpen = $state(false);
+  let fillOpen = $state(false);
   /** The cell whose value is open in the dialog. */
   let dialog = $state<{ row: number; column: number } | undefined>(undefined);
   /** Seconds between automatic refreshes of the result; 0 is off. */
@@ -539,6 +542,31 @@ import type { RowAction } from '../../../../src/shared/row-action';
     try {
       const answer = await rpc.request('editCell', { resultId: tab.id, row, column, input });
       return answer.ok ? undefined : t(`grid.editError.${answer.error ?? 'not-editable'}`);
+    } catch (error) {
+      return error instanceof Error ? error.message : t('grid.editFailed');
+    }
+  }
+
+  /** Fills the selected cells; the answer is a sentence when it failed or skipped cells. */
+  async function onFill(block: SelectionInfo, fill: FillSpec): Promise<string | undefined> {
+    const tab = activeTab;
+    if (tab === undefined) {
+      return t('grid.editFailed');
+    }
+    try {
+      const answer = await rpc.request('fillCells', {
+        resultId: tab.id,
+        top: block.top,
+        bottom: block.bottom,
+        columns: [...block.columns],
+        fill,
+      });
+      if (!answer.ok) {
+        return t(`grid.editError.${answer.error ?? 'not-editable'}`);
+      }
+      return answer.skipped > 0 && answer.error !== undefined
+        ? t('fill.skipped', answer.changed, answer.skipped, t(`grid.editError.${answer.error}`))
+        : undefined;
     } catch (error) {
       return error instanceof Error ? error.message : t('grid.editFailed');
     }
@@ -1653,6 +1681,10 @@ import type { RowAction } from '../../../../src/shared/row-action';
               {changeAt}
               {stateAt}
               {onEdit}
+              {onFill}
+              onFillDialog={() => {
+                fillOpen = true;
+              }}
               {onRowAction}
               {onSave}
               onSelectionChange={(next: SelectionInfo | undefined) => {
@@ -1826,6 +1858,18 @@ import type { RowAction } from '../../../../src/shared/row-action';
         void saveValueFile(target);
       }}
       onLoadFile={canLoadFile(activeTab, target) ? () => void loadValueFile(target) : undefined}
+      {t}
+    />
+  {/if}
+  {#if fillOpen && selected !== undefined}
+    {@const block = selected}
+    <FillDialog
+      rows={block.bottom - block.top + 1}
+      columns={block.columns.length}
+      onFill={(fill: FillSpec) => onFill(block, fill)}
+      onClose={() => {
+        fillOpen = false;
+      }}
       {t}
     />
   {/if}

@@ -171,6 +171,7 @@ describe('protocol shape', () => {
       'countRows',
       'discardChanges',
       'editCell',
+      'fillCells',
       'filterTable',
       'followLink',
       'loadAll',
@@ -217,6 +218,48 @@ describe('protocol shape', () => {
     });
     expect(() => pin.parse({ resultId: 'result-1' })).toThrow();
     expect(() => pin.parse({ pinned: true })).toThrow();
+  });
+
+  it('takes a fill of a block of cells, each kind of it (V12.6)', () => {
+    const fill = resultGridProtocol.host.requests.fillCells.params;
+    const base = { resultId: 'result-1', top: 0, bottom: 3, columns: [1, 2] };
+    const kinds = [
+      { kind: 'value', input: { kind: 'text', text: 'x' } },
+      { kind: 'value', input: { kind: 'null' } },
+      { kind: 'down' },
+      { kind: 'series', start: '1', step: '1' },
+      { kind: 'series', start: '1', step: '0.5', template: 'a{n}', pad: 3 },
+      { kind: 'dates', start: '2024-01-01', step: -2, unit: 'week' },
+    ];
+    for (const one of kinds) {
+      expect(() => fill.parse({ ...base, fill: one })).not.toThrow();
+    }
+    for (const bad of [
+      { kind: 'series', start: '1' },
+      { kind: 'series', start: '1', step: '1', pad: 41 },
+      { kind: 'series', start: '1', step: '1', pad: -1 },
+      { kind: 'dates', start: '2024-01-01', step: 1.5, unit: 'day' },
+      { kind: 'dates', start: '2024-01-01', step: 1, unit: 'hour' },
+      { kind: 'random' },
+    ]) {
+      expect(() => fill.parse({ ...base, fill: bad })).toThrow();
+    }
+    expect(() => fill.parse({ ...base, top: -1, fill: { kind: 'down' } })).toThrow();
+    expect(() => fill.parse({ resultId: 'result-1', fill: { kind: 'down' } })).toThrow();
+  });
+
+  it('answers a fill with the counts and the first reason (V12.6)', () => {
+    const answer = resultGridProtocol.host.requests.fillCells.result;
+    expect(answer.parse({ ok: true, changed: 3, skipped: 1, error: 'not-null' })).toEqual({
+      ok: true,
+      changed: 3,
+      skipped: 1,
+      error: 'not-null',
+    });
+    expect(() =>
+      answer.parse({ ok: false, changed: 0, skipped: 0, error: 'invalid-start' }),
+    ).not.toThrow();
+    expect(() => answer.parse({ ok: false, changed: 0, skipped: 0, error: 'mystery' })).toThrow();
   });
 
   it('gives the page no requests, only the state event', () => {

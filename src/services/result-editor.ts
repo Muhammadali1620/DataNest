@@ -3,6 +3,7 @@
 // Nothing reaches the database here; saving is a separate step (V2.4).
 
 import { cellText } from '../shared/cell-text';
+import { type FillProblem, type FillSpec, MAX_FILL_CELLS, seriesTexts } from '../shared/cell-fill';
 import type { RowAction } from '../shared/row-action';
 import { type EditInput, type InputProblem, parseCellInput } from '../shared/cell-input';
 import type { CellValue } from '../shared/cell-value';
@@ -29,6 +30,26 @@ export type EditError =
 export type RowActionOutcome =
   /** `row` is where the grid shows the first new row, when the action made any. */
   { readonly ok: true; readonly row?: number } | { readonly ok: false; readonly error: EditError };
+
+/** The block of cells a fill covers: rows `top`…`bottom` of the given result columns. */
+export interface FillBox {
+  readonly top: number;
+  readonly bottom: number;
+  readonly columns: readonly number[];
+}
+
+export type FillOutcome =
+  /**
+   * `changed` cells took the input; `skipped` could not (a computed column, a deleted row,
+   * NULL in a NOT NULL column, a text the column's type refuses). `error` is the first reason.
+   */
+  | {
+      readonly ok: true;
+      readonly changed: number;
+      readonly skipped: number;
+      readonly error?: EditError;
+    }
+  | { readonly ok: false; readonly error: EditError | FillProblem };
 
 export type EditOutcome = { readonly ok: true } | { readonly ok: false; readonly error: EditError };
 
@@ -92,6 +113,68 @@ export class ResultEditor {
     return this.results.setChange(resultId, row, column, change)
       ? { ok: true }
       : fail('no-such-row');
+  }
+
+  /**
+   * Fills a block of cells (V12.6): one input in all of them, the top cell copied down, or a
+   * series. Each cell is an ordinary edit, so every column keeps its own type rules; cells
+   * that refuse are skipped and counted, and the fill fails only when none took the input.
+   */
+  fillCells(resultId: string, box: FillBox, fill: FillSpec): FillOutcome {
+    const edit = this.results.get(resultId)?.edit;
+    if (edit?.editable !== true) {
+      return { ok: false, error: 'not-editable' };
+    }
+    const rows = box.bottom - box.top + 1;
+    if (rows < 1 || box.columns.length === 0) {
+      return { ok: false, error: 'no-such-row' };
+    }
+    if (rows * box.columns.length > MAX_FILL_CELLS) {
+      return { ok: false, error: 'too-many-cells' };
+    }
+    let series: string[] | undefined;
+    if (fill.kind === 'series' || fill.kind === 'dates') {
+      const made = seriesTexts(fill, rows);
+      if (!made.ok) {
+        return { ok: false, error: made.problem };
+      }
+      series = made.texts;
+    }
+    const top =
+      fill.kind === 'down' ? this.results.window(resultId, box.top, 1)?.rows[0] : undefined;
+    if (fill.kind === 'down' && top === undefined) {
+      return { ok: false, error: 'no-such-row' };
+    }
+    let changed = 0;
+    let skipped = 0;
+    let first: EditError | undefined;
+    for (const column of box.columns) {
+      for (let offset = 0; offset < rows; offset += 1) {
+        let input: EditInput;
+        if (series !== undefined) {
+          input = { kind: 'text', text: series[offset] ?? '' };
+        } else if (fill.kind === 'value') {
+          input = fill.input;
+        } else {
+          if (offset === 0) {
+            continue;
+          }
+          const value = top?.[column] ?? null;
+          input = value === null ? { kind: 'null' } : { kind: 'text', text: cellText(value) };
+        }
+        const done = this.editCell(resultId, box.top + offset, column, input);
+        if (done.ok) {
+          changed += 1;
+        } else {
+          skipped += 1;
+          first ??= done.error;
+        }
+      }
+    }
+    if (changed === 0 && first !== undefined) {
+      return { ok: false, error: first };
+    }
+    return { ok: true, changed, skipped, ...(first === undefined ? {} : { error: first }) };
   }
 
   /**

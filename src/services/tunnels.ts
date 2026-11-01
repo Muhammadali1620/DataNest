@@ -4,6 +4,7 @@
 // between all sessions of a connection.
 
 import { createRequire } from 'node:module';
+import type { SshAlgorithms } from '../shared/ssh-algorithms';
 import { DbError, toDbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import {
@@ -39,6 +40,8 @@ export interface TunnelHop {
   readonly keyFile?: string;
   readonly passphrase?: string;
   readonly agentSocket?: string;
+  /** Method rules for this server (V13.10); absent means ssh2's defaults. */
+  readonly algorithms?: SshAlgorithms;
 }
 
 /** What the user is asked to trust before the first connection to a server. */
@@ -154,6 +157,7 @@ function tunnelHopsOf(
       ...(hop.auth === 'agent' && hop.agentSocket !== undefined
         ? { agentSocket: hop.agentSocket }
         : {}),
+      ...(hop.algorithms === undefined ? {} : { algorithms: hop.algorithms }),
     };
   });
 }

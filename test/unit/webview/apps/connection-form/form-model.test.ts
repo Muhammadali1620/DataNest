@@ -334,6 +334,49 @@ describe('SSH fields', () => {
     expect(toHop(fields)).toEqual(hop);
   });
 
+  it('keeps the SSH algorithm rules through the form and back (V13.10)', () => {
+    const hop = {
+      id: 'h',
+      host: 'old',
+      user: 'u',
+      auth: 'agent' as const,
+      algorithms: { kex: '+diffie-hellman-group1-sha1', cipher: 'aes128-cbc' },
+    };
+    const fields = hopFieldsFrom(hop);
+    expect(fields.algorithms).toEqual({
+      kex: '+diffie-hellman-group1-sha1',
+      serverHostKey: '',
+      cipher: 'aes128-cbc',
+      hmac: '',
+      compress: '',
+    });
+    expect(toHop(fields)).toEqual(hop);
+    expect(newHopFields('x').algorithms).toEqual({
+      kex: '',
+      serverHostKey: '',
+      cipher: '',
+      hmac: '',
+      compress: '',
+    });
+  });
+
+  it('sends no algorithms when every rule is blank, and trims the others (V13.10)', () => {
+    const blank = { ...newHopFields('h'), host: 'b', user: 'u' };
+    expect(toHop(blank)).not.toHaveProperty('algorithms');
+    const fields = {
+      ...blank,
+      algorithms: { ...blank.algorithms, hmac: '  hmac-md5 ', compress: ' ' },
+    };
+    expect(toHop(fields).algorithms).toEqual({ hmac: 'hmac-md5' });
+  });
+
+  it('flags a rule that names an unknown algorithm (V13.10)', () => {
+    const hop = { ...newHopFields('h'), host: 'b', user: 'u' };
+    expect(hopProblemsOf(hop)).toEqual([]);
+    const bad = { ...hop, algorithms: { ...hop.algorithms, kex: '+nonsense' } };
+    expect(hopProblemsOf(bad)).toEqual(['ssh-algorithms-invalid']);
+  });
+
   it('sends only the fields of the chosen method, trimmed', () => {
     const hop = {
       ...newHopFields('h'),

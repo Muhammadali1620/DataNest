@@ -28,6 +28,7 @@ import {
   type SslSettings,
   supportsSocket,
 } from '../shared/connection';
+import { cleanAlgorithms } from '../shared/ssh-algorithms';
 import { connectionInputShape } from '../shared/connection-schema';
 import {
   cleanFolderPath,
@@ -1022,6 +1023,7 @@ function normalizeHop(hop: SshHop): SshHop {
   };
   const keyFile = hop.auth === 'key' ? trim(hop.keyFile) : undefined;
   const agentSocket = hop.auth === 'agent' ? trim(hop.agentSocket) : undefined;
+  const algorithms = cleanAlgorithms(hop.algorithms);
   return {
     id: hop.id,
     host: hop.host.trim(),
@@ -1030,5 +1032,6 @@ function normalizeHop(hop: SshHop): SshHop {
     auth: hop.auth,
     ...(keyFile === undefined ? {} : { keyFile }),
     ...(agentSocket === undefined ? {} : { agentSocket }),
+    ...(algorithms === undefined ? {} : { algorithms }),
   };
 }

@@ -1263,5 +1263,6 @@
   "JSON, one document per line": "JSON, документ на строку",
   "Import as New Index": "Загрузить как новый индекс",
   "The name of the new index, in lowercase": "Имя нового индекса, строчными буквами",
-  "Added {0} documents to {1}": "Добавлено документов в {1}: {0}"
+  "Added {0} documents to {1}": "Добавлено документов в {1}: {0}",
+  "The SSH server {0}:{1} and DataNest share no encryption method ({2}). If the server is old, allow its method under \"SSH algorithms\" in the connection.": "У SSH-сервера {0}:{1} и DataNest нет общего метода шифрования ({2}). Если сервер старый, разрешите его метод в разделе «Алгоритмы SSH» подключения."
 }

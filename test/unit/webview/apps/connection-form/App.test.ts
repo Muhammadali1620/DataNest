@@ -557,6 +557,85 @@ describe('connection form App', () => {
       ]);
     });
 
+    it('has a folded SSH algorithms section (V13.10)', async () => {
+      await withState();
+      await enableSsh();
+      const section = screen.getByText('SSH algorithms').closest('details');
+      expect(section?.open).toBe(false);
+    });
+
+    it('opens the section by itself once a rule is saved (V13.10)', async () => {
+      await withState(
+        newState({
+          connectionId: 'c1',
+          input: {
+            name: 'Old',
+            driver: 'mysql',
+            host: 'db',
+            ssh: {
+              id: 'main',
+              host: 'old',
+              user: 'u',
+              auth: 'agent',
+              algorithms: { kex: '+diffie-hellman-group1-sha1' },
+            },
+          },
+        }),
+      );
+      expect(screen.getByText('SSH algorithms').closest('details')?.open).toBe(true);
+      expect(field('Key exchange').value).toBe('+diffie-hellman-group1-sha1');
+    });
+
+    it('says out loud that a rule allows weak methods, and names an unknown one (V13.10)', async () => {
+      await withState();
+      await enableSsh();
+      expect(screen.queryByText(/Allows weak, outdated methods/u)).toBeNull();
+      await fireEvent.input(field('Key exchange'), {
+        target: { value: '+diffie-hellman-group1-sha1' },
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Allows weak, outdated methods: diffie-hellman-group1-sha1/u),
+        ).toBeTruthy();
+      });
+      await fireEvent.input(field('Cipher'), { target: { value: '+nonsense' } });
+      await waitFor(() => {
+        expect(screen.getByText('Not supported: nonsense')).toBeTruthy();
+      });
+    });
+
+    it('offers the supported names of each kind in a list (V13.10)', async () => {
+      await withState();
+      await enableSsh();
+      const list = field('Cipher').getAttribute('list');
+      expect(list).not.toBeNull();
+      const options = [...document.querySelectorAll(`datalist[id="${list ?? ''}"] option`)];
+      expect(options.map((option) => option.getAttribute('value'))).toContain('aes128-cbc');
+    });
+
+    it('sends the rules with the hop and blocks a save while one is wrong (V13.10)', async () => {
+      const { host } = await withState();
+      await enableSsh();
+      await fireEvent.input(field('SSH host'), { target: { value: 'old' } });
+      await fireEvent.input(field('SSH user'), { target: { value: 'u' } });
+      await fireEvent.input(field('Name'), { target: { value: 'Old' } });
+      await fireEvent.input(field('Host'), { target: { value: 'db' } });
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Cipher'), { target: { value: '+nonsense' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(drafts).toHaveLength(0);
+      await fireEvent.input(field('Cipher'), { target: { value: '+aes128-cbc' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.ssh?.algorithms).toEqual({ cipher: '+aes128-cbc' });
+    });
+
     it('sends no hop once the tunnel is turned off again', async () => {
       const { host } = await withState(
         newState({

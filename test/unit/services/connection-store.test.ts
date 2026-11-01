@@ -270,6 +270,44 @@ describe('ConnectionStore', () => {
       expect(await store.getSshSecrets(config.id)).toEqual({ main: { password: 'sshpw' } });
     });
 
+    it('saves the algorithm rules of a hop trimmed, without blank kinds (V13.10)', async () => {
+      const config = await store.add({
+        ...mysqlInput,
+        ssh: {
+          id: 'main',
+          host: 'old',
+          user: 'u',
+          auth: 'agent',
+          algorithms: { kex: ' +diffie-hellman-group1-sha1 ', cipher: '  ', hmac: 'hmac-md5' },
+          jumps: [
+            { id: 'j', host: 'e', user: 'u', auth: 'agent', algorithms: { kex: '', cipher: ' ' } },
+          ],
+        },
+      });
+      expect(config.ssh?.algorithms).toEqual({
+        kex: '+diffie-hellman-group1-sha1',
+        hmac: 'hmac-md5',
+      });
+      expect(config.ssh?.jumps?.[0]).not.toHaveProperty('algorithms');
+      const reloaded = new ConnectionStore({ state, secrets, logger });
+      expect(reloaded.get(config.id)?.ssh?.algorithms).toEqual(config.ssh?.algorithms);
+    });
+
+    it('refuses a rule that names an algorithm ssh2 does not know (V13.10)', async () => {
+      await expect(
+        store.add({
+          ...mysqlInput,
+          ssh: {
+            id: 'main',
+            host: 'h',
+            user: 'u',
+            auth: 'agent',
+            algorithms: { kex: '+nonsense' },
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'unsupported' });
+    });
+
     it('keeps only the fields of the chosen method', async () => {
       const config = await store.add({
         ...mysqlInput,

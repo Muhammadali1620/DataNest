@@ -11,6 +11,7 @@ import {
   type Attributes,
   type ParsedKey,
   Server,
+  type ServerConfig,
   type SFTPWrapper,
   utils,
 } from 'ssh2';
@@ -102,104 +103,112 @@ export async function startSshServer(options: {
    * Without the option the server has no SFTP subsystem at all.
    */
   readonly files?: ReadonlyMap<string, TestSshFile>;
+  /** Restricts the methods the server speaks, e.g. an old one with only SHA-1 key exchange. */
+  readonly algorithms?: ServerConfig['algorithms'];
 }): Promise<TestSshServer> {
   const opened: string[] = [];
   const forwards: string[] = [];
   const logins: string[] = [];
   const clients = new Set<{ end(): void }>();
   const key = testHostKey();
-  const server = new Server({ hostKeys: [key] }, (client) => {
-    clients.add(client);
-    client.on('close', () => clients.delete(client));
-    client.on('error', () => undefined);
-    client.on('authentication', (ctx) => {
-      const user = options.users.find((candidate) => candidate.name === ctx.username);
-      if (user === undefined) {
-        ctx.reject();
-        return;
-      }
-      if (ctx.method === 'password' && user.password !== undefined && !user.keyboardOnly) {
-        if (ctx.password === user.password) {
-          logins.push(user.name);
-          ctx.accept();
-        } else {
+  const server = new Server(
+    {
+      hostKeys: [key],
+      ...(options.algorithms === undefined ? {} : { algorithms: options.algorithms }),
+    },
+    (client) => {
+      clients.add(client);
+      client.on('close', () => clients.delete(client));
+      client.on('error', () => undefined);
+      client.on('authentication', (ctx) => {
+        const user = options.users.find((candidate) => candidate.name === ctx.username);
+        if (user === undefined) {
           ctx.reject();
+          return;
         }
-        return;
-      }
-      if (ctx.method === 'keyboard-interactive' && user.password !== undefined) {
-        ctx.prompt([{ prompt: 'Password: ', echo: false }], (answers) => {
-          if (answers[0] === user.password) {
+        if (ctx.method === 'password' && user.password !== undefined && !user.keyboardOnly) {
+          if (ctx.password === user.password) {
             logins.push(user.name);
             ctx.accept();
           } else {
             ctx.reject();
           }
-        });
-        return;
-      }
-      if (ctx.method === 'publickey' && user.publicKey !== undefined) {
-        const allowed = parsed(user.publicKey);
-        if (ctx.key.algo !== allowed.type || !same(ctx.key.data, allowed.getPublicSSH())) {
-          ctx.reject();
           return;
         }
-        if (ctx.signature === undefined) {
-          // The client asks whether this key would do before signing with it.
-          ctx.accept();
+        if (ctx.method === 'keyboard-interactive' && user.password !== undefined) {
+          ctx.prompt([{ prompt: 'Password: ', echo: false }], (answers) => {
+            if (answers[0] === user.password) {
+              logins.push(user.name);
+              ctx.accept();
+            } else {
+              ctx.reject();
+            }
+          });
           return;
         }
-        if (allowed.verify(ctx.blob ?? Buffer.alloc(0), ctx.signature, ctx.hashAlgo)) {
-          logins.push(user.name);
-          ctx.accept();
-        } else {
-          ctx.reject();
-        }
-        return;
-      }
-      const methods: ('password' | 'publickey' | 'keyboard-interactive')[] = [];
-      if (user.password !== undefined) {
-        methods.push(user.keyboardOnly === true ? 'keyboard-interactive' : 'password');
-      }
-      if (user.publicKey !== undefined) {
-        methods.push('publickey');
-      }
-      ctx.reject(methods);
-    });
-    client.on('ready', () => {
-      client.on('session', (accept) => {
-        const session = accept();
-        session.on('sftp', (acceptSftp, rejectSftp) => {
-          if (options.files === undefined) {
-            rejectSftp();
+        if (ctx.method === 'publickey' && user.publicKey !== undefined) {
+          const allowed = parsed(user.publicKey);
+          if (ctx.key.algo !== allowed.type || !same(ctx.key.data, allowed.getPublicSSH())) {
+            ctx.reject();
             return;
           }
-          serveSftp(acceptSftp(), options.files, opened);
-        });
-        // Nothing else (a shell, a command) is offered.
-        session.on('exec', (_accept, rejectExec) => {
-          rejectExec();
-        });
-      });
-      client.on('tcpip', (accept, reject, info) => {
-        forwards.push(`${info.destIP}:${info.destPort}`);
-        if (options.refuse?.(info.destIP, info.destPort) === true) {
-          reject();
+          if (ctx.signature === undefined) {
+            // The client asks whether this key would do before signing with it.
+            ctx.accept();
+            return;
+          }
+          if (allowed.verify(ctx.blob ?? Buffer.alloc(0), ctx.signature, ctx.hashAlgo)) {
+            logins.push(user.name);
+            ctx.accept();
+          } else {
+            ctx.reject();
+          }
           return;
         }
-        const socket = createConnection(info.destPort, info.destIP);
-        socket.once('error', () => {
-          reject();
+        const methods: ('password' | 'publickey' | 'keyboard-interactive')[] = [];
+        if (user.password !== undefined) {
+          methods.push(user.keyboardOnly === true ? 'keyboard-interactive' : 'password');
+        }
+        if (user.publicKey !== undefined) {
+          methods.push('publickey');
+        }
+        ctx.reject(methods);
+      });
+      client.on('ready', () => {
+        client.on('session', (accept) => {
+          const session = accept();
+          session.on('sftp', (acceptSftp, rejectSftp) => {
+            if (options.files === undefined) {
+              rejectSftp();
+              return;
+            }
+            serveSftp(acceptSftp(), options.files, opened);
+          });
+          // Nothing else (a shell, a command) is offered.
+          session.on('exec', (_accept, rejectExec) => {
+            rejectExec();
+          });
         });
-        socket.once('connect', () => {
-          const stream = accept();
-          stream.on('error', () => socket.destroy());
-          socket.on('error', () => stream.destroy());
-          stream.pipe(socket).pipe(stream);
+        client.on('tcpip', (accept, reject, info) => {
+          forwards.push(`${info.destIP}:${info.destPort}`);
+          if (options.refuse?.(info.destIP, info.destPort) === true) {
+            reject();
+            return;
+          }
+          const socket = createConnection(info.destPort, info.destIP);
+          socket.once('error', () => {
+            reject();
+          });
+          socket.once('connect', () => {
+            const stream = accept();
+            stream.on('error', () => socket.destroy());
+            socket.on('error', () => stream.destroy());
+            stream.pipe(socket).pipe(stream);
+          });
         });
       });
-    });
-  });
+    },
+  );
   await new Promise<void>((resolve) => {
     server.listen(0, '127.0.0.1', resolve);
   });

@@ -61,6 +61,45 @@ describe('describeHostKey', () => {
   });
 });
 
+describe('connectConfig and algorithms', () => {
+  it('passes the rules of the hop to ssh2 as its algorithms option', async () => {
+    const config = await connectConfig(
+      {
+        ...hopBase,
+        password: 'pw',
+        algorithms: { kex: '+diffie-hellman-group1-sha1', cipher: 'aes128-ctr' },
+      },
+      5000,
+    );
+    expect(config.algorithms).toEqual({
+      kex: { append: ['diffie-hellman-group1-sha1'] },
+      cipher: ['aes128-ctr'],
+    });
+  });
+
+  it('leaves ssh2 to its defaults without rules', async () => {
+    expect(await connectConfig({ ...hopBase, password: 'pw' }, 5000)).not.toHaveProperty(
+      'algorithms',
+    );
+    expect(
+      await connectConfig({ ...hopBase, password: 'pw', algorithms: { kex: '  ' } }, 5000),
+    ).not.toHaveProperty('algorithms');
+  });
+
+  it('explains a handshake that found no common method', () => {
+    for (const text of [
+      'Handshake failed: no matching key exchange algorithm',
+      'Handshake failed: no matching cipher',
+      'Handshake failed: no matching host key format',
+    ]) {
+      const error = sshError(hopBase, new Error(text), false);
+      expect(error).toMatchObject({ code: 'connection-failed' });
+      expect(error.message).toContain('SSH algorithms');
+      expect(error.message).toContain(text);
+    }
+  });
+});
+
 describe('connectConfig', () => {
   let dir: string;
 
@@ -220,6 +259,130 @@ describe('openSshTunnel', () => {
     expect(await roundTrip(tunnel.port, 'again')).toBe('again');
     expect(ssh.forwards).toEqual([`127.0.0.1:${echo.port}`, `127.0.0.1:${echo.port}`]);
     expect(tunnel.forwardError()).toBeUndefined();
+  });
+
+  describe('SSH algorithms (V13.10)', () => {
+    // A server of the old kind: it speaks SHA-1 key exchange only, which ssh2 does not offer by default.
+    const OLD_KEX: NonNullable<Parameters<typeof startSshServer>[0]['algorithms']> = {
+      kex: ['diffie-hellman-group14-sha1'],
+    };
+
+    it('cannot reach a server that shares no key exchange by default, and says what to do', async () => {
+      const ssh = await server({
+        users: [{ name: 'deploy', password: 'pw' }],
+        algorithms: OLD_KEX,
+      });
+      await expect(
+        open(spec([{ ...hopBase, port: ssh.port, password: 'pw' }])),
+      ).rejects.toMatchObject({
+        code: 'connection-failed',
+        message: expect.stringContaining('SSH algorithms') as unknown,
+      });
+    });
+
+    it('reaches it once the method is added to the defaults', async () => {
+      const ssh = await server({
+        users: [{ name: 'deploy', password: 'pw' }],
+        algorithms: OLD_KEX,
+      });
+      const tunnel = await open(
+        spec([
+          {
+            ...hopBase,
+            port: ssh.port,
+            password: 'pw',
+            algorithms: { kex: '+diffie-hellman-group14-sha1' },
+          },
+        ]),
+      );
+      expect(await roundTrip(tunnel.port, 'old')).toBe('old');
+    });
+
+    it('reaches it with a list of exactly that method', async () => {
+      const ssh = await server({
+        users: [{ name: 'deploy', password: 'pw' }],
+        algorithms: OLD_KEX,
+      });
+      const tunnel = await open(
+        spec([
+          {
+            ...hopBase,
+            port: ssh.port,
+            password: 'pw',
+            algorithms: { kex: 'diffie-hellman-group14-sha1' },
+          },
+        ]),
+      );
+      expect(await roundTrip(tunnel.port, 'only')).toBe('only');
+    });
+
+    it('reaches a server that offers only an old cipher, or an old MAC', async () => {
+      const cipher = await server({
+        users: [{ name: 'deploy', password: 'pw' }],
+        algorithms: { cipher: ['aes128-cbc'] },
+      });
+      await expect(
+        open(spec([{ ...hopBase, port: cipher.port, password: 'pw' }])),
+      ).rejects.toMatchObject({ code: 'connection-failed' });
+      const viaCipher = await open(
+        spec([
+          { ...hopBase, port: cipher.port, password: 'pw', algorithms: { cipher: '+aes128-cbc' } },
+        ]),
+      );
+      expect(await roundTrip(viaCipher.port, 'cbc')).toBe('cbc');
+      const mac = await server({
+        users: [{ name: 'deploy', password: 'pw' }],
+        algorithms: { cipher: ['aes128-cbc'], hmac: ['hmac-md5'] },
+      });
+      const viaMac = await open(
+        spec([
+          {
+            ...hopBase,
+            port: mac.port,
+            password: 'pw',
+            algorithms: { cipher: '+aes128-cbc', hmac: '+hmac-md5' },
+          },
+        ]),
+      );
+      expect(await roundTrip(viaMac.port, 'md5')).toBe('md5');
+    });
+
+    it('a rule that removes some methods leaves the others in use', async () => {
+      const ssh = await server({ users: [{ name: 'deploy', password: 'pw' }] });
+      await expect(
+        open(
+          spec([
+            {
+              ...hopBase,
+              port: ssh.port,
+              password: 'pw',
+              algorithms: { kex: '-curve25519-sha256,curve25519-sha256@libssh.org' },
+            },
+          ]),
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('applies the rules of each hop to that hop only', async () => {
+      const old = await server({
+        users: [{ name: 'deploy', password: 'pw' }],
+        algorithms: OLD_KEX,
+      });
+      const modern = await server({ users: [{ name: 'deploy', password: 'pw' }] });
+      // The jump host is modern; the second server is old and gets its rule alone.
+      const tunnel = await open(
+        spec([
+          { ...hopBase, port: modern.port, password: 'pw' },
+          {
+            ...hopBase,
+            port: old.port,
+            password: 'pw',
+            algorithms: { kex: '+diffie-hellman-group14-sha1' },
+          },
+        ]),
+      );
+      expect(await roundTrip(tunnel.port, 'chain')).toBe('chain');
+    });
   });
 
   it('answers a keyboard-interactive password prompt', async () => {

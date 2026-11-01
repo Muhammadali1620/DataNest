@@ -27,11 +27,22 @@ import {
   SSL_MODES,
   type SslSettings,
 } from './connection';
+import { SSH_ALGORITHM_RULE_MAX, type SshAlgorithms } from './ssh-algorithms';
 import { array, boolean, literal, number, object, optional, type Schema, string } from './schema';
 
 const port = (): Schema<number> => number({ integer: true, min: 1, max: 65_535 });
 
 /** The fields of `SshHop`, to be reused by shapes that change one of them. */
+const algorithmRule = (): Schema<string> => string({ maxLength: SSH_ALGORITHM_RULE_MAX });
+
+export const sshAlgorithmsSchema: Schema<SshAlgorithms> = object({
+  kex: optional(algorithmRule()),
+  serverHostKey: optional(algorithmRule()),
+  cipher: optional(algorithmRule()),
+  hmac: optional(algorithmRule()),
+  compress: optional(algorithmRule()),
+});
+
 export const sshHopShape = {
   id: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
   host: string({ maxLength: CONNECTION_LIMITS.field }),
@@ -40,6 +51,7 @@ export const sshHopShape = {
   auth: literal(...SSH_AUTH_METHODS),
   keyFile: optional(string({ maxLength: CONNECTION_LIMITS.file })),
   agentSocket: optional(string({ maxLength: CONNECTION_LIMITS.file })),
+  algorithms: optional(sshAlgorithmsSchema),
 };
 
 export const sshHopSchema: Schema<SshHop> = object(sshHopShape);

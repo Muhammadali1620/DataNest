@@ -96,6 +96,48 @@ describe('tunnelSpecOf with jump hosts', () => {
   });
 });
 
+describe('SSH algorithms in the tunnel spec (V13.10)', () => {
+  const withRules = {
+    ...base,
+    ssh: {
+      id: 'main',
+      host: 'old',
+      user: 'u',
+      auth: 'password' as const,
+      algorithms: { kex: '+diffie-hellman-group1-sha1' },
+    },
+  };
+
+  it('hands the rules of each hop on, and nothing for a hop without any', () => {
+    const spec = tunnelSpecOf(
+      {
+        ...withRules,
+        ssh: {
+          ...withRules.ssh,
+          jumps: [{ id: 'j', host: 'edge', user: 'j', auth: 'password' as const }],
+        },
+      },
+      {},
+      check,
+    );
+    expect(spec?.hops[0]).not.toHaveProperty('algorithms');
+    expect(spec?.hops[1]).toMatchObject({ algorithms: { kex: '+diffie-hellman-group1-sha1' } });
+  });
+
+  it('carries them to the copy of a file on a server as well', () => {
+    const spec = remoteFileSpecOf(withRules, {}, check);
+    expect(spec?.hops[0]).toMatchObject({ algorithms: { kex: '+diffie-hellman-group1-sha1' } });
+  });
+
+  it('gives a new tunnel key when the rules change, so an old tunnel is not reused', () => {
+    const changed = {
+      ...withRules,
+      ssh: { ...withRules.ssh, algorithms: { kex: '+diffie-hellman-group14-sha1' } },
+    };
+    expect(tunnelKeyOf('c1', changed)).not.toBe(tunnelKeyOf('c1', withRules));
+  });
+});
+
 describe('tunnelKeyOf', () => {
   it('changes with the target and the SSH settings, not with the name', () => {
     const key = tunnelKeyOf('c1', base);

@@ -1,6 +1,8 @@
 // The saved description of a connection. Passwords never live here: they are
 // kept in SecretStorage and joined in only at connect time (ARCHITECTURE.md §8).
 
+import { algorithmProblems, type SshAlgorithms } from './ssh-algorithms';
+
 export const DRIVER_IDS = [
   'mysql',
   'postgres',
@@ -266,6 +268,11 @@ export interface SshHop {
    * usual place: `SSH_AUTH_SOCK`, or the OpenSSH agent pipe on Windows.
    */
   readonly agentSocket?: string;
+  /**
+   * Which key exchange, host key, cipher, MAC and compression methods this server may
+   * use (V13.10), e.g. `+diffie-hellman-group1-sha1` for an old server.
+   */
+  readonly algorithms?: SshAlgorithms;
 }
 
 /** Most jump hosts a tunnel may pass through before its SSH server. */
@@ -654,7 +661,9 @@ export type SshProblem =
   | 'ssh-user-empty'
   | 'ssh-key-empty'
   | 'ssh-id-invalid'
-  | 'ssh-too-many-jumps';
+  | 'ssh-too-many-jumps'
+  /** A method name ssh2 does not know, or a rule with no names. */
+  | 'ssh-algorithms-invalid';
 
 export function isPortValid(port: number | undefined): boolean {
   return port === undefined || (Number.isInteger(port) && port >= 1 && port <= 65_535);
@@ -676,6 +685,9 @@ export function sshHopProblems(hop: SshHop): SshProblem[] {
   }
   if (!HOP_ID_PATTERN.test(hop.id) || hop.id.length > CONNECTION_LIMITS.hopId) {
     problems.push('ssh-id-invalid');
+  }
+  if (algorithmProblems(hop.algorithms).length > 0) {
+    problems.push('ssh-algorithms-invalid');
   }
   return problems;
 }

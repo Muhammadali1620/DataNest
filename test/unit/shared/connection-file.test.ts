@@ -96,6 +96,21 @@ describe('readConnectionFile', () => {
     });
   });
 
+  it('keeps the SSH algorithm rules of a hop, and skips an entry whose rule names nothing ssh2 knows (V13.10)', () => {
+    const [good, bad] = entries(`{ "connections": [
+      { "name": "Old", "driver": "mysql", "host": "db",
+        "ssh": { "host": "old", "user": "u", "auth": "agent",
+                 "algorithms": { "kex": "+diffie-hellman-group1-sha1", "cipher": "aes128-cbc" } } },
+      { "name": "Typo", "driver": "mysql", "host": "db",
+        "ssh": { "host": "old", "user": "u", "auth": "agent", "algorithms": { "kex": "+nonsense" } } }
+    ] }`);
+    expect(good?.ok && good.entry.input.ssh?.algorithms).toEqual({
+      kex: '+diffie-hellman-group1-sha1',
+      cipher: 'aes128-cbc',
+    });
+    expect(bad).toEqual({ ok: false, problem: 'ssh-algorithms-invalid' });
+  });
+
   it('skips a broken entry with the reason and keeps the others', () => {
     const results = entries(`{ "connections": [
       { "name": "Good", "driver": "mysql", "host": "h" },

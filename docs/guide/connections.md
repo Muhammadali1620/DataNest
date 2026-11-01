@@ -38,6 +38,27 @@ and the database. The server's host key is checked the way OpenSSH does: the fir
 are asked to trust it, and a changed key is connected to only after a warning and your
 choice.
 
+### SSH algorithms
+
+An old server may speak only methods that DataNest does not offer by default (SHA-1 key
+exchange, CBC ciphers, `ssh-dss`), and a strict one may allow fewer than the defaults. Open
+**SSH algorithms** under the server (each jump host has its own) and write a rule for the
+kind of method — key exchange, server host key, cipher, MAC or compression — in the syntax
+of OpenSSH's `sshd_config`:
+
+| Rule | Meaning |
+|---|---|
+| `+diffie-hellman-group14-sha1` | add to the defaults |
+| `-aes128-ctr,hmac-sha1` | remove from the defaults |
+| `^aes256-ctr` | put first |
+| `aes256-gcm@openssh.com,aes256-ctr` | use exactly these, in this order |
+
+Names are checked against what the SSH library supports, and the field offers them as you
+type. A rule that lets in a method outside the defaults shows a warning under the field:
+allow weak methods only for a server you trust and cannot update. When the handshake finds
+no common method, the error says so and points here. The rules apply to the tunnel, to the
+connection test and to a SQLite file copied from a server.
+
 ### SQLite file on a server
 
 A SQLite database that lives on a server can be opened through SSH: pick **SQLite**, turn on

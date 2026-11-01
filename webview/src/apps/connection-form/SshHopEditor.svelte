@@ -5,6 +5,14 @@
   import Field from '../../components/Field.svelte';
   import type { MessageKey } from '../../l10n/en';
   import type { Translate } from '../../lib/i18n';
+  import {
+    algorithmProblems,
+    legacyAlgorithms,
+    SSH_ALGORITHM_KINDS,
+    SSH_ALGORITHM_RULE_MAX,
+    SSH_ALGORITHMS,
+    type SshAlgorithmKind,
+  } from '../../../../src/shared/ssh-algorithms';
   import { hopProblemsOf, type HopFields, PROBLEM_MESSAGES } from './form-model';
 
   interface Props {
@@ -25,6 +33,38 @@
 
   function errorFor(problem: (typeof problems)[number]): string | undefined {
     return showProblems && problems.includes(problem) ? t(PROBLEM_MESSAGES[problem]) : undefined;
+  }
+
+  const ALGORITHM_LABELS: Readonly<Record<SshAlgorithmKind, MessageKey>> = {
+    kex: 'form.ssh.alg.kex',
+    serverHostKey: 'form.ssh.alg.serverHostKey',
+    cipher: 'form.ssh.alg.cipher',
+    hmac: 'form.ssh.alg.hmac',
+    compress: 'form.ssh.alg.compress',
+  };
+
+  // A hop id is unique within the form, so the lists of two hops never collide.
+  const listId = (kind: SshAlgorithmKind): string => `ssh-alg-${hop.id}-${kind}`;
+
+  const algorithmIssues = $derived(algorithmProblems(hop.algorithms));
+  const hasAlgorithms = $derived(
+    SSH_ALGORITHM_KINDS.some((kind) => hop.algorithms[kind].trim() !== ''),
+  );
+
+  function algorithmError(kind: SshAlgorithmKind): string | undefined {
+    const found = algorithmIssues.find((issue) => issue.kind === kind);
+    if (found === undefined) {
+      return undefined;
+    }
+    return found.problem.kind === 'empty'
+      ? t('form.ssh.alg.empty')
+      : t('form.ssh.alg.unknown', found.problem.names.join(', '));
+  }
+
+  /** The weak methods a rule lets in; said out loud under the field, never silently. */
+  function algorithmLegacy(kind: SshAlgorithmKind): string | undefined {
+    const names = legacyAlgorithms(kind, hop.algorithms[kind]);
+    return names.length === 0 ? undefined : t('form.ssh.alg.legacy', names.join(', '));
   }
 
   function name(key: MessageKey): string {
@@ -156,6 +196,39 @@
       />
     </Field>
   {/if}
+
+  <details class="algorithms" open={hasAlgorithms}>
+    <summary>{name('form.ssh.algorithms')}</summary>
+    <div class="algorithms-body">
+    <p class="note">{t('form.ssh.algorithmsHint')}</p>
+    {#each SSH_ALGORITHM_KINDS as kind (kind)}
+      <Field label={name(ALGORITHM_LABELS[kind])} error={algorithmError(kind)}>
+        <input
+          class="control"
+          bind:value={hop.algorithms[kind]}
+          list={listId(kind)}
+          maxlength={SSH_ALGORITHM_RULE_MAX}
+          aria-invalid={algorithmError(kind) !== undefined}
+          aria-label={name(ALGORITHM_LABELS[kind])}
+          placeholder={t('form.ssh.alg.default')}
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <datalist id={listId(kind)}>
+          {#each SSH_ALGORITHMS[kind].supported as supported (supported)}
+            <option value={supported}></option>
+          {/each}
+        </datalist>
+      </Field>
+      {#if algorithmLegacy(kind) !== undefined}
+        <p class="legacy" role="note">
+          <span class="codicon codicon-warning" aria-hidden="true"></span>
+          {algorithmLegacy(kind)}
+        </p>
+      {/if}
+    {/each}
+    </div>
+  </details>
 </div>
 
 <style>
@@ -179,6 +252,61 @@
   .grow {
     flex: 1;
     min-width: 0;
+  }
+
+  .algorithms {
+    border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+    border-radius: var(--dn-radius-l, 10px);
+    padding: 0 12px;
+  }
+
+  .algorithms[open] {
+    padding-bottom: 14px;
+  }
+
+  .algorithms-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .algorithms summary {
+    padding: 8px 0;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .algorithms summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .algorithms summary::before {
+    /* The icon font's chevron-right, turned when open. */
+    content: '\eab6';
+    font: normal normal normal 16px/1 codicon;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+    color: var(--dn-muted);
+    transition: transform var(--dn-duration) var(--dn-ease);
+  }
+
+  .algorithms[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .note {
+    margin: 0 0 2px;
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .legacy {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    margin: -6px 0 0;
+    color: var(--vscode-editorWarning-foreground, #cca700);
   }
 
   .check {

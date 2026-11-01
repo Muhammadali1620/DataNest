@@ -10,6 +10,7 @@ import { Client, type ConnectConfig } from 'ssh2';
 import { DbError, errorMessage } from '../../core/errors';
 import { expandHome, readUserFile } from '../../drivers/common/files';
 import type { Logger } from '../../core/logging/logger';
+import { ssh2Algorithms } from '../../shared/ssh-algorithms';
 import type { HostKeyInfo, Tunnel, TunnelHop, TunnelSpec } from '../tunnels';
 
 /** What it takes to log in along a chain of hops; a tunnel adds its target, a copy its files. */
@@ -56,6 +57,7 @@ export async function connectConfig(
     env: process.env,
   },
 ): Promise<ConnectConfig> {
+  const algorithms = ssh2Algorithms(hop.algorithms);
   const base: ConnectConfig = {
     host: hop.host,
     port: hop.port,
@@ -63,6 +65,8 @@ export async function connectConfig(
     readyTimeout: timeoutMs,
     keepaliveInterval: KEEPALIVE_INTERVAL_MS,
     keepaliveCountMax: KEEPALIVE_COUNT_MAX,
+    // A rule the store let through was already checked; a bad one is skipped, not sent.
+    ...(algorithms === undefined ? {} : { algorithms: algorithms }),
   };
   switch (hop.auth) {
     case 'password':
@@ -135,6 +139,19 @@ export function sshError(hop: TunnelHop, error: unknown, hostKeyRejected: boolea
       {
         cause: error,
       },
+    );
+  }
+  if (/no matching (key exchange|host key|cipher|mac|compression)/i.test(message)) {
+    // The server and ssh2 share no method: the connection's SSH algorithms can add one.
+    return new DbError(
+      'connection-failed',
+      msg(
+        'The SSH server {0}:{1} and DataNest share no encryption method ({2}). If the server is old, allow its method under "SSH algorithms" in the connection.',
+        hop.host,
+        hop.port,
+        message,
+      ),
+      { cause: error },
     );
   }
   return new DbError(

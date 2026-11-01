@@ -347,6 +347,20 @@ export const en = {
   'form.ssh.agentSocket': 'Agent socket',
   'form.ssh.agentHint':
     'Empty: SSH_AUTH_SOCK, or the OpenSSH agent on Windows; “pageant” for PuTTY',
+  'form.ssh.algorithms': 'SSH algorithms',
+  'form.ssh.algorithmsHint':
+    'For an old or a strict server. Empty keeps the defaults. “+name” adds a method, “-name” removes one, “^name” puts it first; a plain list uses exactly those, in that order.',
+  'form.ssh.alg.kex': 'Key exchange',
+  'form.ssh.alg.serverHostKey': 'Server host key',
+  'form.ssh.alg.cipher': 'Cipher',
+  'form.ssh.alg.hmac': 'Message authentication (MAC)',
+  'form.ssh.alg.compress': 'Compression',
+  'form.ssh.alg.default': 'Default',
+  'form.ssh.alg.unknown': 'Not supported: {0}',
+  'form.ssh.alg.empty': 'A name is missing in the list',
+  'form.ssh.alg.legacy':
+    'Allows weak, outdated methods: {0}. Use it only for a server you trust that cannot be updated.',
+  'form.ssh.error.algorithms': 'Fix the SSH algorithm rules',
   'form.ssh.error.userEmpty': 'Enter the SSH user',
   'form.ssh.error.keyEmpty': 'Choose the private key file',
   'form.ssl.mode': 'SSL / TLS',

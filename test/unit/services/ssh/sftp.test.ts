@@ -252,6 +252,30 @@ describe('downloadFiles', () => {
     expect(readFileSync(local('d.db'), 'utf8')).toBe('behind');
   });
 
+  it('copies from an old server once its method is allowed (V13.10)', async () => {
+    const server = await startSshServer({
+      users: [{ name: 'deploy', password: 'pw' }],
+      files: new Map([['/old.db', Buffer.from('legacy')]]),
+      algorithms: { kex: ['diffie-hellman-group14-sha1'] },
+    });
+    servers.push(server);
+    await expect(
+      downloadFiles(
+        spec([hop(server)]),
+        [request('/old.db', 'old.db')],
+        { maxBytes: MB },
+        new RecordingLogger(),
+      ),
+    ).rejects.toMatchObject({ code: 'connection-failed' });
+    await downloadFiles(
+      spec([hop(server, { algorithms: { kex: '+diffie-hellman-group14-sha1' } })]),
+      [request('/old.db', 'old.db')],
+      { maxBytes: MB },
+      new RecordingLogger(),
+    );
+    expect(readFileSync(local('old.db'), 'utf8')).toBe('legacy');
+  });
+
   it('refuses a chain with no server', async () => {
     await expect(
       downloadFiles(spec([]), [request('/d.db', 'd.db')], { maxBytes: MB }, new RecordingLogger()),

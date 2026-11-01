@@ -40,6 +40,7 @@ import type {
 } from '../../../../src/shared/protocols/connection-form';
 import type { ParsedConnectionUrl, UrlProblem } from '../../../../src/shared/connection-url';
 import { parsePatterns } from '../../../../src/shared/name-filter';
+import { cleanAlgorithms, type SshAlgorithmKind } from '../../../../src/shared/ssh-algorithms';
 import type { ServerPreset } from '../../../../src/shared/server-presets';
 import type { MessageKey } from '../../l10n/en';
 
@@ -65,6 +66,13 @@ export interface HopFields {
   agentSocket: string;
   password: SecretField;
   passphrase: SecretField;
+  /** One rule per kind, in OpenSSH's syntax (V13.10); blank keeps the defaults. */
+  algorithms: Record<SshAlgorithmKind, string>;
+}
+
+/** Blank rules for every kind of algorithm. */
+export function emptyAlgorithmFields(): Record<SshAlgorithmKind, string> {
+  return { kex: '', serverHostKey: '', cipher: '', hmac: '', compress: '' };
 }
 
 export function newHopFields(id: string = newHopId()): HopFields {
@@ -78,6 +86,7 @@ export function newHopFields(id: string = newHopId()): HopFields {
     agentSocket: '',
     password: emptySecret(),
     passphrase: emptySecret(),
+    algorithms: emptyAlgorithmFields(),
   };
 }
 
@@ -92,6 +101,7 @@ export function hopFieldsFrom(hop: SshHop): HopFields {
     agentSocket: hop.agentSocket ?? '',
     password: emptySecret(),
     passphrase: emptySecret(),
+    algorithms: { ...emptyAlgorithmFields(), ...hop.algorithms },
   };
 }
 
@@ -492,6 +502,7 @@ export function toHop(hop: HopFields): SshHop {
   const port = parsePort(hop.port);
   const keyFile = hop.auth === 'key' ? trim(hop.keyFile) : undefined;
   const agentSocket = hop.auth === 'agent' ? trim(hop.agentSocket) : undefined;
+  const algorithms = cleanAlgorithms(hop.algorithms);
   return {
     id: hop.id,
     host: hop.host.trim(),
@@ -500,6 +511,7 @@ export function toHop(hop: HopFields): SshHop {
     auth: hop.auth,
     ...(keyFile === undefined ? {} : { keyFile }),
     ...(agentSocket === undefined ? {} : { agentSocket }),
+    ...(algorithms === undefined ? {} : { algorithms }),
   };
 }
 
@@ -697,6 +709,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'ssh-key-empty': 'form.ssh.error.keyEmpty',
   'ssh-id-invalid': 'form.unknownError',
   'ssh-too-many-jumps': 'form.ssh.error.tooManyJumps',
+  'ssh-algorithms-invalid': 'form.ssh.error.algorithms',
   'ssl-cert-without-key': 'form.ssl.error.keyMissing',
   'ssl-key-without-cert': 'form.ssl.error.certMissing',
   'connect-timeout-invalid': 'form.options.error.connectTimeout',

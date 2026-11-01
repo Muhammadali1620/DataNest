@@ -60,6 +60,38 @@
         "agentSocket": {
           "type": "string",
           "description": "SSH agent socket, Windows pipe or `pageant`, for \"agent\". Empty means the usual place."
+        },
+        "algorithms": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Which SSH methods this server may use, for an old or a strict server.",
+          "properties": {
+            "kex": {
+              "type": "string",
+              "maxLength": 800,
+              "description": "Rule for the key exchange. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+            },
+            "serverHostKey": {
+              "type": "string",
+              "maxLength": 800,
+              "description": "Rule for the server host key. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+            },
+            "cipher": {
+              "type": "string",
+              "maxLength": 800,
+              "description": "Rule for the cipher. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+            },
+            "hmac": {
+              "type": "string",
+              "maxLength": 800,
+              "description": "Rule for the message authentication (MAC). A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+            },
+            "compress": {
+              "type": "string",
+              "maxLength": 800,
+              "description": "Rule for the compression. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+            }
+          }
         }
       }
     },
@@ -151,6 +183,38 @@
             "agentSocket": {
               "type": "string",
               "description": "SSH agent socket, Windows pipe or `pageant`, for \"agent\". Empty means the usual place."
+            },
+            "algorithms": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Which SSH methods this server may use, for an old or a strict server.",
+              "properties": {
+                "kex": {
+                  "type": "string",
+                  "maxLength": 800,
+                  "description": "Rule for the key exchange. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+                },
+                "serverHostKey": {
+                  "type": "string",
+                  "maxLength": 800,
+                  "description": "Rule for the server host key. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+                },
+                "cipher": {
+                  "type": "string",
+                  "maxLength": 800,
+                  "description": "Rule for the cipher. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+                },
+                "hmac": {
+                  "type": "string",
+                  "maxLength": 800,
+                  "description": "Rule for the message authentication (MAC). A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+                },
+                "compress": {
+                  "type": "string",
+                  "maxLength": 800,
+                  "description": "Rule for the compression. A list names exactly these methods; `+name` adds to the defaults, `-name` removes from them, `^name` puts first (as in OpenSSH). Empty means the defaults."
+                }
+              }
             },
             "jumps": {
               "type": "array",

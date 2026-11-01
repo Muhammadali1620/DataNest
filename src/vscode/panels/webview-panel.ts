@@ -42,7 +42,13 @@ export function createWebviewAppPanel(
         viewColumn: options.column ?? vscode.ViewColumn.Active,
         preserveFocus: options.preserveFocus ?? false,
       },
-      { enableScripts: true, localResourceRoots: [root] },
+      {
+        enableScripts: true,
+        localResourceRoots: [root],
+        // A hidden tab keeps its page, so what was typed or chosen is still there when the
+        // user comes back (D130). Rows live in the host, so a page itself is light.
+        retainContextWhenHidden: true,
+      },
     );
   if (handed !== undefined) {
     panel.title = options.title;

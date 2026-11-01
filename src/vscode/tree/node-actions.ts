@@ -25,6 +25,9 @@ export function nodeSqlTargetOf(node: TreeNode): NodeSqlTarget | undefined {
     case 'database':
     case 'elasticField':
     case 'elasticIndex':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'folder':
     case 'group':
     case 'message':
@@ -106,6 +109,9 @@ export function actionsOf(node: TreeNode): readonly Command[] {
     case 'database':
     case 'elasticField':
     case 'elasticIndex':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'folder':
     case 'group':
     case 'message':

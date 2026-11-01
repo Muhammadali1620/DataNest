@@ -298,3 +298,21 @@ describe('the star on the context value', () => {
     expect(FAVORITABLE_CONTEXTS).not.toContain(TREE_CONTEXT.column);
   });
 });
+
+describe('etcd nodes (V13.19)', () => {
+  it('cannot be starred yet: only their connection can', () => {
+    expect(
+      refOf({ kind: 'etcdFolder', connectionId: 'c1', prefix: { text: '/a/' }, name: 'a' }),
+    ).toBeUndefined();
+    expect(
+      refOf({ kind: 'etcdKey', connectionId: 'c1', key: { text: '/a' }, name: 'a' }),
+    ).toBeUndefined();
+    expect(
+      refOf({ kind: 'etcdMore', connectionId: 'c1', prefix: { text: '' }, loaded: 1 }),
+    ).toBeUndefined();
+    expect(refOf({ kind: 'connection', connectionId: 'c1' })).toEqual({
+      kind: 'connection',
+      connectionId: 'c1',
+    });
+  });
+});

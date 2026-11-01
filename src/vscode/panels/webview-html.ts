@@ -46,6 +46,7 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'data-import': 'insert',
   'elastic-result': 'search',
   'er-diagram': 'type-hierarchy',
+  'etcd-key': 'key',
   manager: 'dashboard',
   'mongo-documents': 'json',
   ping: 'debug-disconnect',

@@ -15,6 +15,9 @@ import { FakeDriverProvider, linkLostError } from '../../../helpers/fake-driver'
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../../helpers/fakes';
 import { bulk, FakeRedisDriver, type FakeRedisSession } from '../../../helpers/fake-redis';
 import { RedisKeyBrowser } from '../../../../src/services/redis/key-browser';
+import { must } from '../../../helpers/must';
+import { EtcdKeyBrowser } from '../../../../src/services/etcd/key-browser';
+import { FakeEtcd, FakeEtcdDriver } from '../../../helpers/fake-etcd';
 import { bool, doc, int32, str } from '../../../../src/core/mongo/value';
 import { FakeElasticDriver, FakeElasticSession, json } from '../../../helpers/fake-elastic';
 import {
@@ -1821,5 +1824,201 @@ describe('TreeModel with Elasticsearch (V7.8)', () => {
         connectionId: search.id,
       },
     ]);
+  });
+});
+
+describe('TreeModel with etcd (V13.19)', () => {
+  async function setup(extra: Record<string, string> = {}) {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const cluster = new FakeEtcd();
+    for (const name of [
+      '/app/db/host',
+      '/app/db/port',
+      '/app/name',
+      '/other',
+      'plain',
+      ...Object.keys(extra),
+    ]) {
+      cluster.seed(name);
+    }
+    const etcd = new FakeEtcdDriver(cluster);
+    const drivers = Object.assign(new FakeDriverProvider(), {
+      getEtcd: () => Promise.resolve(etcd),
+    });
+    const manager = new ConnectionManager({ store, drivers, logger });
+    const etcdKeys = new EtcdKeyBrowser({ manager, logger });
+    const model = new TreeModel({
+      store,
+      manager,
+      cache: new MetadataCache({ logger }),
+      etcdKeys,
+      settings: { showSystemObjects: () => false },
+      logger,
+      texts: { ...TEXTS, noEtcdKeys: 'No keys' },
+    });
+    const config = await store.add({ name: 'Cluster', driver: 'etcd', host: 'h' });
+    const connection: TreeNode = { kind: 'connection', connectionId: config.id };
+    return { model, config, connection, cluster, etcdKeys, etcd };
+  }
+
+  const names = (nodes: readonly TreeNode[]): string[] =>
+    nodes.map((node) =>
+      node.kind === 'etcdFolder'
+        ? `${node.name}/`
+        : node.kind === 'etcdKey'
+          ? node.name
+          : node.kind,
+    );
+
+  it('lists the top of the key space under the connection', async () => {
+    const { model, connection } = await setup();
+    // A name that starts with a slash lives in the folder "/", whose own name is empty.
+    expect(names(await model.children(connection))).toEqual(['/', 'plain']);
+  });
+
+  it('opens a folder one level at a time', async () => {
+    const { model, connection } = await setup();
+    const [top] = await model.children(connection);
+    expect(top).toMatchObject({ kind: 'etcdFolder', prefix: { text: '/' }, name: '' });
+    const level1 = await model.children(must(top));
+    expect(names(level1)).toEqual(['app/', 'other']);
+    const app = level1[0];
+    expect(app).toMatchObject({ kind: 'etcdFolder', count: 3 });
+    expect(names(await model.children(must(app)))).toEqual(['db/', 'name']);
+  });
+
+  it('gives a key its whole name for the page it opens', async () => {
+    const { model, connection } = await setup();
+    const [top] = await model.children(connection);
+    const [app] = await model.children(must(top));
+    const [, name] = await model.children(must(app));
+    expect(name).toMatchObject({ kind: 'etcdKey', key: { text: '/app/name' }, name: 'name' });
+  });
+
+  it('marks a key that dies with a lease', async () => {
+    const { model, connection, cluster } = await setup();
+    const lease = (await cluster.call('lease/grant', { TTL: '60', ID: '0' })) as { ID: string };
+    await cluster.call('kv/put', {
+      key: Buffer.from('leased').toString('base64'),
+      lease: lease.ID,
+    });
+    const nodes = await model.children(connection);
+    expect(nodes.find((node) => node.kind === 'etcdKey' && node.name === 'leased')).toMatchObject({
+      leased: true,
+    });
+    expect(
+      nodes.find((node) => node.kind === 'etcdKey' && node.name === 'plain'),
+    ).not.toHaveProperty('leased');
+  });
+
+  it('says a cluster without keys has none', async () => {
+    const { model, connection, cluster } = await setup();
+    await cluster.call('kv/deleterange', { key: 'AA==', range_end: 'AA==' });
+    expect(await model.children(connection)).toEqual([
+      { kind: 'message', text: 'No keys', connectionId: connection.connectionId },
+    ]);
+  });
+
+  it('ends a long folder with "load more" until the last page is read', async () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 1100 }, (_, index) => [`/big/k${String(index).padStart(4, '0')}`, '']),
+    );
+    const { model, connection, etcdKeys } = await setup(many);
+    const [top] = await model.children(connection);
+    const level = await model.children(must(top));
+    const big = level.find((node) => node.kind === 'etcdFolder' && node.name === 'big');
+    const first = await model.children(must(big));
+    expect(first.at(-1)).toMatchObject({
+      kind: 'etcdMore',
+      prefix: { text: '/big/' },
+      loaded: 1000,
+    });
+    await etcdKeys.loadMore(connection.connectionId, { text: '/big/' });
+    const all = await model.children(must(big));
+    expect(all).toHaveLength(1100);
+    expect(all.some((node) => node.kind === 'etcdMore')).toBe(false);
+  });
+
+  it('has nothing under a key, nor under "load more"', async () => {
+    const { model, connection } = await setup();
+    const keyNode: TreeNode = {
+      kind: 'etcdKey',
+      connectionId: connection.connectionId,
+      key: { text: 'plain' },
+      name: 'plain',
+    };
+    expect(await model.children(keyNode)).toEqual([]);
+    expect(
+      await model.children({
+        kind: 'etcdMore',
+        connectionId: connection.connectionId,
+        prefix: { text: '' },
+        loaded: 5,
+      }),
+    ).toEqual([]);
+  });
+
+  it('knows the parent of a folder, a key and "load more", for a reveal', async () => {
+    const { model, connection } = await setup();
+    const id = connection.connectionId;
+    const folder = (text: string): TreeNode => ({
+      kind: 'etcdFolder',
+      connectionId: id,
+      prefix: { text },
+      name: text,
+    });
+    expect(
+      model.parentOf({
+        kind: 'etcdKey',
+        connectionId: id,
+        key: { text: '/app/db/host' },
+        name: 'host',
+      }),
+    ).toMatchObject({ kind: 'etcdFolder', prefix: { text: '/app/db/' }, name: 'db' });
+    expect(model.parentOf(folder('/app/db/'))).toMatchObject({
+      kind: 'etcdFolder',
+      prefix: { text: '/app/' },
+      name: 'app',
+    });
+    // The top of a name that starts with a slash is the folder "/", then the connection.
+    expect(model.parentOf(folder('/app/'))).toMatchObject({
+      kind: 'etcdFolder',
+      prefix: { text: '/' },
+    });
+    expect(model.parentOf(folder('/'))).toEqual(connection);
+    expect(
+      model.parentOf({ kind: 'etcdKey', connectionId: id, key: { text: 'plain' }, name: 'plain' }),
+    ).toEqual(connection);
+    expect(
+      model.parentOf({ kind: 'etcdMore', connectionId: id, prefix: { text: '/app/' }, loaded: 1 }),
+    ).toMatchObject({ kind: 'etcdFolder', prefix: { text: '/app/' } });
+    expect(
+      model.parentOf({ kind: 'etcdMore', connectionId: id, prefix: { text: '' }, loaded: 1 }),
+    ).toEqual(connection);
+  });
+
+  it('shows no children without a key browser', async () => {
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+    });
+    const manager = new ConnectionManager({ store, drivers: new FakeDriverProvider(), logger });
+    const bare = new TreeModel({
+      store,
+      manager,
+      cache: new MetadataCache({ logger }),
+      settings: { showSystemObjects: () => false },
+      logger,
+      texts: TEXTS,
+    });
+    const config = await store.add({ name: 'Cluster', driver: 'etcd', host: 'h' });
+    expect(await bare.children({ kind: 'connection', connectionId: config.id })).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ export const DRIVER_IDS = [
   'redis',
   'mongodb',
   'elasticsearch',
+  'etcd',
   'libsql',
   'plugin',
 ] as const;
@@ -26,16 +27,22 @@ export function isDriverId(value: unknown): value is DriverId {
 /**
  * What a database speaks (D81): SQL drivers share the dialect, the result grid and the
  * SQL editor; Redis has commands and keys, MongoDB collections of documents (D88), each
- * with a UI of its own; Elasticsearch speaks HTTP and JSON (D91). Connections, folders,
- * secrets, SSH and the connection form are the same for all.
+ * with a UI of its own; Elasticsearch speaks HTTP and JSON (D91); etcd is a tree of keys
+ * with leases (V13.19). Connections, folders, secrets, SSH and the connection form are the
+ * same for all.
  */
-export type DriverFamily = 'sql' | 'redis' | 'mongodb' | 'elasticsearch';
+export type DriverFamily = 'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd';
 
 export function driverFamily(driver: DriverId): DriverFamily {
-  return driver === 'redis' || driver === 'mongodb' || driver === 'elasticsearch' ? driver : 'sql';
+  return driver === 'redis' ||
+    driver === 'mongodb' ||
+    driver === 'elasticsearch' ||
+    driver === 'etcd'
+    ? driver
+    : 'sql';
 }
 
-export type SqlDriverId = Exclude<DriverId, 'redis' | 'mongodb' | 'elasticsearch'>;
+export type SqlDriverId = Exclude<DriverId, 'redis' | 'mongodb' | 'elasticsearch' | 'etcd'>;
 
 export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
   return driverFamily(driver) === 'sql';
@@ -76,6 +83,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   redis: 6379,
   mongodb: 27_017,
   elasticsearch: 9200,
+  // The client port; the HTTP/JSON gateway answers on it too.
+  etcd: 2379,
   // sqld's own HTTP port; Turso and other hosted servers answer on 443 with TLS.
   libsql: 8080,
 };
@@ -444,6 +453,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
       };
     // A query or a request may take as long as the timeout allows; nothing runs on connect.
     case 'elasticsearch':
+    case 'etcd':
     case 'mongodb':
       return {
         connectTimeout: true,
@@ -494,6 +504,9 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
       return { databases: true, schemas: false };
     // Indices, all listed; the hidden ones only with system objects.
     case 'elasticsearch':
+      return { databases: false, schemas: false };
+    // One flat key space; folders are made from the key names.
+    case 'etcd':
       return { databases: false, schemas: false };
   }
 }

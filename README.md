@@ -81,6 +81,7 @@ page is in English; the short summaries below are for everyone else.
 | MongoDB | Replica sets, `mongodb+srv://`, documents as a table or as text |
 | Redis | One server, Sentinel, cluster; Valkey too |
 | Elasticsearch, OpenSearch | Console-style requests, hits as a table |
+| etcd | Keys as folders, values, revisions and leases, over the HTTP/JSON gateway |
 | libSQL, Turso | sqld and hosted servers over HTTP, with an auth token; the SQL of SQLite |
 | TiDB, CockroachDB, YugabyteDB, Amazon Aurora | Through the MySQL and PostgreSQL drivers, with presets |
 
@@ -275,6 +276,7 @@ The [documentation](docs/index.md) has a guide to every feature, the
 | `datanest.format.denseOperators` | `false` | Write `a+b` instead of `a + b`. |
 | `datanest.redis.keySeparator` | `:` | What splits Redis key names into folders in the tree. |
 | `datanest.redis.keysPerLoad` | `5000` | Redis keys loaded at a time with `SCAN`. |
+| `datanest.etcd.keysPerLoad` | `300` | etcd keys and folders read from a folder at a time. |
 | `datanest.logLevel` | `info` | How much goes to the DataNest output channel. |
 
 Every setting is described in [Settings](docs/guide/settings.md).

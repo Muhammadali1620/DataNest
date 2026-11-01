@@ -64,6 +64,7 @@ import { RunStatus } from './vscode/editor/run-status';
 import { TransactionModes } from './vscode/editor/transaction-modes';
 import { TransactionStatus } from './vscode/editor/transaction-status';
 import {
+  createEtcdKeySettings,
   createRedisKeySettings,
   createSettings,
   readHistoryLimit,
@@ -83,6 +84,7 @@ import {
 } from './vscode/settings';
 import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/connections-tree';
 import { RedisKeyBrowser } from './services/redis/key-browser';
+import { EtcdKeyBrowser } from './services/etcd/key-browser';
 import type { TableNode } from './vscode/tree/nodes';
 import { ConnectionDecorations } from './vscode/tree/connection-decorations';
 import { AiTools } from './services/ai-tools';
@@ -436,6 +438,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
   context.subscriptions.push(decorations);
   const redisKeySettings = createRedisKeySettings();
   const redisKeys = new RedisKeyBrowser({ manager, settings: redisKeySettings, logger });
+  const etcdKeys = new EtcdKeyBrowser({ manager, settings: createEtcdKeySettings(), logger });
   // Saved queries are plain files, kept in the extension's global storage (V11.12).
   const savedQueries = new SavedQueryStore(join(context.globalStorageUri.fsPath, 'queries'));
   const versionMemory = new VersionMemory(context.globalState);
@@ -450,6 +453,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     settings,
     logger,
     redisKeys,
+    etcdKeys,
     redisKeySeparator: () => redisKeySettings.separator(),
     savedQueries: {
       list: async (connectionId, scope) => await savedQueries.list(connectionId, scope),
@@ -599,6 +603,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
       variableMemory,
       openFiltered: openRelated,
       redisKeys,
+      etcdKeys,
       treeView,
       favorites,
       redisKeySeparator: () => redisKeySettings.separator(),

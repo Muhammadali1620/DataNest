@@ -44,6 +44,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   redis: ['redis-cli', 'valkey-cli'],
   mongodb: ['mongosh'],
   elasticsearch: [],
+  // Reached over HTTP; `etcdctl` speaks gRPC and has other options.
+  etcd: [],
 };
 
 /** The program's path, looked up like a shell would; undefined when it is not installed. */
@@ -218,6 +220,7 @@ export function cliCommand(
     case 'plugin':
     case 'libsql':
     case 'elasticsearch':
+    case 'etcd':
       return undefined;
   }
 }

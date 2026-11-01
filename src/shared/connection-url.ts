@@ -44,6 +44,8 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   // libSQL servers over HTTP (V13.17); `turso://` is the same address on a hosted server.
   libsql: 'libsql',
   turso: 'libsql',
+  // etcd (V13.19): the address of its client port; the path means nothing to it.
+  etcd: 'etcd',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
   redis: 'redis',
   rediss: 'redis',
@@ -377,7 +379,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   const password =
     url.password === '' ? (params.get('password') ?? undefined) : decode(url.password);
   const database =
-    nonEmpty(decode(url.pathname.replace(/^\//, '').split('/')[0] ?? '')) ??
+    (driver === 'etcd'
+      ? undefined
+      : nonEmpty(decode(url.pathname.replace(/^\//, '').split('/')[0] ?? ''))) ??
     nonEmpty(params.get('dbname')) ??
     nonEmpty(params.get('database')) ??
     (driver === 'redis' ? nonEmpty(params.get('db')) : undefined);

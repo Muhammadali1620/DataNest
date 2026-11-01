@@ -42,6 +42,12 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 9.500c0 1.700 3.600 3 8 3s8-1.300 8-3v3.500c0 1.700-3.600 3-8 3s-8-1.300-8-3zM4 16.500c0 1.700 3.600 3 8 3s8-1.300 8-3V19c0 1.700-3.600 3-8 3s-8-1.300-8-3z"/>',
   },
+  // A key: the thing etcd stores values under (V13.19); the vendor's logo is not ours to use.
+  etcd: {
+    hex: '#2563eb',
+    ink: WHITE,
+    body: '<circle cx="7.500" cy="12" r="4.500" fill="none" stroke="currentColor" stroke-width="3"/><rect x="11" y="10.500" width="11" height="3"/><rect x="16" y="13" width="2.500" height="4.500"/><rect x="20" y="13" width="2" height="3.500"/>',
+  },
   // A ring around a core.
   oracle: {
     hex: '#c74634',

@@ -27,6 +27,8 @@ import { connectionUri, tagText } from './connection-decorations';
 import { redisTypeIcon } from './redis-type-icon';
 import { tagsOf } from './connection-look';
 import { elasticFieldItem, elasticIndexItem } from './elastic-items';
+import { etcdFolderItem, etcdKeyItem, etcdMoreItem } from './etcd-items';
+import type { EtcdKeyBrowser } from '../../services/etcd/key-browser';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
 import {
   columnKind,
@@ -74,6 +76,8 @@ export interface ConnectionsTreeDeps {
   readonly store: ConnectionStore;
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys?: RedisKeyBrowser;
+  /** The folders of etcd connections as read so far (V13.19). */
+  readonly etcdKeys?: EtcdKeyBrowser;
   /** `datanest.redis.keySeparator`. */
   readonly redisKeySeparator?: () => string;
   readonly manager: ConnectionManager;
@@ -136,6 +140,7 @@ export class ConnectionsTreeProvider
       manager: deps.manager,
       cache: deps.cache,
       ...(deps.redisKeys === undefined ? {} : { redisKeys: deps.redisKeys }),
+      ...(deps.etcdKeys === undefined ? {} : { etcdKeys: deps.etcdKeys }),
       ...(deps.redisKeySeparator === undefined
         ? {}
         : { redisKeySeparator: deps.redisKeySeparator }),
@@ -166,6 +171,7 @@ export class ConnectionsTreeProvider
         noColumns: vscode.l10n.t('No columns'),
         noCollections: vscode.l10n.t('No collections'),
         noIndices: vscode.l10n.t('No indices'),
+        noEtcdKeys: vscode.l10n.t('No keys'),
         noFields: vscode.l10n.t('No fields in the mapping'),
         noKeys: (pattern) =>
           pattern === undefined
@@ -220,6 +226,7 @@ export class ConnectionsTreeProvider
         const status = deps.manager.getState(connectionId).status;
         if (status === 'disconnected' || status === 'error') {
           deps.redisKeys?.reset(connectionId);
+          deps.etcdKeys?.reset(connectionId);
         }
         // Status decorations live on connection items, which sit at the root.
         this.refresh();
@@ -595,6 +602,12 @@ export class ConnectionsTreeProvider
         return elasticIndexItem(node);
       case 'elasticField':
         return elasticFieldItem(node);
+      case 'etcdFolder':
+        return etcdFolderItem(node);
+      case 'etcdKey':
+        return etcdKeyItem(node);
+      case 'etcdMore':
+        return etcdMoreItem(node);
       case 'message': {
         const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
         item.id = nodeId(node);

@@ -137,6 +137,7 @@ export function columnSql(
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
+    case 'etcd':
       throw new Error('This connection has no SQL columns');
   }
 }
@@ -234,6 +235,7 @@ export function indexSql(
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
+    case 'etcd':
       throw new Error('This connection has no SQL indexes');
   }
 }
@@ -277,6 +279,7 @@ export function foreignKeySql(
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
+    case 'etcd':
       throw new Error('This connection has no SQL foreign keys');
   }
 }

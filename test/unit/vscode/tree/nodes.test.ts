@@ -574,3 +574,75 @@ describe('Query and Security nodes (V11.12)', () => {
     );
   });
 });
+
+describe('etcd nodes (V13.19)', () => {
+  const folder: TreeNode = {
+    kind: 'etcdFolder',
+    connectionId: 'c1',
+    prefix: { text: '/app/' },
+    name: 'app',
+    count: 3,
+  };
+  const key: TreeNode = {
+    kind: 'etcdKey',
+    connectionId: 'c1',
+    key: { text: '/app/db' },
+    name: 'db',
+  };
+  const more: TreeNode = {
+    kind: 'etcdMore',
+    connectionId: 'c1',
+    prefix: { text: '/app/' },
+    loaded: 3,
+  };
+
+  it('gives every node its own id, and a folder and a key of the same text different ones', () => {
+    const asKey: TreeNode = { ...key, key: { text: '/app/' } };
+    const ids = [folder, key, more, asKey].map(nodeId);
+    expect(new Set(ids).size).toBe(4);
+  });
+
+  it('gives a key whose bytes are not text an id of its own', () => {
+    const text: TreeNode = { ...key, key: { text: '\\xff' } };
+    const bytes: TreeNode = { ...key, key: { text: '\\xff', hex: 'ff' } };
+    expect(nodeId(text)).not.toBe(nodeId(bytes));
+  });
+
+  it('copies the whole name of a key and the whole prefix of a folder', () => {
+    expect(nameOf(key)).toBe('/app/db');
+    expect(nameOf(folder)).toBe('/app/');
+    expect(nameOf(more)).toBeUndefined();
+  });
+
+  it('belongs to its connection, without a SQL scope or definition', () => {
+    for (const node of [folder, key, more]) {
+      expect(isTreeNode(node)).toBe(true);
+      expect(connectionIdOf(node)).toBe('c1');
+      expect(scopeOf(node)).toEqual({});
+      expect(objectRefOf(node)).toBeUndefined();
+    }
+  });
+
+  it('marks etcd connections apart from every other family', () => {
+    expect(connectionContext({ project: false, connected: true, family: 'etcd' })).toBe(
+      TREE_CONTEXT.etcdConnectionConnected,
+    );
+    expect(connectionContext({ project: false, connected: false, family: 'etcd' })).toBe(
+      TREE_CONTEXT.etcdConnection,
+    );
+    expect(connectionContext({ project: true, connected: true, family: 'etcd' })).toBe(
+      TREE_CONTEXT.projectEtcdConnectionConnected,
+    );
+    expect(connectionContext({ project: true, connected: false, family: 'etcd' })).toBe(
+      TREE_CONTEXT.projectEtcdConnection,
+    );
+    const contexts = [false, true].flatMap((project) =>
+      [false, true].flatMap((connected) =>
+        (['sql', 'redis', 'mongodb', 'elasticsearch', 'etcd'] as const).map((family) =>
+          connectionContext({ project, connected, family }),
+        ),
+      ),
+    );
+    expect(new Set(contexts).size).toBe(20);
+  });
+});

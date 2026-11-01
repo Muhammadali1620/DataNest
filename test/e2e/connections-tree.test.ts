@@ -127,6 +127,11 @@ describe('connections view', () => {
       'datanest.redis.deleteKeys',
       'datanest.redis.openConsole',
       'datanest.redis.serverInfo',
+      'datanest.etcd.loadMoreKeys',
+      'datanest.etcd.openKey',
+      'datanest.etcd.findKey',
+      'datanest.etcd.newKey',
+      'datanest.etcd.deleteKeys',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -160,6 +165,17 @@ describe('connections view', () => {
       'datanest.object.edit',
       'datanest.table.generateSelect',
       'datanest.table.generateDelete',
+    ]) {
+      await vscode.commands.executeCommand(id);
+    }
+  });
+
+  it('etcd key commands without a node do nothing', async () => {
+    // They belong to tree items; from elsewhere there is no key to act on.
+    for (const id of [
+      'datanest.etcd.loadMoreKeys',
+      'datanest.etcd.openKey',
+      'datanest.etcd.deleteKeys',
     ]) {
       await vscode.commands.executeCommand(id);
     }

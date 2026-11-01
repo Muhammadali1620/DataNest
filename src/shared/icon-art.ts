@@ -37,6 +37,7 @@ export const PANEL_TILES: Readonly<Record<string, PanelTile>> = {
   'data-import': { glyph: 'insert', tone: 'teal' },
   'elastic-result': { glyph: 'search', tone: 'purple' },
   'er-diagram': { glyph: 'type-hierarchy', tone: 'pink' },
+  'etcd-key': { glyph: 'key', tone: 'blue' },
   manager: { glyph: 'dashboard', tone: 'teal' },
   'mongo-documents': { glyph: 'json', tone: 'green' },
   ping: { glyph: 'debug-disconnect', tone: 'teal' },

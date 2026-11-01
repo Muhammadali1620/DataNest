@@ -11,7 +11,7 @@ import { readServerInfo } from './redis/server-info';
 
 type Reader = Pick<
   ConnectionManager,
-  'acquire' | 'driverOf' | 'acquireRedis' | 'acquireMongo' | 'acquireElastic'
+  'acquire' | 'driverOf' | 'acquireRedis' | 'acquireMongo' | 'acquireElastic' | 'acquireEtcd'
 >;
 
 /** `15.19 (Debian 15.19-1.pgdg120+1)` → `15.19`; `10.11.6-MariaDB-1:…` → `10.11.6`. */
@@ -64,6 +64,9 @@ export async function readServerVersion(
   }
   if (driver === 'elasticsearch') {
     return shortVersion((await manager.acquireElastic(owner, { connectionId })).server.version);
+  }
+  if (driver === 'etcd') {
+    return shortVersion((await manager.acquireEtcd(owner, { connectionId })).server.version);
   }
   const session = await browseSession(manager, connectionId);
   const [row] = await namedRows(session, VERSION_SQL[driver]);
@@ -123,6 +126,7 @@ WHERE active AND database = ${dialect.literal(database)}`;
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
+    case 'etcd':
       return undefined;
   }
 }

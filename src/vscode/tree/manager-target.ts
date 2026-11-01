@@ -69,6 +69,9 @@ export function managerTargetOfNode(
     case 'mongoIndex':
     case 'elasticIndex':
     case 'elasticField':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':

@@ -197,6 +197,20 @@ describe('DriverRegistry', () => {
       ).rejects.toThrow('unexpected module shape');
     });
 
+    it('loads the etcd driver and refuses it as any other (V13.19)', async () => {
+      const etcd = { id: 'etcd', openSession: () => Promise.reject(new Error('unused')) };
+      const loader = vi.fn(() => Promise.resolve({ driver: etcd }));
+      const registry = registryWith(loader as never);
+      expect(await registry.getEtcd()).toBe(etcd);
+      expect(loader).toHaveBeenCalledWith('etcd');
+      await expect(registry.get('etcd' as BuiltInSqlDriverId)).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+      await expect(
+        registryWith(() => Promise.resolve({ driver: redis })).getEtcd(),
+      ).rejects.toThrow('unexpected module shape');
+    });
+
     it('rejects a SQL bundle that carries no dialect', async () => {
       await expect(
         registryWith(() =>

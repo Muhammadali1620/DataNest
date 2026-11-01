@@ -69,6 +69,7 @@ jobs:
             redis,
             redisjson,
             libsql,
+            etcd,
             mongodb,
             elasticsearch,
           ]

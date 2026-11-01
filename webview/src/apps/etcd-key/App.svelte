@@ -1,0 +1,487 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import type {
+    EtcdKeyProtocol,
+    EtcdKeyState,
+  } from '../../../../src/shared/protocols/etcd-key';
+  import type { RedisValue } from '../../../../src/shared/redis-value';
+  import type { RpcPeer } from '../../../../src/shared/rpc';
+  import Icon from '../../components/Icon.svelte';
+  import IconButton from '../../components/IconButton.svelte';
+  import type { Translate } from '../../lib/i18n';
+  import ValueEditor from '../redis-key/ValueEditor.svelte';
+  import { clock, parseLeaseId, parseSeconds, secondsLeft, toneOf } from './lease-view';
+
+  interface Props {
+    rpc: RpcPeer<EtcdKeyProtocol['webview'], EtcdKeyProtocol['host']>;
+    t: Translate;
+  }
+
+  const { rpc, t }: Props = $props();
+
+  let keyState = $state<EtcdKeyState | undefined>(undefined);
+  let busy = $state(false);
+  let error = $state<string | undefined>(undefined);
+  /** What the user typed in the value box; undefined while it is as the server has it. */
+  let draft = $state<RedisValue | undefined>(undefined);
+  let ttlText = $state('');
+  let leaseText = $state('');
+  /** When the state arrived, so the lease counts down between reads. */
+  let receivedAt = $state(0);
+  let now = $state(Date.now());
+  /** Bumped when the server's value should replace what the box shows. */
+  let version = $state(0);
+
+  const left = $derived(
+    keyState?.lease === null || keyState?.lease === undefined
+      ? undefined
+      : secondsLeft(keyState.lease, now - receivedAt),
+  );
+  const tone = $derived(left === undefined ? undefined : toneOf(left));
+
+  onMount(() => {
+    const subscription = rpc.on('state', (next) => {
+      keyState = next;
+      receivedAt = Date.now();
+      now = receivedAt;
+      // A refused save keeps the user's text in the box: only a fresh read replaces it.
+      if (next.conflict !== true) {
+        version += 1;
+        draft = undefined;
+      }
+    });
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 1000);
+    rpc.emit('ready', {});
+    return () => {
+      subscription.dispose();
+      clearInterval(timer);
+    };
+  });
+
+  async function run(action: () => Promise<unknown>, after?: () => void): Promise<void> {
+    if (busy) {
+      return;
+    }
+    busy = true;
+    error = undefined;
+    try {
+      await action();
+      after?.();
+    } catch (failure) {
+      error = failure instanceof Error ? failure.message : String(failure);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function save(overwrite: boolean): void {
+    const state = keyState;
+    const value = draft ?? state?.value;
+    if (state === undefined || value === undefined) {
+      return;
+    }
+    void run(() =>
+      rpc.request('save', {
+        value,
+        modRevision: state.modRevision,
+        ...(overwrite ? { overwrite: true } : {}),
+      }),
+    );
+  }
+</script>
+
+<main>
+  {#if busy}
+    <div class="progress-bar" aria-hidden="true"></div>
+  {/if}
+  {#if keyState === undefined}
+    <div class="empty">
+      <span class="empty-icon"><Icon name="loading" spin size={24} /></span>
+      <p class="empty-title">{t('redis.loading')}</p>
+    </div>
+  {:else}
+    <header class="top">
+      <span class="top-icon"><Icon name="key" size={18} /></span>
+      <div class="top-text">
+        <h1 title={keyState.key.text}>{keyState.key.text}</h1>
+        <p class="meta" data-testid="meta">
+          {#if keyState.exists}
+            <span class="badge" title={t('etcd.createdAt', keyState.createRevision)}
+              ><Icon name="history" size={12} />{t('etcd.revision', keyState.modRevision)}</span
+            >
+            <span class="badge outline"><Icon name="layers" size={12} />{t('etcd.version', keyState.version)}</span>
+            <span class="fact">{t('redis.bytes', keyState.size)}</span>
+          {/if}
+          {#if keyState.readOnly}
+            <span class="badge outline"><Icon name="lock" size={12} />{t('redis.readOnly')}</span>
+          {/if}
+          <span class="fact"><Icon name="server" size={12} />{keyState.connectionName}</span>
+        </p>
+      </div>
+      <div class="toolbar">
+        <IconButton
+          icon="copy"
+          label={t('etcd.copyKey')}
+          disabled={busy}
+          onclick={() => {
+            const text = keyState?.key.text ?? '';
+            void run(() => rpc.request('copyText', { text }));
+          }}
+        />
+        <IconButton
+          icon="refresh"
+          label={t('redis.refresh')}
+          disabled={busy}
+          onclick={() => void run(() => rpc.request('refresh', {}))}
+        />
+        {#if keyState.exists && !keyState.readOnly}
+          <IconButton
+            icon="trash"
+            label={t('redis.deleteKey')}
+            disabled={busy}
+            onclick={() => void run(() => rpc.request('deleteKey', {}))}
+          />
+        {/if}
+      </div>
+    </header>
+
+    {#if error !== undefined}
+      <div class="notice error problem" role="alert" data-testid="error"><Icon name="error" /><span class="message">{error}</span></div>
+    {/if}
+
+    {#if keyState.conflict === true}
+      <div class="notice warning problem" role="alert" data-testid="conflict">
+        <Icon name="warning" />
+        <span class="message">{t('etcd.conflict', keyState.modRevision)}</span>
+        <span class="conflict-actions">
+          <button
+            type="button"
+            class="button secondary"
+            disabled={busy}
+            onclick={() => void run(() => rpc.request('refresh', {}))}>{t('etcd.loadServer')}</button
+          >
+          {#if !keyState.readOnly}
+            <button type="button" class="button" disabled={busy} onclick={() => { save(true); }}
+              >{t('etcd.overwrite')}</button
+            >
+          {/if}
+        </span>
+      </div>
+    {/if}
+
+    {#if !keyState.exists}
+      <div class="empty">
+        <span class="empty-icon"><Icon name="circle-slash" size={24} /></span>
+        <p class="empty-title" data-testid="gone">{t('etcd.gone')}</p>
+        <div class="empty-actions">
+          <button type="button" class="button secondary" disabled={busy} onclick={() => void run(() => rpc.request('refresh', {}))}
+            ><Icon name="refresh" />{t('redis.refresh')}</button
+          >
+          {#if !keyState.readOnly}
+            <button
+              type="button"
+              class="button"
+              disabled={busy}
+              onclick={() =>
+                void run(() => rpc.request('save', { value: draft ?? { text: '' }, modRevision: '0' }))}
+              ><Icon name="add" />{t('etcd.create')}</button
+            >
+          {/if}
+        </div>
+      </div>
+    {:else}
+      <div class="keybar" data-testid="lease">
+        <span class="group-icon" title={t('etcd.lease')}><Icon name="watch" /></span>
+        {#if keyState.lease !== null && tone !== undefined && left !== undefined}
+          <span class="badge lease {tone}" data-testid="lease-badge" title={t('etcd.leaseId', keyState.lease.id)}>
+            {#if left <= 0}{t('etcd.leaseEnded')}{:else}{t('etcd.leaseLeft', clock(left))}{/if}
+          </span>
+          <span class="fact mono">{keyState.lease.id}</span>
+          {#if !keyState.readOnly}
+            <button
+              type="button"
+              class="button secondary"
+              disabled={busy}
+              onclick={() => void run(() => rpc.request('detachLease', {}))}>{t('etcd.detach')}</button
+            >
+            <button
+              type="button"
+              class="button secondary"
+              disabled={busy}
+              onclick={() => void run(() => rpc.request('revokeLease', {}))}>{t('etcd.revoke')}</button
+            >
+          {/if}
+        {:else}
+          <span class="fact">{t('etcd.noLease')}</span>
+          {#if !keyState.readOnly}
+            <span class="toolbar-separator"></span>
+            <input
+              class="control ttl-input"
+              bind:value={ttlText}
+              placeholder={t('redis.seconds')}
+              aria-label={t('etcd.attachNew')}
+              inputmode="numeric"
+              onkeydown={(event) => {
+                const ttl = parseSeconds(ttlText);
+                if (event.key === 'Enter' && ttl !== undefined) {
+                  void run(() => rpc.request('attachLease', { ttl }), () => {
+                    ttlText = '';
+                  });
+                }
+              }}
+            />
+            <button
+              type="button"
+              class="button secondary"
+              disabled={busy || parseSeconds(ttlText) === undefined}
+              onclick={() => {
+                const ttl = parseSeconds(ttlText);
+                if (ttl !== undefined) {
+                  void run(() => rpc.request('attachLease', { ttl }), () => {
+                    ttlText = '';
+                  });
+                }
+              }}>{t('etcd.attachNew')}</button
+            >
+            <span class="toolbar-separator"></span>
+            <input
+              class="control id-input mono"
+              bind:value={leaseText}
+              placeholder={t('etcd.leaseIdHint')}
+              aria-label={t('etcd.attachExisting')}
+              spellcheck="false"
+              onkeydown={(event) => {
+                const id = parseLeaseId(leaseText);
+                if (event.key === 'Enter' && id !== undefined) {
+                  void run(() => rpc.request('attachLease', { id }), () => {
+                    leaseText = '';
+                  });
+                }
+              }}
+            />
+            <button
+              type="button"
+              class="button secondary"
+              disabled={busy || parseLeaseId(leaseText) === undefined}
+              onclick={() => {
+                const id = parseLeaseId(leaseText);
+                if (id !== undefined) {
+                  void run(() => rpc.request('attachLease', { id }), () => {
+                    leaseText = '';
+                  });
+                }
+              }}>{t('etcd.attachExisting')}</button
+            >
+          {/if}
+        {/if}
+      </div>
+
+      {#if keyState.value !== undefined}
+        <div class="string">
+          {#key version}
+            <ValueEditor
+              value={keyState.value}
+              label={t('redis.value')}
+              rows={12}
+              grow
+              readonly={keyState.readOnly}
+              {t}
+              onchange={(value: RedisValue | undefined) => {
+                draft = value;
+              }}
+            />
+          {/key}
+        </div>
+        {#if !keyState.readOnly && keyState.value.truncated !== true}
+          <footer class="actions">
+            <button
+              type="button"
+              class="button"
+              disabled={busy || draft === undefined}
+              onclick={() => {
+                save(false);
+              }}><Icon name="save" />{t('redis.save')}</button
+            >
+          </footer>
+        {/if}
+      {/if}
+    {/if}
+  {/if}
+</main>
+
+<style>
+  main {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .mono {
+    font-family: var(--dn-mono);
+  }
+
+  /* The key, what it is, and what can be done to it as a whole. */
+  .top {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-m);
+    align-items: center;
+    padding: var(--dn-gap-m) var(--dn-gap-l);
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .top-icon {
+    display: inline-flex;
+    padding: 7px;
+    color: #fff;
+    background: linear-gradient(135deg, #58a6ff, #2563eb);
+    border-radius: var(--dn-radius-l);
+  }
+
+  .top-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  h1 {
+    overflow: hidden;
+    font-family: var(--dn-mono);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-s) var(--dn-gap-m);
+    align-items: center;
+    margin: 4px 0 0;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+  }
+
+  .fact {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .problem {
+    flex: none;
+    margin: var(--dn-gap-m) var(--dn-gap-l) 0;
+  }
+
+  .message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .conflict-actions {
+    display: inline-flex;
+    gap: var(--dn-gap-s);
+    margin-left: auto;
+  }
+
+  /* The lease: how long the key has to live, and the forms to change that. */
+  .keybar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-s);
+    align-items: center;
+    padding: var(--dn-gap) var(--dn-gap-l);
+    background: var(--vscode-sideBar-background, var(--dn-surface));
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .keybar .control,
+  .keybar .button {
+    min-height: 24px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  .group-icon {
+    display: inline-flex;
+    color: var(--dn-muted);
+  }
+
+  .ttl-input {
+    width: 96px;
+  }
+
+  .id-input {
+    width: 180px;
+  }
+
+  .lease.ok {
+    color: var(--dn-success, var(--vscode-charts-green));
+    border-color: currentColor;
+  }
+
+  .lease.soon {
+    color: var(--dn-warning);
+    border-color: currentColor;
+  }
+
+  .lease.ended {
+    color: var(--dn-danger);
+    border-color: currentColor;
+  }
+
+  /* The value fills the page; its Save button is pinned below. */
+  .string {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    padding: var(--dn-gap-m) var(--dn-gap-l);
+  }
+
+  .actions {
+    display: flex;
+    flex: none;
+    justify-content: flex-end;
+    padding: var(--dn-gap) var(--dn-gap-l);
+    border-top: 1px solid var(--dn-divider);
+  }
+
+  /* Waiting and gone: centred. */
+  .empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--dn-gap);
+    align-items: center;
+    justify-content: center;
+    padding: var(--dn-gap-xl);
+    color: var(--dn-muted);
+    text-align: center;
+  }
+
+  .empty-actions {
+    display: flex;
+    gap: var(--dn-gap-s);
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    padding: 14px;
+    color: var(--dn-muted);
+    background: var(--dn-surface);
+    border: 1px solid var(--dn-border);
+    border-radius: 50%;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 14px;
+  }
+</style>

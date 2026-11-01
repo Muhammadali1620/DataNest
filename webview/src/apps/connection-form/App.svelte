@@ -89,6 +89,7 @@
     mongodb: 'form.driver.mongodb',
     elasticsearch: 'form.driver.elasticsearch',
     libsql: 'form.driver.libsql',
+    etcd: 'form.driver.etcd',
     plugin: 'form.driver.plugin',
   };
 
@@ -109,6 +110,7 @@
   const isMongo = $derived(fields?.driver === 'mongodb');
   const isElastic = $derived(fields?.driver === 'elasticsearch');
   const isLibsql = $derived(fields?.driver === 'libsql');
+  const isEtcd = $derived(fields?.driver === 'etcd');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
   const defaultPort = $derived(
     isLibsql
@@ -548,7 +550,10 @@
 
             <div class="pair">
               {#if !withApiKey && !isLibsql}
-              <Field label={t('form.user')} hint={isRedis ? t('form.redis.userHint') : undefined}>
+              <Field
+                label={t('form.user')}
+                hint={isRedis ? t('form.redis.userHint') : isEtcd ? t('form.etcd.userHint') : undefined}
+              >
                 <input
                   class="control"
                   bind:value={fields.user}
@@ -638,7 +643,7 @@
               {/if}
             {/if}
 
-            {#if !isElastic && !isLibsql}
+            {#if !isElastic && !isLibsql && !isEtcd}
             <Field
               label={isRedis ? t('form.redis.database') : t('form.database')}
               hint={isRedis

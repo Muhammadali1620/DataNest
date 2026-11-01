@@ -243,5 +243,11 @@
   "commands.sftp.moveTo.title": "Переместить в…",
   "commands.sftp.refresh.title": "Обновить",
   "configuration.servers.maxOpenSizeMb.description": "Самый большой файл сервера (в мегабайтах), который открывается в редакторе из раздела «Серверы». Файл больше этого предлагается скачать.",
-  "configuration.servers.showHidden.description": "Показывать скрытые файлы (имена, начинающиеся с точки) в разделе «Серверы»."
+  "configuration.servers.showHidden.description": "Показывать скрытые файлы (имена, начинающиеся с точки) в разделе «Серверы».",
+  "commands.etcd.loadMoreKeys.title": "Загрузить ещё ключи etcd",
+  "commands.etcd.openKey.title": "Открыть ключ etcd",
+  "commands.etcd.findKey.title": "Найти ключ etcd по началу имени…",
+  "commands.etcd.newKey.title": "Новый ключ etcd…",
+  "commands.etcd.deleteKeys.title": "Удалить ключи etcd",
+  "configuration.etcd.keysPerLoad.description": "Сколько ключей и папок дерево читает из папки etcd за один раз. Если в папке больше, показывается «Загрузить ещё ключи…»."
 }

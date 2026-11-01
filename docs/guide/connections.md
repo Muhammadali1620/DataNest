@@ -13,6 +13,7 @@
 | Redis | One server, Sentinel or a cluster; Valkey too. |
 | MongoDB | One server, a replica set or `mongodb+srv://`; SCRAM, X.509 and LDAP sign-in. |
 | Elasticsearch | And OpenSearch; user and password or an API key. |
+| etcd | A key-value cluster (v3) over its HTTP/JSON gateway on the client port (2379); user and password when the cluster has authentication. |
 | libSQL | A libSQL server (sqld, Turso) over HTTP; the address and an auth token. TLS is on for a hosted server (port 443), off for a local one (8080). |
 
 Each driver is loaded the first time you connect to that kind of database, so the ones

@@ -45,6 +45,8 @@ import {
 } from './nodes';
 import { normalizeTableFilter, tableFilter } from './table-filter';
 import { msg } from '../../core/user-message';
+import { type EtcdKeyBrowser, ROOT } from '../../services/etcd/key-browser';
+import { displayKey, type RedisKeyRef, redisKeyBytes, redisKeyRef } from '../../shared/redis-key';
 import { childFolders, parentFolder } from '../../shared/folder-path';
 
 /** What a project node says when it has nothing to list (V4.7). */
@@ -73,6 +75,8 @@ export interface TreeTexts {
   readonly noKeys?: (pattern: string | undefined) => string;
   /** A MongoDB database without collections (V7.5). */
   readonly noCollections?: string;
+  /** An etcd cluster or folder without keys (V13.19). */
+  readonly noEtcdKeys?: string;
   /** An Elasticsearch cluster without indices, an index without fields (V7.8). */
   readonly noIndices?: string;
   readonly noFields?: string;
@@ -110,6 +114,8 @@ export interface TreeModelDeps {
   readonly store: ConnectionStore;
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys?: RedisKeyBrowser;
+  /** The folders of etcd connections as read so far (V13.19). */
+  readonly etcdKeys?: EtcdKeyBrowser;
   /** `datanest.redis.keySeparator`, for the prefix a folder copies. */
   readonly redisKeySeparator?: () => string;
   readonly projects?: ProjectSource;
@@ -300,6 +306,8 @@ export class TreeModel {
         return await elasticFieldChildren(this.elasticDeps(), node);
       case 'elasticField':
         return elasticSubfields(node);
+      case 'etcdFolder':
+        return await this.etcdChildren(node.connectionId, node.prefix);
       case 'column':
       case 'object':
       case 'index':
@@ -308,6 +316,8 @@ export class TreeModel {
       case 'account':
       case 'redisKey':
       case 'redisMore':
+      case 'etcdKey':
+      case 'etcdMore':
       case 'mongoIndex':
       case 'message':
         return [];
@@ -344,6 +354,14 @@ export class TreeModel {
       }
       case 'redisMore':
         return this.redisDatabaseNode(node.connectionId, node.database);
+      case 'etcdMore':
+        return this.etcdFolderNode(node.connectionId, node.prefix);
+      case 'etcdFolder':
+      case 'etcdKey':
+        return this.etcdFolderNode(
+          node.connectionId,
+          parentPrefix(node.kind === 'etcdFolder' ? node.prefix : node.key),
+        );
       case 'redisDatabase':
         return { kind: 'connection', connectionId: node.connectionId };
       case 'connection': {
@@ -383,6 +401,46 @@ export class TreeModel {
     }
   }
 
+  /** The folder a key or folder of etcd sits in; the connection for the top (V13.19). */
+  private etcdFolderNode(connectionId: string, prefix: RedisKeyRef): TreeNode {
+    if (prefix.text === '' && prefix.hex === undefined) {
+      return { kind: 'connection', connectionId };
+    }
+    return { kind: 'etcdFolder', connectionId, prefix, name: lastSegment(prefix) };
+  }
+
+  /** Folders, then keys, then "load more" while the folder has pages left (V13.19). */
+  private async etcdChildren(connectionId: string, prefix: RedisKeyRef): Promise<TreeNode[]> {
+    const browser = this.deps.etcdKeys;
+    if (browser === undefined) {
+      return [];
+    }
+    const listing = await browser.children(connectionId, prefix);
+    const nodes: TreeNode[] = listing.entries.map((entry): TreeNode =>
+      entry.kind === 'folder'
+        ? {
+            kind: 'etcdFolder',
+            connectionId,
+            prefix: entry.prefix,
+            name: entry.label,
+            ...(entry.count === undefined ? {} : { count: entry.count }),
+          }
+        : {
+            kind: 'etcdKey',
+            connectionId,
+            key: entry.key,
+            name: entry.label,
+            ...(entry.leased ? { leased: true } : {}),
+          },
+    );
+    if (listing.more) {
+      nodes.push({ kind: 'etcdMore', connectionId, prefix, loaded: nodes.length });
+    } else if (nodes.length === 0 && this.deps.texts.noEtcdKeys !== undefined) {
+      nodes.push({ kind: 'message', text: this.deps.texts.noEtcdKeys, connectionId });
+    }
+    return nodes;
+  }
+
   /** "12 keys", for the description of a Redis database. */
   redisKeysText(count: number): string {
     return this.deps.texts.redisKeys?.(count) ?? String(count);
@@ -398,6 +456,9 @@ export class TreeModel {
     }
     if (this.driverIdOf(connectionId) === 'elasticsearch') {
       return await elasticIndexChildren(this.elasticDeps(), connectionId);
+    }
+    if (this.driverIdOf(connectionId) === 'etcd') {
+      return await this.etcdChildren(connectionId, ROOT);
     }
     const capabilities = await this.capabilitiesOf(connectionId);
     const metadata = await this.metadataOf(connectionId);
@@ -941,3 +1002,21 @@ export function inSecurityGroup(account: AccountInfo, group: SecurityGroup): boo
   const isRole = account.role || !account.login;
   return group === 'roles' ? isRole : !isRole;
 }
+
+/** The folder a key sits in: everything up to and including its last slash. */
+function parentPrefix(key: RedisKeyRef): RedisKeyRef {
+  const bytes = redisKeyBytes(key);
+  // A folder's own prefix ends in the slash; its parent is the one before that.
+  const body = bytes.at(-1) === SLASH_BYTE ? bytes.subarray(0, -1) : bytes;
+  const slash = body.lastIndexOf(SLASH_BYTE);
+  return slash < 0 ? ROOT : redisKeyRef(Uint8Array.from(bytes.subarray(0, slash + 1)));
+}
+
+/** The name of a folder inside its parent, without the slash. */
+function lastSegment(prefix: RedisKeyRef): string {
+  const bytes = redisKeyBytes(prefix);
+  const body = bytes.at(-1) === SLASH_BYTE ? bytes.subarray(0, -1) : bytes;
+  return displayKey(body.subarray(body.lastIndexOf(SLASH_BYTE) + 1));
+}
+
+const SLASH_BYTE = 0x2f;

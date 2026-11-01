@@ -201,6 +201,15 @@ export const COMMAND_IDS = {
   redisOpenConsole: 'datanest.redis.openConsole',
   /** What a Redis server reports about itself (INFO). */
   redisServerInfo: 'datanest.redis.serverInfo',
+  /** Brings the next page of a folder of an etcd connection into the tree (V13.19). */
+  etcdLoadMoreKeys: 'datanest.etcd.loadMoreKeys',
+  /** Opens the page of an etcd key: its value, revisions and lease. */
+  etcdOpenKey: 'datanest.etcd.openKey',
+  /** Finds etcd keys by the beginning of their names. */
+  etcdFindKey: 'datanest.etcd.findKey',
+  etcdNewKey: 'datanest.etcd.newKey',
+  /** Deletes the clicked key, every selected one, or all the keys of a folder. */
+  etcdDeleteKeys: 'datanest.etcd.deleteKeys',
   /** A MongoDB database comes to be with its first collection (V7.5). */
   mongoNewDatabase: 'datanest.mongo.newDatabase',
   mongoDropDatabase: 'datanest.mongo.dropDatabase',
@@ -331,6 +340,8 @@ export const CONFIG_KEYS = {
   formatLogicalOperatorNewline: 'format.logicalOperatorNewline',
   formatExpressionWidth: 'format.expressionWidth',
   formatDenseOperators: 'format.denseOperators',
+  /** How many etcd keys the tree reads at a time (V13.19). */
+  etcdKeysPerLoad: 'etcd.keysPerLoad',
   /** What splits Redis key names into folders (V7.2). */
   redisKeySeparator: 'redis.keySeparator',
   /** How many Redis keys the tree loads at a time. */

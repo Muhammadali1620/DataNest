@@ -243,5 +243,11 @@
   "commands.sftp.moveTo.title": "Move To…",
   "commands.sftp.refresh.title": "Refresh",
   "configuration.servers.maxOpenSizeMb.description": "The largest file of a server, in megabytes, that opens in the editor from the Servers view. A bigger file is offered for download instead.",
-  "configuration.servers.showHidden.description": "List hidden files (names starting with a dot) in the Servers view."
+  "configuration.servers.showHidden.description": "List hidden files (names starting with a dot) in the Servers view.",
+  "commands.etcd.loadMoreKeys.title": "Load More etcd Keys",
+  "commands.etcd.openKey.title": "Open etcd Key",
+  "commands.etcd.findKey.title": "Find etcd Key by Prefix…",
+  "commands.etcd.newKey.title": "New etcd Key…",
+  "commands.etcd.deleteKeys.title": "Delete etcd Keys",
+  "configuration.etcd.keysPerLoad.description": "How many keys and folders the tree reads from an etcd folder at a time. A folder with more children shows \"Load more keys…\"."
 }

@@ -176,6 +176,9 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
     case 'redisMore':
     case 'mongoIndex':
     case 'elasticField':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'message':
       return undefined;
   }

@@ -451,6 +451,27 @@ services:
         - -c
         - 'exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /health HTTP/1.0\r\n\r\n" >&3; head -n1 <&3 | grep -q " 200"'
 
+  # etcd (V13.19), group `etcd`: one member, plain HTTP on the client port, no sign-in; the
+  # tests switch authentication on for a moment and off again. The image has no shell, so
+  # the health check is etcdctl itself. The data lives in tmpfs, so every start is empty.
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.17
+    container_name: datanest-etcd
+    profiles: [etcd]
+    command:
+      - /usr/local/bin/etcd
+      - --name=datanest
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://127.0.0.1:7239
+    ports:
+      - 127.0.0.1:7239:2379
+    tmpfs:
+      - /etcd-data
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', '/usr/local/bin/etcdctl', 'endpoint', 'health']
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

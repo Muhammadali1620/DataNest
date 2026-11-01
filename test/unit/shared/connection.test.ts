@@ -466,9 +466,9 @@ describe('Redis connections (V7.1)', () => {
       expect(driverFamily(id)).toBe('sql');
       expect(isSqlDriver(id)).toBe(true);
     }
-    expect([...SQL_DRIVER_IDS, 'plugin', 'redis', 'mongodb', 'elasticsearch'].sort()).toEqual(
-      [...DRIVER_IDS].sort(),
-    );
+    expect(
+      [...SQL_DRIVER_IDS, 'plugin', 'redis', 'mongodb', 'elasticsearch', 'etcd'].sort(),
+    ).toEqual([...DRIVER_IDS].sort());
     expect(isFileDriver('redis')).toBe(false);
   });
 
@@ -881,5 +881,44 @@ describe('SQLite file on a server (V12.8)', () => {
     expect(describeTunnel(remote)).toBe('deploy@bastion:22');
     expect(describeTunnel({ name: 'L', driver: 'sqlite', file: '/a.db' })).toBeUndefined();
     expect(describeTarget(remote)).toBe('/srv/app/data.db');
+  });
+});
+
+describe('etcd connections (V13.19)', () => {
+  const etcd = { name: 'Cluster', driver: 'etcd', host: 'h' } as const;
+
+  it('is a driver of its own family, apart from SQL', () => {
+    expect(isDriverId('etcd')).toBe(true);
+    expect(driverFamily('etcd')).toBe('etcd');
+    expect(isSqlDriver('etcd')).toBe(false);
+    expect(SQL_DRIVER_IDS).not.toContain('etcd');
+    expect(isFileDriver('etcd')).toBe(false);
+  });
+
+  it('listens on the client port, 2379, unless told otherwise', () => {
+    expect(DEFAULT_PORTS.etcd).toBe(2379);
+    expect(effectivePort(etcd)).toBe(2379);
+    expect(effectivePort({ ...etcd, port: 12_379 })).toBe(12_379);
+  });
+
+  it('has timeouts and TLS to set, a request timeout, and nothing to run on connect', () => {
+    expect(optionSupport('etcd')).toMatchObject({
+      connectTimeout: true,
+      keepAlive: true,
+      tls: true,
+      queryTimeout: true,
+      init: false,
+      timeZone: false,
+      charset: false,
+    });
+  });
+
+  it('has no databases or schemas to filter', () => {
+    expect(filterSupport('etcd')).toEqual({ databases: false, schemas: false });
+  });
+
+  it('describes its target as host and port', () => {
+    expect(describeTarget(etcd)).toBe('h:2379');
+    expect(describeTarget({ ...etcd, user: 'root', port: 4001 })).toBe('root@h:4001');
   });
 });

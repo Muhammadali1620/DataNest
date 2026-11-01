@@ -257,6 +257,9 @@ describe('cliCommand', () => {
       cliCommand(config({ driver: 'elasticsearch' }), 'x', undefined, undefined),
     ).toBeUndefined();
     expect(CLI_PROGRAMS.elasticsearch).toEqual([]);
+    // etcdctl speaks gRPC and has other options: no terminal command for etcd (V13.19).
+    expect(CLI_PROGRAMS.etcd).toEqual([]);
+    expect(cliCommand(config({ driver: 'etcd' }), 'x', undefined, undefined)).toBeUndefined();
   });
 
   it('leaves the password out when there is none', () => {

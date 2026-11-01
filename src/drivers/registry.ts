@@ -12,6 +12,7 @@ import {
 } from '../shared/connection';
 import type { Driver, DriverModule } from './driver';
 import type { ElasticDriver, ElasticDriverModule } from './elastic-driver';
+import type { EtcdDriver, EtcdDriverModule } from './etcd-driver';
 import type { MongoDriver, MongoDriverModule } from './mongo-driver';
 import type { PluginDrivers } from './plugin/plugin-drivers';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
@@ -19,7 +20,9 @@ import { msg } from '../core/user-message';
 
 export type DriverLoader = (
   id: DriverId,
-) => Promise<DriverModule | RedisDriverModule | MongoDriverModule | ElasticDriverModule>;
+) => Promise<
+  DriverModule | RedisDriverModule | MongoDriverModule | ElasticDriverModule | EtcdDriverModule
+>;
 
 /**
  * Resolves `./drivers/<id>.js` relative to the running bundle (dist/extension.js).
@@ -31,7 +34,7 @@ export function createBundleDriverLoader(bundlePath: string): DriverLoader {
 }
 
 /** A SQL driver, the Redis one (D81) or the MongoDB one (D88), as the bundle exports it. */
-type AnyDriver = Driver | RedisDriver | MongoDriver | ElasticDriver;
+type AnyDriver = Driver | RedisDriver | MongoDriver | ElasticDriver | EtcdDriver;
 
 export class DriverRegistry {
   private readonly loader: DriverLoader;
@@ -102,6 +105,15 @@ export class DriverRegistry {
     return driver;
   }
 
+  /** Loads the etcd driver on first use (V13.19). */
+  async getEtcd(): Promise<EtcdDriver> {
+    const driver = await this.loadOnce('etcd');
+    if (isSqlDriverShaped(driver) || driver.id !== 'etcd') {
+      throw new DbError('internal', msg('Driver "etcd" is broken: unexpected module shape'));
+    }
+    return driver;
+  }
+
   private async loadOnce(id: DriverId): Promise<AnyDriver> {
     let promise = this.loading.get(id);
     if (!promise) {
@@ -122,7 +134,8 @@ export class DriverRegistry {
 
   private async load(id: DriverId): Promise<AnyDriver> {
     this.logger.debug(`Loading driver "${id}"`);
-    let module: DriverModule | RedisDriverModule | MongoDriverModule | ElasticDriverModule;
+    let module:
+      DriverModule | RedisDriverModule | MongoDriverModule | ElasticDriverModule | EtcdDriverModule;
     try {
       module = await this.loader(id);
     } catch (error) {
@@ -158,6 +171,6 @@ function isSqlDriverShaped(value: unknown): value is Driver {
 function isFamilyDriverShaped(
   value: unknown,
   id: DriverId,
-): value is RedisDriver | MongoDriver | ElasticDriver {
+): value is RedisDriver | MongoDriver | ElasticDriver | EtcdDriver {
   return isObject(value) && value.id === id && typeof value.openSession === 'function';
 }

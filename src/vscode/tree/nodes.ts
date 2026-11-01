@@ -69,6 +69,16 @@ export const TREE_CONTEXT = {
   projectElasticConnectionConnected: 'datanest.projectElasticConnection.connected',
   elasticIndex: 'datanest.elasticIndex',
   elasticField: 'datanest.elasticField',
+  /** etcd connections (V13.19) share the connection menus but none of the SQL ones. */
+  etcdConnection: 'datanest.etcdConnection',
+  etcdConnectionConnected: 'datanest.etcdConnection.connected',
+  projectEtcdConnection: 'datanest.projectEtcdConnection',
+  projectEtcdConnectionConnected: 'datanest.projectEtcdConnection.connected',
+  /** Keys of an etcd connection whose names share a prefix: `/app/db/` holds `/app/db/host`. */
+  etcdFolder: 'datanest.etcdFolder',
+  etcdKey: 'datanest.etcdKey',
+  /** "Load more" at the end of a folder whose next page has not been read. */
+  etcdMore: 'datanest.etcdMore',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -351,6 +361,38 @@ export interface ElasticFieldNode {
   readonly field: ElasticFieldInfo;
 }
 
+/** Keys of an etcd connection that share a prefix, up to the slash (V13.19). */
+export interface EtcdFolderNode {
+  readonly kind: 'etcdFolder';
+  readonly connectionId: string;
+  /** The folder's whole prefix, slash included; empty for the top of the key space. */
+  readonly prefix: RedisKeyRef;
+  /** Its own name, shown in the tree. */
+  readonly name: string;
+  /** Keys below it, when the cluster was asked. */
+  readonly count?: number;
+}
+
+export interface EtcdKeyNode {
+  readonly kind: 'etcdKey';
+  readonly connectionId: string;
+  readonly key: RedisKeyRef;
+  /** The part of the name inside its folder. */
+  readonly name: string;
+  /** The key dies with a lease. */
+  readonly leased?: boolean;
+}
+
+/** The leaf after the children of a folder whose next page has not been read. */
+export interface EtcdMoreNode {
+  readonly kind: 'etcdMore';
+  readonly connectionId: string;
+  /** The folder that has more; empty for the top. */
+  readonly prefix: RedisKeyRef;
+  /** Children shown so far. */
+  readonly loaded: number;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -390,6 +432,9 @@ export type TreeNode =
   | MongoIndexNode
   | ElasticIndexNode
   | ElasticFieldNode
+  | EtcdFolderNode
+  | EtcdKeyNode
+  | EtcdMoreNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -429,6 +474,9 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'mongoIndex':
     case 'elasticIndex':
     case 'elasticField':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'message':
       return {};
   }
@@ -543,6 +591,12 @@ export function nodeId(node: TreeNode): string {
       return join(['elasticIndex', node.connectionId, node.index.name]);
     case 'elasticField':
       return join(['elasticField', node.connectionId, node.index, node.field.path]);
+    case 'etcdFolder':
+      return join(['etcdFolder', node.connectionId, redisKeyId(node.prefix)]);
+    case 'etcdKey':
+      return join(['etcdKey', node.connectionId, redisKeyId(node.key)]);
+    case 'etcdMore':
+      return join(['etcdMore', node.connectionId, redisKeyId(node.prefix)]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -599,6 +653,9 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'mongoIndex' ||
     kind === 'elasticIndex' ||
     kind === 'elasticField' ||
+    kind === 'etcdFolder' ||
+    kind === 'etcdKey' ||
+    kind === 'etcdMore' ||
     kind === 'message'
   );
 }
@@ -640,6 +697,10 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.index.name;
     case 'elasticField':
       return node.field.path;
+    case 'etcdKey':
+      return node.key.text;
+    case 'etcdFolder':
+      return node.prefix.text;
     case 'project':
     case 'connection':
     case 'group':
@@ -649,6 +710,7 @@ export function nameOf(node: TreeNode): string | undefined {
     case 'securityGroup':
     case 'redisDatabase':
     case 'redisMore':
+    case 'etcdMore':
     case 'message':
       return undefined;
   }
@@ -703,6 +765,9 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'mongoIndex':
     case 'elasticIndex':
     case 'elasticField':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'message':
       return undefined;
   }
@@ -715,6 +780,15 @@ export function connectionContext(options: {
   readonly family: DriverFamily;
 }): string {
   const { project, connected, family } = options;
+  if (family === 'etcd') {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectEtcdConnectionConnected
+        : TREE_CONTEXT.projectEtcdConnection
+      : connected
+        ? TREE_CONTEXT.etcdConnectionConnected
+        : TREE_CONTEXT.etcdConnection;
+  }
   if (family === 'elasticsearch') {
     return project
       ? connected

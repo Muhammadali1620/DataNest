@@ -826,7 +826,8 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     host: file ? undefined : trim(input.host),
     port: file ? undefined : input.port,
     user: file ? undefined : trim(input.user),
-    database: file ? undefined : trim(input.database),
+    // etcd has one key space and no database to pick.
+    database: file || input.driver === 'etcd' ? undefined : trim(input.database),
     // A plugin driver may read a file as well as connect to a server (V12.7).
     file: file || input.driver === 'plugin' ? trim(input.file) : undefined,
     plugin: input.driver === 'plugin' ? input.plugin : undefined,

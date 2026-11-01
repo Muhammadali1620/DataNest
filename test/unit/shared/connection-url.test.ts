@@ -464,3 +464,23 @@ describe('Redis URLs (V7.1)', () => {
     expect(parseConnectionUrl('redis:///0')).toEqual({ ok: false, problem: 'no-host' });
   });
 });
+
+describe('etcd:// URLs (V13.19)', () => {
+  it('reads the host, port, user and password, and leaves the path alone', () => {
+    const result = parseConnectionUrl('etcd://root:p%40ss@etcd.local:2380/ignored/path');
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        input: { driver: 'etcd', host: 'etcd.local', port: 2380, user: 'root' },
+        password: 'p@ss',
+      },
+    });
+    expect(result.ok && result.value.input.database).toBeUndefined();
+  });
+
+  it('is an etcd URL by its scheme, and asks for TLS by a query', () => {
+    expect(urlDriver('etcd://h')).toBe('etcd');
+    const result = parseConnectionUrl('etcd://h?sslmode=require');
+    expect(result.ok && result.value.input.ssl).toEqual({ mode: 'require' });
+  });
+});

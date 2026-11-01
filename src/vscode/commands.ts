@@ -103,6 +103,11 @@ import { PingPanel } from './panels/ping-panel';
 import type { TransactionStatus } from './editor/transaction-status';
 import type { TransactionModes } from './editor/transaction-modes';
 import type { RedisKeyBrowser } from '../services/redis/key-browser';
+import type { EtcdKeyBrowser } from '../services/etcd/key-browser';
+import { EtcdKeyModel } from './panels/etcd-key-model';
+import { EtcdKeyPanel } from './panels/etcd-key-panel';
+import { etcdCommandHandlers } from './etcd/etcd-commands';
+import { etcdCommandUi } from './etcd/etcd-ui';
 import { describeTarget, type DriverId } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
 import { redisKeyFileCommandHandlers } from './redis/redis-key-file-commands';
@@ -188,6 +193,8 @@ export interface CommandDeps {
   ) => Promise<void>;
   /** The loaded keys of Redis databases (V7.2). */
   readonly redisKeys: RedisKeyBrowser;
+  /** The folders of etcd connections as read so far (V13.19). */
+  readonly etcdKeys: EtcdKeyBrowser;
   /** The Connections view, to reveal a key found by a search. */
   readonly treeView: vscode.TreeView<TreeElement>;
   /** The starred nodes (V13.2). */
@@ -423,6 +430,42 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       },
     });
   };
+  /** The tree's session of an etcd connection. */
+  const etcdSession = async (connectionId: string) =>
+    await deps.manager.acquireEtcd(ConnectionManager.treeOwner(connectionId), { connectionId });
+  const openEtcdKey = (connectionId: string, key: RedisKeyRef): Promise<void> => {
+    const config = deps.store.get(connectionId);
+    EtcdKeyPanel.show({
+      extensionUri: deps.extensionUri,
+      logger: deps.logger,
+      connectionId,
+      policy: policyOf(config),
+      model: new EtcdKeyModel({
+        key,
+        connectionName: config?.name ?? '',
+        readOnly: config?.readOnly === true,
+        session: async () => await etcdSession(connectionId),
+      }),
+      onChanged: (change) => {
+        // A key that appeared or went changes its folder's listing: read it again.
+        deps.etcdKeys.reset(change.connectionId);
+        deps.tree.refresh();
+      },
+    });
+    return Promise.resolve();
+  };
+  const etcdCommands = etcdCommandHandlers({
+    store: deps.store,
+    browser: deps.etcdKeys,
+    session: etcdSession,
+    tree: deps.tree,
+    ui: etcdCommandUi(deps.store),
+    openKey: openEtcdKey,
+    texts: {
+      noEtcd: vscode.l10n.t('There is no etcd connection yet'),
+      readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+    },
+  });
   const redisKeyFileCommands = redisKeyFileCommandHandlers({
     browser: deps.redisKeys,
     store: deps.store,
@@ -589,6 +632,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       invalidate: (connectionId?: string) => {
         deps.cache.invalidate(connectionId);
         deps.redisKeys.reset(connectionId);
+        deps.etcdKeys.reset(connectionId);
       },
     },
     openTable: deps.openTable,
@@ -1051,6 +1095,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.redisFilterKeys]: redisKeyCommands.filterKeys,
     [COMMAND_IDS.redisFindKey]: redisKeyCommands.findKey,
     [COMMAND_IDS.redisOpenKey]: redisKeyCommands.openKey,
+    [COMMAND_IDS.etcdLoadMoreKeys]: etcdCommands.loadMoreKeys,
+    [COMMAND_IDS.etcdOpenKey]: etcdCommands.openKey,
+    [COMMAND_IDS.etcdFindKey]: etcdCommands.findKey,
+    [COMMAND_IDS.etcdNewKey]: etcdCommands.newKey,
+    [COMMAND_IDS.etcdDeleteKeys]: etcdCommands.deleteKeys,
     [COMMAND_IDS.redisNewKey]: redisKeyCommands.newKey,
     [COMMAND_IDS.redisRenameKey]: redisKeyCommands.renameKey,
     [COMMAND_IDS.redisOpenConsole]: redisKeyCommands.openConsole,
@@ -1120,6 +1169,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         DataComparePanel.disposeAll();
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
+        EtcdKeyPanel.disposeAll();
         RedisConsolePanel.disposeAll();
         RedisInfoPanel.disposeAll();
         MongoDocumentsPanel.disposeAll();

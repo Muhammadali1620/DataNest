@@ -234,3 +234,23 @@ describe('nodeSqlTargetOf', () => {
     ]);
   });
 });
+
+describe('etcd nodes (V13.19)', () => {
+  const nodes: TreeNode[] = [
+    {
+      kind: 'etcdFolder',
+      connectionId: 'c1',
+      prefix: { text: '/a/' },
+      name: 'a',
+    },
+    { kind: 'etcdKey', connectionId: 'c1', key: { text: '/a/b' }, name: 'b' },
+    { kind: 'etcdMore', connectionId: 'c1', prefix: { text: '/a/' }, loaded: 3 },
+  ];
+
+  it('have no SQL to open and no list of actions', () => {
+    for (const node of nodes) {
+      expect(nodeSqlTargetOf(node)).toBeUndefined();
+      expect(actionsOf(node)).toEqual([]);
+    }
+  });
+});

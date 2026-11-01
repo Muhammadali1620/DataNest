@@ -77,6 +77,9 @@ export function diagramStartOf(
     case 'mongoIndex':
     case 'elasticIndex':
     case 'elasticField':
+    case 'etcdFolder':
+    case 'etcdKey':
+    case 'etcdMore':
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':

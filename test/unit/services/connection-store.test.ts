@@ -1798,3 +1798,59 @@ describe('ConnectionStore: sockets and proxies (V10.2.5)', () => {
     });
   });
 });
+
+describe('ConnectionStore etcd (V13.19)', () => {
+  function store() {
+    return new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+  }
+
+  it('keeps the host, the port, the user and TLS, and the password in the secrets', async () => {
+    const one = store();
+    const config = await one.add(
+      {
+        name: 'Cluster',
+        driver: 'etcd',
+        host: ' etcd.local ',
+        port: 12_379,
+        user: 'root',
+        ssl: { mode: 'verify-full' },
+      },
+      'secret',
+    );
+    expect(config).toMatchObject({
+      driver: 'etcd',
+      host: 'etcd.local',
+      port: 12_379,
+      user: 'root',
+      ssl: { mode: 'verify-full' },
+    });
+    expect(await one.getPassword(config.id)).toBe('secret');
+    expect(JSON.stringify(one.list())).not.toContain('secret');
+  });
+
+  it('has no database to pick, even if the form sent one', async () => {
+    const config = await store().add({ name: 'Cluster', driver: 'etcd', host: 'h', database: 'x' });
+    expect(config.database).toBeUndefined();
+  });
+
+  it('can be switched off and kept apart from the other families', async () => {
+    const one = store();
+    const config = await one.add({ name: 'Cluster', driver: 'etcd', host: 'h' });
+    await one.setDisabled(config.id, true);
+    expect(one.get(config.id)?.disabled).toBe(true);
+    expect(one.get(config.id)?.redis).toBeUndefined();
+    expect(one.get(config.id)?.elastic).toBeUndefined();
+  });
+
+  it('can be exported and read back as an etcd connection', async () => {
+    const one = store();
+    await one.add({ name: 'Cluster', driver: 'etcd', host: 'h', user: 'root' });
+    const copy = store();
+    await copy.add(one.list()[0] as never);
+    expect(copy.list()[0]).toMatchObject({ driver: 'etcd', host: 'h', user: 'root' });
+  });
+});

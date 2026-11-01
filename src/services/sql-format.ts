@@ -58,6 +58,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
+    case 'etcd':
     case undefined:
       return 'sql';
   }

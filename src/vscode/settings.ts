@@ -8,6 +8,7 @@ import { isTransactionMode, type TransactionMode } from './editor/transaction-mo
 import { lookFromSettings, type ResultsLook } from '../shared/results-look';
 import type { TreeSettings } from './tree/tree-model';
 import type { KeyBrowserSettings } from '../services/redis/key-browser';
+import { DEFAULT_KEYS_PER_LOAD, type EtcdBrowserSettings } from '../services/etcd/key-browser';
 
 /**
  * Reads DataNest settings on every call, so a change in the editor takes effect
@@ -45,6 +46,18 @@ export function createRedisKeySettings(): KeyBrowserSettings {
     keysPerLoad: () => {
       const value = config().get<number>(CONFIG_KEYS.redisKeysPerLoad, DEFAULT_REDIS_KEYS_PER_LOAD);
       return Number.isInteger(value) && value > 0 ? value : DEFAULT_REDIS_KEYS_PER_LOAD;
+    },
+  };
+}
+
+/** `datanest.etcd.keysPerLoad`: how many children one read of a folder brings (V13.19). */
+export function createEtcdKeySettings(): EtcdBrowserSettings {
+  return {
+    keysPerLoad: () => {
+      const value = vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<number>(CONFIG_KEYS.etcdKeysPerLoad, DEFAULT_KEYS_PER_LOAD);
+      return Number.isInteger(value) && value > 0 ? value : DEFAULT_KEYS_PER_LOAD;
     },
   };
 }

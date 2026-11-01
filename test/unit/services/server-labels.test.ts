@@ -93,7 +93,7 @@ describe('sizeSql', () => {
     expect(ask('clickhouse')).toBeUndefined();
   });
 
-  it.each(['sqlite', 'oracle', 'redis', 'mongodb', 'elasticsearch'] as const)(
+  it.each(['sqlite', 'oracle', 'redis', 'mongodb', 'elasticsearch', 'etcd'] as const)(
     'has no cheap way for %s',
     (driver) => {
       expect(ask(driver, 'x', 'y')).toBeUndefined();
@@ -118,6 +118,7 @@ function managerWith(sql: (statement: string) => ReturnType<typeof records>, dia
     acquireRedis: vi.fn(),
     acquireMongo: vi.fn(),
     acquireElastic: vi.fn(),
+    acquireEtcd: vi.fn(),
   };
   return { manager: manager as never, acquire, executed };
 }
@@ -173,6 +174,14 @@ describe('readServerVersion', () => {
     expect(await readServerVersion(manager, 'c1', 'mongodb')).toBe('8.2.12');
     expect(await readServerVersion(manager, 'c1', 'elasticsearch')).toBe('8.19.6');
     expect(await readServerVersion(manager, 'c1', 'redis')).toBe('7.4.1');
+  });
+
+  it('takes the etcd version from the session as well (V13.19)', async () => {
+    const { manager } = managerWith(() => records([]));
+    const typed = manager as unknown as { acquireEtcd: ReturnType<typeof vi.fn> };
+    typed.acquireEtcd.mockResolvedValue({ server: { version: '3.5.17' } });
+    expect(await readServerVersion(manager, 'c1', 'etcd')).toBe('3.5.17');
+    expect(typed.acquireEtcd).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
   });
 });
 

@@ -121,10 +121,11 @@
             "redis",
             "mongodb",
             "elasticsearch",
+            "etcd",
             "libsql",
             "plugin"
           ],
-          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; libsql is a libSQL server (sqld, Turso) over HTTP, its auth token kept as the password; plugin is a database that another extension added, named in \"plugin\"."
+          "description": "mysql also covers MariaDB; mssql is Microsoft SQL Server; redis runs Redis commands, mongodb keeps documents in collections and elasticsearch (OpenSearch too) answers HTTP requests, not SQL; etcd is a key-value store reached over its HTTP/JSON gateway, with the user and password of an etcd user; libsql is a libSQL server (sqld, Turso) over HTTP, its auth token kept as the password; plugin is a database that another extension added, named in \"plugin\"."
         },
         "host": {
           "type": "string"

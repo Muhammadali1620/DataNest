@@ -1,4 +1,4 @@
-# Redis, MongoDB and Elasticsearch
+# Redis, MongoDB, Elasticsearch and etcd
 
 These connections live in the same tree, with the same folders, SSH, TLS, production and
 read-only marks, but each speaks its own language and has pages of its own. SQL commands
@@ -87,3 +87,36 @@ do not apply to them, and theirs do not apply to SQL connections.
   exists, or make up new ids; a refused document either stops the load or is skipped, and
   the report lists its line. **Import as New Index…** on the connection makes the index from
   the header of the file first. Loading follows the production and read-only rules.
+
+## etcd
+
+DataNest talks to etcd v3 through the cluster's HTTP/JSON gateway on the client port
+(2379), so there is nothing to install; TLS, SSH tunnels and proxies work as for the other
+connections. Give a user and password when the cluster has authentication (the sign-in
+token is renewed by itself); leave both empty when it has none.
+
+- **Keys** appear as folders made by splitting the names at `/`. A folder is read when you
+  open it, a page at a time (`datanest.etcd.keysPerLoad`), by a range over its prefix, so
+  nothing below it is read ahead and a huge store opens as fast as a small one; the number
+  next to a folder is the cluster's own count of the keys below it. **Load More Keys**
+  brings the next page. A key that dies with a lease has a clock icon.
+- **Find etcd Key by Prefix…** lists the keys that start with what you type (etcd has no
+  "contains", only ranges) and opens the one you pick.
+- **Open etcd Key** shows a key on a page of its own: the value as text, JSON or hex, the
+  revision of its last change, its version, its size and its lease with the time left.
+  **Save** is a compare-and-swap on the revision the page read: when somebody changed the
+  key meanwhile, nothing is overwritten; the page says so, keeps your text and offers
+  to load the server's value or to overwrite it on purpose. The lease the key has is kept
+  when you save.
+- **Leases**: attach a new lease of N seconds, attach an existing one by its id (a decimal
+  number, as the gateway writes it), detach it so the key stays for good, or revoke it
+  (which deletes every key attached to it, after a question).
+- **New etcd Key…** makes a key with an empty value and opens its page; a name that is
+  taken is refused. **Delete etcd Keys** deletes the clicked key, the selected keys or
+  everything under a folder, after saying how many keys that is.
+- A read-only connection offers no change, and a production one asks before every one.
+  Keys whose names are not text are shown with `\xHH` for the bytes and found again byte
+  for byte.
+
+Not here (yet): watching a key for changes, and etcd's own user, role and cluster
+administration.

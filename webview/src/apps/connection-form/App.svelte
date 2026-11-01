@@ -90,6 +90,7 @@
     elasticsearch: 'form.driver.elasticsearch',
     libsql: 'form.driver.libsql',
     etcd: 'form.driver.etcd',
+    influxdb: 'form.driver.influxdb',
     plugin: 'form.driver.plugin',
   };
 
@@ -111,7 +112,17 @@
   const isElastic = $derived(fields?.driver === 'elasticsearch');
   const isLibsql = $derived(fields?.driver === 'libsql');
   const isEtcd = $derived(fields?.driver === 'etcd');
+  const isInflux = $derived(fields?.driver === 'influxdb');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
+  const secretLabel = $derived(
+    withApiKey
+      ? t('form.elastic.apiKey')
+      : isLibsql
+        ? t('form.libsql.token')
+        : isInflux
+          ? t('form.influx.token')
+          : t('form.password'),
+  );
   const defaultPort = $derived(
     isLibsql
       ? // A hosted server answers on 443 with TLS; a local sqld listens on 8080 without it.
@@ -551,26 +562,34 @@
             <div class="pair">
               {#if !withApiKey && !isLibsql}
               <Field
-                label={t('form.user')}
-                hint={isRedis ? t('form.redis.userHint') : isEtcd ? t('form.etcd.userHint') : undefined}
+                label={isInflux ? t('form.influx.org') : t('form.user')}
+                hint={isRedis
+                  ? t('form.redis.userHint')
+                  : isEtcd
+                    ? t('form.etcd.userHint')
+                    : isInflux
+                      ? t('form.influx.orgHint')
+                      : undefined}
               >
                 <input
                   class="control"
                   bind:value={fields.user}
                   maxlength={CONNECTION_LIMITS.field}
-                  aria-label={t('form.user')}
+                  aria-label={isInflux ? t('form.influx.org') : t('form.user')}
                   autocomplete="off"
                 />
               </Field>
               {/if}
               <Field
-                label={withApiKey ? t('form.elastic.apiKey') : isLibsql ? t('form.libsql.token') : t('form.password')}
+                label={secretLabel}
                 hint={fields.passwordTouched
                   ? withApiKey
                     ? t('form.elastic.apiKeyHint')
                     : isLibsql
                       ? t('form.libsql.tokenHint')
-                      : undefined
+                      : isInflux
+                        ? t('form.influx.tokenHint')
+                        : undefined
                   : formState?.hasStoredPassword
                     ? t('form.passwordStored')
                     : formState?.importedPassword === true
@@ -586,7 +605,7 @@
                   }}
                   maxlength={PASSWORD_MAX_LENGTH}
                   disabled={fields.erasePassword}
-                  label={withApiKey ? t('form.elastic.apiKey') : isLibsql ? t('form.libsql.token') : t('form.password')}
+                  label={secretLabel}
                   showLabel={t('form.showSecret')}
                   hideLabel={t('form.hideSecret')}
                   testid="password"
@@ -645,12 +664,18 @@
 
             {#if !isElastic && !isLibsql && !isEtcd}
             <Field
-              label={isRedis ? t('form.redis.database') : t('form.database')}
+              label={isRedis
+                ? t('form.redis.database')
+                : isInflux
+                  ? t('form.influx.bucket')
+                  : t('form.database')}
               hint={isRedis
                 ? t('form.redis.databaseHint')
                 : isMongo
                   ? t('form.mongo.databaseHint')
-                  : t('form.databaseHint')}
+                  : isInflux
+                    ? t('form.influx.bucketHint')
+                    : t('form.databaseHint')}
               error={isRedis
                 ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
                 : undefined}
@@ -661,7 +686,11 @@
                 maxlength={CONNECTION_LIMITS.field}
                 inputmode={isRedis ? 'numeric' : undefined}
                 placeholder={isRedis ? '0' : undefined}
-                aria-label={isRedis ? t('form.redis.database') : t('form.database')}
+                aria-label={isRedis
+                  ? t('form.redis.database')
+                  : isInflux
+                    ? t('form.influx.bucket')
+                    : t('form.database')}
                 autocomplete="off"
               />
             </Field>

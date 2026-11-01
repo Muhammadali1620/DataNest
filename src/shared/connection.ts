@@ -15,6 +15,7 @@ export const DRIVER_IDS = [
   'elasticsearch',
   'etcd',
   'libsql',
+  'influxdb',
   'plugin',
 ] as const;
 
@@ -87,6 +88,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   etcd: 2379,
   // sqld's own HTTP port; Turso and other hosted servers answer on 443 with TLS.
   libsql: 8080,
+  // The HTTP API of InfluxDB 2.x; HTTPS is served on the same port.
+  influxdb: 8086,
 };
 
 export const CONNECTION_LIMITS = {
@@ -383,6 +386,17 @@ export function optionSupport(driver: DriverId): OptionSupport {
         queryTimeout: false,
         init: false,
       };
+    // InfluxDB (V13.20): HTTP(S) like libSQL, but no session, so no statements to run first.
+    case 'influxdb':
+      return {
+        connectTimeout: true,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: false,
+      };
     // A request over HTTP(S): a connect timeout and TLS, and statements that run as long as
     // the timeout allows; the server keeps the stream, there is no socket of ours to keep alive.
     case 'libsql':
@@ -508,6 +522,9 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     // One flat key space; folders are made from the key names.
     case 'etcd':
       return { databases: false, schemas: false };
+    // Buckets are the databases; the system ones are hidden with the other system objects.
+    case 'influxdb':
+      return { databases: true, schemas: false };
   }
 }
 

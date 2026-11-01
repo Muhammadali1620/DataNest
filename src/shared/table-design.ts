@@ -226,6 +226,7 @@ const INTEGER_TYPES: Readonly<Record<SqlDriverId, ReadonlySet<string>>> = {
   // Only INTEGER PRIMARY KEY is the rowid; INT or BIGINT would not auto-number.
   sqlite: new Set(['integer']),
   libsql: new Set(['integer']),
+  influxdb: new Set(),
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
   // Nothing numbers itself: rows have no identity, only a sorting key.
   clickhouse: new Set(),

@@ -7,6 +7,7 @@ import { createConnection } from 'node:net';
 import { testDatabase, testSshServer } from './databases';
 import { TEST_ELASTIC } from './elastic-servers';
 import { TEST_ETCD } from './etcd-servers';
+import { TEST_INFLUXDB } from './influxdb-servers';
 import { TEST_LIBSQL } from './libsql-servers';
 import { TEST_MONGO } from './mongo-servers';
 import { TEST_REDIS, TEST_REDISJSON } from './redis-servers';
@@ -103,6 +104,11 @@ const DEFINITIONS = {
     always: false,
     folders: ['libsql'],
     endpoints: () => [{ name: 'libsql', host: TEST_LIBSQL.host, port: TEST_LIBSQL.port }],
+  },
+  influxdb: {
+    always: false,
+    folders: ['influxdb'],
+    endpoints: () => [{ name: 'influxdb', host: TEST_INFLUXDB.host, port: TEST_INFLUXDB.port }],
   },
   etcd: {
     always: false,

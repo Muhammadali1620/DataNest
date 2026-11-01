@@ -27,6 +27,7 @@ npm run db:up -- oracle # Oracle 23ai Free 7521 (раздел 16c)
 npm run db:up -- compat # TiDB 7400, CockroachDB 7257, YugabyteDB 7533 (раздел 16d)
 npm run db:up -- redis mongodb elasticsearch # разделы 16e–16g и 16j
 npm run db:up -- libsql # libSQL (sqld) 7080 (раздел 16e3)
+npm run db:up -- influxdb # InfluxDB 2.7 7186 (раздел 16e4)
 npm run package        # соберёт datanest-<версия>.vsix
 ```
 
@@ -326,6 +327,17 @@ npm run package        # соберёт datanest-<версия>.vsix
 4. Отмена. Запрос `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c` → «Отменить» возвращает управление сразу; следующий запрос работает.
 5. Только чтение. Отметить «только чтение» → `INSERT` отклоняется самим клиентом до отправки. sqld не принимает `PRAGMA query_only`, поэтому сервер этот запрет не усиливает; для строгого запрета выдайте токен только для чтения.
 6. Дерево, конструктор таблиц, дамп и перенос — как у SQLite (общий диалект); значок — бирюзовая стопка дисков.
+
+## 16e4. InfluxDB (V13.20)
+
+`npm run db:up -- influxdb` поднимает InfluxDB 2.7 на `127.0.0.1:7186` (HTTP, организация `datanest`, корзина `metrics`, токен `datanest-test-token`, данные в tmpfs). Точки пишет сам интеграционный тест; для ручной проверки: `curl -X POST "http://127.0.0.1:7186/api/v2/write?org=datanest&bucket=metrics&precision=s" -H "Authorization: Token datanest-test-token" --data-binary 'cpu,host=a usage=1.5 1714557600'`.
+
+1. Подключение. «База данных» → InfluxDB: поля «Организация», «API-токен», «Корзина (bucket)», порт 8086; «Init SQL» нет. Хост `127.0.0.1`, порт `7186`, организация `datanest`, токен `datanest-test-token` → «Проверить» — успешно; неверный токен — «auth-failed»; порт `7999` — «connection-failed». URL `influxdb://127.0.0.1:7186/metrics?org=datanest&token=datanest-test-token` заполняет форму.
+2. Дерево. Подключение → корзины (`_monitoring` и `_tasks` скрыты, видны с «показывать системные объекты») → измерения → колонки: `time`, теги (значок «tag»), поля (значок «field»).
+3. Запросы. InfluxQL: `SELECT * FROM "cpu" LIMIT 5`, `SHOW MEASUREMENTS`, `SELECT mean(usage) FROM "cpu" GROUP BY host` (тег — колонка справа). Flux: `from(bucket: "metrics") |> range(start: -1y)` — колонки с типами, времена как времена; `import "generate"` + `generate.from(count: 5000000, …)` с «лимитом строк» — читаются первые строки, остальное не качается. Запрос с другим набором колонок после первого — «пропущено таблиц…» в уведомлении.
+4. Отмена. Долгий Flux-запрос → «Отменить» возвращает управление; следующий запрос работает.
+5. Только чтение. «Только чтение» → `DROP MEASUREMENT`, `|> to(bucket: …)` отклоняются самим клиентом до отправки. Строгий запрет даёт только токен только для чтения.
+6. Таблица измерения открывается как `SELECT * FROM "cpu" LIMIT … OFFSET …`; сортировка, кроме `time`, конструктор таблиц, дамп и перенос недоступны (в сообщении сказано почему).
 
 ## 16f. MongoDB (0.7.0)
 

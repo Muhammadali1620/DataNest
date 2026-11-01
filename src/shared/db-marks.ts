@@ -42,6 +42,12 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 9.500c0 1.700 3.600 3 8 3s8-1.300 8-3v3.500c0 1.700-3.600 3-8 3s-8-1.300-8-3zM4 16.500c0 1.700 3.600 3 8 3s8-1.300 8-3V19c0 1.700-3.600 3-8 3s-8-1.300-8-3z"/>',
   },
+  // A wave over a baseline: a time series (V13.20); the vendor's logo is not ours to use.
+  influxdb: {
+    hex: '#7c3aed',
+    ink: WHITE,
+    body: '<path d="M2 14h4l2.500-8 4 14 3-9 1.500 3H22" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/>',
+  },
   // A key: the thing etcd stores values under (V13.19); the vendor's logo is not ours to use.
   etcd: {
     hex: '#2563eb',

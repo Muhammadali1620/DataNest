@@ -3,7 +3,8 @@
 // matching rows per column — and a hit opens the table filtered to those rows. The text
 // goes in as a literal of the dialect (D103), with LIKE's own characters escaped.
 
-import { errorMessage } from '../core/errors';
+import { DbError, errorMessage } from '../core/errors';
+import { msg } from '../core/user-message';
 import type { ObjectScope, TableRef } from '../core/model/objects';
 import type { Dialect, MetadataReader, Session } from '../drivers/driver';
 import { inputKindOf } from '../shared/cell-input';
@@ -85,6 +86,9 @@ export function containsCondition(
     case 'clickhouse':
       // No escaping needed: a plain search for the text, in UTF-8, ignoring case.
       return `positionCaseInsensitiveUTF8(toString(${name}), ${dialect.literal(text)}) > 0`;
+    case 'influxdb':
+      // InfluxQL matches text with a regular expression, not LIKE: not offered here.
+      throw new DbError('unsupported', msg('Searching all columns is not available for InfluxDB'));
     case 'mysql':
     case 'sqlite':
     case 'libsql':

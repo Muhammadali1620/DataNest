@@ -56,6 +56,8 @@ export interface SqlSyntax {
   readonly slashTerminator: boolean;
   /** `q'[…]'` strings with a delimiter of one's choice (Oracle). */
   readonly quoteOperator: boolean;
+  /** `//` starts a line comment (Flux, V13.20). */
+  readonly slashComments?: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -163,11 +165,31 @@ const ORACLE: SqlSyntax = {
   quoteOperator: true,
 };
 
+/** InfluxQL and Flux: `'…'` strings with `\` escapes, `"…"` names, `//` comments. */
+const INFLUX: SqlSyntax = {
+  backslashEscapes: true,
+  hashComments: false,
+  backtickIdentifiers: false,
+  doubleQuoteIdentifiers: true,
+  escapeStrings: false,
+  dollarQuotes: false,
+  nestedBlockComments: false,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
+  slashComments: true,
+};
+
 const BY_DRIVER: Readonly<Record<SqlDriverId, SqlSyntax>> = {
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,
   libsql: SQLITE,
+  influxdb: INFLUX,
   plugin: SQLITE,
   mssql: MSSQL,
   clickhouse: CLICKHOUSE,
@@ -221,6 +243,9 @@ function readToken(sql: string, start: number, syntax: SqlSyntax): Token {
     return { kind: 'whitespace', start, end: runOfWhitespace(sql, start) };
   }
   if (sql.startsWith('--', start)) {
+    return { kind: 'comment', start, end: endOfLine(sql, start + 2) };
+  }
+  if (syntax.slashComments === true && sql.startsWith('//', start)) {
     return { kind: 'comment', start, end: endOfLine(sql, start + 2) };
   }
   if (syntax.hashComments && char === '#') {

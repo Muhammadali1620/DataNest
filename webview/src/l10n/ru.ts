@@ -317,6 +317,15 @@ export const ru: Record<MessageKey, string> = {
   'form.driver.plugin': 'База из другого расширения',
   'form.driver.libsql': 'libSQL / Turso',
   'form.driver.etcd': 'etcd',
+  'form.driver.influxdb': 'InfluxDB',
+  'form.influx.org': 'Организация',
+  'form.influx.orgHint': 'Организация, которой принадлежат корзины (InfluxDB 2.x)',
+  'form.influx.token': 'API-токен',
+  'form.influx.tokenHint':
+    'Передаётся как `Authorization: Token …`; надёжнее всего токен только для чтения',
+  'form.influx.bucket': 'Корзина (bucket)',
+  'form.influx.bucketHint':
+    'Корзина, на которой выполняются запросы InfluxQL; в Flux корзина названа в from()',
   'form.etcd.userHint':
     'Если в кластере нет аутентификации, оставьте пользователя и пароль пустыми',
   'form.libsql.hostHint':

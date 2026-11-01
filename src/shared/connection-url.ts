@@ -44,6 +44,9 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   // libSQL servers over HTTP (V13.17); `turso://` is the same address on a hosted server.
   libsql: 'libsql',
   turso: 'libsql',
+  // InfluxDB 2.x (V13.20): `influxdb://host:8086/bucket?org=acme&token=…`; `influxdbs` is TLS.
+  influxdb: 'influxdb',
+  influxdbs: 'influxdb',
   // etcd (V13.19): the address of its client port; the path means nothing to it.
   etcd: 'etcd',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
@@ -322,6 +325,51 @@ function libsqlUrl(plain: string): UrlResult {
   };
 }
 
+/**
+ * `influxdb://host:8086/bucket?org=acme&token=…`: the path is the bucket, the organization
+ * and the API token ride in the query (the token never in the user part). `influxdbs://`, or
+ * `tls=1`, asks for TLS.
+ */
+function influxdbUrl(plain: string): UrlResult {
+  let url: URL;
+  try {
+    url = new URL(plain.replace(/^[a-z][a-z0-9.-]*:/i, 'datanest:'));
+  } catch {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const host = nonEmpty(decode(url.hostname).replace(/^\[(.*)\]$/, '$1'));
+  if (host === undefined) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const portText = nonEmpty(url.port);
+  const port = portText !== undefined && /^\d+$/.test(portText) ? Number(portText) : undefined;
+  const org = nonEmpty(url.searchParams.get('org')) ?? nonEmpty(decode(url.username));
+  const bucket =
+    nonEmpty(decode(url.pathname.replace(/^\//, '').split('/')[0] ?? '')) ??
+    nonEmpty(url.searchParams.get('bucket'));
+  const token = nonEmpty(url.searchParams.get('token')) ?? nonEmpty(decode(url.password));
+  const scheme = /^([a-z][a-z0-9.-]*):/i.exec(plain)?.[1]?.toLowerCase() ?? '';
+  const tls =
+    scheme === 'influxdbs' ||
+    ['1', 'true'].includes((url.searchParams.get('tls') ?? '').toLowerCase());
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'influxdb',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(org === undefined ? {} : { user: org }),
+    ...(bucket === undefined ? {} : { database: bucket }),
+    ...(tls ? { ssl: { mode: 'verify-full' as const } } : {}),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(token === undefined ? {} : { password: token }),
+    },
+  };
+}
+
 /** Reads a connection URL. Unknown query parameters are ignored. */
 export function parseConnectionUrl(text: string): UrlResult {
   const trimmed = text.trim();
@@ -359,6 +407,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'libsql') {
     return libsqlUrl(plain);
+  }
+  if (driver === 'influxdb') {
+    return influxdbUrl(plain);
   }
   let url: URL;
   try {

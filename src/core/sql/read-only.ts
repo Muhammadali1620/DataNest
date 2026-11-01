@@ -62,6 +62,9 @@ const MAIN_VERBS = new Set([
 /** Verbs that write wherever they appear, e.g. in a data-modifying CTE of PostgreSQL. */
 const WRITE_VERBS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'REPLACE']);
 
+/** Flux functions and packages that write points or alter a bucket. */
+const FLUX_WRITES = new Set(['TO', 'WRITE', 'DELETE', 'POST']);
+
 /** Session settings that would lift the read-only guard or reach past the session. */
 const GUARDED_SETTINGS = new Set([
   'GLOBAL',
@@ -142,6 +145,11 @@ export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf())
   switch (first.text) {
     case 'SELECT':
       return selectReads(words, 0);
+    case 'FROM':
+    case 'IMPORT':
+      // Flux (InfluxDB, V13.20) starts with from() or an import. It writes only through
+      // to() (and the packages that wrap it), so any such word makes it a change.
+      return !words.some((word) => FLUX_WRITES.has(word.text));
     case 'VALUES':
     case 'TABLE':
     case 'SHOW':

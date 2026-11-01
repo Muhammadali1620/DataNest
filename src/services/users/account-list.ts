@@ -20,7 +20,13 @@ export interface AccountSummary {
 /** True where the server has accounts a client can list (everything SQL but a SQLite file). */
 export function hasAccounts(driver: DriverId): boolean {
   // A plugin driver has no way to list accounts (V12.7).
-  return isSqlDriver(driver) && driver !== 'sqlite' && driver !== 'libsql' && driver !== 'plugin';
+  return (
+    isSqlDriver(driver) &&
+    driver !== 'sqlite' &&
+    driver !== 'libsql' &&
+    driver !== 'influxdb' &&
+    driver !== 'plugin'
+  );
 }
 
 export async function listAccounts(

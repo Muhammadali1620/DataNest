@@ -5,6 +5,7 @@ import { clickhouseDialect } from '../../../../src/drivers/clickhouse/dialect';
 import { oracleDialect } from '../../../../src/drivers/oracle/dialect';
 import { postgresDialect } from '../../../../src/drivers/postgres/dialect';
 import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
+import { influxdbDialect } from '../../../../src/drivers/influxdb/dialect';
 import type {
   ListedObjectKind,
   ObjectRef,
@@ -25,6 +26,7 @@ const DIALECTS = {
   postgres: postgresDialect,
   sqlite: sqliteDialect,
   libsql: sqliteDialect,
+  influxdb: influxdbDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
   oracle: oracleDialect,

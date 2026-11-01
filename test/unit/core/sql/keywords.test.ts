@@ -25,7 +25,12 @@ describe('KEYWORDS', () => {
 
   it('includes the core SQL every dialect shares', () => {
     for (const driver of SQL_DRIVER_IDS) {
-      for (const keyword of ['SELECT', 'FROM', 'WHERE', 'JOIN', 'INSERT']) {
+      // InfluxQL has neither joins nor INSERT: points are written by line protocol.
+      const shared =
+        driver === 'influxdb'
+          ? ['SELECT', 'FROM', 'WHERE']
+          : ['SELECT', 'FROM', 'WHERE', 'JOIN', 'INSERT'];
+      for (const keyword of shared) {
         expect(KEYWORDS[driver], `${driver} is missing ${keyword}`).toContain(keyword);
       }
     }

@@ -70,6 +70,7 @@ jobs:
             redisjson,
             libsql,
             etcd,
+            influxdb,
             mongodb,
             elasticsearch,
           ]

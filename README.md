@@ -8,7 +8,7 @@
 **DataNest is a free, open-source database client for VS Code and its forks (VSCodium, Cursor,
 Windsurf, Antigravity).** Browse and edit data, write SQL, design tables and see an ER diagram
 for **MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server, Oracle, ClickHouse, MongoDB,
-Redis, Elasticsearch and libSQL** — with no account, no limits and no telemetry.
+Redis, Elasticsearch, libSQL and InfluxDB** — with no account, no limits and no telemetry.
 
 ![DataNest: database tree, data grid with filters, record panel](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/overview.png)
 
@@ -83,6 +83,7 @@ page is in English; the short summaries below are for everyone else.
 | Elasticsearch, OpenSearch | Console-style requests, hits as a table |
 | etcd | Keys as folders, values, revisions and leases, over the HTTP/JSON gateway |
 | libSQL, Turso | sqld and hosted servers over HTTP, with an auth token; the SQL of SQLite |
+| InfluxDB 2.x | Flux and InfluxQL over HTTP: buckets, measurements, tags and fields in the tree, points as a table |
 | TiDB, CockroachDB, YugabyteDB, Amazon Aurora | Through the MySQL and PostgreSQL drivers, with presets |
 
 All of them work through SSH tunnels, SOCKS5 and HTTP proxies and TLS where the server supports it.

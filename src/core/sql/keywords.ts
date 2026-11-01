@@ -764,11 +764,40 @@ const ORACLE_KEYWORDS = [
   'EXPLAIN PLAN FOR',
 ] as const;
 
+/** InfluxQL (V13.20); the words of Flux are functions and live in functions.ts. */
+const INFLUX_KEYWORDS = [
+  'SELECT',
+  'FROM',
+  'WHERE',
+  'GROUP BY',
+  'ORDER BY',
+  'LIMIT',
+  'OFFSET',
+  'SLIMIT',
+  'SOFFSET',
+  'INTO',
+  'FILL',
+  'TZ',
+  'AND',
+  'OR',
+  'AS',
+  'DESC',
+  'ASC',
+  'SHOW DATABASES',
+  'SHOW MEASUREMENTS',
+  'SHOW TAG KEYS',
+  'SHOW TAG VALUES',
+  'SHOW FIELD KEYS',
+  'SHOW SERIES',
+  'SHOW RETENTION POLICIES',
+] as const;
+
 export const KEYWORDS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   mysql: MYSQL_KEYWORDS,
   postgres: POSTGRES_KEYWORDS,
   sqlite: SQLITE_KEYWORDS,
   libsql: SQLITE_KEYWORDS,
+  influxdb: INFLUX_KEYWORDS,
   // Plain SQL: the closest of ours to the standard.
   plugin: SQLITE_KEYWORDS,
   mssql: MSSQL_KEYWORDS,

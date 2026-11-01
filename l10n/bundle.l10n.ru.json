@@ -1457,5 +1457,18 @@
   "Every key attached to the lease is deleted with it, not only this one.": "Вместе с арендой удаляются все привязанные к ней ключи, а не только этот.",
   "{0} keys below": "Ключей ниже: {0}",
   "Ends with its lease": "Исчезнет вместе с арендой",
-  "A key prefix to delete cannot be empty": "Начало имён для удаления не может быть пустым"
+  "A key prefix to delete cannot be empty": "Начало имён для удаления не может быть пустым",
+  "InfluxQL has no NULL to write": "В InfluxQL нет NULL, который можно записать",
+  "InfluxDB has no {0}: points are written, not designed": "В InfluxDB нет такого понятия: {0} — точки записываются, а не проектируются",
+  "The server refused the API token": "Сервер отклонил API-токен",
+  "The token has no right to do this": "У токена нет прав на это действие",
+  "The query failed on the server": "Запрос завершился ошибкой на сервере",
+  "The answer of the server is larger than 16 MB": "Ответ сервера больше 16 МБ",
+  "A measurement has no definition to show: it exists as points": "У измерения нет определения, которое можно показать: оно существует как набор точек",
+  "Measurements cannot be dumped as SQL": "Измерения нельзя выгрузить как SQL",
+  "Pick a bucket first": "Сначала выберите корзину (bucket)",
+  "The connection is read-only: this statement could change data": "Подключение только для чтения: этот запрос мог бы изменить данные",
+  "{0} more tables with other columns were left out: join them with group() or keep the same columns": "Пропущено таблиц с другими колонками: {0}. Объедините их через group() или оставьте одинаковые колонки",
+  "Searching all columns is not available for InfluxDB": "Поиск по всем колонкам для InfluxDB недоступен",
+  "Tables cannot be copied to InfluxDB": "Таблицы нельзя копировать в InfluxDB"
 }

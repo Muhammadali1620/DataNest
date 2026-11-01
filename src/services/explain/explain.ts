@@ -79,6 +79,7 @@ export async function planServerOf(session: Session, driver: SqlDriverId): Promi
       return driver;
     case 'libsql':
       return 'sqlite';
+    case 'influxdb':
     case 'plugin':
       throw new DbError(
         'unsupported',

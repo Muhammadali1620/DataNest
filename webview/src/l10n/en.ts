@@ -314,6 +314,15 @@ export const en = {
   'form.driver.plugin': 'Database from another extension',
   'form.driver.libsql': 'libSQL / Turso',
   'form.driver.etcd': 'etcd',
+  'form.driver.influxdb': 'InfluxDB',
+  'form.influx.org': 'Organization',
+  'form.influx.orgHint': 'The organization the buckets belong to (InfluxDB 2.x)',
+  'form.influx.token': 'API token',
+  'form.influx.tokenHint':
+    'Sent as `Authorization: Token …`; a read-only token is the strict way to keep data safe',
+  'form.influx.bucket': 'Bucket',
+  'form.influx.bucketHint':
+    'The bucket InfluxQL statements run on; Flux names its bucket in from()',
   'form.etcd.userHint': 'Leave the user and password empty when the cluster has no authentication',
   'form.libsql.hostHint':
     'The server address, e.g. my-db-org.turso.io, or a libsql:// URL. Turn TLS on below for a hosted server',

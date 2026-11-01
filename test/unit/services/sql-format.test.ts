@@ -173,6 +173,23 @@ describe('createBundleFormatterLoader', () => {
   });
 });
 
+describe('InfluxDB formatting (V13.20)', () => {
+  const style = DEFAULT_FORMAT_STYLE;
+
+  it('leaves Flux alone: a SQL formatter would only garble its pipes', () => {
+    const flux =
+      'from(bucket: "b")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._field == "x")';
+    const result = formatEdits(flux, 'influxdb', style, shouting);
+    expect(result.edits).toEqual([]);
+    expect(result.failed).toBe(0);
+  });
+
+  it('formats InfluxQL as SQL', () => {
+    const result = formatEdits('select * from "cpu"', 'influxdb', style, shouting);
+    expect(apply('select * from "cpu"', result.edits).trim()).toBe('SELECT * FROM "CPU"');
+  });
+});
+
 describe('ClickHouse formatting (V6.3)', () => {
   it('formats through the real formatter in its own dialect', () => {
     const text = formatter.format(

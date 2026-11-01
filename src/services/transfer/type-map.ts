@@ -358,6 +358,8 @@ export function targetType(
       throw new DbError('unsupported', msg('Tables cannot be copied to MongoDB'));
     case 'elasticsearch':
       throw new DbError('unsupported', msg('Tables cannot be copied to Elasticsearch'));
+    case 'influxdb':
+      throw new DbError('unsupported', msg('Tables cannot be copied to InfluxDB'));
     case 'etcd':
       throw new DbError('unsupported', msg('Tables cannot be copied to etcd'));
   }

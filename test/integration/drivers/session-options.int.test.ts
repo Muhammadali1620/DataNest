@@ -13,6 +13,7 @@ import { driver as postgresDriver } from '../../../src/drivers/postgres';
 import { driver as mssqlDriver } from '../../../src/drivers/mssql';
 import { driver as clickhouseDriver } from '../../../src/drivers/clickhouse';
 import { driver as libsqlDriver } from '../../../src/drivers/libsql';
+import { driver as influxdbDriver } from '../../../src/drivers/influxdb';
 import { driver as oracleDriver } from '../../../src/drivers/oracle';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { ConnectionManager } from '../../../src/services/connection-manager';
@@ -72,6 +73,7 @@ async function managerFor(input: ConnectionInput, password?: string) {
     clickhouse: clickhouseDriver,
     oracle: oracleDriver,
     libsql: libsqlDriver,
+    influxdb: influxdbDriver,
   };
   const manager = new ConnectionManager({
     store,

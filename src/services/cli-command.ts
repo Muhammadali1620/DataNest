@@ -37,6 +37,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   sqlite: ['sqlite3'],
   // Reached over HTTP; sqlite3 cannot open a remote database.
   libsql: [],
+  // Flux and InfluxQL go through the HTTP API; the `influx` CLI wants its own config.
+  influxdb: [],
   mssql: ['sqlcmd'],
   clickhouse: ['clickhouse-client', 'clickhouse'],
   oracle: ['sql', 'sqlplus'],
@@ -219,6 +221,7 @@ export function cliCommand(
     }
     case 'plugin':
     case 'libsql':
+    case 'influxdb':
     case 'elasticsearch':
     case 'etcd':
       return undefined;

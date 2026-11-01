@@ -55,6 +55,23 @@ const COMMON: readonly SqlSnippet[] = [
 ];
 
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlSnippet[]>> = {
+  influxdb: [
+    {
+      prefix: 'last1h',
+      title: 'Flux: the last hour of a measurement',
+      body: 'from(bucket: "${1:bucket}")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == "${2:measurement}")',
+    },
+    {
+      prefix: 'window',
+      title: 'Flux: mean per window',
+      body: 'from(bucket: "${1:bucket}")\n  |> range(start: -${2:6h})\n  |> filter(fn: (r) => r._measurement == "${3:measurement}" and r._field == "${4:field}")\n  |> aggregateWindow(every: ${5:5m}, fn: mean, createEmpty: false)',
+    },
+    {
+      prefix: 'influxql',
+      title: 'InfluxQL: the latest points',
+      body: 'SELECT * FROM "${1:measurement}" WHERE time > now() - ${2:1h} ORDER BY time DESC LIMIT ${3:100}',
+    },
+  ],
   mysql: [
     {
       prefix: 'upsert',

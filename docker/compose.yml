@@ -472,6 +472,28 @@ services:
       <<: *healthcheck
       test: ['CMD', '/usr/local/bin/etcdctl', 'endpoint', 'health']
 
+  # InfluxDB 2.x (V13.20), group `influxdb`: one organization and one bucket with a known
+  # admin token (test-only constants, see test/helpers/influxdb-servers.ts). The data lives
+  # in tmpfs, so every start is empty; the tests write their own points.
+  influxdb:
+    image: influxdb:2.7
+    container_name: datanest-influxdb
+    profiles: [influxdb]
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: datanest
+      DOCKER_INFLUXDB_INIT_PASSWORD: datanest-test-password
+      DOCKER_INFLUXDB_INIT_ORG: datanest
+      DOCKER_INFLUXDB_INIT_BUCKET: metrics
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: datanest-test-token
+    ports:
+      - 127.0.0.1:7186:8086
+    tmpfs:
+      - /var/lib/influxdb2
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8086/health']
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

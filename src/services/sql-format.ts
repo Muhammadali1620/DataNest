@@ -4,6 +4,7 @@
 
 import { createRequire } from 'node:module';
 import { errorMessage } from '../core/errors';
+import { languageOf as influxLanguageOf } from '../core/sql/influx-language';
 import { splitStatements, statementsIn } from '../core/sql/split';
 import type { DriverId } from '../shared/connection';
 
@@ -55,6 +56,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'oracle':
       return 'plsql';
     case 'plugin':
+    case 'influxdb':
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
@@ -115,6 +117,10 @@ export function formatEdits(
   let failed = 0;
   let reason: string | undefined;
   for (const statement of statements) {
+    // Flux is not SQL: a SQL formatter would only garble its pipes and lambdas.
+    if (driver === 'influxdb' && influxLanguageOf(statement.text) === 'flux') {
+      continue;
+    }
     try {
       const formatted = formatter.format(statement.text, languageOf(driver), style).trim();
       if (formatted !== '' && formatted !== statement.text) {

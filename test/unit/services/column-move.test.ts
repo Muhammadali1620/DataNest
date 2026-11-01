@@ -3,6 +3,7 @@ import type { TableStructure } from '../../../src/core/model/objects';
 import { clickhouseDialect } from '../../../src/drivers/clickhouse/dialect';
 import { mysqlDialect } from '../../../src/drivers/mysql/dialect';
 import { sqliteDialect } from '../../../src/drivers/sqlite/dialect';
+import { influxdbDialect } from '../../../src/drivers/influxdb/dialect';
 import { planColumnMove } from '../../../src/services/column-move';
 import { actionSql } from '../../../src/services/schema-actions';
 import { canReorderColumns } from '../../../src/shared/table-design';
@@ -80,6 +81,7 @@ describe('canReorderColumns', () => {
     sqlite: sqliteDialect,
     // A libSQL server runs SQLite's SQL, and its dialect is the same object (V13.17).
     libsql: sqliteDialect,
+    influxdb: influxdbDialect,
     mssql: mssqlDialect,
     clickhouse: clickhouseDialect,
     oracle: oracleDialect,

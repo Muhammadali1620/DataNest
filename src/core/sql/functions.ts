@@ -40,7 +40,44 @@ const COMMON: readonly SqlFunction[] = [
   fn('LEAD', 'expression'),
 ];
 
+/** InfluxQL aggregates and selectors, then the Flux functions most queries start with. */
+const INFLUX_FUNCTIONS: readonly SqlFunction[] = [
+  fn('COUNT', 'field'),
+  fn('MEAN', 'field'),
+  fn('MEDIAN', 'field'),
+  fn('SUM', 'field'),
+  fn('MIN', 'field'),
+  fn('MAX', 'field'),
+  fn('FIRST', 'field'),
+  fn('LAST', 'field'),
+  fn('SPREAD', 'field'),
+  fn('STDDEV', 'field'),
+  fn('PERCENTILE', 'field', 'n'),
+  fn('DERIVATIVE', 'field', 'unit'),
+  fn('NON_NEGATIVE_DERIVATIVE', 'field', 'unit'),
+  fn('MOVING_AVERAGE', 'field', 'n'),
+  fn('NOW'),
+  fn('time', 'interval'),
+  fn('from', 'bucket: "name"'),
+  fn('range', 'start: -1h'),
+  fn('filter', 'fn: (r) => r._measurement == "name"'),
+  fn('aggregateWindow', 'every: 1m', 'fn: mean'),
+  fn('window', 'every: 1m'),
+  fn('mean'),
+  fn('sum'),
+  fn('last'),
+  fn('first'),
+  fn('limit', 'n: 100'),
+  fn('sort', 'columns: ["_time"]'),
+  fn('keep', 'columns: ["_time", "_value"]'),
+  fn('group', 'columns: []'),
+  fn('pivot', 'rowKey: ["_time"]', 'columnKey: ["_field"]', 'valueColumn: "_value"'),
+  fn('map', 'fn: (r) => ({ r with _value: r._value })'),
+  fn('derivative', 'unit: 1s'),
+];
+
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlFunction[]>> = {
+  influxdb: INFLUX_FUNCTIONS,
   mysql: [
     ...LENGTH_SUBSTR,
     fn('NOW'),

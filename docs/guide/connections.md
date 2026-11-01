@@ -15,6 +15,7 @@
 | Elasticsearch | And OpenSearch; user and password or an API key. |
 | etcd | A key-value cluster (v3) over its HTTP/JSON gateway on the client port (2379); user and password when the cluster has authentication. |
 | libSQL | A libSQL server (sqld, Turso) over HTTP; the address and an auth token. TLS is on for a hosted server (port 443), off for a local one (8080). |
+| InfluxDB | InfluxDB 2.x over HTTP (port 8086): the organization goes in the *Organization* field, the API token in *API token*, and *Bucket* is the one InfluxQL runs on. Address: `influxdb://host:8086/bucket?org=acme&token=…` (`influxdbs://` or `tls=1` for TLS). |
 
 Each driver is loaded the first time you connect to that kind of database, so the ones
 you never use cost nothing.

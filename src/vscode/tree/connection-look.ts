@@ -21,11 +21,14 @@ export interface ConnectionLook {
   readonly tooltip?: string;
 }
 
-export type ConnectionTag = 'production' | 'read-only';
+export type ConnectionTag = 'disabled' | 'production' | 'read-only';
 
 /** The marks a connection wears, in a fixed order. */
 export function tagsOf(config: ConnectionConfig | undefined): ConnectionTag[] {
   const tags: ConnectionTag[] = [];
+  if (config?.disabled === true) {
+    tags.push('disabled');
+  }
   if (config?.production === true) {
     tags.push('production');
   }
@@ -35,8 +38,11 @@ export function tagsOf(config: ConnectionConfig | undefined): ConnectionTag[] {
   return tags;
 }
 
+/** A switched-off connection is greyed out, whatever color it had. */
+export const DISABLED_THEME_ID = 'disabledForeground';
+
 /**
- * Production is red unless the user picked another color, and wears a "P"; a
+ * A disabled connection is grey and wears "⊘"; production is red unless the user picked another color, and wears a "P"; a
  * read-only connection wears "RO"; any other colored one a dot.
  */
 export function lookOf(
@@ -44,13 +50,25 @@ export function lookOf(
   tagText: (tag: ConnectionTag) => string = (tag) => tag,
 ): ConnectionLook | undefined {
   const tags = tagsOf(config);
+  const off = tags.includes('disabled');
   const color = config?.color ?? (tags.includes('production') ? 'red' : undefined);
   if (color === undefined && tags.length === 0) {
     return undefined;
   }
-  const badge = tags.includes('production') ? 'P' : tags.includes('read-only') ? 'RO' : '●';
+  const badge = off
+    ? '⊘'
+    : tags.includes('production')
+      ? 'P'
+      : tags.includes('read-only')
+        ? 'RO'
+        : '●';
+  const themeColor = off
+    ? DISABLED_THEME_ID
+    : color === undefined
+      ? undefined
+      : COLOR_THEME_IDS[color];
   return {
-    ...(color === undefined ? {} : { color: COLOR_THEME_IDS[color] }),
+    ...(themeColor === undefined ? {} : { color: themeColor }),
     badge,
     ...(tags.length === 0 ? {} : { tooltip: tags.map(tagText).join(', ') }),
   };

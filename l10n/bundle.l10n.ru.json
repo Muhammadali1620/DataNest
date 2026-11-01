@@ -1181,5 +1181,11 @@
   "The file {0} does not exist on the server": "Файла {0} нет на сервере",
   "{0} on the server is not a file": "{0} на сервере — не файл",
   "{0} is {1} MB, more than the {2} MB that are copied. Raise \"datanest.sqlite.remoteMaxSizeMb\" to open it.": "{0} занимает {1} МБ, а копируется не больше {2} МБ. Чтобы открыть, увеличьте «datanest.sqlite.remoteMaxSizeMb».",
-  "Files on a server are not available": "Файлы на сервере недоступны"
+  "Files on a server are not available": "Файлы на сервере недоступны",
+  "Disabled": "Выключено",
+  "Pick a connection to disable": "Выберите подключение, чтобы выключить",
+  "Pick a connection to enable": "Выберите подключение, чтобы включить",
+  "Disabled: it is kept, but never connected to": "Выключено: оно сохранено, но к нему не подключаются",
+  "Connection \"{0}\" is disabled": "Подключение «{0}» выключено — включите его в дереве",
+  "A project connection cannot be disabled: the file is shared with the team": "Подключение проекта выключить нельзя: файл общий для команды"
 }

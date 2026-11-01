@@ -567,7 +567,9 @@ export class ConnectionsTreeProvider
     const state = this.deps.manager.getState(connectionId);
     const item = new vscode.TreeItem(
       config?.name ?? connectionId,
-      vscode.TreeItemCollapsibleState.Collapsed,
+      config?.disabled === true
+        ? vscode.TreeItemCollapsibleState.None
+        : vscode.TreeItemCollapsibleState.Collapsed,
     );
     item.id = nodeId({ kind: 'connection', connectionId });
     // Carries the color label (ConnectionDecorations); the icon stays the status.
@@ -580,6 +582,17 @@ export class ConnectionsTreeProvider
     item.description = version === undefined ? rest : `${version} · ${rest}`;
     const project = this.deps.store.projectOf(connectionId);
     const connected = state.status === 'connected';
+    if (config?.disabled === true) {
+      item.contextValue = TREE_CONTEXT.connectionDisabled;
+      item.tooltip = new vscode.MarkdownString(
+        `**${config.name}**\n\n${describeTarget(config)}\n\n${vscode.l10n.t('Disabled: it is kept, but never connected to')}`,
+      );
+      item.iconPath = new vscode.ThemeIcon(
+        'circle-slash',
+        new vscode.ThemeColor('disabledForeground'),
+      );
+      return item;
+    }
     item.contextValue = connectionContext({
       project: project !== undefined,
       connected,

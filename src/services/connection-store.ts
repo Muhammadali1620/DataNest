@@ -29,7 +29,16 @@ import {
   supportsSocket,
 } from '../shared/connection';
 import { connectionInputShape } from '../shared/connection-schema';
-import { array, literal, object, type Schema, string, union } from '../shared/schema';
+import {
+  array,
+  boolean,
+  literal,
+  object,
+  optional,
+  type Schema,
+  string,
+  union,
+} from '../shared/schema';
 import type { ProjectConnections, ProjectFolder } from './project-connections';
 import { msg } from '../core/user-message';
 
@@ -76,6 +85,7 @@ const SSH_SECRET_KINDS = ['password', 'passphrase'] as const satisfies (keyof Ss
 
 const connectionConfigSchema: Schema<ConnectionConfig> = object({
   ...connectionInputShape,
+  disabled: optional(boolean()),
   id: string({ minLength: 1, maxLength: 100 }),
   name: string({ minLength: 1, maxLength: CONNECTION_LIMITS.name }),
 });
@@ -380,7 +390,12 @@ export class ConnectionStore {
     if (index === -1) {
       config = await this.projectsOrThrow().update(id, normalizeInput(input));
     } else {
-      config = { ...normalizeInput(input), id };
+      // The form does not know the flag, so editing must not switch a connection back on.
+      config = {
+        ...normalizeInput(input),
+        id,
+        ...(before.disabled === true ? { disabled: true } : {}),
+      };
       const items = [...this.items];
       items[index] = config;
       await this.save(items);
@@ -410,6 +425,31 @@ export class ConnectionStore {
     }
     this.notify();
     return config;
+  }
+
+  /**
+   * Switches a connection of the user's off or on without touching anything else. A
+   * project connection is shared through a file, so it cannot be switched off here.
+   */
+  async setDisabled(id: string, disabled: boolean): Promise<void> {
+    const index = this.items.findIndex((item) => item.id === id);
+    const before = this.items[index];
+    if (before === undefined) {
+      throw new DbError(
+        this.projects?.get(id) === undefined ? 'not-found' : 'unsupported',
+        this.projects?.get(id) === undefined
+          ? msg('Connection "{0}" does not exist', id)
+          : msg('A project connection cannot be disabled: the file is shared with the team'),
+      );
+    }
+    if ((before.disabled === true) === disabled) {
+      return;
+    }
+    const { disabled: _was, ...rest } = before;
+    const items = [...this.items];
+    items[index] = disabled ? { ...rest, disabled: true } : rest;
+    await this.save(items);
+    this.notify();
   }
 
   /** Removes the config and its secrets. Removing a missing id is a no-op. */

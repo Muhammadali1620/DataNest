@@ -296,6 +296,9 @@ export class ConnectionManager implements Disposable {
       throw new DbError('internal', msg('The connection manager is disposed'));
     }
     const config = this.configOf(target.connectionId);
+    if (config.disabled === true) {
+      throw new DbError('permission-denied', msg('Connection "{0}" is disabled', config.name));
+    }
     if (driverFamily(config.driver) !== family) {
       throw new DbError('unsupported', familyMismatch(config, family));
     }

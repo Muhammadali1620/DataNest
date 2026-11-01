@@ -781,6 +781,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.editConnection]: connections.edit,
     [COMMAND_IDS.duplicateConnection]: connections.duplicate,
     [COMMAND_IDS.removeConnection]: connections.remove,
+    [COMMAND_IDS.disableConnection]: connections.disable,
+    [COMMAND_IDS.enableConnection]: connections.enable,
     [COMMAND_IDS.connect]: treeCommands.connect,
     [COMMAND_IDS.disconnect]: treeCommands.disconnect,
     [COMMAND_IDS.refreshTree]: treeCommands.refresh,

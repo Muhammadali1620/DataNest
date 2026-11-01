@@ -527,6 +527,11 @@ export interface ConnectionInput {
 
 export interface ConnectionConfig extends ConnectionInput {
   readonly id: string;
+  /**
+   * Switched off, not deleted (V13.1): shown greyed in the tree, never connected to.
+   * Kept out of the input, so the form, exports and project files do not carry it.
+   */
+  readonly disabled?: boolean;
 }
 
 /** A config with its secret resolved, ready to be passed to a driver. */

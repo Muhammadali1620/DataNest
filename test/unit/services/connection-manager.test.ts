@@ -46,6 +46,32 @@ describe('ConnectionManager', () => {
     );
   });
 
+  describe('disabled connections (V13.1)', () => {
+    it('refuses every kind of session and opens nothing', async () => {
+      await store.setDisabled(mysql.id, true);
+      for (const open of [
+        () => manager.acquire('editor:a', { connectionId: mysql.id }),
+        () => manager.connect(mysql.id),
+        () => manager.connectAny(mysql.id),
+      ]) {
+        await expect(open()).rejects.toMatchObject({ code: 'permission-denied' });
+      }
+      expect(drivers.driver('mysql').sessions).toHaveLength(0);
+      expect(manager.getState(mysql.id).status).toBe('disconnected');
+    });
+
+    it('names the connection in the refusal', async () => {
+      await store.setDisabled(mysql.id, true);
+      await expect(manager.connect(mysql.id)).rejects.toThrow(/Local/);
+    });
+
+    it('works again once it is switched back on', async () => {
+      await store.setDisabled(mysql.id, true);
+      await store.setDisabled(mysql.id, false);
+      await expect(manager.connect(mysql.id)).resolves.toBeDefined();
+    });
+  });
+
   describe('acquire', () => {
     it('opens a session on first use and reuses it for the same owner', async () => {
       const first = await manager.acquire('editor:a', { connectionId: mysql.id });

@@ -50,3 +50,31 @@ describe('production and read-only marks', () => {
     });
   });
 });
+
+describe('disabled connections (V13.1)', () => {
+  const base = { id: 'c', name: 'n', driver: 'mysql' as const, disabled: true };
+
+  it('puts the mark first and greys the label out', () => {
+    expect(tagsOf({ ...base, production: true, readOnly: true })).toEqual([
+      'disabled',
+      'production',
+      'read-only',
+    ]);
+    expect(lookOf(base, (tag) => tag)).toEqual({
+      color: 'disabledForeground',
+      badge: '⊘',
+      tooltip: 'disabled',
+    });
+  });
+
+  it('grey beats the color the user picked and the red of production', () => {
+    expect(lookOf({ ...base, color: 'green' })?.color).toBe('disabledForeground');
+    expect(lookOf({ ...base, production: true })?.color).toBe('disabledForeground');
+    expect(lookOf({ ...base, production: true })?.badge).toBe('⊘');
+  });
+
+  it('a flag that is false changes nothing', () => {
+    expect(lookOf({ ...base, disabled: false })).toBeUndefined();
+    expect(tagsOf({ ...base, disabled: false })).toEqual([]);
+  });
+});

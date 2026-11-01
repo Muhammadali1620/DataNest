@@ -15,7 +15,7 @@ export async function pickConnection(
 ): Promise<string | undefined> {
   const items = store
     .list()
-    .filter((config) => isSqlDriver(config.driver))
+    .filter((config) => isSqlDriver(config.driver) && config.disabled !== true)
     .map((config) => ({
       label: config.name,
       description: describeTarget(config),

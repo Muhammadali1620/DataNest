@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- Disable Connection / Enable Connection: switch a connection off without deleting it. It turns grey in the tree, does not expand and is never connected to; its password, folder and color are kept.
 - Pin a result: a re-run keeps it and shows the new result beside it. Result History brings back a result that a re-run replaced.
 - Public API for other extensions: they register a database (`registerDriver`) and it works in the tree, the SQL editor and the result grid. New Connection (Database from Another Extension)… makes a connection to it. The guide is in `docs/contributing/plugin-api.md`.
 - SQLite file on a server: turn on SSH for a SQLite connection and give the path on the server; the file (and its `-wal`) is copied over SFTP and opened read-only. Larger than `datanest.sqlite.remoteMaxSizeMb` (512 MB) is refused.

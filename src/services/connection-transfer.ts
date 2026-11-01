@@ -19,7 +19,8 @@ export function exportConnections(
     configs.flatMap((config) => (config.folder === undefined ? [] : [config.folder])),
   );
   return writeConnectionFile({
-    connections: configs.map(({ id: _id, ...input }) => entryJson({ input })),
+    // Whether a connection is switched off is a matter of this machine, not of the file.
+    connections: configs.map(({ id: _id, disabled: _off, ...input }) => entryJson({ input })),
     folders: folderOrder.filter((folder) => used.has(folder)),
   });
 }

@@ -635,6 +635,96 @@ describe('ConnectionStore production and read-only', () => {
   });
 });
 
+describe('ConnectionStore disabling (V13.1)', () => {
+  function make() {
+    const state = new FakeMemento();
+    const secrets = new FakeSecretStorage();
+    const logger = new RecordingLogger();
+    const store = new ConnectionStore({ state, secrets, logger });
+    return { state, secrets, logger, store };
+  }
+
+  it('switches a connection off and on, keeping everything else', async () => {
+    const { store } = make();
+    const config = await store.add({ ...mysqlInput, color: 'blue', folder: 'Work' }, 'pw');
+    expect(config.disabled).toBeUndefined();
+    await store.setDisabled(config.id, true);
+    expect(store.get(config.id)).toEqual({ ...config, disabled: true });
+    expect(await store.getPassword(config.id)).toBe('pw');
+    await store.setDisabled(config.id, false);
+    expect(store.get(config.id)).toEqual(config);
+    expect(JSON.stringify(store.get(config.id))).not.toContain('disabled');
+  });
+
+  it('survives a restart', async () => {
+    const { store, state, secrets, logger } = make();
+    const config = await store.add(mysqlInput);
+    await store.setDisabled(config.id, true);
+    const reloaded = new ConnectionStore({ state, secrets, logger });
+    expect(reloaded.get(config.id)?.disabled).toBe(true);
+  });
+
+  it('tells the listeners, but not when nothing changed', async () => {
+    const { store } = make();
+    const config = await store.add(mysqlInput);
+    let calls = 0;
+    store.onDidChange(() => (calls += 1));
+    await store.setDisabled(config.id, false);
+    expect(calls).toBe(0);
+    await store.setDisabled(config.id, true);
+    await store.setDisabled(config.id, true);
+    expect(calls).toBe(1);
+  });
+
+  it('editing a disabled connection does not switch it back on', async () => {
+    const { store } = make();
+    const config = await store.add(mysqlInput);
+    await store.setDisabled(config.id, true);
+    const edited = await store.update(config.id, { ...mysqlInput, name: 'Renamed' });
+    expect(edited).toMatchObject({ name: 'Renamed', disabled: true });
+    expect(store.get(config.id)?.disabled).toBe(true);
+  });
+
+  it('a form cannot set the flag from outside', async () => {
+    const { store } = make();
+    const config = await store.add({ ...mysqlInput, disabled: true } as ConnectionInput);
+    expect(config.disabled).toBeUndefined();
+  });
+
+  it('refuses a connection that does not exist', async () => {
+    const { store } = make();
+    await expect(store.setDisabled('nope', true)).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('refuses a project connection: its file is shared', async () => {
+    const files = new Map<string, string>();
+    const folder: ProjectFolder = { key: 'file:///shop', name: 'shop', root: '/shop' };
+    files.set(
+      folder.key,
+      JSON.stringify({ connections: [{ id: 'dev', name: 'Dev', driver: 'postgres', host: 'db' }] }),
+    );
+    const logger = new RecordingLogger();
+    const projects = new ProjectConnections({
+      files: {
+        read: (f) => Promise.resolve(files.get(f.key)),
+        write: (f, text) => Promise.resolve(void files.set(f.key, text)),
+      },
+      logger,
+    });
+    await projects.load([folder], true);
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger,
+      projects,
+    });
+    const id = projectConnectionId(folder.key, 'dev');
+    await expect(store.setDisabled(id, true)).rejects.toBeInstanceOf(DbError);
+    await expect(store.setDisabled(id, true)).rejects.toMatchObject({ code: 'unsupported' });
+    expect(files.get(folder.key)).not.toContain('disabled');
+  });
+});
+
 describe('ConnectionStore project connections', () => {
   const SHOP: ProjectFolder = { key: 'file:///shop', name: 'shop', root: '/shop' };
 

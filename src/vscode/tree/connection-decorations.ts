@@ -3,7 +3,14 @@ import type { ConnectionStore } from '../../services/connection-store';
 import { type ConnectionTag, lookOf } from './connection-look';
 
 export function tagText(tag: ConnectionTag): string {
-  return tag === 'production' ? vscode.l10n.t('Production') : vscode.l10n.t('Read-only');
+  switch (tag) {
+    case 'disabled':
+      return vscode.l10n.t('Disabled');
+    case 'production':
+      return vscode.l10n.t('Production');
+    case 'read-only':
+      return vscode.l10n.t('Read-only');
+  }
 }
 
 /** Tree items of connections carry this URI, so decorations can find them. */

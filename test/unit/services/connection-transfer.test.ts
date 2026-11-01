@@ -32,6 +32,13 @@ const shop: ConnectionConfig = {
 const lite: ConnectionConfig = { id: 'uuid-2', name: 'Lite', driver: 'sqlite', file: '/data/a.db' };
 
 describe('exportConnections', () => {
+  it('leaves out whether a connection is switched off: that is for this machine', () => {
+    const text = exportConnections([{ ...shop, disabled: true }], []);
+    expect(text).not.toContain('disabled');
+    const parsed = JSON.parse(text) as { connections: { name: string }[] };
+    expect(parsed.connections[0]?.name).toBe('Shop');
+  });
+
   it('writes the connections without ids, and the order of the folders they use', () => {
     const text = exportConnections([shop, lite], ['Home', 'Work', 'Empty']);
     const parsed = JSON.parse(text) as {

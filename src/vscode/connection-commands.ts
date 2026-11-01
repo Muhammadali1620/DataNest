@@ -19,7 +19,7 @@ export interface ConnectionCommandDeps {
   readonly plugins?: PluginConnectionHandlers;
 }
 
-export type ConnectionCommandName = 'add' | 'edit' | 'duplicate' | 'remove';
+export type ConnectionCommandName = 'add' | 'edit' | 'duplicate' | 'remove' | 'disable' | 'enable';
 
 /**
  * Commands that work on saved connections. Each takes an optional id, so the tree
@@ -28,8 +28,32 @@ export type ConnectionCommandName = 'add' | 'edit' | 'duplicate' | 'remove';
 export function connectionCommandHandlers(
   deps: ConnectionCommandDeps,
 ): Record<ConnectionCommandName, (target?: CommandTarget) => unknown> {
-  const pick = async (placeholder: string): Promise<string | undefined> =>
-    await pickConnection(deps.store, placeholder);
+  const pick = async (
+    placeholder: string,
+    accept: (config: ConnectionConfig) => boolean = () => true,
+  ): Promise<string | undefined> => await pickConnection(deps.store, placeholder, accept);
+
+  // Switching off closes the sessions first; switching on only lifts the ban.
+  const switchTo = async (clicked: CommandTarget | undefined, disabled: boolean): Promise<void> => {
+    const target =
+      connectionIdOf(clicked) ??
+      (await pick(
+        disabled
+          ? vscode.l10n.t('Pick a connection to disable')
+          : vscode.l10n.t('Pick a connection to enable'),
+        // A project connection lives in a file shared with the team: it stays on.
+        (config) =>
+          (config.disabled === true) !== disabled && deps.store.projectOf(config.id) === undefined,
+      ));
+    if (target === undefined) {
+      return;
+    }
+    requireConnection(deps.store, target);
+    if (disabled) {
+      await deps.manager.disconnect(target);
+    }
+    await deps.store.setDisabled(target, disabled);
+  };
 
   return {
     add: async () => {
@@ -117,6 +141,14 @@ export function connectionCommandHandlers(
       await deps.store.remove(target);
       return undefined;
     },
+
+    disable: async (clicked?: CommandTarget) => {
+      await switchTo(clicked, true);
+    },
+
+    enable: async (clicked?: CommandTarget) => {
+      await switchTo(clicked, false);
+    },
   };
 }
 
@@ -132,12 +164,16 @@ function requireConnection(store: ConnectionStore, id: string): ConnectionConfig
 async function pickConnection(
   store: ConnectionStore,
   placeHolder: string,
+  accept: (config: ConnectionConfig) => boolean,
 ): Promise<string | undefined> {
-  const items = store.list().map((config) => ({
-    label: config.name,
-    description: describeTarget(config),
-    id: config.id,
-  }));
+  const items = store
+    .list()
+    .filter(accept)
+    .map((config) => ({
+      label: config.name,
+      description: describeTarget(config),
+      id: config.id,
+    }));
   if (items.length === 0) {
     void vscode.window.showInformationMessage(vscode.l10n.t('There are no saved connections yet'));
     return undefined;

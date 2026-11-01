@@ -30,6 +30,8 @@ export const TREE_CONTEXT = {
   connectionFolder: 'datanest.connectionFolder',
   connection: 'datanest.connection',
   connectionConnected: 'datanest.connection.connected',
+  /** A connection switched off (V13.1): only enable, edit and delete are offered. */
+  connectionDisabled: 'datanest.connection.disabled',
   /** The connections of a workspace folder's `.vscode/datanest.json` (V4.7). */
   project: 'datanest.project',
   /** A connection from a project file: no user folders, other menus. */

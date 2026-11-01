@@ -36,7 +36,8 @@ describe('running queries', () => {
   });
 
   after(() => {
-    rmSync(dir, { recursive: true, force: true });
+    // Windows keeps the database file locked for a moment after the session closed.
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   });
 
   afterEach(async () => {

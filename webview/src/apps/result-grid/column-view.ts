@@ -40,21 +40,66 @@ function baseOrder(columnCount: number, order: readonly number[] | undefined): n
   return result;
 }
 
-/** Moves a column to stand just before another one (or last when `before` is undefined). */
+/**
+ * Moves a column to stand just before another one (or last when `before` is undefined).
+ * Pinned columns keep to their own group: one moves among the pinned ones, an unpinned
+ * one among the rest, and a move across the border is no move (unpin it first).
+ */
 export function moveColumn(
   view: ColumnView,
   columnCount: number,
   from: number,
   before: number | undefined,
 ): ColumnView {
+  if (from === before) {
+    return view;
+  }
+  if (isPinned(view, from)) {
+    if (before !== undefined && !isPinned(view, before)) {
+      return view;
+    }
+    const without = view.pinned.filter((index) => index !== from);
+    const at = before === undefined ? without.length : without.indexOf(before);
+    without.splice(at === -1 ? without.length : at, 0, from);
+    return { ...view, pinned: without };
+  }
+  if (before !== undefined && isPinned(view, before)) {
+    return view;
+  }
   const order = baseOrder(columnCount, view.order);
-  if (!order.includes(from) || from === before) {
+  if (!order.includes(from)) {
     return view;
   }
   const without = order.filter((index) => index !== from);
   const at = before === undefined ? without.length : without.indexOf(before);
   without.splice(at === -1 ? without.length : at, 0, from);
   return { ...view, order: without };
+}
+
+/**
+ * Moves a column one place left (-1) or right (1) among the columns on screen: the
+ * keyboard's way of what dragging does. At the edge of its group nothing moves.
+ */
+export function shiftColumn(
+  view: ColumnView,
+  columnCount: number,
+  column: number,
+  delta: -1 | 1,
+): ColumnView {
+  const { order, pinnedCount } = displayOrder(columnCount, view);
+  const at = order.indexOf(column);
+  if (at === -1) {
+    return view;
+  }
+  const inPinned = at < pinnedCount;
+  const groupEnd = inPinned ? pinnedCount : order.length;
+  const next = at + delta;
+  if (next < (inPinned ? 0 : pinnedCount) || next >= groupEnd) {
+    return view;
+  }
+  // Left: stand before the neighbour. Right: before the one after it, or last in the group.
+  const before = delta === -1 ? order[next] : next + 1 < groupEnd ? order[next + 1] : undefined;
+  return moveColumn(view, columnCount, column, before);
 }
 
 export function displayOrder(columnCount: number, view: ColumnView): DisplayOrder {

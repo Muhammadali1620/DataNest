@@ -1086,11 +1086,9 @@ describe('more ways to look', () => {
     expect(screen.getByTestId('row-height').textContent).toBe('22');
   });
 
-  it('reorders columns by dragging a header when that is on', async () => {
+  it('reorders columns by dragging a header', async () => {
     await open();
     await fireEvent.click(screen.getByTestId('view-toggle'));
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Drag columns by the header' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     const heads = screen.getAllByRole('columnheader').slice(1);
     const grab = headerButton(2);
     expect(grab.getAttribute('draggable')).toBe('true');
@@ -1106,8 +1104,11 @@ describe('more ways to look', () => {
     });
   });
 
-  it('does not drag columns unless asked', async () => {
+  it('stops dragging columns when the switch is turned off', async () => {
     await open();
+    await fireEvent.click(screen.getByTestId('view-toggle'));
+    await fireEvent.click(screen.getByRole('checkbox', { name: /Drag columns by the header/u }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     const grab = headerButton(0);
     expect(grab.getAttribute('draggable')).toBe('false');
   });

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   resultGridProtocol,
   type ResultGridProtocol,
@@ -118,6 +118,11 @@ function pin(name: string): HTMLButtonElement {
   }
   return found;
 }
+
+afterEach(() => {
+  // The view (the drag switch among it) is kept in storage between visits.
+  window.localStorage.clear();
+});
 
 describe('result grid column menu', () => {
   it('is closed until asked for and lists every column', async () => {
@@ -375,5 +380,250 @@ describe('result grid column widths', () => {
       expect(dataCells().length).toBeGreaterThan(0);
     });
     expect(widthOf(1)).toBe(chosen);
+  });
+});
+
+function header(column: number): HTMLElement {
+  const found = screen
+    .getAllByRole('columnheader')
+    .find((candidate) => candidate.getAttribute('data-column') === String(column));
+  if (found === undefined) {
+    throw new Error(`no header ${column}`);
+  }
+  return found;
+}
+
+function grab(column: number): HTMLElement {
+  const found = header(column).querySelector<HTMLElement>('button.name');
+  if (found === null) {
+    throw new Error(`no handle ${column}`);
+  }
+  return found;
+}
+
+/** Drags one header onto another; `right` aims at its right half (a jsdom box is empty, so x > 0). */
+async function drag(from: number, onto: number, right = false): Promise<void> {
+  await fireEvent.dragStart(grab(from));
+  await over(header(onto), right);
+  await fireEvent.drop(header(onto));
+  await fireEvent.dragEnd(grab(from));
+}
+
+/** A dragover with a pointer position: jsdom has no DragEvent, so the field is set by hand. */
+async function over(target: HTMLElement, right: boolean): Promise<void> {
+  const event = createEvent.dragOver(target);
+  Object.defineProperty(event, 'clientX', { value: right ? 10 : -10 });
+  await fireEvent(target, event);
+}
+
+describe('result grid column order (V13.5)', () => {
+  it('lets the headers be dragged without asking first', async () => {
+    await open();
+    expect(grab(0).getAttribute('draggable')).toBe('true');
+    expect(grab(0).classList.contains('draggable')).toBe(true);
+  });
+
+  it('drops a column before the one under the left half of the pointer', async () => {
+    await open();
+    await drag(3, 1);
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 4, 2, 3]);
+    });
+    expect(
+      dataCells()
+        .slice(0, 4)
+        .map((c) => c.getAttribute('data-column')),
+    ).toEqual(['0', '3', '1', '2']);
+  });
+
+  it('drops after the column under the right half, and at the very end', async () => {
+    await open();
+    await drag(0, 1, true);
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([2, 1, 3, 4]);
+    });
+    await drag(1, 3, true);
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 3, 4, 2]);
+    });
+  });
+
+  it('marks where the column would land with an accent line, and who is moving', async () => {
+    await open();
+    await fireEvent.dragStart(grab(2));
+    await over(header(0), false);
+    expect(header(0).classList.contains('drop-target')).toBe(true);
+    expect(header(2).classList.contains('dragged')).toBe(true);
+    await over(header(3), true);
+    expect(header(3).classList.contains('drop-end')).toBe(true);
+    expect(header(0).classList.contains('drop-target')).toBe(false);
+    await fireEvent.dragEnd(grab(2));
+    expect(header(3).classList.contains('drop-end')).toBe(false);
+    expect(header(2).classList.contains('dragged')).toBe(false);
+  });
+
+  it('changes nothing when the drag is cancelled or dropped on itself', async () => {
+    await open();
+    await fireEvent.dragStart(grab(1));
+    await over(header(1), true);
+    await fireEvent.drop(header(1));
+    await fireEvent.dragEnd(grab(1));
+    await fireEvent.dragStart(grab(1));
+    await fireEvent.dragEnd(grab(1));
+    expect(headerOrder()).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps a pinned column among the pinned ones, and the others among theirs', async () => {
+    await open();
+    await openMenu();
+    await fireEvent.click(pin('extra'));
+    await fireEvent.click(pin('note'));
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([4, 3, 1, 2]);
+    });
+    // Across the border nothing moves, in either direction.
+    await drag(0, 3);
+    await drag(2, 0);
+    expect(headerOrder()).toEqual([4, 3, 1, 2]);
+    // Among the others, and among the pinned ones, it does.
+    await drag(1, 0);
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([4, 3, 2, 1]);
+    });
+    await drag(3, 2, true);
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([3, 4, 2, 1]);
+    });
+  });
+
+  it('copies in the dragged order, and keeps the order for the same columns again', async () => {
+    const { host, copyAs } = await open();
+    await drag(3, 0);
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([4, 1, 2, 3]);
+    });
+    await chooseFromMenu('copy-as', 'CSV');
+    await waitFor(() => {
+      expect(copyAs).toHaveBeenCalledWith({
+        resultId: 'result-1',
+        format: 'csv',
+        columns: [3, 0, 1, 2],
+      });
+    });
+    host.emit('state', {
+      tabs: [TAB, { ...TAB, id: 'result-2', revision: 0 }],
+      activeId: 'result-2',
+      running: false,
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { selected: true })).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([4, 1, 2, 3]);
+    });
+  });
+
+  it('does not drag when the switch is off, and Alt+Shift+] then does nothing', async () => {
+    await open();
+    await fireEvent.click(screen.getByTestId('view-toggle'));
+    await fireEvent.click(screen.getByRole('checkbox', { name: /Drag columns by the header/u }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(grab(0).getAttribute('draggable')).toBe('false');
+    await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+    await fireEvent.keyDown(screen.getByTestId('grid'), {
+      code: 'BracketRight',
+      key: ']',
+      shiftKey: true,
+      altKey: true,
+    });
+    expect(headerOrder()).toEqual([1, 2, 3, 4]);
+  });
+
+  it('moves the focused column with Alt+Shift+] and [', async () => {
+    await open();
+    await fireEvent.pointerDown(cell(0, 1), { button: 0 });
+    const press = async (code: string) =>
+      await fireEvent.keyDown(screen.getByTestId('grid'), {
+        code,
+        key: code === 'BracketLeft' ? '[' : ']',
+        shiftKey: true,
+        altKey: true,
+      });
+    await press('BracketRight');
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 3, 2, 4]);
+    });
+    await press('BracketLeft');
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 2, 3, 4]);
+    });
+    await press('BracketLeft');
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([2, 1, 3, 4]);
+    });
+    await press('BracketLeft');
+    expect(headerOrder()).toEqual([2, 1, 3, 4]);
+  });
+
+  it('does not carry a column over the border of the pinned ones from the keyboard', async () => {
+    await open();
+    await openMenu();
+    await fireEvent.click(pin('extra'));
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([4, 1, 2, 3]);
+    });
+    await fireEvent.pointerDown(cell(0, 0), { button: 0 });
+    await fireEvent.keyDown(screen.getByTestId('grid'), {
+      code: 'BracketLeft',
+      key: '[',
+      shiftKey: true,
+      altKey: true,
+    });
+    await flush();
+    expect(headerOrder()).toEqual([4, 1, 2, 3]);
+    // The focus stayed where it was.
+    expect(
+      dataCells()
+        .find((c) => c.classList.contains('focused'))
+        ?.getAttribute('data-column'),
+    ).toBe('0');
+  });
+
+  it('moves columns one place from the columns menu, and lists them as drawn', async () => {
+    await open();
+    await openMenu();
+    await fireEvent.click(screen.getByRole('button', { name: 'Move note left' }));
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 3, 2, 4]);
+    });
+    const names = screen.getAllByTestId('columns-item').map((li) => li.textContent.trim());
+    expect(names.map((name) => name.split(' ')[0])).toEqual(['id', 'note', 'name', 'extra']);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Move id left' }).disabled).toBe(
+      true,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Move extra right' }).disabled,
+    ).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Move id right' }));
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([3, 1, 2, 4]);
+    });
+  });
+
+  it('offers no move for a hidden column, and Reset brings the order back', async () => {
+    await open();
+    await openMenu();
+    await fireEvent.click(checkbox('name'));
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Move name left' }).disabled).toBe(
+      true,
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Move extra left' }));
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 4, 3]);
+    });
+    await fireEvent.click(screen.getByTestId('columns-reset'));
+    await waitFor(() => {
+      expect(headerOrder()).toEqual([1, 2, 3, 4]);
+    });
   });
 });

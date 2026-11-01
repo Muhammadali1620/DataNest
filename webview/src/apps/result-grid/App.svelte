@@ -26,6 +26,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
     isHidden,
     isPinned,
     moveColumn,
+    shiftColumn,
     NO_VIEW,
     showAll,
     toggleHidden,
@@ -344,6 +345,11 @@ import type { RowAction } from '../../../../src/shared/row-action';
   );
   const columnView = $derived(views[viewId] ?? NO_VIEW);
   const display = $derived(displayOrder(activeTab?.columns.length ?? 0, columnView));
+  /** The columns dialog lists them as they are drawn, the hidden ones after. */
+  const listed = $derived([
+    ...display.order,
+    ...(activeTab?.columns ?? []).flatMap((_column, index) => (display.order.includes(index) ? [] : [index])),
+  ]);
 
 
   function rowAt(index: number): readonly CellValue[] | undefined {
@@ -1622,7 +1628,8 @@ import type { RowAction } from '../../../../src/shared/row-action';
           </button>
         </div>
         <ul class="columns-list">
-          {#each activeTab.columns as column, index (index)}
+          {#each listed as index (index)}
+            {@const column = activeTab.columns[index] ?? { name: "", dataType: undefined }}
             <li class="columns-item" data-testid="columns-item">
               <label>
                 <input
@@ -1644,6 +1651,26 @@ import type { RowAction } from '../../../../src/shared/row-action';
                 disabled={isHidden(columnView, index)}
                 onclick={() => {
                   changeView(togglePinned(columnView, index));
+                }}
+              />
+              <IconButton
+                class="move-left"
+                icon="arrow-left"
+                label={t('columns.moveUp', column.name)}
+                hint={t('columns.moveUpHint')}
+                disabled={isHidden(columnView, index) || shiftColumn(columnView, activeTab.columns.length, index, -1) === columnView}
+                onclick={() => {
+                  changeView(shiftColumn(columnView, activeTab.columns.length, index, -1));
+                }}
+              />
+              <IconButton
+                class="move-right"
+                icon="arrow-right"
+                label={t('columns.moveDown', column.name)}
+                hint={t('columns.moveDownHint')}
+                disabled={isHidden(columnView, index) || shiftColumn(columnView, activeTab.columns.length, index, 1) === columnView}
+                onclick={() => {
+                  changeView(shiftColumn(columnView, activeTab.columns.length, index, 1));
                 }}
               />
             </li>
@@ -1764,6 +1791,9 @@ import type { RowAction } from '../../../../src/shared/row-action';
               {onSort}
               onMoveColumn={(from: number, before: number | undefined) => {
                 changeView(moveColumn(columnView, activeTab.columns.length, from, before));
+              }}
+              onShiftColumn={(column: number, delta: -1 | 1) => {
+                changeView(shiftColumn(columnView, activeTab.columns.length, column, delta));
               }}
               onSortDirection={(column: number, direction: 'asc' | 'desc') => {
                 void onSortDirection(column, direction);

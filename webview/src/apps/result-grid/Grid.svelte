@@ -117,6 +117,8 @@
     filteredColumns?: ReadonlySet<number> | undefined;
     /** Called when a header is dropped before another column: the host-free column order. */
     onMoveColumn?: ((from: number, before: number | undefined) => void) | undefined;
+    /** Called for Alt+Shift+[ or ]: a column moves one place left or right. */
+    onShiftColumn?: ((column: number, delta: -1 | 1) => void) | undefined;
     /** Called to open the form that adds a row with the fields filled in. */
     onInsertDialog?: (() => void) | undefined;
     /** Called to open a cell's value in the dialog (the magnifier on the cell). */
@@ -170,6 +172,7 @@
     onFilterValue,
     onInsertDialog,
     onMoveColumn,
+    onShiftColumn,
     t,
   }: Props = $props();
 
@@ -216,6 +219,47 @@
   /** The column being dragged by its header, and the one it would land before. */
   let dragging = $state<number | undefined>(undefined);
   let dropBefore = $state<number | undefined>(undefined);
+  /** True when the drop would put the column after the last one of its group. */
+  let dropAtEnd = $state(false);
+
+  function endDrag(): void {
+    dragging = undefined;
+    dropBefore = undefined;
+    dropAtEnd = false;
+  }
+
+  /** Pinned columns stay among themselves, the others among theirs. */
+  function sameGroup(a: number, b: number): boolean {
+    return order.indexOf(a) < pinned === order.indexOf(b) < pinned;
+  }
+
+  /** Aims a drag at the half of a header it is over: the left half drops before it, the right after. */
+  function aimDrag(event: DragEvent, position: number): void {
+    const index = orig(position);
+    if (dragging === undefined || dragging === index || !sameGroup(dragging, index)) {
+      return;
+    }
+    event.preventDefault();
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const right = event.clientX > box.left + box.width / 2;
+    const groupEnd = position < pinned ? pinned : order.length;
+    const next = right ? position + 1 : position;
+    if (next < groupEnd) {
+      dropBefore = orig(next);
+      dropAtEnd = false;
+    } else {
+      dropBefore = undefined;
+      dropAtEnd = true;
+    }
+  }
+
+  function dropDrag(event: DragEvent): void {
+    event.preventDefault();
+    if (dragging !== undefined && (dropBefore !== undefined || dropAtEnd)) {
+      onMoveColumn?.(dragging, dropAtEnd ? undefined : dropBefore);
+    }
+    endDrag();
+  }
 
   /** The row whose details are open under it (one at a time), and how much room they take. */
   let expanded = $state<number | undefined>(undefined);
@@ -295,9 +339,18 @@
 
   /** A different result means different cells, so the old selection is dropped. */
   function clearSelection(_key: string): void {
-    selection = undefined;
+    // A column moved from the keyboard keeps the focus, which went along with it.
+    const kept = keepFocus;
+    keepFocus = undefined;
+    selection =
+      kept === undefined
+        ? undefined
+        : untrack(() => selectCell(kept, { rowCount, columnCount: order.length }));
     expanded = undefined;
   }
+
+  /** Where the focus goes once the order of the columns has changed (plain: never read by a view). */
+  let keepFocus: { row: number; column: number } | undefined;
 
   // Reading only the key (never the selection) keeps this out of a write loop.
   $effect(() => {
@@ -761,6 +814,30 @@
         return;
       }
     }
+    // Alt+Shift+[ and ] move the focused column left and right, the keyboard's way of dragging it.
+    if (
+      event.shiftKey &&
+      event.altKey &&
+      !modifier &&
+      focusCell !== undefined &&
+      onShiftColumn !== undefined &&
+      view.draggableColumns &&
+      (event.code === 'BracketLeft' || event.code === 'BracketRight')
+    ) {
+      event.preventDefault();
+      const delta = event.code === 'BracketLeft' ? -1 : 1;
+      // The focus is kept by position on screen; the parent wants the result's own number.
+      const target = (selection?.focus.column ?? 0) + delta;
+      // The focus goes along with the column, so the key can be pressed again.
+      if (target >= 0 && target < order.length && sameGroup(focusCell.column, orig(target))) {
+        const row = focusCell.row;
+        onShiftColumn(focusCell.column, delta);
+        // A new order is a new key, which clears the selection: keep the cell for that.
+        keepFocus = { row, column: target };
+        selection = selectCell({ row, column: target }, bounds);
+      }
+      return;
+    }
     if (event.key === 'F12' && selection !== undefined) {
       event.preventDefault();
       follow(focusCell?.row ?? 0, focusCell?.column ?? 0);
@@ -1148,6 +1225,8 @@
     class="cell head"
     class:pinned={position < pinned}
     class:drop-target={dropBefore === index}
+    class:drop-end={dropAtEnd && dragging !== undefined && sameGroup(dragging, index) && (position === pinned - 1 || position === order.length - 1)}
+    class:dragged={dragging === index}
     role="columnheader"
     tabindex="-1"
     aria-colindex={position + 2}
@@ -1158,24 +1237,18 @@
       : ''}"
     title={columns[index]?.dataType ?? columns[index]?.name ?? ''}
     ondragover={(event) => {
-      if (dragging !== undefined && dragging !== index) {
-        event.preventDefault();
-        dropBefore = index;
+      aimDrag(event, position);
+    }}
+    ondragleave={(event) => {
+      // Leaving for a child of the header is not leaving it.
+      if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+        if (dropBefore === index) {
+          dropBefore = undefined;
+        }
+        dropAtEnd = false;
       }
     }}
-    ondragleave={() => {
-      if (dropBefore === index) {
-        dropBefore = undefined;
-      }
-    }}
-    ondrop={(event) => {
-      event.preventDefault();
-      if (dragging !== undefined) {
-        onMoveColumn?.(dragging, index);
-      }
-      dragging = undefined;
-      dropBefore = undefined;
-    }}
+    ondrop={dropDrag}
   >
     <!-- Out of the tab order: the grid is one stop, and Shift+Alt+↑ sorts from a cell. -->
     <button
@@ -1192,10 +1265,7 @@
           transfer.effectAllowed = 'move';
         }
       }}
-      ondragend={() => {
-        dragging = undefined;
-        dropBefore = undefined;
-      }}
+      ondragend={endDrag}
       tabindex="-1"
       onclick={() => {
         onSort(index);
@@ -1494,12 +1564,25 @@
     border-bottom-color: transparent;
   }
 
+  /* The accent line shows where the column lands: before this header, or after the last. */
   .head.drop-target {
     box-shadow: inset 3px 0 0 var(--vscode-focusBorder);
   }
 
+  .head.drop-end {
+    box-shadow: inset -3px 0 0 var(--vscode-focusBorder);
+  }
+
+  .head.dragged {
+    opacity: 0.45;
+  }
+
   .name.draggable {
     cursor: grab;
+  }
+
+  .name.draggable:active {
+    cursor: grabbing;
   }
 
   .viewport.align-left .cell:not(.rownum):not(.head),

@@ -48,6 +48,9 @@ describe('normalizeView', () => {
         draggableColumns: 'yes',
       }),
     ).toEqual(DEFAULT_VIEW);
+    // Dragging columns is on unless the user turned it off (V13.5).
+    expect(DEFAULT_VIEW.draggableColumns).toBe(true);
+    expect(normalizeView({ draggableColumns: false }).draggableColumns).toBe(false);
   });
 
   it('clamps and rounds a row height instead of refusing it', () => {

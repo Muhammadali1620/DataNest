@@ -59,7 +59,7 @@ export const DEFAULT_VIEW: GridView = {
   checkboxes: true,
   font: 'ui',
   showTime: true,
-  draggableColumns: false,
+  draggableColumns: true,
 };
 
 export const VIEW_STORAGE_KEY = 'datanest.grid.view';
@@ -98,8 +98,7 @@ export function normalizeView(raw: unknown, look: ResultsLook = DEFAULT_LOOK): G
     checkboxes: typeof source.checkboxes === 'boolean' ? source.checkboxes : true,
     font: oneOf(source.font, GRID_FONTS, DEFAULT_VIEW.font),
     showTime: typeof source.showTime === 'boolean' ? source.showTime : true,
-    draggableColumns:
-      typeof source.draggableColumns === 'boolean' ? source.draggableColumns : false,
+    draggableColumns: typeof source.draggableColumns === 'boolean' ? source.draggableColumns : true,
   };
 }
 

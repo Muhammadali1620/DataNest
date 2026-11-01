@@ -6,6 +6,7 @@ import {
   isHidden,
   isPinned,
   moveColumn,
+  shiftColumn,
   NO_VIEW,
   showAll,
   toggleHidden,
@@ -152,5 +153,57 @@ describe('dragging columns', () => {
   it('counts a changed order as a customized view, and the plain order as none', () => {
     expect(isCustomized(moveColumn(NO_VIEW, 3, 2, 0))).toBe(true);
     expect(isCustomized({ hidden: [], pinned: [], order: [0, 1, 2] })).toBe(false);
+  });
+});
+
+describe('dragging among pinned columns (V13.5)', () => {
+  const pinnedView = { hidden: [], pinned: [3, 1] } as const;
+
+  it('reorders the pinned columns among themselves', () => {
+    const moved = moveColumn(pinnedView, 5, 1, 3);
+    expect(moved.pinned).toEqual([1, 3]);
+    expect(displayOrder(5, moved).order).toEqual([1, 3, 0, 2, 4]);
+    expect(moveColumn(pinnedView, 5, 3, undefined).pinned).toEqual([1, 3]);
+  });
+
+  it('refuses to cross the border between pinned and other columns', () => {
+    expect(moveColumn(pinnedView, 5, 3, 0)).toBe(pinnedView);
+    expect(moveColumn(pinnedView, 5, 0, 3)).toBe(pinnedView);
+  });
+
+  it('moves the others among themselves as before', () => {
+    expect(displayOrder(5, moveColumn(pinnedView, 5, 4, 0)).order).toEqual([3, 1, 4, 0, 2]);
+  });
+});
+
+describe('shiftColumn', () => {
+  it('moves a column one place left or right as drawn', () => {
+    expect(displayOrder(4, shiftColumn(NO_VIEW, 4, 2, -1)).order).toEqual([0, 2, 1, 3]);
+    expect(displayOrder(4, shiftColumn(NO_VIEW, 4, 1, 1)).order).toEqual([0, 2, 1, 3]);
+    expect(displayOrder(4, shiftColumn(NO_VIEW, 4, 2, 1)).order).toEqual([0, 1, 3, 2]);
+  });
+
+  it('stays put at the edges and for a column that is not drawn', () => {
+    expect(shiftColumn(NO_VIEW, 4, 0, -1)).toBe(NO_VIEW);
+    expect(shiftColumn(NO_VIEW, 4, 3, 1)).toBe(NO_VIEW);
+    const hiding = view([1], []);
+    expect(shiftColumn(hiding, 4, 1, 1)).toBe(hiding);
+    expect(shiftColumn(NO_VIEW, 4, 9, 1)).toBe(NO_VIEW);
+  });
+
+  it('steps over a hidden column', () => {
+    const hiddenView = view([1], []);
+    expect(displayOrder(4, shiftColumn(hiddenView, 4, 2, -1)).order).toEqual([2, 0, 3]);
+    expect(displayOrder(4, shiftColumn(hiddenView, 4, 0, 1)).order).toEqual([2, 0, 3]);
+  });
+
+  it('keeps to the pinned group or to the rest', () => {
+    const pins = view([], [3, 1]);
+    expect(shiftColumn(pins, 5, 3, -1)).toBe(pins);
+    expect(shiftColumn(pins, 5, 1, 1)).toBe(pins);
+    expect(shiftColumn(pins, 5, 0, -1)).toBe(pins);
+    expect(shiftColumn(pins, 5, 4, 1)).toBe(pins);
+    expect(shiftColumn(pins, 5, 3, 1).pinned).toEqual([1, 3]);
+    expect(displayOrder(5, shiftColumn(pins, 5, 2, -1)).order).toEqual([3, 1, 2, 0, 4]);
   });
 });

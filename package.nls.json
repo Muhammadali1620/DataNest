@@ -203,5 +203,18 @@
   "commands.savedQuery.open.title": "Open Saved Query",
   "commands.savedQuery.rename.title": "Rename Saved Query",
   "commands.savedQuery.delete.title": "Delete Saved Query",
-  "commands.account.open.title": "Open in Users and Privileges"
+  "commands.account.open.title": "Open in Users and Privileges",
+  "configuration.ai.enabled.description": "Let the editor's language model use DataNest: tools that list connections, read a schema and run one statement that only reads (at most 100 rows, each query approved by you), and the `@datanest` chat participant. Passwords and hosts are never sent. Takes effect at once; editors without a language model API simply do not show it.",
+  "tools.listConnections.displayName": "List DataNest Connections",
+  "tools.listConnections.userDescription": "List your saved database connections (names and drivers only)",
+  "tools.listTables.displayName": "List Tables",
+  "tools.listTables.userDescription": "List the databases, schemas, tables and views of a connection",
+  "tools.describeTable.displayName": "Describe Table",
+  "tools.describeTable.userDescription": "Columns, keys and indexes of a table",
+  "tools.runReadOnlyQuery.displayName": "Run Read-only Query",
+  "tools.runReadOnlyQuery.userDescription": "Run one statement that only reads, up to 100 rows",
+  "chat.description": "Ask about your databases",
+  "chat.schema.description": "Show the structure of a connection",
+  "chat.query.description": "Write a SQL query for a question and run it if it only reads",
+  "chat.explain.description": "Explain a SQL statement"
 }

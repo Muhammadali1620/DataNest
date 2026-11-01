@@ -282,6 +282,8 @@ export const CONFIG_KEYS = {
   /** Result tabs of saved SQL files come back after a restart, and whether they run again (V13.12). */
   resultsRestore: 'results.restore',
   resultsRestoreRun: 'results.restoreRun',
+  /** The tools and the chat participant for the editor's language model (V13.15). */
+  aiEnabled: 'ai.enabled',
   /** Seconds a statement may run before it is cancelled; 0 means no limit. */
   queryTimeout: 'queryTimeout',
   /** How many executed statements the history keeps; 0 turns it off. */

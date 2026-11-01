@@ -73,6 +73,7 @@ import {
   readSyncConnections,
   readQueryVariablesMode,
   readRemoteMaxBytes,
+  readAiEnabled,
   readResultsRestore,
   readResultsRestoreRun,
   readRowLimit,
@@ -82,6 +83,10 @@ import { CONNECTIONS_VIEW_ID, ConnectionsTreeProvider } from './vscode/tree/conn
 import { RedisKeyBrowser } from './services/redis/key-browser';
 import type { TableNode } from './vscode/tree/nodes';
 import { ConnectionDecorations } from './vscode/tree/connection-decorations';
+import { AiTools } from './services/ai-tools';
+import { browseSession } from './services/browse-session';
+import { registerAiTools } from './vscode/ai-tools';
+import { registerChatParticipant } from './vscode/ai-chat';
 import { FavoritesStore } from './vscode/tree/favorites';
 import { ConnectionsDragAndDrop } from './vscode/tree/connection-dnd';
 
@@ -461,6 +466,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     treeView,
     vscode.window.registerFileDecorationProvider(decorations),
     store.onDidChange(pruneVersions),
+  );
+
+  // The editor's language model may read schemas and run statements that only read (V13.15).
+  const aiTools = new AiTools({
+    store,
+    enabled: () => readAiEnabled(),
+    capabilitiesOf: async (connectionId) => (await manager.driverOf(connectionId)).capabilities,
+    browse: async (connectionId, database) => await browseSession(manager, connectionId, database),
+    query: async (connectionId, database) =>
+      await manager.acquire(
+        `ai-tools:${connectionId}`,
+        database === undefined ? { connectionId } : { connectionId, database },
+      ),
+  });
+  context.subscriptions.push(
+    ...registerAiTools(aiTools, logger),
+    ...registerChatParticipant({
+      tools: aiTools,
+      connections: () => store.list(),
+      enabled: () => readAiEnabled(),
+      logger,
+    }),
   );
 
   const objectEdits = new ObjectEditRegistry();

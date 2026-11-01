@@ -203,6 +203,13 @@ export function readResultsRestore(): boolean {
     .get<boolean>(CONFIG_KEYS.resultsRestore, true);
 }
 
+/** Whether the tools and the chat participant for the editor's language model are on (V13.15). */
+export function readAiEnabled(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(CONFIG_KEYS.aiEnabled, true);
+}
+
 /** Whether restored tabs run again on their own; never for production or a switched-off connection. */
 export function readResultsRestoreRun(): boolean {
   return vscode.workspace

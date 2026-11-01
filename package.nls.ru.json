@@ -203,5 +203,18 @@
   "commands.savedQuery.open.title": "Открыть сохранённый запрос",
   "commands.savedQuery.rename.title": "Переименовать сохранённый запрос",
   "commands.savedQuery.delete.title": "Удалить сохранённый запрос",
-  "commands.account.open.title": "Открыть в «Пользователях и правах»"
+  "commands.account.open.title": "Открыть в «Пользователях и правах»",
+  "configuration.ai.enabled.description": "Разрешить языковой модели редактора пользоваться DataNest: инструменты показывают подключения, читают схему и выполняют одну команду, которая только читает (не больше 100 строк, каждый запрос вы подтверждаете), и участник чата `@datanest`. Пароли и адреса серверов не передаются. Действует сразу; в редакторах без API языковых моделей этого просто нет.",
+  "tools.listConnections.displayName": "Подключения DataNest",
+  "tools.listConnections.userDescription": "Показать сохранённые подключения (только имена и драйверы)",
+  "tools.listTables.displayName": "Список таблиц",
+  "tools.listTables.userDescription": "Базы, схемы, таблицы и представления подключения",
+  "tools.describeTable.displayName": "Описание таблицы",
+  "tools.describeTable.userDescription": "Колонки, ключи и индексы таблицы",
+  "tools.runReadOnlyQuery.displayName": "Запрос только для чтения",
+  "tools.runReadOnlyQuery.userDescription": "Выполнить одну команду, которая только читает, до 100 строк",
+  "chat.description": "Спросите о ваших базах данных",
+  "chat.schema.description": "Показать структуру подключения",
+  "chat.query.description": "Написать SQL-запрос по вопросу и выполнить, если он только читает",
+  "chat.explain.description": "Объяснить SQL-команду"
 }

@@ -1264,5 +1264,20 @@
   "Import as New Index": "Загрузить как новый индекс",
   "The name of the new index, in lowercase": "Имя нового индекса, строчными буквами",
   "Added {0} documents to {1}": "Добавлено документов в {1}: {0}",
-  "The SSH server {0}:{1} and DataNest share no encryption method ({2}). If the server is old, allow its method under \"SSH algorithms\" in the connection.": "У SSH-сервера {0}:{1} и DataNest нет общего метода шифрования ({2}). Если сервер старый, разрешите его метод в разделе «Алгоритмы SSH» подключения."
+  "The SSH server {0}:{1} and DataNest share no encryption method ({2}). If the server is old, allow its method under \"SSH algorithms\" in the connection.": "У SSH-сервера {0}:{1} и DataNest нет общего метода шифрования ({2}). Если сервер старый, разрешите его метод в разделе «Алгоритмы SSH» подключения.",
+  "\"{0}\" is a production database.": "«{0}» — это рабочая (production) база.",
+  "The assistant wants to run this statement on \"{0}\". Only statements that read are run, at most 100 rows come back.": "Ассистент хочет выполнить эту команду на «{0}». Выполняются только команды, которые читают; вернётся не больше 100 строк.",
+  "The assistant wants to read the structure of \"{0}\".": "Ассистент хочет прочитать структуру «{0}».",
+  "Read the structure of a database": "Прочитать структуру базы",
+  "Run a query": "Выполнить запрос",
+  "DataNest assistant tools are turned off in the settings.": "Инструменты ассистента DataNest выключены в настройках.",
+  "There is no usable SQL connection yet. Add one in the DataNest view.": "Пока нет подходящего SQL-подключения. Добавьте его в панели DataNest.",
+  "Which connection? Mention its name in your question:": "Какое подключение? Назовите его в вопросе:",
+  "The structure of \"{0}\" needs a database or schema: open it in the DataNest view first.": "Для структуры «{0}» нужна база или схема: сначала откройте её в панели DataNest.",
+  "Explaining…": "Объясняю…",
+  "Writing the statement…": "Пишу команду…",
+  "This statement is not run: only statements that merely read are.": "Эта команда не выполняется: выполняются только те, что лишь читают.",
+  "\"{0}\" is a production database: the statement is not run for you.": "«{0}» — рабочая база: команду за вас не выполняю.",
+  "Running it (read only, at most 100 rows)…": "Выполняю (только чтение, не больше 100 строк)…",
+  "Something went wrong: {0}": "Что-то пошло не так: {0}"
 }

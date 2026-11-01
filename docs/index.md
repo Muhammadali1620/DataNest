@@ -22,8 +22,10 @@ no telemetry.
 8. [Tools](guide/tools.md) — ER diagram, query plans, schema and data comparison, server
    monitor, users and privileges.
 9. [Manager](guide/manager.md) — log, dashboard, processes, dump and structure sync of a connection.
-10. [Keyboard and accessibility](guide/keyboard.md)
-11. [Settings](guide/settings.md)
+10. [The assistant](guide/assistant.md) — tools for the editor's language model and the
+    `@datanest` chat participant.
+11. [Keyboard and accessibility](guide/keyboard.md)
+12. [Settings](guide/settings.md)
 
 ## Help
 

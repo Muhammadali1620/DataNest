@@ -2309,6 +2309,12 @@
           "maximum": 8192,
           "markdownDescription": "%configuration.sqlite.remoteMaxSizeMb.description%",
           "scope": "window"
+        },
+        "datanest.ai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.ai.enabled.description%",
+          "scope": "window"
         }
       }
     },
@@ -2484,6 +2490,155 @@
       {
         "id": "datanest.tree.data",
         "label": "%submenu.data%"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "datanest_listConnections",
+        "tags": [
+          "database",
+          "sql",
+          "datanest"
+        ],
+        "toolReferenceName": "datanestConnections",
+        "displayName": "%tools.listConnections.displayName%",
+        "modelDescription": "List the database connections the user has saved in DataNest: id, name, driver, default database and flags (production, readOnly, disabled). Never returns passwords or hosts. Call this first.",
+        "userDescription": "%tools.listConnections.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(database)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "datanest_listTables",
+        "tags": [
+          "database",
+          "sql",
+          "datanest"
+        ],
+        "toolReferenceName": "datanestTables",
+        "displayName": "%tools.listTables.displayName%",
+        "modelDescription": "List the tables and views of a SQL connection. Without \"database\" (where the server has several) it lists the databases; without \"schema\" (where databases have schemas) it lists the schemas; pass the one you pick on the next call.",
+        "userDescription": "%tools.listTables.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(list-tree)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "connection": {
+              "type": "string",
+              "description": "Connection id or name, from datanest_listConnections."
+            },
+            "database": {
+              "type": "string",
+              "description": "Database name."
+            },
+            "schema": {
+              "type": "string",
+              "description": "Schema name."
+            }
+          },
+          "required": [
+            "connection"
+          ]
+        }
+      },
+      {
+        "name": "datanest_describeTable",
+        "tags": [
+          "database",
+          "sql",
+          "datanest"
+        ],
+        "toolReferenceName": "datanestTable",
+        "displayName": "%tools.describeTable.displayName%",
+        "modelDescription": "Describe one table of a SQL connection: columns with types, nullability, primary key and default; foreign keys; indexes.",
+        "userDescription": "%tools.describeTable.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(table)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "connection": {
+              "type": "string",
+              "description": "Connection id or name, from datanest_listConnections."
+            },
+            "table": {
+              "type": "string",
+              "description": "Table or view name."
+            },
+            "database": {
+              "type": "string"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "connection",
+            "table"
+          ]
+        }
+      },
+      {
+        "name": "datanest_runReadOnlyQuery",
+        "tags": [
+          "database",
+          "sql",
+          "datanest"
+        ],
+        "toolReferenceName": "datanestQuery",
+        "displayName": "%tools.runReadOnlyQuery.displayName%",
+        "modelDescription": "Run ONE SQL statement that only reads (SELECT, SHOW, EXPLAIN, ...) on a SQL connection and return at most 100 rows as JSON. Statements that may change data or settings are refused; the user is asked to approve each query. Qualify table names with the schema when the database has schemas.",
+        "userDescription": "%tools.runReadOnlyQuery.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(play)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "connection": {
+              "type": "string",
+              "description": "Connection id or name, from datanest_listConnections."
+            },
+            "sql": {
+              "type": "string",
+              "description": "One read-only SQL statement."
+            },
+            "database": {
+              "type": "string",
+              "description": "Database to run it in."
+            }
+          },
+          "required": [
+            "connection",
+            "sql"
+          ]
+        }
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "datanest.chat",
+        "name": "datanest",
+        "fullName": "DataNest",
+        "description": "%chat.description%",
+        "isSticky": false,
+        "commands": [
+          {
+            "name": "schema",
+            "description": "%chat.schema.description%"
+          },
+          {
+            "name": "query",
+            "description": "%chat.query.description%"
+          },
+          {
+            "name": "explain",
+            "description": "%chat.explain.description%"
+          }
+        ]
       }
     ]
   },

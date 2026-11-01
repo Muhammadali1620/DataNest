@@ -198,7 +198,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     new RunStatus(runner),
     vscode.languages.registerCompletionItemProvider(
       { language: 'sql' },
-      new SqlCompletionProvider({ editors, store, manager, cache, logger }),
+      new SqlCompletionProvider({
+        editors,
+        store,
+        manager,
+        cache,
+        logger,
+        enabled: () =>
+          vscode.workspace
+            .getConfiguration(CONFIG_SECTION)
+            .get<boolean>(CONFIG_KEYS.completionEnabled, true),
+      }),
       ...TRIGGER_CHARACTERS,
     ),
   );
@@ -394,7 +404,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     treeDataProvider: tree,
     showCollapseAll: true,
     canSelectMany: true,
-    dragAndDropController: new ConnectionsDragAndDrop(store, logger),
+    dragAndDropController: new ConnectionsDragAndDrop(
+      store,
+      logger,
+      async (connectionId) => (await manager.driverOf(connectionId)).dialect,
+    ),
   });
   // A removed connection, or one that now points elsewhere, loses its remembered version.
   const pruneVersions = (): void => {

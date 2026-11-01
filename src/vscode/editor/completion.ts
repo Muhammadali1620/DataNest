@@ -15,6 +15,8 @@ export interface CompletionDeps {
   readonly manager: ConnectionManager;
   readonly cache: MetadataCache;
   readonly logger: Logger;
+  /** Asked at every request, so the setting works live (V13.4); absent means always on. */
+  readonly enabled?: () => boolean;
 }
 
 /** Characters that trigger completion on their own. */
@@ -49,7 +51,7 @@ export class SqlCompletionProvider implements vscode.CompletionItemProvider {
     document: vscode.TextDocument,
     position: vscode.Position,
   ): Promise<vscode.CompletionItem[]> {
-    if (document.languageId !== SQL_LANGUAGE_ID) {
+    if (document.languageId !== SQL_LANGUAGE_ID || this.deps.enabled?.() === false) {
       return [];
     }
     const documentUri = document.uri.toString();

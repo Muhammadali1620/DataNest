@@ -1962,6 +1962,18 @@
           "markdownDescription": "%configuration.pageSize.description%",
           "scope": "window"
         },
+        "datanest.completion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.completion.enabled.description%",
+          "scope": "window"
+        },
+        "datanest.tree.dragNames": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%configuration.tree.dragNames.description%",
+          "scope": "window"
+        },
         "datanest.results.rowHeight": {
           "type": "string",
           "enum": [

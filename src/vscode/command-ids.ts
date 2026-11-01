@@ -260,6 +260,10 @@ export const CONFIG_KEYS = {
   rowLimit: 'rowLimit',
   /** Rows one page of a table view holds. */
   pageSize: 'pageSize',
+  /** DataNest's own SQL completion; the editor's quick suggestions stay as they are (V13.4). */
+  completionEnabled: 'completion.enabled',
+  /** Dragging a tree node into an editor types its name (V13.4). */
+  treeDragNames: 'tree.dragNames',
   /** How roomy the result grid is by default (V13.3): row height and widest own column width. */
   resultsRowHeight: 'results.rowHeight',
   resultsMaxColumnWidth: 'results.maxColumnWidth',

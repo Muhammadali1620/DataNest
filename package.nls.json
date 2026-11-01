@@ -39,6 +39,8 @@
   "configuration.rowLimit.description": "How many rows one statement may bring back. Larger results are cut off, and the result shows that it was truncated.",
   "commands.results.show.title": "Show Results",
   "commands.table.open.title": "Open Table",
+  "configuration.completion.enabled.description": "Offer DataNest's own SQL completion (keywords, tables, columns) while typing. Turn it off to keep the editor's quick suggestions and other completion providers only; the editor's `editor.quickSuggestions` setting is not touched.",
+  "configuration.tree.dragNames.description": "Dragging a database, schema, table, view or column from the tree into a text editor types its name, quoted for that database. Turn it off to drag only inside the tree.",
   "configuration.pageSize.description": "Rows shown on one page when a table is opened from the tree.",
   "configuration.results.rowHeight.description": "How tall the rows of the result grid are. A button in the grid's toolbar changes it for you alone, and that choice wins over this setting.",
   "configuration.results.rowHeight.compact": "Compact: 24 px, more rows on screen.",

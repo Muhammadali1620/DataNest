@@ -22,6 +22,7 @@ const etcdConfig = (id: string, extra: Partial<ConnectionConfig> = {}): Connecti
 
 interface Calls {
   opened: { connectionId: string; key: string }[];
+  openOptions: ({ readonly watchPrefix?: boolean } | undefined)[];
   refreshed: (TreeNode | undefined)[];
   loadMore: { connectionId: string; prefix: string }[];
   resets: (string | undefined)[];
@@ -79,8 +80,9 @@ function handlers() {
       },
     },
     ui,
-    openKey: (connectionId, key) => {
+    openKey: (connectionId, key, options) => {
       calls.opened.push({ connectionId, key: key.text });
+      calls.openOptions.push(options);
       return Promise.resolve();
     },
     texts: { noEtcd: 'no etcd', readOnly: 'read-only' },
@@ -122,6 +124,7 @@ beforeEach(() => {
   pickedConnection = undefined;
   calls = {
     opened: [],
+    openOptions: [],
     refreshed: [],
     loadMore: [],
     resets: [],
@@ -171,6 +174,43 @@ describe('openKey and loadMoreKeys', () => {
   it('ignores load more from anything else', async () => {
     await handlers().loadMoreKeys(folderNode('/a/'));
     expect(calls.loadMore).toEqual([]);
+  });
+});
+
+describe('watchPrefix', () => {
+  it('opens the page of the folder with the watch of everything below it', async () => {
+    await handlers().watchPrefix(folderNode('/app/'));
+    expect(calls.opened).toEqual([{ connectionId: 'c1', key: '/app/' }]);
+    expect(calls.openOptions).toEqual([{ watchPrefix: true }]);
+  });
+
+  it('watches the whole store from the connection', async () => {
+    await handlers().watchPrefix(connectionNode());
+    expect(calls.opened).toEqual([{ connectionId: 'c1', key: '' }]);
+    expect(calls.openOptions).toEqual([{ watchPrefix: true }]);
+  });
+
+  it('is allowed on a read-only connection: it only reads', async () => {
+    configs = [etcdConfig('c1', { readOnly: true })];
+    await handlers().watchPrefix(folderNode('/app/'));
+    expect(calls.opened).toHaveLength(1);
+  });
+
+  it('picks the connection when run from the palette with several, and backs out', async () => {
+    configs = [etcdConfig('c1'), etcdConfig('c2')];
+    pickedConnection = 'c2';
+    await handlers().watchPrefix(undefined);
+    expect(calls.opened).toEqual([{ connectionId: 'c2', key: '' }]);
+    pickedConnection = undefined;
+    await handlers().watchPrefix(undefined);
+    expect(calls.opened).toHaveLength(1);
+  });
+
+  it('refuses a connection that is not etcd, and says when there is none', async () => {
+    configs = [etcdConfig('c1', { driver: 'redis' })];
+    expect((await failure(handlers().watchPrefix(connectionNode()))).message).toBe('no etcd');
+    configs = [];
+    expect((await failure(handlers().watchPrefix(undefined))).code).toBe('not-found');
   });
 });
 

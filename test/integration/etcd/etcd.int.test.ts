@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { driver } from '../../../src/drivers/etcd';
@@ -36,6 +39,14 @@ import {
   scopeOf,
   userRoles,
 } from '../../../src/services/etcd/etcd-auth';
+import {
+  listAlarms,
+  listMembers,
+  memberStatus,
+  SNAPSHOT_HASH_BYTES,
+  takeSnapshot,
+} from '../../../src/services/etcd/etcd-cluster';
+import { openSnapshotFile } from '../../../src/services/etcd/snapshot-file';
 import { listPage } from '../../../src/services/etcd/key-listing';
 import { type EtcdWatchEvent, watchKeys } from '../../../src/services/etcd/etcd-watch';
 import { prefixEnd } from '../../../src/services/etcd/etcd-codec';
@@ -754,6 +765,122 @@ describe('etcd driver on an etcd cluster', () => {
       page.stopWatch();
       expect(page.state().watching).toBeUndefined();
     });
+  });
+});
+
+describe('etcd cluster: members, status and a snapshot', () => {
+  let session: EtcdSession;
+
+  beforeAll(async () => {
+    session = await driver.openSession(config());
+    await deletePrefix(session, encode('/dn-it/cluster/'));
+  });
+
+  afterAll(async () => {
+    await deletePrefix(session, encode('/dn-it/cluster/'));
+    await session.close();
+  });
+
+  it('lists the one member, which is the connected one and the leader', async () => {
+    const members = await listMembers(session);
+    expect(members).toHaveLength(1);
+    expect(members[0]).toMatchObject({ name: 'datanest', learner: false });
+    expect(members[0]?.clientUrls.length).toBeGreaterThan(0);
+    expect(members[0]?.peerUrls.length).toBeGreaterThan(0);
+    const status = await memberStatus(session);
+    expect(status.memberId).toBe(members[0]?.id);
+    expect(status.leaderId).toBe(status.memberId);
+    expect(status.version).toMatch(/^3\./u);
+    expect(status.dbSize).toBeGreaterThan(0);
+    expect(status.dbSizeInUse).toBeLessThanOrEqual(status.dbSize);
+    expect(status.errors).toEqual([]);
+  });
+
+  it('has no alarms', async () => {
+    expect(await listAlarms(session)).toEqual([]);
+  });
+
+  it('streams a snapshot whose checksum matches and that holds a bbolt file', async () => {
+    for (let index = 0; index < 50; index += 1) {
+      await putEntry(session, encode(`/dn-it/cluster/k${index}`), {
+        value: encode('x'.repeat(2000)),
+      });
+    }
+    const pieces: Uint8Array[] = [];
+    const result = await takeSnapshot(
+      session,
+      (chunk) => {
+        pieces.push(chunk.slice());
+        return Promise.resolve();
+      },
+      new AbortController().signal,
+    );
+    const file = Buffer.concat(pieces);
+    expect(result.verified).toBe(true);
+    expect(result.bytes).toBe(file.length);
+    expect(file.length).toBeGreaterThan(SNAPSHOT_HASH_BYTES + 100_000);
+    // bbolt's magic number sits at offset 16 of the first page.
+    expect(file.readUInt32LE(16)).toBe(0xed0cdaed);
+  });
+
+  it('saves a snapshot to a file and drops the half file when cancelled', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'datanest-etcd-snap-'));
+    try {
+      const path = join(dir, 'a.db');
+      const sink = await openSnapshotFile(path);
+      const result = await takeSnapshot(
+        session,
+        (chunk) => sink.write(chunk),
+        new AbortController().signal,
+      );
+      await sink.close(true);
+      expect(result.verified).toBe(true);
+      expect((await stat(path)).size).toBe(result.bytes);
+      expect((await readFile(path)).readUInt32LE(16)).toBe(0xed0cdaed);
+
+      const other = join(dir, 'b.db');
+      const half = await openSnapshotFile(other);
+      const cancelled = new AbortController();
+      cancelled.abort();
+      await expect(
+        takeSnapshot(session, (chunk) => half.write(chunk), cancelled.signal),
+      ).rejects.toMatchObject({ code: 'cancelled' });
+      await half.close(false);
+      await expect(stat(other)).rejects.toThrow();
+      await expect(stat(`${other}.part`)).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('follows every key below a folder on the page of the folder', async () => {
+    const folder = '/dn-it/cluster/watched/';
+    const page = new EtcdKeyModel({
+      key: redisKeyRef(encode(folder)),
+      connectionName: 'etcd',
+      readOnly: false,
+      session: () => Promise.resolve(session),
+      watchFlushMs: 20,
+    });
+    await page.refresh();
+    expect(page.state().exists).toBe(false);
+    const changed = vi.fn();
+    await page.startWatch(true, changed);
+    await vi.waitFor(() => {
+      expect(changed).toHaveBeenCalled();
+    });
+    await putEntry(session, encode(`${folder}one`), { value: encode('1') });
+    await putEntry(session, encode(`${folder}deeper/two`), { value: encode('2') });
+    await putEntry(session, encode('/dn-it/cluster/elsewhere'), { value: encode('3') });
+    await vi.waitFor(() => {
+      expect(page.state().events).toHaveLength(2);
+    });
+    expect(page.state().watchPrefix).toBe(true);
+    expect(page.state().events?.map((event) => event.key)).toEqual([
+      `${folder}one`,
+      `${folder}deeper/two`,
+    ]);
+    page.stopWatch();
   });
 });
 

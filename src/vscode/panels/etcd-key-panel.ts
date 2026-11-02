@@ -30,6 +30,8 @@ export interface EtcdKeyPanelDeps {
   readonly model: EtcdKeyModel;
   readonly policy: WritePolicy;
   readonly onChanged: (change: EtcdKeyChange) => void;
+  /** Start watching every key below this one as soon as the page has read it (V13.35). */
+  readonly watchPrefix?: boolean;
 }
 
 /** Long names are cut in the tab title; the page shows them whole. */
@@ -56,7 +58,11 @@ export class EtcdKeyPanel implements vscode.Disposable {
     const existing = EtcdKeyPanel.open.get(id);
     if (existing !== undefined && !existing.disposed) {
       existing.panel.reveal();
-      void existing.reload();
+      void existing.reload().then(async () => {
+        if (deps.watchPrefix === true) {
+          await existing.followPrefix();
+        }
+      });
       return existing;
     }
     const panel = new EtcdKeyPanel(deps);
@@ -154,7 +160,11 @@ export class EtcdKeyPanel implements vscode.Disposable {
     // A hidden tab is unloaded, so the page asks for its state on every load (D21).
     this.rpc.on('ready', () => {
       if (this.state === undefined) {
-        void this.reload();
+        void this.reload().then(async () => {
+          if (deps.watchPrefix === true) {
+            await this.followPrefix();
+          }
+        });
       } else {
         this.rpc.emit('state', this.state);
       }
@@ -213,6 +223,26 @@ export class EtcdKeyPanel implements vscode.Disposable {
     }
     this.rpc.dispose();
     this.panel.dispose();
+  }
+
+  /** Starts the watch of every key below this one, unless it already runs. */
+  private async followPrefix(): Promise<void> {
+    const { model } = this.deps;
+    if (this.disposed || model.watching) {
+      return;
+    }
+    try {
+      this.push(
+        await model.startWatch(true, () => {
+          this.push(model.state());
+        }),
+      );
+    } catch (error) {
+      this.log.warn('Starting the watch failed', error);
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t('DataNest: {0}', error instanceof Error ? error.message : String(error)),
+      );
+    }
   }
 
   private async reload(): Promise<void> {

@@ -2,13 +2,15 @@
 // and modal questions. Kept apart from `etcd-commands.ts` so that file stays testable
 // without an editor.
 
+import { homedir } from 'node:os';
 import * as vscode from 'vscode';
 import type { ConnectionStore } from '../../services/connection-store';
 import { describeTarget } from '../../shared/connection';
-import type { AccessPickItem, EtcdAccessUi } from './etcd-access-commands';
+import type { AccessPickItem } from './etcd-access-commands';
+import type { EtcdClusterUi } from './etcd-cluster-commands';
 import type { EtcdCommandUi } from './etcd-commands';
 
-export function etcdCommandUi(store: Pick<ConnectionStore, 'get'>): EtcdAccessUi {
+export function etcdCommandUi(store: Pick<ConnectionStore, 'get'>): EtcdClusterUi {
   const ui: EtcdCommandUi = {
     input: async (options) =>
       await vscode.window.showInputBox({
@@ -71,6 +73,32 @@ export function etcdCommandUi(store: Pick<ConnectionStore, 'get'>): EtcdAccessUi
   };
   return {
     ...ui,
+    saveFile: async (options) =>
+      (
+        await vscode.window.showSaveDialog({
+          title: options.title,
+          defaultUri: vscode.Uri.joinPath(
+            vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(homedir()),
+            options.defaultName,
+          ),
+          filters: { [options.filterName]: [...options.extensions] },
+        })
+      )?.fsPath,
+    withProgress: async <T>(title: string, task: (signal: AbortSignal) => Promise<T>) =>
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title, cancellable: true },
+        async (_progress, token) => {
+          const abort = new AbortController();
+          const subscription = token.onCancellationRequested(() => {
+            abort.abort();
+          });
+          try {
+            return await task(abort.signal);
+          } finally {
+            subscription.dispose();
+          }
+        },
+      ),
     pick: async <T>(options: {
       readonly title: string;
       readonly placeHolder?: string;

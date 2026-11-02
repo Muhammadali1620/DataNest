@@ -55,15 +55,20 @@ export interface EtcdCommandDeps {
   readonly session: (connectionId: string) => Promise<EtcdCaller>;
   readonly tree: { refresh(node?: TreeNode): void };
   readonly ui: EtcdCommandUi;
-  /** Opens the page of a key. */
-  readonly openKey: (connectionId: string, key: RedisKeyRef) => Promise<void>;
+  /** Opens the page of a key; with `watchPrefix` it starts watching every key below it (V13.35). */
+  readonly openKey: (
+    connectionId: string,
+    key: RedisKeyRef,
+    options?: { readonly watchPrefix?: boolean },
+  ) => Promise<void>;
   readonly texts: {
     readonly noEtcd: string;
     readonly readOnly: string;
   };
 }
 
-export type EtcdCommandName = 'loadMoreKeys' | 'openKey' | 'findKey' | 'newKey' | 'deleteKeys';
+export type EtcdCommandName =
+  'loadMoreKeys' | 'openKey' | 'findKey' | 'newKey' | 'deleteKeys' | 'watchPrefix';
 
 export function etcdCommandHandlers(
   deps: EtcdCommandDeps,
@@ -129,6 +134,20 @@ export function etcdCommandHandlers(
       if (isTreeNode(target) && target.kind === 'etcdKey') {
         await deps.openKey(target.connectionId, target.key);
       }
+      return undefined;
+    },
+
+    /**
+     * Follows every key below a folder (or the whole store, from the connection): the page
+     * of the folder opens with the watch already running. Watching only reads, so a
+     * read-only connection may do it.
+     */
+    watchPrefix: async (target?: CommandTarget) => {
+      const connectionId = await connectionOf(target);
+      if (connectionId === undefined) {
+        return undefined;
+      }
+      await deps.openKey(connectionId, folderOf(target), { watchPrefix: true });
       return undefined;
     },
 

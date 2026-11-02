@@ -770,6 +770,18 @@
         "icon": "$(organization)"
       },
       {
+        "command": "datanest.etcd.cluster",
+        "title": "%commands.etcd.cluster.title%",
+        "category": "DataNest",
+        "icon": "$(server-environment)"
+      },
+      {
+        "command": "datanest.etcd.watchPrefix",
+        "title": "%commands.etcd.watchPrefix.title%",
+        "category": "DataNest",
+        "icon": "$(eye)"
+      },
+      {
         "command": "datanest.etcd.newKey",
         "title": "%commands.etcd.newKey.title%",
         "category": "DataNest",
@@ -2140,6 +2152,16 @@
           "command": "datanest.etcd.manageAccess",
           "when": "view == datanest.connections && (viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
           "group": "1_keys@9"
+        },
+        {
+          "command": "datanest.etcd.cluster",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
+          "group": "1_keys@10"
+        },
+        {
+          "command": "datanest.etcd.watchPrefix",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred || viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
+          "group": "1_keys@2"
         },
         {
           "command": "datanest.etcd.newKey",

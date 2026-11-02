@@ -49,7 +49,7 @@ function objectOf<T extends object>(value: unknown): T {
 }
 
 /** The kinds of failure a stream reports, from gRPC's codes. */
-function kindOf(code: unknown): DbErrorCode {
+export function kindOf(code: unknown): DbErrorCode {
   switch (code) {
     case 7:
       return 'permission-denied';

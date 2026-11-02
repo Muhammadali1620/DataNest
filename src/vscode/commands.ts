@@ -107,6 +107,8 @@ import type { EtcdKeyBrowser } from '../services/etcd/key-browser';
 import { EtcdKeyModel } from './panels/etcd-key-model';
 import { EtcdKeyPanel } from './panels/etcd-key-panel';
 import { etcdAccessHandler } from './etcd/etcd-access-commands';
+import { openSnapshotFile } from '../services/etcd/snapshot-file';
+import { etcdClusterHandler } from './etcd/etcd-cluster-commands';
 import { etcdCommandHandlers } from './etcd/etcd-commands';
 import { etcdCommandUi } from './etcd/etcd-ui';
 import type { ZookeeperNodeBrowser } from '../services/zookeeper/node-browser';
@@ -451,7 +453,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   /** The tree's session of an etcd connection. */
   const etcdSession = async (connectionId: string) =>
     await deps.manager.acquireEtcd(ConnectionManager.treeOwner(connectionId), { connectionId });
-  const openEtcdKey = (connectionId: string, key: RedisKeyRef): Promise<void> => {
+  const openEtcdKey = (
+    connectionId: string,
+    key: RedisKeyRef,
+    options: { readonly watchPrefix?: boolean } = {},
+  ): Promise<void> => {
     const config = deps.store.get(connectionId);
     EtcdKeyPanel.show({
       extensionUri: deps.extensionUri,
@@ -469,9 +475,18 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         deps.etcdKeys.reset(change.connectionId);
         deps.tree.refresh();
       },
+      ...(options.watchPrefix === true ? { watchPrefix: true } : {}),
     });
     return Promise.resolve();
   };
+  const etcdCluster = etcdClusterHandler({
+    store: deps.store,
+    session: etcdSession,
+    ui: etcdCommandUi(deps.store),
+    openSink: (path) => openSnapshotFile(path),
+    today: () => new Date().toISOString().slice(0, 10),
+    texts: { noEtcd: vscode.l10n.t('There is no etcd connection yet') },
+  });
   const etcdCommands = etcdCommandHandlers({
     store: deps.store,
     browser: deps.etcdKeys,
@@ -1292,6 +1307,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.etcdFindKey]: etcdCommands.findKey,
     [COMMAND_IDS.etcdNewKey]: etcdCommands.newKey,
     [COMMAND_IDS.etcdManageAccess]: etcdAccess,
+    [COMMAND_IDS.etcdCluster]: etcdCluster,
+    [COMMAND_IDS.etcdWatchPrefix]: etcdCommands.watchPrefix,
     [COMMAND_IDS.etcdDeleteKeys]: etcdCommands.deleteKeys,
     [COMMAND_IDS.zookeeperLoadMoreNodes]: zookeeperCommands.loadMoreNodes,
     [COMMAND_IDS.zookeeperOpenNode]: zookeeperCommands.openNode,

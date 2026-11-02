@@ -20,12 +20,16 @@ import { exportServers, parseServerFile } from '../../services/server-transfer';
 import type { ServerStore } from '../../services/server-store';
 import type { SftpHub } from '../../services/sftp-hub';
 import {
+  changeAttributes,
   copyTree,
   createEmptyFile,
   downloadTree,
   entryAt,
   exists,
   moveEntry,
+  moveTree,
+  type MoveOutcome,
+  parseOwner,
   removeTree,
   type TransferControl,
   uploadTree,
@@ -62,6 +66,9 @@ export type ServerCommandName =
   | 'newFolder'
   | 'newFile'
   | 'chmod'
+  | 'chmodTree'
+  | 'chown'
+  | 'compareWithLocal'
   | 'copyPath'
   | 'copyTo'
   | 'moveTo'
@@ -75,6 +82,11 @@ export interface ServerCommands {
   readonly handlers: Record<ServerCommandName, Handler>;
   /** Files dropped on the tree from the explorer. */
   readonly drop: (target: ServerNode | undefined, paths: readonly string[]) => Promise<void>;
+  /** Items of the tree dragged onto a folder or a server: moved there. */
+  readonly moveEntries: (
+    target: ServerNode | undefined,
+    entries: readonly Entry[],
+  ) => Promise<void>;
 }
 
 export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
@@ -267,6 +279,106 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
       return false;
     }
     return answer === open;
+  };
+
+  /** Moves one item to a full path on a server, the same or another. */
+  const moveOne = async (
+    fromServer: string,
+    entry: SftpEntry,
+    toServer: string,
+    toPath: string,
+    control: TransferControl,
+  ): Promise<MoveOutcome> =>
+    await deps.hub.run(fromServer, async (from) => {
+      const found = (await entryAt(from, entry.path)) ?? entry;
+      if (toServer === fromServer) {
+        return await moveTree(from, found, from, toPath, control);
+      }
+      return await deps.hub.run(toServer, (to) => moveTree(from, found, to, toPath, control));
+    });
+
+  /** Between servers a move is a copy and a delete: say so before it starts. */
+  const confirmCrossMove = async (names: readonly string[], target: string): Promise<boolean> => {
+    const move = vscode.l10n.t('Move');
+    const answer = await vscode.window.showWarningMessage(
+      names.length === 1
+        ? vscode.l10n.t('Move "{0}" to the server "{1}"?', names[0] ?? '', target)
+        : vscode.l10n.t('Move {0} items to the server "{1}"?', names.length, target),
+      {
+        modal: true,
+        detail: vscode.l10n.t(
+          'The files are copied first; the originals are deleted from their server only after every file arrived.',
+        ),
+      },
+      move,
+    );
+    return answer === move;
+  };
+
+  const reportMoves = (outcomes: readonly MoveOutcome[]): void => {
+    const kept = outcomes.filter((outcome) => !outcome.sourceRemoved).length;
+    if (kept > 0) {
+      void vscode.window.showWarningMessage(
+        vscode.l10n.t(
+          'Copied, but {0} originals were kept: they hold links or special files that were not copied.',
+          kept,
+        ),
+      );
+    }
+  };
+
+  const moveEntries = async (
+    target: ServerNode | undefined,
+    entries: readonly Entry[],
+  ): Promise<void> => {
+    if (target === undefined) {
+      return;
+    }
+    const folder = await folderPathOf(target);
+    // Already in that folder, or the folder itself: nothing to do.
+    const items = entries.filter(
+      (item) =>
+        !(
+          item.serverId === folder.serverId &&
+          (parentPath(item.entry.path) === folder.path || item.entry.path === folder.path)
+        ),
+    );
+    if (items.length === 0) {
+      return;
+    }
+    requireWritable(folder.serverId);
+    for (const id of new Set(items.map((item) => item.serverId))) {
+      requireWritable(id);
+    }
+    if (
+      items.some((item) => item.serverId !== folder.serverId) &&
+      !(await confirmCrossMove(
+        items.map((item) => item.entry.name),
+        serverOf(folder.serverId).name,
+      ))
+    ) {
+      return;
+    }
+    try {
+      const outcomes = await transferring(vscode.l10n.t('Moving…'), async (control) => {
+        const done: MoveOutcome[] = [];
+        for (const item of items) {
+          done.push(
+            await moveOne(
+              item.serverId,
+              item.entry,
+              folder.serverId,
+              joinRemote(folder.path, item.entry.name),
+              control,
+            ),
+          );
+        }
+        return done;
+      });
+      reportMoves(outcomes);
+    } finally {
+      deps.tree.refresh();
+    }
   };
 
   const drop = async (target: ServerNode | undefined, paths: readonly string[]): Promise<void> => {
@@ -719,21 +831,191 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
     moveTo: async (node?: unknown) => {
       const { serverId, entry } = oneEntry(node);
       requireWritable(serverId);
-      const destination = await askDestination(
-        deps,
-        serverId,
-        entry,
-        vscode.l10n.t('Move to'),
-        true,
-      );
+      const destination = await askDestination(deps, serverId, entry, vscode.l10n.t('Move to'));
       if (destination === undefined) {
         return undefined;
       }
-      await deps.hub.run(serverId, async (session) => {
-        const found = (await entryAt(session, entry.path)) ?? entry;
-        await moveEntry(session, found, destination.path);
-      });
+      requireWritable(destination.serverId);
+      if (
+        destination.serverId !== serverId &&
+        !(await confirmCrossMove([entry.name], serverOf(destination.serverId).name))
+      ) {
+        return undefined;
+      }
+      try {
+        const outcome = await transferring(vscode.l10n.t('Moving…'), (control) =>
+          moveOne(serverId, entry, destination.serverId, destination.path, control),
+        );
+        reportMoves([outcome]);
+      } finally {
+        deps.tree.refresh();
+      }
+      return undefined;
+    },
+
+    chmodTree: async (node?: unknown) => {
+      const { serverId, entry } = oneEntry(node);
+      requireWritable(serverId);
+      if (entry.kind !== 'directory') {
+        return undefined;
+      }
+      const ask = async (title: string, value: string): Promise<number | null | undefined> => {
+        const text = await vscode.window.showInputBox({
+          title,
+          prompt: vscode.l10n.t('Octal, e.g. {0}. Leave empty to keep as it is.', value),
+          value,
+          validateInput: (input) =>
+            input.trim() === '' || parseMode(input) !== undefined
+              ? undefined
+              : vscode.l10n.t('Three or four octal digits, like 644 or 0755'),
+        });
+        return text === undefined ? undefined : text.trim() === '' ? null : parseMode(text);
+      };
+      const fileMode = await ask(
+        vscode.l10n.t('Permissions of the files in {0}', entry.name),
+        '644',
+      );
+      if (fileMode === undefined) {
+        return undefined;
+      }
+      const folderMode = await ask(
+        vscode.l10n.t('Permissions of the folders in {0}', entry.name),
+        '755',
+      );
+      if (folderMode === undefined || (fileMode === null && folderMode === null)) {
+        return undefined;
+      }
+      const change = vscode.l10n.t('Change');
+      const answer = await vscode.window.showWarningMessage(
+        vscode.l10n.t('Change permissions of everything inside "{0}"?', entry.name),
+        {
+          modal: true,
+          detail: [
+            fileMode === null ? '' : vscode.l10n.t('Files: {0}', modeOctal(fileMode)),
+            folderMode === null
+              ? ''
+              : vscode.l10n.t('Folders: {0} (and "{1}" itself)', modeOctal(folderMode), entry.name),
+            vscode.l10n.t('Links are left alone.'),
+          ]
+            .filter((line) => line !== '')
+            .join('\n'),
+        },
+        change,
+      );
+      if (answer !== change) {
+        return undefined;
+      }
+      const result = await transferring(vscode.l10n.t('Changing permissions…'), (control) =>
+        deps.hub.run(serverId, (session) =>
+          changeAttributes(
+            session,
+            entry,
+            {
+              ...(fileMode === null ? {} : { fileMode }),
+              ...(folderMode === null ? {} : { folderMode }),
+            },
+            true,
+            control,
+          ),
+        ),
+      );
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Permissions changed: {0} items, {1} links skipped',
+          result.changed,
+          result.skipped,
+        ),
+      );
       deps.tree.refresh();
+      return undefined;
+    },
+
+    chown: async (node?: unknown) => {
+      const { serverId, entry } = oneEntry(node);
+      requireWritable(serverId);
+      const current =
+        entry.uid === undefined && entry.gid === undefined
+          ? ''
+          : `${entry.uid ?? ''}:${entry.gid ?? ''}`;
+      const text = await vscode.window.showInputBox({
+        title: vscode.l10n.t('Owner of {0}', entry.name),
+        prompt: vscode.l10n.t(
+          'Numeric user and group ids as user:group, e.g. 1000:1000. Only the user, 1000, or only the group, :1000, also work.',
+        ),
+        value: current,
+        validateInput: (value) =>
+          parseOwner(value) === undefined
+            ? vscode.l10n.t('Give numbers, like 1000:1000')
+            : undefined,
+      });
+      const owner = text === undefined ? undefined : parseOwner(text);
+      if (owner === undefined) {
+        return undefined;
+      }
+      let recursive = false;
+      if (entry.kind === 'directory') {
+        const scope = await vscode.window.showQuickPick(
+          [
+            { label: vscode.l10n.t('Only this folder'), recursive: false },
+            { label: vscode.l10n.t('Everything inside it too'), recursive: true },
+          ],
+          { title: vscode.l10n.t('Owner of {0}', entry.name) },
+        );
+        if (scope === undefined) {
+          return undefined;
+        }
+        recursive = scope.recursive;
+      }
+      const result = await transferring(vscode.l10n.t('Changing the owner…'), (control) =>
+        deps.hub.run(serverId, (session) =>
+          changeAttributes(session, entry, owner, recursive, control),
+        ),
+      );
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Owner changed: {0} items, {1} links skipped',
+          result.changed,
+          result.skipped,
+        ),
+      );
+      deps.tree.refresh();
+      return undefined;
+    },
+
+    compareWithLocal: async (node?: unknown) => {
+      const { entry, serverId } = oneEntry(node);
+      if (entry.kind !== 'file') {
+        return undefined;
+      }
+      if (entry.size > deps.maxOpenBytes() || !opensAsText(fileKindOf(entry.name))) {
+        throw new DbError(
+          'unsupported',
+          msg('"{0}" is too large or not a text file, so it is not compared', entry.name),
+        );
+      }
+      const picked = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        canSelectFiles: true,
+        canSelectFolders: false,
+        openLabel: vscode.l10n.t('Compare'),
+        title: vscode.l10n.t('Compare "{0}" with a file of this machine', entry.name),
+      });
+      const local = picked?.[0];
+      if (local === undefined) {
+        return undefined;
+      }
+      if ((await statLocal(local.fsPath)).size > deps.maxOpenBytes()) {
+        throw new DbError(
+          'unsupported',
+          msg('"{0}" is too large to compare', basename(local.fsPath)),
+        );
+      }
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        local,
+        vscode.Uri.from(sftpUriParts(serverId, entry.path)),
+        vscode.l10n.t('{0} ↔ {1} on the server', basename(local.fsPath), entry.name),
+      );
       return undefined;
     },
 
@@ -741,7 +1023,7 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
       deps.tree.refresh(isServerNode(node) ? node : undefined);
     },
   };
-  return { handlers, drop };
+  return { handlers, drop, moveEntries };
 }
 
 /**
@@ -753,11 +1035,10 @@ async function askDestination(
   serverId: string,
   entry: SftpEntry,
   title: string,
-  sameServerOnly = false,
 ): Promise<{ serverId: string; path: string } | undefined> {
   let target = serverId;
   const servers = deps.store.list();
-  if (!sameServerOnly && servers.length > 1) {
+  if (servers.length > 1) {
     const picked = await vscode.window.showQuickPick(
       servers.map((server) => ({
         label: server.name,

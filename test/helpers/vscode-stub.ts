@@ -129,6 +129,13 @@ function makeUri(scheme: string, authority: string, path: string): StubUri {
   };
 }
 
+export class DataTransferItem {
+  constructor(readonly value: unknown) {}
+  asString(): Promise<string> {
+    return Promise.resolve(String(this.value));
+  }
+}
+
 export const Uri = {
   from: (parts: { scheme: string; authority?: string; path?: string }): StubUri =>
     makeUri(parts.scheme, parts.authority ?? '', parts.path ?? ''),

@@ -397,3 +397,119 @@ export async function freeName(
 export function targetInFolder(folder: string, source: string): string {
   return joinRemote(folder, baseName(source));
 }
+
+export interface MoveOutcome {
+  readonly result: TransferResult;
+  /** False when the source was kept because something in it was not copied (a link, a device). */
+  readonly sourceRemoved: boolean;
+}
+
+/**
+ * Moves between two places that may be on different servers: a rename when it is one session,
+ * otherwise a copy and then a delete of the source. The source goes only after every byte was
+ * written, and is kept when the copy had to skip something (a link, a device), so that
+ * nothing is lost by a "move".
+ */
+export async function moveTree(
+  from: SftpSession,
+  fromEntry: Pick<SftpEntry, 'path' | 'kind' | 'link'>,
+  to: SftpSession,
+  toPath: string,
+  control: TransferControl = {},
+): Promise<MoveOutcome> {
+  if (from === to) {
+    await moveEntry(from, fromEntry, toPath);
+    return { result: { files: 0, folders: 0, bytes: 0, skipped: 0 }, sourceRemoved: true };
+  }
+  if (await exists(to, toPath)) {
+    throw new DbError('unsupported', msg('{0} already exists on the server', toPath));
+  }
+  const result = await copyTree(from, fromEntry, to, toPath, control);
+  if (result.skipped > 0) {
+    return { result, sourceRemoved: false };
+  }
+  await removeTree(from, fromEntry, control);
+  return { result, sourceRemoved: true };
+}
+
+export interface AttributeChange {
+  /** New permission bits for files. */
+  readonly fileMode?: number;
+  /** New permission bits for folders. */
+  readonly folderMode?: number;
+  readonly uid?: number;
+  readonly gid?: number;
+}
+
+export interface AttributeResult {
+  readonly changed: number;
+  /** Links, which are left alone: a change would land on what they point at. */
+  readonly skipped: number;
+}
+
+type Attributed = Pick<SftpEntry, 'path' | 'kind' | 'link' | 'uid' | 'gid'>;
+
+/**
+ * Changes permissions and/or owner of an item and, for a folder, of everything inside it.
+ * Links are skipped (the request would follow them out of the tree). Children change before
+ * their folder, so a mode that removes access does not stop the walk.
+ */
+export async function changeAttributes(
+  session: SftpSession,
+  entry: Attributed,
+  change: AttributeChange,
+  recursive: boolean,
+  control: TransferControl = {},
+): Promise<AttributeResult> {
+  const counter = { changed: 0, skipped: 0 };
+  await changeInto(session, entry, change, recursive, counter, control);
+  return counter;
+}
+
+async function changeInto(
+  session: SftpSession,
+  entry: Attributed,
+  change: AttributeChange,
+  recursive: boolean,
+  counter: { changed: number; skipped: number },
+  control: TransferControl,
+): Promise<void> {
+  checkCancelled(control);
+  if (entry.link) {
+    counter.skipped += 1;
+    return;
+  }
+  const folder = entry.kind === 'directory';
+  if (folder && recursive) {
+    for (const child of await session.list(entry.path)) {
+      await changeInto(session, child, change, recursive, counter, control);
+    }
+  }
+  if (change.uid !== undefined || change.gid !== undefined) {
+    // chown sets both; the one not asked for keeps what the server says it is now.
+    const known =
+      entry.uid === undefined || entry.gid === undefined ? await session.stat(entry.path) : entry;
+    await session.chown(
+      entry.path,
+      change.uid ?? known?.uid ?? entry.uid ?? 0,
+      change.gid ?? known?.gid ?? entry.gid ?? 0,
+    );
+  }
+  const mode = folder ? change.folderMode : change.fileMode;
+  if (mode !== undefined) {
+    await session.chmod(entry.path, mode);
+  }
+  counter.changed += 1;
+}
+
+/** `1000:1000`, `1000` (owner only) or `:1000` (group only) as numbers; undefined if not one. */
+export function parseOwner(text: string): { uid?: number; gid?: number } | undefined {
+  const match = /^\s*(\d+)?\s*(?::\s*(\d+)?)?\s*$/u.exec(text);
+  if (match === null || (match[1] === undefined && match[2] === undefined)) {
+    return undefined;
+  }
+  return {
+    ...(match[1] === undefined ? {} : { uid: Number(match[1]) }),
+    ...(match[2] === undefined ? {} : { gid: Number(match[2]) }),
+  };
+}

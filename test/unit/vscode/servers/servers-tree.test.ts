@@ -6,6 +6,7 @@ import {
   folderOf,
   isServerNode,
   type ServerNode,
+  SERVERS_MIME,
   ServersTree,
 } from '../../../../src/vscode/servers/servers-tree';
 import { MemorySftpFs } from '../../../helpers/memory-sftp';
@@ -20,6 +21,7 @@ let fs: MemorySftpFs;
 let tree: ServersTree;
 let showHidden: boolean;
 let drops: { target: ServerNode | undefined; paths: readonly string[] }[];
+let moves: { target: ServerNode | undefined; entries: readonly ServerNode[] }[];
 
 beforeEach(async () => {
   fs = new MemorySftpFs();
@@ -36,12 +38,17 @@ beforeEach(async () => {
   world = await startServerWorld(fs);
   showHidden = true;
   drops = [];
+  moves = [];
   tree = new ServersTree({
     store: world.store,
     hub: world.hub,
     showHidden: () => showHidden,
     onDropFiles: (target, paths) => {
       drops.push({ target, paths });
+      return Promise.resolve();
+    },
+    onMoveEntries: (target, entries) => {
+      moves.push({ target, entries });
       return Promise.resolve();
     },
   });
@@ -316,8 +323,76 @@ describe('dropping files from the explorer', () => {
     expect(drops[0]?.target).toBeUndefined();
   });
 
-  it('accepts only lists of addresses', () => {
-    expect(tree.dropMimeTypes).toEqual(['text/uri-list']);
-    expect(tree.dragMimeTypes).toEqual([]);
+  it('accepts lists of addresses and items of the tree itself', () => {
+    expect(SERVERS_MIME).toBe('application/vnd.code.tree.datanest.servers');
+    expect(tree.dropMimeTypes).toEqual(['text/uri-list', SERVERS_MIME]);
+    expect(tree.dragMimeTypes).toEqual([SERVERS_MIME]);
+  });
+});
+
+describe('dragging inside the tree', () => {
+  const entryNode = (path: string): ServerNode => ({
+    kind: 'entry',
+    serverId: world.serverId,
+    entry: {
+      name: path.slice(path.lastIndexOf('/') + 1),
+      path,
+      kind: 'file',
+      link: false,
+      size: 1,
+      modified: 0,
+      mode: 0o100644,
+    },
+  });
+
+  class Transfer {
+    readonly items = new Map<string, { value: unknown }>();
+    set(mime: string, item: { value: unknown }): void {
+      this.items.set(mime, item);
+    }
+    get(mime: string): { value: unknown } | undefined {
+      return this.items.get(mime);
+    }
+  }
+
+  it('offers the files and folders being dragged, and leaves servers and messages out', () => {
+    const transfer = new Transfer();
+    const a = entryNode('/home/deploy/notes.txt');
+    tree.handleDrag([a, server(world.serverId)], transfer as never);
+    expect(transfer.get(SERVERS_MIME)?.value).toEqual([a]);
+    const none = new Transfer();
+    tree.handleDrag([server(world.serverId)], none as never);
+    expect(none.items.size).toBe(0);
+  });
+
+  it('passes what was dropped on, with the node it landed on', async () => {
+    const transfer = new Transfer();
+    const a = entryNode('/home/deploy/notes.txt');
+    tree.handleDrag([a], transfer as never);
+    const target = server(world.serverId);
+    await tree.handleDrop(target, transfer as never);
+    expect(moves).toEqual([{ target, entries: [a] }]);
+    expect(drops).toEqual([]);
+  });
+
+  it('ignores a drop of something that is not a list of tree items', async () => {
+    const transfer = new Transfer();
+    transfer.set(SERVERS_MIME, { value: [{ kind: 'server', serverId: 's' }, 'text'] });
+    await tree.handleDrop(server(world.serverId), transfer as never);
+    expect(moves).toEqual([]);
+    expect(drops).toEqual([]);
+  });
+
+  it('does not fail where nobody listens for moves', async () => {
+    const lonely = new ServersTree({
+      store: world.store,
+      hub: world.hub,
+      showHidden: () => true,
+      onDropFiles: () => Promise.resolve(),
+    });
+    const transfer = new Transfer();
+    transfer.set(SERVERS_MIME, { value: [entryNode('/x')] });
+    await expect(lonely.handleDrop(undefined, transfer as never)).resolves.toBeUndefined();
+    lonely.dispose();
   });
 });

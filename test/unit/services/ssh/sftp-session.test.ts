@@ -151,6 +151,24 @@ describe('SFTP session', () => {
     expect(fs.modeOf('/srv/a.txt')).toBe(0o600);
   });
 
+  it('changes the owner and the group, and says them in stat and in the listing', async () => {
+    expect(await session.stat('/srv/a.txt')).toMatchObject({ uid: 1000, gid: 1000 });
+    await session.chown('/srv/a.txt', 33, 44);
+    expect(fs.ownerOf('/srv/a.txt')).toEqual({ uid: 33, gid: 44 });
+    expect(fs.modeOf('/srv/a.txt')).toBe(0o644);
+    expect(await session.stat('/srv/a.txt')).toMatchObject({ uid: 33, gid: 44 });
+    const listed = (await session.list('/srv')).find((entry) => entry.name === 'a.txt');
+    expect(listed).toMatchObject({ uid: 33, gid: 44 });
+  });
+
+  it('refuses to change the owner where it is not allowed or not there', async () => {
+    fs.deny('/srv/a.txt');
+    await expect(session.chown('/srv/a.txt', 1, 1)).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    await expect(session.chown('/srv/nothing', 1, 1)).rejects.toMatchObject({ code: 'not-found' });
+  });
+
   it('closes, and says when it is gone', async () => {
     const own = await openSftpSession(fixture.spec(), new RecordingLogger());
     own.close();

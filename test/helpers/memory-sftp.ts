@@ -11,10 +11,15 @@ const S_IFREG = 0o100000;
 const S_IFDIR = 0o040000;
 const S_IFLNK = 0o120000;
 
+interface Owner {
+  uid?: number;
+  gid?: number;
+}
+
 type Node =
-  | { type: 'file'; data: Buffer; mode: number; mtime: number }
-  | { type: 'dir'; mode: number; mtime: number }
-  | { type: 'link'; target: string; mtime: number };
+  | ({ type: 'file'; data: Buffer; mode: number; mtime: number } & Owner)
+  | ({ type: 'dir'; mode: number; mtime: number } & Owner)
+  | ({ type: 'link'; target: string; mtime: number } & Owner);
 
 interface Handle {
   readonly path: string;
@@ -118,6 +123,12 @@ export class MemorySftpFs {
     return node === undefined || node.type === 'link' ? undefined : node.mode & 0o7777;
   }
 
+  /** Numeric owner and group of a path (1000:1000 until a test changes them). */
+  ownerOf(path: string): { uid: number; gid: number } | undefined {
+    const node = this.nodes.get(normalize(path, this.home));
+    return node === undefined ? undefined : { uid: node.uid ?? 1000, gid: node.gid ?? 1000 };
+  }
+
   mtimeOf(path: string): number | undefined {
     return this.nodes.get(normalize(path, this.home))?.mtime;
   }
@@ -172,8 +183,8 @@ export class MemorySftpFs {
       case 'file':
         return {
           mode: S_IFREG | node.mode,
-          uid: 1000,
-          gid: 1000,
+          uid: node.uid ?? 1000,
+          gid: node.gid ?? 1000,
           size: node.data.length,
           atime: node.mtime,
           mtime: node.mtime,
@@ -181,8 +192,8 @@ export class MemorySftpFs {
       case 'dir':
         return {
           mode: S_IFDIR | node.mode,
-          uid: 1000,
-          gid: 1000,
+          uid: node.uid ?? 1000,
+          gid: node.gid ?? 1000,
           size: 4096,
           atime: node.mtime,
           mtime: node.mtime,
@@ -190,8 +201,8 @@ export class MemorySftpFs {
       case 'link':
         return {
           mode: S_IFLNK | 0o777,
-          uid: 1000,
-          gid: 1000,
+          uid: node.uid ?? 1000,
+          gid: node.gid ?? 1000,
           size: node.target.length,
           atime: node.mtime,
           mtime: node.mtime,
@@ -424,8 +435,14 @@ export class MemorySftpFs {
         status(reqid, STATUS_CODE.NO_SUCH_FILE);
         return;
       }
-      if (node.type !== 'link') {
+      if (node.type !== 'link' && typeof attrs.mode === 'number') {
         node.mode = attrs.mode & 0o7777;
+      }
+      if (typeof attrs.uid === 'number') {
+        node.uid = attrs.uid;
+      }
+      if (typeof attrs.gid === 'number') {
+        node.gid = attrs.gid;
       }
       status(reqid, STATUS_CODE.OK);
     });

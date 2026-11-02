@@ -17,6 +17,9 @@ export interface SftpStat {
   readonly modified: number;
   /** Unix mode bits, including the file type. */
   readonly mode: number;
+  /** Numeric owner and group, when the server says them. */
+  readonly uid?: number;
+  readonly gid?: number;
 }
 
 export interface SftpEntry extends SftpStat {
@@ -47,6 +50,8 @@ export interface SftpSession {
   unlink(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
+  /** Changes the numeric owner and group of the path (the link itself is not followed by name). */
+  chown(path: string, uid: number, gid: number): Promise<void>;
   close(): void;
 }
 

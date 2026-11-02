@@ -527,13 +527,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     checkHostKey: hostKeyCheck,
     logger,
   });
-  const serverTreeBridge: { drop?: ServerCommands['drop'] } = {};
+  const serverTreeBridge: { drop?: ServerCommands['drop']; move?: ServerCommands['moveEntries'] } =
+    {};
   const serversTree = new ServersTree({
     store: serverStore,
     hub: sftpHub,
     showHidden: readServersShowHidden,
     onDropFiles: async (target, paths) => {
       await serverTreeBridge.drop?.(target, paths);
+    },
+    onMoveEntries: async (target, entries) => {
+      await serverTreeBridge.move?.(target, entries);
     },
   });
   const serverCommands = serverCommandHandlers({
@@ -544,6 +548,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     maxOpenBytes: readServersMaxOpenBytes,
   });
   serverTreeBridge.drop = serverCommands.drop;
+  serverTreeBridge.move = serverCommands.moveEntries;
   const terminalCommands = terminalCommandHandlers({
     store: serverStore,
     opener: tunnels,

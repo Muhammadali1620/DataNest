@@ -19,6 +19,9 @@ import {
 
 export { SERVERS_VIEW_ID };
 
+/** VS Code's own type for items dragged within a tree: `application/vnd.code.tree.<view id>`. */
+export const SERVERS_MIME = `application/vnd.code.tree.${SERVERS_VIEW_ID.toLowerCase()}`;
+
 export type ServerNode =
   | { readonly kind: 'server'; readonly serverId: string }
   | { readonly kind: 'entry'; readonly serverId: string; readonly entry: SftpEntry }
@@ -54,6 +57,11 @@ export interface ServersTreeDeps {
   readonly showHidden: () => boolean;
   /** Files dropped on the tree from the explorer. */
   readonly onDropFiles: (target: ServerNode | undefined, paths: readonly string[]) => Promise<void>;
+  /** Files and folders of the tree itself dropped on a folder or a server: a move. */
+  readonly onMoveEntries?: (
+    target: ServerNode | undefined,
+    entries: readonly Extract<ServerNode, { kind: 'entry' }>[],
+  ) => Promise<void>;
 }
 
 /** The "Servers" view: saved SSH servers, and the folders and files on them, listed lazily. */
@@ -65,8 +73,8 @@ export class ServersTree
 {
   private readonly changed = new vscode.EventEmitter<ServerNode | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
-  readonly dropMimeTypes = ['text/uri-list'];
-  readonly dragMimeTypes: string[] = [];
+  readonly dropMimeTypes = ['text/uri-list', SERVERS_MIME];
+  readonly dragMimeTypes = [SERVERS_MIME];
   private readonly subscriptions: { dispose(): void }[];
 
   constructor(private readonly deps: ServersTreeDeps) {
@@ -137,10 +145,28 @@ export class ServersTree
     }
   }
 
+  handleDrag(source: readonly ServerNode[], dataTransfer: vscode.DataTransfer): void {
+    const entries = source.filter((node) => node.kind === 'entry');
+    if (entries.length > 0) {
+      dataTransfer.set(SERVERS_MIME, new vscode.DataTransferItem(entries));
+    }
+  }
+
   async handleDrop(
     target: ServerNode | undefined,
     dataTransfer: vscode.DataTransfer,
   ): Promise<void> {
+    const dragged: unknown = dataTransfer.get(SERVERS_MIME)?.value;
+    if (Array.isArray(dragged)) {
+      const entries = dragged.filter(
+        (node): node is Extract<ServerNode, { kind: 'entry' }> =>
+          isServerNode(node) && node.kind === 'entry',
+      );
+      if (entries.length > 0) {
+        await this.deps.onMoveEntries?.(target, entries);
+      }
+      return;
+    }
     const item = dataTransfer.get('text/uri-list');
     if (item === undefined) {
       return;

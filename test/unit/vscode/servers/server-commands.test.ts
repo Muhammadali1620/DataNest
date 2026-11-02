@@ -1,8 +1,9 @@
 // The commands of the Servers view (V13.16): what they ask, what they refuse, what they do
 // on the server — with the editor's dialogs answered by the test and a real SFTP session.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type ServerCommands,
@@ -53,6 +54,24 @@ function entryNode(
 }
 
 const server = (serverId: string): ServerNode => ({ kind: 'server', serverId });
+
+/** A second saved server that leads to the same fixture: its own session, so a move is a copy. */
+async function addTwin(): Promise<string> {
+  const twin = await world.store.add(
+    {
+      name: 'Twin',
+      ssh: {
+        id: 'main',
+        host: '127.0.0.1',
+        port: world.server.port,
+        user: 'deploy',
+        auth: 'password',
+      },
+    },
+    { main: { password: 'pw' } },
+  );
+  return twin.id;
+}
 
 const run = async (name: keyof ServerCommands['handlers'], ...args: unknown[]): Promise<unknown> =>
   await commands.handlers[name](...args);
@@ -813,15 +832,17 @@ describe('copying and moving', () => {
     expect(box.validateInput('/ok')).toBeUndefined();
   });
 
-  it('moves within the server, without asking which one', async () => {
+  it('moves within the server to the path typed, with no question about deleting', async () => {
+    window.showQuickPick.mockResolvedValueOnce({ id: world.serverId });
     answers('/dest/moved.txt');
     await run('moveTo', file('/home/deploy/a.txt'));
     expect(fs.text('/dest/moved.txt')).toBe('aaa');
     expect(fs.has('/home/deploy/a.txt')).toBe(false);
-    expect(window.showQuickPick).not.toHaveBeenCalled();
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
   });
 
   it('will not move onto something that is there, into itself, or on a read-only server', async () => {
+    window.showQuickPick.mockResolvedValue({ id: world.serverId });
     answers('/home/deploy/b.txt');
     await expect(run('moveTo', file('/home/deploy/a.txt'))).rejects.toMatchObject({
       code: 'unsupported',
@@ -836,5 +857,298 @@ describe('copying and moving', () => {
       },
     );
     expect(fs.text('/home/deploy/a.txt')).toBe('aaa');
+  });
+
+  it('moves to another server: asks first, copies, then deletes the original', async () => {
+    const twin = await addTwin();
+    window.showQuickPick.mockResolvedValueOnce({ id: twin });
+    window.showWarningMessage.mockResolvedValueOnce('Move');
+    answers('/dest/across.txt');
+    await run('moveTo', file('/home/deploy/a.txt'));
+    expect(fs.text('/dest/across.txt')).toBe('aaa');
+    expect(fs.has('/home/deploy/a.txt')).toBe(false);
+    const [question, options] = (window.showWarningMessage.mock.calls[0] ?? []) as unknown[];
+    expect(question).toBe('Move "a.txt" to the server "Twin"?');
+    expect((options as { detail: string }).detail).toMatch(/originals are deleted/u);
+  });
+
+  it('leaves everything as it was when the move to another server is not confirmed', async () => {
+    const twin = await addTwin();
+    window.showQuickPick.mockResolvedValueOnce({ id: twin });
+    window.showWarningMessage.mockResolvedValueOnce(undefined);
+    answers('/dest/across.txt');
+    await run('moveTo', file('/home/deploy/a.txt'));
+    expect(fs.has('/dest/across.txt')).toBe(false);
+    expect(fs.text('/home/deploy/a.txt')).toBe('aaa');
+  });
+
+  it('will not move into a read-only server', async () => {
+    window.showQuickPick.mockResolvedValueOnce({ id: world.readOnlyId });
+    answers('/dest/x.txt');
+    await expect(run('moveTo', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(fs.text('/home/deploy/a.txt')).toBe('aaa');
+  });
+
+  it('keeps the original and says so when the copy left links out', async () => {
+    const twin = await addTwin();
+    fs.folder('/home/deploy/linked/real').link(
+      '/home/deploy/linked/ln',
+      '/home/deploy/linked/real',
+    );
+    window.showQuickPick.mockResolvedValueOnce({ id: twin });
+    window.showWarningMessage.mockResolvedValueOnce('Move');
+    answers('/dest/linked');
+    await run('moveTo', folder('/home/deploy/linked'));
+    expect(fs.has('/dest/linked/real')).toBe(true);
+    expect(fs.has('/home/deploy/linked/real')).toBe(true);
+    expect(window.showWarningMessage).toHaveBeenLastCalledWith(
+      'Copied, but 1 originals were kept: they hold links or special files that were not copied.',
+    );
+  });
+});
+
+describe('dragging inside the tree', () => {
+  const entries = (...nodes: ServerNode[]): never => nodes as never;
+
+  it('moves files and folders into the folder they were dropped on', async () => {
+    await commands.moveEntries(
+      folder('/dest'),
+      entries(file('/home/deploy/a.txt'), folder('/home/deploy/dir')),
+    );
+    expect(fs.text('/dest/a.txt')).toBe('aaa');
+    expect(fs.text('/dest/dir/c.txt')).toBe('ccc');
+    expect(fs.has('/home/deploy/a.txt')).toBe(false);
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(refreshes).toBeGreaterThan(0);
+  });
+
+  it('takes a drop on a file as a drop on its folder, and on a server as its start folder', async () => {
+    await commands.moveEntries(file('/dest/other.txt'), entries(file('/home/deploy/a.txt')));
+    expect(fs.has('/dest/a.txt')).toBe(true);
+    fs.folder('/home/deploy');
+    await commands.moveEntries(server(world.serverId), entries(file('/dest/a.txt')));
+    expect(fs.has('/home/deploy/a.txt')).toBe(true);
+  });
+
+  it('does nothing for a drop where the item already is, on itself, or on empty space', async () => {
+    await commands.moveEntries(folder('/home/deploy'), entries(file('/home/deploy/a.txt')));
+    await commands.moveEntries(folder('/home/deploy/dir'), entries(folder('/home/deploy/dir')));
+    await commands.moveEntries(undefined, entries(file('/home/deploy/a.txt')));
+    expect(fs.text('/home/deploy/a.txt')).toBe('aaa');
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
+  it('will not drop a folder into itself, and refuses on a read-only server', async () => {
+    await expect(
+      commands.moveEntries(
+        folder('/home/deploy/dir/c.txt'.replace('/c.txt', '')),
+        entries(folder('/home/deploy')),
+      ),
+    ).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(
+      commands.moveEntries(folder('/dest', world.readOnlyId), entries(file('/home/deploy/a.txt'))),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(
+      commands.moveEntries(folder('/dest'), entries(file('/home/deploy/a.txt', world.readOnlyId))),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(fs.text('/home/deploy/a.txt')).toBe('aaa');
+  });
+
+  it('will not overwrite what is already in the folder', async () => {
+    fs.file('/dest/a.txt', 'old');
+    await expect(
+      commands.moveEntries(folder('/dest'), entries(file('/home/deploy/a.txt'))),
+    ).rejects.toMatchObject({ code: 'unsupported' });
+    expect(fs.text('/dest/a.txt')).toBe('old');
+    expect(fs.text('/home/deploy/a.txt')).toBe('aaa');
+  });
+
+  it('asks before moving between servers, and does nothing when refused', async () => {
+    const twin = await addTwin();
+    window.showWarningMessage.mockResolvedValueOnce(undefined);
+    await commands.moveEntries(
+      folder('/dest', twin),
+      entries(file('/home/deploy/a.txt'), file('/home/deploy/b.txt')),
+    );
+    expect(window.showWarningMessage.mock.calls[0]?.[0]).toBe('Move 2 items to the server "Twin"?');
+    expect(fs.has('/dest/a.txt')).toBe(false);
+    window.showWarningMessage.mockResolvedValueOnce('Move');
+    await commands.moveEntries(
+      folder('/dest', twin),
+      entries(file('/home/deploy/a.txt'), file('/home/deploy/b.txt')),
+    );
+    expect(fs.text('/dest/a.txt')).toBe('aaa');
+    expect(fs.text('/dest/b.txt')).toBe('bbb');
+    expect(fs.has('/home/deploy/b.txt')).toBe(false);
+  });
+});
+
+describe('permissions and owner of everything inside', () => {
+  beforeEach(() => {
+    fs.file('/home/deploy/tree/top.txt', 't', 0o600)
+      .file('/home/deploy/tree/sub/in.txt', 'i', 0o600)
+      .folder('/home/deploy/tree/sub/deep', 0o700);
+  });
+
+  it('gives files and folders their own modes after a confirmation', async () => {
+    answers('640', '750');
+    window.showWarningMessage.mockResolvedValueOnce('Change');
+    await run('chmodTree', folder('/home/deploy/tree'));
+    expect(fs.modeOf('/home/deploy/tree/top.txt')).toBe(0o640);
+    expect(fs.modeOf('/home/deploy/tree/sub/in.txt')).toBe(0o640);
+    expect(fs.modeOf('/home/deploy/tree/sub')).toBe(0o750);
+    expect(fs.modeOf('/home/deploy/tree/sub/deep')).toBe(0o750);
+    expect(fs.modeOf('/home/deploy/tree')).toBe(0o750);
+    const detail = (window.showWarningMessage.mock.calls[0]?.[1] as { detail: string }).detail;
+    expect(detail).toContain('Files: 640');
+    expect(detail).toContain('Folders: 750');
+    expect(window.showInformationMessage).toHaveBeenLastCalledWith(
+      'Permissions changed: 5 items, 0 links skipped',
+    );
+  });
+
+  it('keeps what is left empty, and checks the digits', async () => {
+    answers('', '700');
+    window.showWarningMessage.mockResolvedValueOnce('Change');
+    await run('chmodTree', folder('/home/deploy/tree'));
+    expect(fs.modeOf('/home/deploy/tree/top.txt')).toBe(0o600);
+    expect(fs.modeOf('/home/deploy/tree/sub')).toBe(0o700);
+    const box = window.showInputBox.mock.calls[0]?.[0] as {
+      value: string;
+      validateInput(value: string): string | undefined;
+    };
+    expect(box.value).toBe('644');
+    expect(box.validateInput('')).toBeUndefined();
+    expect(box.validateInput('999')).toMatch(/octal digits/u);
+  });
+
+  it('does nothing when both are empty, a question is dismissed, or it is not confirmed', async () => {
+    answers('', '');
+    await run('chmodTree', folder('/home/deploy/tree'));
+    answers(undefined);
+    await run('chmodTree', folder('/home/deploy/tree'));
+    answers('644', undefined);
+    await run('chmodTree', folder('/home/deploy/tree'));
+    answers('644', '755');
+    window.showWarningMessage.mockResolvedValueOnce(undefined);
+    await run('chmodTree', folder('/home/deploy/tree'));
+    await run('chmodTree', file('/home/deploy/a.txt'));
+    expect(fs.modeOf('/home/deploy/tree/top.txt')).toBe(0o600);
+    expect(fs.modeOf('/home/deploy/tree')).toBe(0o755);
+  });
+
+  it('refuses on a read-only server', async () => {
+    await expect(
+      run('chmodTree', folder('/home/deploy/tree', world.readOnlyId)),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('changes the owner of a file, starting with the current one', async () => {
+    const node = file('/home/deploy/a.txt');
+    if (node.kind === 'entry') {
+      Object.assign(node.entry, { uid: 1000, gid: 1000 });
+    }
+    answers('33:44');
+    await run('chown', node);
+    expect(fs.ownerOf('/home/deploy/a.txt')).toEqual({ uid: 33, gid: 44 });
+    const box = window.showInputBox.mock.calls[0]?.[0] as {
+      value: string;
+      validateInput(value: string): string | undefined;
+    };
+    expect(box.value).toBe('1000:1000');
+    expect(box.validateInput('root')).toMatch(/numbers/u);
+    expect(box.validateInput(':5')).toBeUndefined();
+    expect(window.showQuickPick).not.toHaveBeenCalled();
+  });
+
+  it('changes the owner of a folder only, or of everything inside it', async () => {
+    answers('7:8');
+    window.showQuickPick.mockResolvedValueOnce({ recursive: false });
+    await run('chown', folder('/home/deploy/tree'));
+    expect(fs.ownerOf('/home/deploy/tree')).toEqual({ uid: 7, gid: 8 });
+    expect(fs.ownerOf('/home/deploy/tree/top.txt')).toEqual({ uid: 1000, gid: 1000 });
+    answers(':9');
+    window.showQuickPick.mockResolvedValueOnce({ recursive: true });
+    await run('chown', folder('/home/deploy/tree'));
+    expect(fs.ownerOf('/home/deploy/tree/sub/in.txt')).toEqual({ uid: 1000, gid: 9 });
+    expect(fs.ownerOf('/home/deploy/tree')).toEqual({ uid: 7, gid: 9 });
+    expect(window.showInformationMessage).toHaveBeenLastCalledWith(
+      'Owner changed: 5 items, 0 links skipped',
+    );
+  });
+
+  it('does nothing when dismissed, and refuses on a read-only server', async () => {
+    answers(undefined);
+    await run('chown', file('/home/deploy/a.txt'));
+    answers('5:5');
+    window.showQuickPick.mockResolvedValueOnce(undefined);
+    await run('chown', folder('/home/deploy/tree'));
+    expect(fs.ownerOf('/home/deploy/a.txt')).toEqual({ uid: 1000, gid: 1000 });
+    expect(fs.ownerOf('/home/deploy/tree')).toEqual({ uid: 1000, gid: 1000 });
+    await expect(run('chown', file('/home/deploy/a.txt', world.readOnlyId))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+  });
+
+  it('says when the server does not allow it', async () => {
+    fs.deny('/home/deploy/a.txt');
+    answers('5:5');
+    await expect(run('chown', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+  });
+});
+
+describe('comparing with a local file', () => {
+  it('opens a diff of the local file against the one on the server', async () => {
+    const mine = join(tmpdir(), `datanest-compare-mine-${process.pid}.txt`);
+    writeFileSync(mine, 'mine');
+    window.showOpenDialog.mockResolvedValueOnce([stub.Uri.file(mine)]);
+    try {
+      await run('compareWithLocal', file('/home/deploy/a.txt'));
+    } finally {
+      rmSync(mine, { force: true });
+    }
+    const [command, left, right, title] = (stub.commands.executeCommand.mock.calls.at(-1) ??
+      []) as unknown[];
+    expect(command).toBe('vscode.diff');
+    expect((left as { fsPath: string }).fsPath).toBe(mine);
+    expect((right as { scheme: string }).scheme).toBe('datanest-sftp');
+    expect(title).toBe(`${basename(mine)} ↔ a.txt on the server`);
+  });
+
+  it('does nothing when no file is chosen, or for a folder', async () => {
+    window.showOpenDialog.mockResolvedValueOnce(undefined);
+    await run('compareWithLocal', file('/home/deploy/a.txt'));
+    await run('compareWithLocal', folder('/home/deploy/dir'));
+    expect(stub.commands.executeCommand).not.toHaveBeenCalledWith(
+      'vscode.diff',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('refuses a file that is too large or not text, on either side', async () => {
+    await expect(
+      run('compareWithLocal', file('/home/deploy/a.txt', world.serverId, 5000)),
+    ).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    await expect(run('compareWithLocal', file('/home/deploy/pack.zip'))).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    const big = join(tmpdir(), `datanest-compare-${process.pid}.txt`);
+    writeFileSync(big, 'x'.repeat(2000));
+    try {
+      window.showOpenDialog.mockResolvedValueOnce([stub.Uri.file(big)]);
+      await expect(run('compareWithLocal', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+    } finally {
+      rmSync(big, { force: true });
+    }
   });
 });

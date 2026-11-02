@@ -38,6 +38,7 @@ class FakeSession implements SftpSession {
   unlink = vi.fn(() => Promise.resolve());
   rename = vi.fn(() => Promise.resolve());
   chmod = vi.fn(() => Promise.resolve());
+  chown = vi.fn(() => Promise.resolve());
 }
 
 /** Lets the promise callbacks that close sessions run. */

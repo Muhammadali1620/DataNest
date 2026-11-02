@@ -1211,6 +1211,24 @@
         "icon": "$(shield)"
       },
       {
+        "command": "datanest.sftp.chmodTree",
+        "title": "%commands.sftp.chmodTree.title%",
+        "category": "DataNest",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "datanest.sftp.chown",
+        "title": "%commands.sftp.chown.title%",
+        "category": "DataNest",
+        "icon": "$(account)"
+      },
+      {
+        "command": "datanest.sftp.compareWithLocal",
+        "title": "%commands.sftp.compareWithLocal.title%",
+        "category": "DataNest",
+        "icon": "$(diff)"
+      },
+      {
         "command": "datanest.sftp.copyPath",
         "title": "%commands.sftp.copyPath.title%",
         "category": "DataNest",
@@ -1554,6 +1572,18 @@
         },
         {
           "command": "datanest.sftp.chmod",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.chmodTree",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.chown",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.compareWithLocal",
           "when": "false"
         },
         {
@@ -2443,6 +2473,21 @@
           "command": "datanest.sftp.chmod",
           "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)$/",
           "group": "3_edit@2"
+        },
+        {
+          "command": "datanest.sftp.chmodTree",
+          "when": "view == datanest.servers && viewItem == datanest.sftpDir",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "datanest.sftp.chown",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftp(Dir|File)$/",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "datanest.sftp.compareWithLocal",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftpFile(\\.ro)?$/",
+          "group": "1_open@2"
         },
         {
           "command": "datanest.sftp.copyTo",

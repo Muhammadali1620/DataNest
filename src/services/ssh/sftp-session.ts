@@ -76,6 +76,8 @@ function statOf(stats: Stats): SftpStat {
     size: stats.size,
     modified: stats.mtime * 1000,
     mode: stats.mode,
+    ...(typeof stats.uid === 'number' ? { uid: stats.uid } : {}),
+    ...(typeof stats.gid === 'number' ? { gid: stats.gid } : {}),
   };
 }
 
@@ -262,6 +264,13 @@ class Session implements SftpSession {
     this.alive(path);
     await call<undefined>(path, (done) => {
       this.sftp.chmod(path, mode, done);
+    });
+  }
+
+  async chown(path: string, uid: number, gid: number): Promise<void> {
+    this.alive(path);
+    await call<undefined>(path, (done) => {
+      this.sftp.chown(path, uid, gid, done);
     });
   }
 

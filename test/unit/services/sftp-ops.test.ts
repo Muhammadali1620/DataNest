@@ -11,7 +11,9 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { DbError } from '../../../src/core/errors';
 import {
+  changeAttributes,
   copyTree,
   createEmptyFile,
   downloadTree,
@@ -19,6 +21,8 @@ import {
   freeName,
   looksBinary,
   moveEntry,
+  moveTree,
+  parseOwner,
   readLimited,
   removeTree,
   sortEntries,
@@ -434,6 +438,220 @@ describe('moveEntry', () => {
     await expect(moveEntry(session, entry('/m/d', 'directory'), '/m/d/in')).rejects.toMatchObject({
       code: 'unsupported',
     });
+  });
+});
+
+describe('moveTree', () => {
+  it('renames within one session, which copies nothing', async () => {
+    fs.file('/mv/a.txt', 'a');
+    const outcome = await moveTree(session, entry('/mv/a.txt', 'file'), session, '/mv/b.txt');
+    expect(outcome).toEqual({
+      result: { files: 0, folders: 0, bytes: 0, skipped: 0 },
+      sourceRemoved: true,
+    });
+    expect(fs.text('/mv/b.txt')).toBe('a');
+    expect(fs.has('/mv/a.txt')).toBe(false);
+  });
+
+  it('moves a folder to another server: copies it whole, then removes the original', async () => {
+    const otherFs = new MemorySftpFs().folder('/dest');
+    const other = await startSftpFixture(otherFs);
+    try {
+      const target = await other.open();
+      fs.file('/mv/d/x.txt', 'xx').file('/mv/d/sub/y.txt', 'yyy');
+      const outcome = await moveTree(session, entry('/mv/d', 'directory'), target, '/dest/d');
+      expect(outcome.sourceRemoved).toBe(true);
+      expect(outcome.result).toMatchObject({ files: 2, bytes: 5 });
+      expect(otherFs.text('/dest/d/sub/y.txt')).toBe('yyy');
+      expect(fs.has('/mv/d')).toBe(false);
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('will not move onto something that is there on the other server', async () => {
+    const otherFs = new MemorySftpFs().file('/dest/a.txt', 'taken');
+    const other = await startSftpFixture(otherFs);
+    try {
+      const target = await other.open();
+      fs.file('/mv/a.txt', 'mine');
+      await expect(
+        moveTree(session, entry('/mv/a.txt', 'file'), target, '/dest/a.txt'),
+      ).rejects.toMatchObject({ code: 'unsupported' });
+      expect(otherFs.text('/dest/a.txt')).toBe('taken');
+      expect(fs.text('/mv/a.txt')).toBe('mine');
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('keeps the original when the copy had to leave something out', async () => {
+    const otherFs = new MemorySftpFs().folder('/dest');
+    const other = await startSftpFixture(otherFs);
+    try {
+      const target = await other.open();
+      fs.file('/mv/d/real.txt', 'real').folder('/mv/other').link('/mv/d/ln', '/mv/other');
+      const outcome = await moveTree(session, entry('/mv/d', 'directory'), target, '/dest/d');
+      expect(outcome.sourceRemoved).toBe(false);
+      expect(outcome.result.skipped).toBeGreaterThan(0);
+      expect(otherFs.text('/dest/d/real.txt')).toBe('real');
+      expect(fs.text('/mv/d/real.txt')).toBe('real');
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('keeps the original when the copy fails halfway', async () => {
+    const otherFs = new MemorySftpFs().folder('/dest');
+    const other = await startSftpFixture(otherFs);
+    try {
+      const target = await other.open();
+      otherFs.deny('/dest/d/b.txt');
+      fs.file('/mv/d/a.txt', 'a').file('/mv/d/b.txt', 'b');
+      await expect(
+        moveTree(session, entry('/mv/d', 'directory'), target, '/dest/d'),
+      ).rejects.toBeInstanceOf(DbError);
+      expect(fs.text('/mv/d/a.txt')).toBe('a');
+      expect(fs.text('/mv/d/b.txt')).toBe('b');
+    } finally {
+      await other.close();
+    }
+  });
+});
+
+describe('changeAttributes', () => {
+  const tree = (): void => {
+    fs.file('/ch/top.txt', 't', 0o600)
+      .file('/ch/d/in.txt', 'i', 0o600)
+      .file('/ch/d/deep/x.sh', 'x', 0o600)
+      .folder('/ch/d/empty', 0o700)
+      .link('/ch/ln', '/ch/top.txt');
+  };
+
+  it('changes one file without walking', async () => {
+    tree();
+    const result = await changeAttributes(
+      session,
+      entry('/ch/top.txt', 'file'),
+      { fileMode: 0o644 },
+      true,
+    );
+    expect(result).toEqual({ changed: 1, skipped: 0 });
+    expect(fs.modeOf('/ch/top.txt')).toBe(0o644);
+  });
+
+  it('gives files and folders their own modes all the way down', async () => {
+    tree();
+    const result = await changeAttributes(
+      session,
+      entry('/ch', 'directory'),
+      { fileMode: 0o640, folderMode: 0o750 },
+      true,
+    );
+    expect(fs.modeOf('/ch')).toBe(0o750);
+    expect(fs.modeOf('/ch/d')).toBe(0o750);
+    expect(fs.modeOf('/ch/d/deep')).toBe(0o750);
+    expect(fs.modeOf('/ch/d/empty')).toBe(0o750);
+    expect(fs.modeOf('/ch/top.txt')).toBe(0o640);
+    expect(fs.modeOf('/ch/d/deep/x.sh')).toBe(0o640);
+    // 4 folders and 3 files; the link is not touched.
+    expect(result).toEqual({ changed: 7, skipped: 1 });
+  });
+
+  it('changes only the folder when it is not recursive', async () => {
+    tree();
+    const result = await changeAttributes(
+      session,
+      entry('/ch', 'directory'),
+      { fileMode: 0o640, folderMode: 0o750 },
+      false,
+    );
+    expect(result.changed).toBe(1);
+    expect(fs.modeOf('/ch')).toBe(0o750);
+    expect(fs.modeOf('/ch/top.txt')).toBe(0o600);
+  });
+
+  it('leaves what is not asked for as it is', async () => {
+    tree();
+    await changeAttributes(session, entry('/ch', 'directory'), { fileMode: 0o644 }, true);
+    expect(fs.modeOf('/ch/top.txt')).toBe(0o644);
+    expect(fs.modeOf('/ch/d')).toBe(0o755);
+  });
+
+  it('never touches what a link points at', async () => {
+    tree();
+    const result = await changeAttributes(
+      session,
+      { ...entry('/ch/ln', 'file', true) },
+      { fileMode: 0o777 },
+      true,
+    );
+    expect(result).toEqual({ changed: 0, skipped: 1 });
+    expect(fs.modeOf('/ch/top.txt')).toBe(0o600);
+  });
+
+  it('changes the owner and group, keeping the one not given', async () => {
+    tree();
+    const listed = await session.list('/ch');
+    const top = listed.find((item) => item.name === 'top.txt');
+    expect(top).toMatchObject({ uid: 1000, gid: 1000 });
+    await changeAttributes(session, top ?? entry('/ch/top.txt', 'file'), { uid: 33 }, false);
+    expect(fs.ownerOf('/ch/top.txt')).toEqual({ uid: 33, gid: 1000 });
+    await changeAttributes(session, entry('/ch/top.txt', 'file'), { gid: 44 }, false);
+    expect(fs.ownerOf('/ch/top.txt')).toEqual({ uid: 33, gid: 44 });
+  });
+
+  it('changes owner and mode of a whole tree together', async () => {
+    tree();
+    await changeAttributes(
+      session,
+      entry('/ch/d', 'directory'),
+      { uid: 5, gid: 6, fileMode: 0o644, folderMode: 0o755 },
+      true,
+    );
+    expect(fs.ownerOf('/ch/d/deep/x.sh')).toEqual({ uid: 5, gid: 6 });
+    expect(fs.ownerOf('/ch/d')).toEqual({ uid: 5, gid: 6 });
+    expect(fs.modeOf('/ch/d/in.txt')).toBe(0o644);
+    expect(fs.ownerOf('/ch/top.txt')).toEqual({ uid: 1000, gid: 1000 });
+  });
+
+  it('stops when cancelled, before changing anything', async () => {
+    tree();
+    const abort = new AbortController();
+    abort.abort();
+    await expect(
+      changeAttributes(session, entry('/ch', 'directory'), { fileMode: 0o644 }, true, {
+        signal: abort.signal,
+      }),
+    ).rejects.toMatchObject({ code: 'cancelled' });
+    expect(fs.modeOf('/ch/top.txt')).toBe(0o600);
+  });
+
+  it('says what is not allowed', async () => {
+    tree();
+    fs.deny('/ch/d/in.txt');
+    await expect(
+      changeAttributes(session, entry('/ch', 'directory'), { fileMode: 0o644 }, true),
+    ).rejects.toBeInstanceOf(DbError);
+  });
+});
+
+describe('parseOwner', () => {
+  it('reads user:group, a user alone and a group alone', () => {
+    expect(parseOwner('1000:1000')).toEqual({ uid: 1000, gid: 1000 });
+    expect(parseOwner(' 33 ')).toEqual({ uid: 33 });
+    expect(parseOwner('33:')).toEqual({ uid: 33 });
+    expect(parseOwner(':44')).toEqual({ gid: 44 });
+    expect(parseOwner(' 0 : 0 ')).toEqual({ uid: 0, gid: 0 });
+  });
+
+  it('refuses names, empty text and extra parts', () => {
+    expect(parseOwner('')).toBeUndefined();
+    expect(parseOwner(':')).toBeUndefined();
+    expect(parseOwner('root')).toBeUndefined();
+    expect(parseOwner('root:root')).toBeUndefined();
+    expect(parseOwner('1:2:3')).toBeUndefined();
+    expect(parseOwner('-1')).toBeUndefined();
   });
 });
 

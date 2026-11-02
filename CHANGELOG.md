@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- Grafana Loki: check over TLS and follow a query with no time limit (`# tail: forever`). RabbitMQ: make and delete virtual hosts, change a user's password or tags (the password is kept when only the tags change), and live graphs of a queue's messages and rates.
 - Servers: move files between servers and drag them inside the tree, change permissions and owner of a whole folder, compare a file with a local one, and set jump hosts and a proxy when adding or editing a server.
 - Kafka: follow a topic live, reset a consumer group's offsets (to the start, the end, an offset or a moment), kafka:// URLs, favorites on connections, topics and groups, and a note about tunnels in the connection form.
 - ZooKeeper: ACL editor, zookeeper:// URLs, session timeout in the connection form, server version in the tree, stars on znodes. etcd: stars on keys and folders, keep-alive for a key's lease while its page is open, "etcd Users and Roles…".

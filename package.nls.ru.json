@@ -241,6 +241,7 @@
   "commands.sftp.chmodTree.title": "Права на всё внутри…",
   "commands.sftp.chown.title": "Сменить владельца…",
   "commands.sftp.compareWithLocal.title": "Сравнить с локальным файлом…",
+  "commands.sftp.compareWithServerFile.title": "Сравнить с файлом сервера…",
   "commands.sftp.copyPath.title": "Копировать путь",
   "commands.sftp.copyTo.title": "Копировать в…",
   "commands.sftp.moveTo.title": "Переместить в…",

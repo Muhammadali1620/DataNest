@@ -5,6 +5,7 @@ import { describeServer, type SshServerConfig } from '../../shared/ssh-server';
 import type { ServerStore } from '../../services/server-store';
 import type { SftpHub } from '../../services/sftp-hub';
 import { sortEntries } from '../../services/sftp-ops';
+import { ownerText } from '../../services/sftp-owners';
 import type { SftpEntry } from '../../services/sftp-types';
 import { COLOR_THEME_IDS } from '../tree/connection-look';
 import {
@@ -110,6 +111,8 @@ export class ServersTree
           path ?? this.deps.store.get(node.serverId)?.startPath ?? (await session.home());
         return await session.list(start);
       });
+      // The names for the owners in the tooltips; a server that has none shows numbers.
+      await this.deps.hub.ownerNames(node.serverId).catch(() => undefined);
       const shown = this.deps.showHidden()
         ? entries
         : entries.filter((entry) => !entry.name.startsWith('.'));
@@ -252,6 +255,7 @@ export class ServersTree
         `**${entry.name}**`,
         entry.path,
         `${modeOctal(entry.mode)}${entry.modified > 0 ? ` · ${dateText(entry.modified, vscode.env.language)}` : ''}`,
+        ownerText(entry.uid, entry.gid, this.deps.hub.peekOwnerNames(node.serverId)),
         entry.link ? vscode.l10n.t('A link') : '',
       ]
         .filter((line) => line !== '')

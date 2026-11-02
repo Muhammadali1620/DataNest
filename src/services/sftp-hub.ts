@@ -10,6 +10,7 @@ import { serverFileSpecOf } from './tunnels';
 import type { HostKeyCheck } from './tunnels';
 import type { RemoteFileSpec } from './remote-snapshots';
 import type { ServerStore } from './server-store';
+import { loadOwnerNames, type OwnerNames } from './sftp-owners';
 import type { SftpSession } from './sftp-types';
 
 export interface SftpHubDeps {
@@ -33,6 +34,9 @@ interface Entry {
   timer: ReturnType<typeof setTimeout> | undefined;
   /** Work running on the session; it is not closed for idleness meanwhile. */
   busy: number;
+  /** The names of owners and groups of the server, read once per session (V13.36). */
+  owners: Promise<OwnerNames> | undefined;
+  ownerNames: OwnerNames | undefined;
 }
 
 type StateListener = (serverId: string) => void;
@@ -88,6 +92,31 @@ export class SftpHub implements Disposable {
     }
   }
 
+  /**
+   * The names of the server's users and groups, read from `/etc/passwd` and `/etc/group` once
+   * per session (none when the server has no such files or does not let them be read).
+   */
+  async ownerNames(serverId: string): Promise<OwnerNames> {
+    const entry = this.entry(serverId);
+    entry.owners ??= this.run(serverId, async (session) => {
+      const names = await loadOwnerNames(session);
+      entry.ownerNames = names;
+      return names;
+    });
+    try {
+      return await entry.owners;
+    } catch (error) {
+      // A failed try (the link dropped) is made again next time, not remembered.
+      entry.owners = undefined;
+      throw error;
+    }
+  }
+
+  /** What `ownerNames` read, if it has by now; never opens or waits for anything. */
+  peekOwnerNames(serverId: string): OwnerNames | undefined {
+    return this.entries.get(serverId)?.ownerNames;
+  }
+
   /** The session itself, for a long task that holds it across several calls. */
   async session(serverId: string): Promise<SftpSession> {
     const entry = this.entry(serverId);
@@ -132,6 +161,8 @@ export class SftpHub implements Disposable {
       opened: false,
       timer: undefined,
       busy: 0,
+      owners: undefined,
+      ownerNames: undefined,
     };
     this.entries.set(serverId, entry);
     entry.session.then(

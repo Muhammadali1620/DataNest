@@ -1884,8 +1884,6 @@
   "Changing permissions…": "Смена прав…",
   "Permissions changed: {0} items, {1} links skipped": "Права изменены: элементов {0}, ссылок пропущено {1}",
   "Owner of {0}": "Владелец «{0}»",
-  "Numeric user and group ids as user:group, e.g. 1000:1000. Only the user, 1000, or only the group, :1000, also work.": "Числовые id пользователя и группы: пользователь:группа, например 1000:1000. Можно только пользователя, 1000, или только группу, :1000.",
-  "Give numbers, like 1000:1000": "Введите числа, например 1000:1000",
   "Only this folder": "Только эту папку",
   "Everything inside it too": "И всё внутри неё",
   "Changing the owner…": "Смена владельца…",
@@ -1967,5 +1965,13 @@
   "Changing the file on the server needs Python 3 there (its sqlite3 module does the work), and python3 was not found": "Чтобы менять файл на сервере, там нужен Python 3 (работу делает его модуль sqlite3), а python3 не найден",
   "The connection to the file on the server was closed": "Связь с файлом на сервере закрыта",
   "The connection to the server was lost; a transaction that was open is undone there": "Связь с сервером потеряна; открытая транзакция там отменена",
-  "The helper on the server stopped (exit code {0}): {1}": "Помощник на сервере остановился (код выхода {0}): {1}"
+  "The helper on the server stopped (exit code {0}): {1}": "Помощник на сервере остановился (код выхода {0}): {1}",
+  "User and group as user:group, by name or by number, e.g. deploy:www or 1000:1000. Only the user, deploy, or only the group, :www, also work.": "Пользователь и группа: пользователь:группа, по имени или по номеру, например deploy:www или 1000:1000. Можно только пользователя, deploy, или только группу, :www.",
+  "Give ids or names, like 1000:1000 or deploy:www": "Введите номера или имена, например 1000:1000 или deploy:www",
+  "The server has no user \"{0}\"": "На сервере нет пользователя «{0}»",
+  "The server has no group \"{0}\"": "На сервере нет группы «{0}»",
+  "Compare \"{0}\" with a file of a server": "Сравнить «{0}» с файлом сервера",
+  "Pick another file: this is the one being compared": "Выберите другой файл: этот и сравнивается",
+  "\"{0}\" is not a file on that server": "«{0}» — не файл на том сервере",
+  "{0} ({1}) ↔ {2} ({3})": "{0} ({1}) ↔ {2} ({3})"
 }

@@ -302,6 +302,7 @@ export const COMMAND_IDS = {
   sftpChmodTree: 'datanest.sftp.chmodTree',
   sftpChown: 'datanest.sftp.chown',
   sftpCompare: 'datanest.sftp.compareWithLocal',
+  sftpCompareServer: 'datanest.sftp.compareWithServerFile',
   sftpCopyPath: 'datanest.sftp.copyPath',
   sftpCopyTo: 'datanest.sftp.copyTo',
   sftpMoveTo: 'datanest.sftp.moveTo',

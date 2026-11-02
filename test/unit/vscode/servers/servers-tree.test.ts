@@ -205,6 +205,25 @@ describe('folders and files', () => {
     expect(item.command?.arguments?.[0]).toBe(notes);
   });
 
+  it('names the owner in the tooltip by the files of the server', async () => {
+    fs.file('/etc/passwd', 'deploy:x:1000:1000::/h:/bin/sh\n').file(
+      '/etc/group',
+      'staff:x:1000:\n',
+    );
+    const roots = await tree.getChildren(server(world.serverId));
+    const notes = roots.find((node) => node.kind === 'entry' && node.entry.name === 'notes.txt');
+    const tooltip = tree.getTreeItem(must(notes)).tooltip as stub.MarkdownString;
+    expect(tooltip.value).toContain('deploy:staff');
+  });
+
+  it('shows the owner as numbers when the server has no names, and still lists the folder', async () => {
+    const roots = await tree.getChildren(server(world.serverId));
+    expect(roots.length).toBeGreaterThan(0);
+    const notes = roots.find((node) => node.kind === 'entry' && node.entry.name === 'notes.txt');
+    const tooltip = tree.getTreeItem(must(notes)).tooltip as stub.MarkdownString;
+    expect(tooltip.value).toContain('1000:1000');
+  });
+
   it('draws a folder that opens and does not click through', async () => {
     const roots = await tree.getChildren(server(world.serverId));
     const app = roots.find((node) => node.kind === 'entry' && node.entry.name === 'app');

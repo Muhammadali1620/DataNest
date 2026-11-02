@@ -29,11 +29,11 @@ import {
   moveEntry,
   moveTree,
   type MoveOutcome,
-  parseOwner,
   removeTree,
   type TransferControl,
   uploadTree,
 } from '../../services/sftp-ops';
+import { NO_OWNER_NAMES, ownerText, resolveOwner } from '../../services/sftp-owners';
 import type { SftpEntry } from '../../services/sftp-types';
 import { askServer } from './server-wizard';
 import { sftpUriParts } from './server-model';
@@ -69,6 +69,7 @@ export type ServerCommandName =
   | 'chmodTree'
   | 'chown'
   | 'compareWithLocal'
+  | 'compareWithServerFile'
   | 'copyPath'
   | 'copyTo'
   | 'moveTo'
@@ -933,25 +934,33 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
     chown: async (node?: unknown) => {
       const { serverId, entry } = oneEntry(node);
       requireWritable(serverId);
-      const current =
-        entry.uid === undefined && entry.gid === undefined
-          ? ''
-          : `${entry.uid ?? ''}:${entry.gid ?? ''}`;
+      // The server's own names for users and groups, when it lets them be read.
+      const names = await deps.hub.ownerNames(serverId).catch(() => NO_OWNER_NAMES);
+      const problem = (value: string): string | undefined => {
+        const found = resolveOwner(value, names);
+        if (found === undefined) {
+          return vscode.l10n.t('Give ids or names, like 1000:1000 or deploy:www');
+        }
+        if ('unknown' in found) {
+          return found.unknown === 'user'
+            ? vscode.l10n.t('The server has no user "{0}"', found.name)
+            : vscode.l10n.t('The server has no group "{0}"', found.name);
+        }
+        return undefined;
+      };
       const text = await vscode.window.showInputBox({
         title: vscode.l10n.t('Owner of {0}', entry.name),
         prompt: vscode.l10n.t(
-          'Numeric user and group ids as user:group, e.g. 1000:1000. Only the user, 1000, or only the group, :1000, also work.',
+          'User and group as user:group, by name or by number, e.g. deploy:www or 1000:1000. Only the user, deploy, or only the group, :www, also work.',
         ),
-        value: current,
-        validateInput: (value) =>
-          parseOwner(value) === undefined
-            ? vscode.l10n.t('Give numbers, like 1000:1000')
-            : undefined,
+        value: ownerText(entry.uid, entry.gid, names),
+        validateInput: problem,
       });
-      const owner = text === undefined ? undefined : parseOwner(text);
-      if (owner === undefined) {
+      const found = text === undefined ? undefined : resolveOwner(text, names);
+      if (found === undefined || 'unknown' in found) {
         return undefined;
       }
+      const owner = found;
       let recursive = false;
       if (entry.kind === 'directory') {
         const scope = await vscode.window.showQuickPick(
@@ -1015,6 +1024,55 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
         local,
         vscode.Uri.from(sftpUriParts(serverId, entry.path)),
         vscode.l10n.t('{0} ↔ {1} on the server', basename(local.fsPath), entry.name),
+      );
+      return undefined;
+    },
+
+    compareWithServerFile: async (node?: unknown) => {
+      const { entry, serverId } = oneEntry(node);
+      if (entry.kind !== 'file') {
+        return undefined;
+      }
+      const limit = deps.maxOpenBytes();
+      if (entry.size > limit || !opensAsText(fileKindOf(entry.name))) {
+        throw new DbError(
+          'unsupported',
+          msg('"{0}" is too large or not a text file, so it is not compared', entry.name),
+        );
+      }
+      const other = await askDestination(
+        deps,
+        serverId,
+        entry,
+        vscode.l10n.t('Compare "{0}" with a file of a server', entry.name),
+      );
+      if (other === undefined) {
+        return undefined;
+      }
+      if (other.serverId === serverId && other.path === entry.path) {
+        throw new DbError('unsupported', msg('Pick another file: this is the one being compared'));
+      }
+      const found = await deps.hub.run(other.serverId, (session) => session.stat(other.path));
+      if (found?.kind !== 'file') {
+        throw new DbError('not-found', msg('"{0}" is not a file on that server', other.path));
+      }
+      if (found.size > limit) {
+        throw new DbError(
+          'unsupported',
+          msg('"{0}" is too large to compare', baseName(other.path)),
+        );
+      }
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        vscode.Uri.from(sftpUriParts(serverId, entry.path)),
+        vscode.Uri.from(sftpUriParts(other.serverId, other.path)),
+        vscode.l10n.t(
+          '{0} ({1}) ↔ {2} ({3})',
+          entry.name,
+          serverOf(serverId).name,
+          baseName(other.path),
+          serverOf(other.serverId).name,
+        ),
       );
       return undefined;
     },

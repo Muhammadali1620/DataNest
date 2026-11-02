@@ -1241,6 +1241,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "datanest.sftp.compareWithServerFile",
+        "title": "%commands.sftp.compareWithServerFile.title%",
+        "category": "DataNest",
+        "icon": "$(diff)"
+      },
+      {
         "command": "datanest.sftp.copyPath",
         "title": "%commands.sftp.copyPath.title%",
         "category": "DataNest",
@@ -1596,6 +1602,10 @@
         },
         {
           "command": "datanest.sftp.compareWithLocal",
+          "when": "false"
+        },
+        {
+          "command": "datanest.sftp.compareWithServerFile",
           "when": "false"
         },
         {
@@ -2500,6 +2510,11 @@
           "command": "datanest.sftp.compareWithLocal",
           "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftpFile(\\.ro)?$/",
           "group": "1_open@2"
+        },
+        {
+          "command": "datanest.sftp.compareWithServerFile",
+          "when": "view == datanest.servers && viewItem =~ /^datanest\\.sftpFile(\\.ro)?$/",
+          "group": "1_open@3"
         },
         {
           "command": "datanest.sftp.copyTo",

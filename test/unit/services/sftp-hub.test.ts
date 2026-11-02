@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import type { RemoteFileSpec } from '../../../src/services/remote-snapshots';
@@ -281,5 +282,52 @@ describe('SftpHub', () => {
       throw new Error('boom');
     });
     await expect(hub.session(id)).resolves.toBeDefined();
+  });
+
+  describe('names of owners', () => {
+    const serve = (session: FakeSession, files: Record<string, string>): void => {
+      session.openRead.mockImplementation(((path: string) => {
+        const text = files[path];
+        return text === undefined
+          ? Promise.reject(new Error('No such file'))
+          : Promise.resolve({ stream: Readable.from([Buffer.from(text)]), size: text.length });
+      }) as never);
+    };
+
+    it('reads the names once per session and remembers them', async () => {
+      const session = (await hub.session(id)) as FakeSession;
+      serve(session, { '/etc/passwd': 'deploy:x:1000:1000::/h:/sh', '/etc/group': 'www:x:33:' });
+      expect(hub.peekOwnerNames(id)).toBeUndefined();
+      const names = await hub.ownerNames(id);
+      expect(names.users.get(1000)).toBe('deploy');
+      expect(hub.peekOwnerNames(id)).toBe(names);
+      await hub.ownerNames(id);
+      expect(session.openRead).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives no names, and no error, for a server without the files', async () => {
+      await hub.session(id);
+      const names = await hub.ownerNames(id);
+      expect(names.users.size).toBe(0);
+    });
+
+    it('reads again after the session was replaced', async () => {
+      const first = (await hub.session(id)) as FakeSession;
+      serve(first, { '/etc/passwd': 'a:x:1:1::/h:/sh' });
+      expect((await hub.ownerNames(id)).users.get(1)).toBe('a');
+      hub.disconnect(id);
+      await settle();
+      expect(hub.peekOwnerNames(id)).toBeUndefined();
+      const second = (await hub.session(id)) as FakeSession;
+      serve(second, { '/etc/passwd': 'b:x:2:2::/h:/sh' });
+      expect((await hub.ownerNames(id)).users.get(2)).toBe('b');
+    });
+
+    it('does not remember a failure to open', async () => {
+      failOpen = new Error('refused');
+      await expect(hub.ownerNames(id)).rejects.toThrow('refused');
+      failOpen = undefined;
+      await expect(hub.ownerNames(id)).resolves.toBeDefined();
+    });
   });
 });

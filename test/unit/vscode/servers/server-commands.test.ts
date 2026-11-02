@@ -1333,8 +1333,9 @@ describe('permissions and owner of everything inside', () => {
       validateInput(value: string): string | undefined;
     };
     expect(box.value).toBe('1000:1000');
-    expect(box.validateInput('root')).toMatch(/numbers/u);
+    expect(box.validateInput('')).toMatch(/ids or names/u);
     expect(box.validateInput(':5')).toBeUndefined();
+    expect(box.validateInput('root')).toMatch(/no user "root"/u);
     expect(window.showQuickPick).not.toHaveBeenCalled();
   });
 
@@ -1373,6 +1374,124 @@ describe('permissions and owner of everything inside', () => {
     await expect(run('chown', file('/home/deploy/a.txt'))).rejects.toMatchObject({
       code: 'permission-denied',
     });
+  });
+});
+
+describe('owners by name', () => {
+  beforeEach(() => {
+    fs.file('/etc/passwd', 'root:x:0:0::/root:/bin/sh\ndeploy:x:1000:1000::/h:/bin/sh\n').file(
+      '/etc/group',
+      'root:x:0:\nwww:x:33:deploy\ndeploy:x:1000:\n',
+    );
+  });
+
+  it('shows the names in the box and takes names, turning them into numbers', async () => {
+    const node = file('/home/deploy/a.txt');
+    if (node.kind === 'entry') {
+      Object.assign(node.entry, { uid: 1000, gid: 33 });
+    }
+    answers('root:www');
+    await run('chown', node);
+    expect(fs.ownerOf('/home/deploy/a.txt')).toEqual({ uid: 0, gid: 33 });
+    const box = window.showInputBox.mock.calls[0]?.[0] as {
+      value: string;
+      validateInput(value: string): string | undefined;
+    };
+    expect(box.value).toBe('deploy:www');
+    expect(box.validateInput('deploy:www')).toBeUndefined();
+    expect(box.validateInput('ghost')).toBe('The server has no user "ghost"');
+    expect(box.validateInput('deploy:nogroup')).toBe('The server has no group "nogroup"');
+  });
+
+  it('takes only a group name', async () => {
+    answers(':www');
+    await run('chown', file('/home/deploy/a.txt'));
+    expect(fs.ownerOf('/home/deploy/a.txt')).toEqual({ uid: 1000, gid: 33 });
+  });
+
+  it('does nothing for a name the server does not know', async () => {
+    answers('ghost');
+    await run('chown', file('/home/deploy/a.txt'));
+    expect(fs.ownerOf('/home/deploy/a.txt')).toEqual({ uid: 1000, gid: 1000 });
+  });
+
+  it('still takes numbers on a server whose name files cannot be read', async () => {
+    fs.deny('/etc/passwd');
+    fs.deny('/etc/group');
+    answers('12:34');
+    await run('chown', file('/home/deploy/a.txt'));
+    expect(fs.ownerOf('/home/deploy/a.txt')).toEqual({ uid: 12, gid: 34 });
+  });
+});
+
+describe('comparing with a file of a server', () => {
+  const diffArgs = (): unknown[] =>
+    (stub.commands.executeCommand.mock.calls.filter((call) => call[0] === 'vscode.diff').at(-1) ??
+      []) as unknown[];
+
+  it('opens a diff of two files, one on each server', async () => {
+    const twin = await addTwin();
+    window.showQuickPick.mockResolvedValueOnce({ id: twin });
+    answers('/home/deploy/b.txt');
+    await run('compareWithServerFile', file('/home/deploy/a.txt'));
+    const [command, left, right, title] = diffArgs();
+    expect(command).toBe('vscode.diff');
+    expect((left as { scheme: string }).scheme).toBe('datanest-sftp');
+    expect((right as { scheme: string }).scheme).toBe('datanest-sftp');
+    expect((left as { authority: string }).authority).toBe(world.serverId);
+    expect((right as { authority: string }).authority).toBe(twin);
+    expect((right as { path: string }).path).toBe('/home/deploy/b.txt');
+    expect(title).toBe('a.txt (Web) ↔ b.txt (Twin)');
+  });
+
+  it('compares with another file of the same server', async () => {
+    window.showQuickPick.mockResolvedValueOnce({ id: world.serverId });
+    answers('/home/deploy/b.txt');
+    await run('compareWithServerFile', file('/home/deploy/a.txt'));
+    const [, left, right] = diffArgs();
+    expect((left as { authority: string }).authority).toBe(
+      (right as { authority: string }).authority,
+    );
+  });
+
+  it('does nothing when dismissed, or for a folder', async () => {
+    answers(undefined);
+    await run('compareWithServerFile', file('/home/deploy/a.txt'));
+    await run('compareWithServerFile', folder('/home/deploy/dir'));
+    expect(diffArgs()).toEqual([]);
+  });
+
+  it('refuses the file itself, a path that is not a file, and a file that is too large', async () => {
+    window.showQuickPick.mockResolvedValueOnce({ id: world.serverId });
+    answers('/home/deploy/a.txt');
+    await expect(run('compareWithServerFile', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    window.showQuickPick.mockResolvedValueOnce({ id: world.serverId });
+    answers('/home/deploy/dir');
+    await expect(run('compareWithServerFile', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+      code: 'not-found',
+    });
+    window.showQuickPick.mockResolvedValueOnce({ id: world.serverId });
+    answers('/home/deploy/missing.txt');
+    await expect(run('compareWithServerFile', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+      code: 'not-found',
+    });
+    fs.file('/home/deploy/big.txt', 'x'.repeat(2000));
+    window.showQuickPick.mockResolvedValueOnce({ id: world.serverId });
+    answers('/home/deploy/big.txt');
+    await expect(run('compareWithServerFile', file('/home/deploy/a.txt'))).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+  });
+
+  it('refuses a large or non-text file on this side', async () => {
+    await expect(
+      run('compareWithServerFile', file('/home/deploy/a.txt', world.serverId, 5000)),
+    ).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(run('compareWithServerFile', file('/home/deploy/pack.zip'))).rejects.toMatchObject(
+      { code: 'unsupported' },
+    );
   });
 });
 

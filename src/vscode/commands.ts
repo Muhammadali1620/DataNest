@@ -1274,6 +1274,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.sftpChmodTree]: deps.servers.chmodTree,
     [COMMAND_IDS.sftpChown]: deps.servers.chown,
     [COMMAND_IDS.sftpCompare]: deps.servers.compareWithLocal,
+    [COMMAND_IDS.sftpCompareServer]: deps.servers.compareWithServerFile,
     [COMMAND_IDS.sftpCopyPath]: deps.servers.copyPath,
     [COMMAND_IDS.sftpCopyTo]: deps.servers.copyTo,
     [COMMAND_IDS.sftpMoveTo]: deps.servers.moveTo,

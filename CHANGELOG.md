@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-02
+
 ### Added
 
 - etcd: watch every key under a folder from the tree, "etcd Cluster and Snapshot…" (members, alarms, and the whole store saved to a file with its checksum checked). RabbitMQ: a cluster page with nodes and how much of their memory, file descriptors, sockets and processes they use, limits of connections and queues for a virtual host, and policies made from fields.

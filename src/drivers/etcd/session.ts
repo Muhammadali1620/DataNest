@@ -141,6 +141,153 @@ class GatewaySession implements EtcdSession {
     }
   }
 
+  /**
+   * A call whose answer never ends (V13.31): the messages come as JSON lines and go to
+   * `onMessage` one by one. Ends when `signal` aborts or the cluster closes the stream.
+   * Like `call`, it signs in again once when the token has expired.
+   */
+  async watch(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    onMessage: (message: unknown) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      await this.stream(path, body, onMessage, signal);
+    } catch (error) {
+      if (this.target.user !== '' && isTokenRefusal(error)) {
+        await this.signIn(true);
+        await this.stream(path, body, onMessage, signal);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private stream(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    onMessage: (message: unknown) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (this.closed) {
+      return Promise.reject(new DbError('connection-failed', msg('The session is closed')));
+    }
+    if (signal.aborted) {
+      return Promise.resolve();
+    }
+    const payload = Buffer.from(JSON.stringify(body), 'utf8');
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        if (error === undefined) {
+          resolve();
+        } else {
+          reject(error);
+        }
+      };
+      const send = this.target.secure ? https.request : http.request;
+      // A stream holds its socket for as long as it lives: it gets its own, outside the
+      // pool the short calls share.
+      const outgoing = send(
+        {
+          host: this.target.host,
+          port: this.target.port,
+          method: 'POST',
+          path: `/${this.version}/${path}`,
+          agent: false,
+          ...(this.target.secure ? this.target.tls : {}),
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+            'content-length': String(payload.length),
+            ...(this.token === undefined ? {} : { authorization: this.token }),
+          },
+        },
+        (incoming) => {
+          const status = incoming.statusCode ?? 0;
+          incoming.setEncoding('utf8');
+          let pending = '';
+          incoming.on('data', (chunk: string) => {
+            if (status >= 400) {
+              pending += chunk.slice(0, 4096);
+              return;
+            }
+            pending += chunk;
+            let newline = pending.indexOf('\n');
+            while (newline >= 0) {
+              const line = pending.slice(0, newline).trim();
+              pending = pending.slice(newline + 1);
+              newline = pending.indexOf('\n');
+              if (line === '') {
+                continue;
+              }
+              try {
+                onMessage(JSON.parse(line) as unknown);
+              } catch (error) {
+                outgoing.destroy();
+                finish(
+                  error instanceof DbError
+                    ? error
+                    : new DbError(
+                        'connection-failed',
+                        msg('The server did not answer as etcd does: {0}', errorMessage(error)),
+                        { cause: error },
+                      ),
+                );
+                return;
+              }
+            }
+          });
+          incoming.on('end', () => {
+            finish(status >= 400 ? etcdFailure(status, pending) : undefined);
+          });
+          incoming.on('error', (error) => {
+            finish(signal.aborted ? undefined : networkFailure(error));
+          });
+        },
+      );
+      const onAbort = (): void => {
+        outgoing.destroy();
+        finish();
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      outgoing.setTimeout(this.target.connectTimeoutMs, () => {
+        if (outgoing.socket?.connecting !== false) {
+          outgoing.destroy(
+            Object.assign(new Error(`connect ETIMEDOUT ${this.target.host}:${this.target.port}`), {
+              code: 'ETIMEDOUT',
+            }),
+          );
+        } else {
+          // Connected: a stream may be quiet for as long as nothing changes.
+          outgoing.setTimeout(0);
+        }
+      });
+      outgoing.on('socket', (socket) => {
+        socket.setKeepAlive(true, 30_000);
+      });
+      outgoing.on('error', (error) => {
+        if (signal.aborted) {
+          finish();
+          return;
+        }
+        finish(
+          error instanceof DbError
+            ? error
+            : ((this.serverName === undefined ? undefined : tlsFailure(error, this.serverName)) ??
+                networkFailure(error)),
+        );
+      });
+      outgoing.end(payload);
+    });
+  }
+
   /** Reads who the cluster is; a gateway of etcd 3.3 answers on `/v3beta` only. */
   async readServer(): Promise<EtcdServerInfo> {
     let answer: unknown;

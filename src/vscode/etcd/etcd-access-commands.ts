@@ -11,10 +11,14 @@ import type { ConnectionStore } from '../../services/connection-store';
 import {
   addRole,
   addUser,
+  authEnabled,
+  authEnableProblem,
   boundsOf,
   changePassword,
   deleteRole,
   deleteUser,
+  disableAuth,
+  enableAuth,
   type EtcdPermission,
   grantPermission,
   grantRole,
@@ -28,6 +32,7 @@ import {
   revokeRole,
   roleView,
   ROOT_ROLE,
+  ROOT_USER,
   userRoles,
 } from '../../services/etcd/etcd-auth';
 import type { EtcdCaller } from '../../services/etcd/etcd-client';
@@ -68,6 +73,8 @@ export interface EtcdAccessDeps {
 type Choice =
   | { readonly to: 'addUser' }
   | { readonly to: 'addRole' }
+  | { readonly to: 'authOn' }
+  | { readonly to: 'authOff' }
   | { readonly to: 'user'; readonly name: string }
   | { readonly to: 'role'; readonly name: string };
 
@@ -111,6 +118,13 @@ export function etcdAccessHandler(
           msg('Change'),
         )
       : true;
+  };
+
+  /** Refuses at once on a read-only connection, before any question is asked. */
+  const requireWritable = (connectionId: string): void => {
+    if (changeVerdict(policyOf(deps.store.get(connectionId))) === 'refuse') {
+      throw new DbError('permission-denied', deps.texts.readOnly);
+    }
   };
 
   const askName = async (title: string, prompt: string): Promise<string | undefined> =>
@@ -223,6 +237,74 @@ export function etcdAccessHandler(
         }
       }
     }
+  };
+
+  /**
+   * Turns authentication on (V13.31). The cluster wants the user `root` with the role
+   * `root` first; and the moment it is on, this connection, which may have no user, stops
+   * working until the user is put into its form: so the question says that, every time.
+   */
+  const turnAuthOnFlow = async (connectionId: string, session: EtcdCaller): Promise<boolean> => {
+    requireWritable(connectionId);
+    const problem = await authEnableProblem(session);
+    if (problem === 'no-root-user') {
+      throw new DbError(
+        'constraint',
+        msg(
+          'etcd needs a user named "{0}" with the role "{1}" before authentication goes on: add the user, then the role, then grant it',
+          ROOT_USER,
+          ROOT_ROLE,
+        ),
+      );
+    }
+    if (problem === 'no-root-role') {
+      throw new DbError(
+        'constraint',
+        msg(
+          'The user "{0}" needs the role "{1}" before authentication goes on: grant it first',
+          ROOT_USER,
+          ROOT_ROLE,
+        ),
+      );
+    }
+    const config = deps.store.get(connectionId);
+    const detail = [
+      msg('From then on every connection to this cluster has to sign in with a user and password.'),
+      (config?.user ?? '').trim() === ''
+        ? msg('This connection has no user: it stops working until you enter one in its form.')
+        : msg('This connection signs in as "{0}".', config?.user ?? ''),
+      msg('Turning it off again needs the user "{0}".', ROOT_USER),
+    ].join(' ');
+    if (
+      !(await ui.confirm(msg('Turn authentication on?'), detail, msg('Turn On'))) ||
+      !(await allowChange(connectionId, msg('authentication')))
+    ) {
+      return false;
+    }
+    await enableAuth(session);
+    ui.info(
+      msg(
+        'Authentication is on. Edit the connection and enter the user "{0}" and its password to go on working.',
+        ROOT_USER,
+      ),
+    );
+    return true;
+  };
+
+  const turnAuthOffFlow = async (connectionId: string, session: EtcdCaller): Promise<void> => {
+    requireWritable(connectionId);
+    if (
+      !(await ui.confirm(
+        msg('Turn authentication off?'),
+        msg('Everyone who can reach the cluster may then read and change every key.'),
+        msg('Turn Off'),
+      )) ||
+      !(await allowChange(connectionId, msg('authentication')))
+    ) {
+      return;
+    }
+    await disableAuth(session);
+    ui.info(msg('Authentication is off'));
   };
 
   const askPermission = async (): Promise<EtcdPermission | undefined> => {
@@ -362,6 +444,7 @@ export function etcdAccessHandler(
     const session = await deps.session(connectionId);
     for (;;) {
       const [users, roles] = await Promise.all([listUsers(session), listRoles(session)]);
+      const enabled = await authEnabled(session);
       const choice = await ui.pick<Choice>({
         title: msg('Users and Roles'),
         placeHolder: msg('{0} users, {1} roles', users.length, roles.length),
@@ -380,6 +463,23 @@ export function etcdAccessHandler(
             icon: 'organization',
             value: { to: 'role', name } as const,
           })),
+          ...(enabled === undefined
+            ? []
+            : [
+                enabled
+                  ? {
+                      label: msg('Turn Authentication Off…'),
+                      description: msg('authentication is on'),
+                      icon: 'unlock',
+                      value: { to: 'authOff' } as const,
+                    }
+                  : {
+                      label: msg('Turn Authentication On…'),
+                      description: msg('authentication is off'),
+                      icon: 'lock',
+                      value: { to: 'authOn' } as const,
+                    },
+              ]),
         ],
       });
       if (choice === undefined) {
@@ -391,6 +491,15 @@ export function etcdAccessHandler(
           break;
         case 'addRole':
           await addRoleFlow(connectionId, session);
+          break;
+        case 'authOn':
+          // This session has no user: with authentication on it can read nothing more.
+          if (await turnAuthOnFlow(connectionId, session)) {
+            return undefined;
+          }
+          break;
+        case 'authOff':
+          await turnAuthOffFlow(connectionId, session);
           break;
         case 'user':
           await userFlow(connectionId, session, choice.name);

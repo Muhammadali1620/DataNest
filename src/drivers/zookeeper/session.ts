@@ -21,6 +21,8 @@ import type {
   ZookeeperServerInfo,
   ZookeeperSession,
   ZookeeperStat,
+  ZookeeperWatchEvent,
+  ZookeeperWatchKind,
 } from '../zookeeper-driver';
 import { networkFailure, ZK, zookeeperFailure } from './errors';
 import { JuteReader, JuteWriter, MAX_FRAME_BYTES } from './jute';
@@ -48,6 +50,21 @@ const OP = {
   auth: 100,
   closeSession: -11,
 } as const;
+
+/** What a watch notification's type number stands for. */
+const WATCH_KINDS: Readonly<Record<number, ZookeeperWatchKind | undefined>> = {
+  1: 'created',
+  2: 'deleted',
+  3: 'data',
+  4: 'children',
+};
+
+interface Watcher {
+  /** The znode on the server, below the chroot. */
+  readonly path: string;
+  readonly onEvent: (event: ZookeeperWatchEvent) => void;
+  readonly onLost: (error: Error) => void;
+}
 
 /** The `xid`s the server uses for answers that are not to a request of ours. */
 const XID = { watch: -1, ping: -2, auth: -4 } as const;
@@ -160,6 +177,7 @@ class ZookeeperConnection implements ZookeeperSession {
   private closed = false;
   private failure: DbError | undefined;
   private onFrame: ((frame: Buffer) => void) | undefined;
+  private readonly watchers = new Set<Watcher>();
 
   constructor(
     private readonly target: ZookeeperTarget,
@@ -387,7 +405,15 @@ class ZookeeperConnection implements ZookeeperSession {
       const xid = reader.int();
       reader.long(); // zxid
       const code = reader.int();
-      if (xid === XID.ping || xid === XID.watch) {
+      if (xid === XID.watch) {
+        if (code === 0) {
+          const type = reader.int();
+          reader.int(); // state
+          this.notify(type, reader.string());
+        }
+        return;
+      }
+      if (xid === XID.ping) {
         return;
       }
       const request = this.pending.get(xid);
@@ -617,6 +643,7 @@ class ZookeeperConnection implements ZookeeperSession {
     }
     this.closed = true;
     this.stopPing();
+    this.watchers.clear();
     this.failPending(new DbError('connection-failed', msg('The session is closed')));
     if (socket !== undefined) {
       await new Promise<void>((resolve) => {
@@ -633,6 +660,73 @@ class ZookeeperConnection implements ZookeeperSession {
     }
   }
 
+  /** A watch fired: tell the watchers of that path, after setting the watch again. */
+  private notify(type: number, path: string): void {
+    const kind = WATCH_KINDS[type];
+    if (kind === undefined) {
+      return;
+    }
+    for (const watcher of [...this.watchers]) {
+      if (watcher.path !== path) {
+        continue;
+      }
+      const report = (): void => {
+        if (this.watchers.has(watcher)) {
+          watcher.onEvent({ kind, path: this.relative(path) });
+        }
+      };
+      // Set again first, so that what the report's reader sees is covered by the next watch.
+      this.arm(path).then(report, report);
+    }
+  }
+
+  /** Sets the data and the children watch of a znode; a znode that is not there gets the first. */
+  private async arm(path: string): Promise<void> {
+    const shown = this.relative(path);
+    const stat = await this.request(
+      OP.exists,
+      new JuteWriter().string(path).bool(true),
+      (reader): ZookeeperStat | undefined => reader.stat(),
+      shown,
+      true,
+    );
+    if (stat !== undefined) {
+      await this.request(
+        OP.getChildren2,
+        new JuteWriter().string(path).bool(true),
+        () => undefined,
+        shown,
+        true,
+      );
+    }
+  }
+
+  async watchNode(
+    path: string,
+    onEvent: (event: ZookeeperWatchEvent) => void,
+    onLost: (error: Error) => void,
+  ): Promise<() => void> {
+    const watcher: Watcher = { path: this.absolute(path), onEvent, onLost };
+    this.watchers.add(watcher);
+    try {
+      await this.arm(watcher.path);
+    } catch (error) {
+      this.watchers.delete(watcher);
+      throw error;
+    }
+    return () => {
+      this.watchers.delete(watcher);
+    };
+  }
+
+  private loseWatchers(error: Error): void {
+    const lost = [...this.watchers];
+    this.watchers.clear();
+    for (const watcher of lost) {
+      watcher.onLost(error);
+    }
+  }
+
   /** The link is gone: every request in flight fails, and later ones too. */
   private fail(error: DbError): void {
     this.handshakeFailed?.(error);
@@ -644,6 +738,7 @@ class ZookeeperConnection implements ZookeeperSession {
     this.failure = error;
     this.stopPing();
     this.failPending(error);
+    this.loseWatchers(error);
     this.socket?.destroy();
   }
 

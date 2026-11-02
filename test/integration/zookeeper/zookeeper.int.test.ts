@@ -1,10 +1,15 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { driver } from '../../../src/drivers/zookeeper';
-import type { ZookeeperSession } from '../../../src/drivers/zookeeper-driver';
+import type { ZookeeperSession, ZookeeperWatchEvent } from '../../../src/drivers/zookeeper-driver';
 import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
 import { ZookeeperNodeModel } from '../../../src/vscode/panels/zookeeper-node-model';
-import { deleteTree, countTree, readNode } from '../../../src/services/zookeeper/zk-ops';
+import {
+  applyAclTree,
+  deleteTree,
+  countTree,
+  readNode,
+} from '../../../src/services/zookeeper/zk-ops';
 import { ZookeeperNodeBrowser } from '../../../src/services/zookeeper/node-browser';
 import { TEST_ZOOKEEPER } from '../../helpers/zookeeper-servers';
 import type { ConnectionManager } from '../../../src/services/connection-manager';
@@ -412,6 +417,173 @@ describe('ZooKeeper driver on a ZooKeeper server', () => {
     const all = await browser.children('c', `${ROOT}/paged`);
     expect(all.entries).toHaveLength(25);
     expect(all.more).toBe(false);
+  });
+
+  // V13.31: real one-shot watches, set again after every report.
+  describe('watching', () => {
+    async function watch(path: string): Promise<{
+      events: ZookeeperWatchEvent[];
+      lost: Error[];
+      stop: () => void;
+    }> {
+      const events: ZookeeperWatchEvent[] = [];
+      const lost: Error[] = [];
+      const stop = await session.watchNode(
+        path,
+        (event) => events.push(event),
+        (error) => lost.push(error),
+      );
+      return { events, lost, stop };
+    }
+
+    it('reports a change of the data, and again after the watch was set anew', async () => {
+      const path = `${ROOT}/watch-data`;
+      await session.create(path, encode('a'), 'persistent');
+      const watching = await watch(path);
+      const writer = await driver.openSession(config());
+      try {
+        await writer.setData(path, encode('b'), -1);
+        await vi.waitFor(() => {
+          expect(watching.events).toEqual([{ kind: 'data', path }]);
+        });
+        await writer.setData(path, encode('c'), -1);
+        await vi.waitFor(() => {
+          expect(watching.events).toHaveLength(2);
+        });
+      } finally {
+        watching.stop();
+        await writer.close();
+      }
+    });
+
+    it('reports a child that is added and one that goes', async () => {
+      const path = `${ROOT}/watch-children`;
+      await session.create(path, new Uint8Array(), 'persistent');
+      const watching = await watch(path);
+      try {
+        await session.create(`${path}/x`, new Uint8Array(), 'persistent');
+        await vi.waitFor(() => {
+          expect(watching.events).toEqual([{ kind: 'children', path }]);
+        });
+        await session.remove(`${path}/x`, -1);
+        await vi.waitFor(() => {
+          expect(watching.events).toHaveLength(2);
+        });
+      } finally {
+        watching.stop();
+      }
+    });
+
+    it('reports a znode that is made after it was watched, then its data', async () => {
+      const path = `${ROOT}/watch-later`;
+      const watching = await watch(path);
+      try {
+        await session.create(path, encode('hi'), 'persistent');
+        await vi.waitFor(() => {
+          expect(watching.events.map((event) => event.kind)).toContain('created');
+        });
+        await session.setData(path, encode('hello'), -1);
+        await vi.waitFor(() => {
+          expect(watching.events.map((event) => event.kind)).toContain('data');
+        });
+      } finally {
+        watching.stop();
+      }
+    });
+
+    it('reports the deletion of the znode', async () => {
+      const path = `${ROOT}/watch-gone`;
+      await session.create(path, new Uint8Array(), 'persistent');
+      const watching = await watch(path);
+      try {
+        await session.remove(path, -1);
+        await vi.waitFor(() => {
+          expect(watching.events.map((event) => event.kind)).toContain('deleted');
+        });
+      } finally {
+        watching.stop();
+      }
+    });
+
+    it('tells the watcher when its session is closed from the other end', async () => {
+      const path = `${ROOT}/watch-lost`;
+      await session.create(path, new Uint8Array(), 'persistent');
+      const own = await driver.openSession(config());
+      const lost: Error[] = [];
+      await own.watchNode(
+        path,
+        () => undefined,
+        (error) => lost.push(error),
+      );
+      // The server's side of a session ends when the client closes it: a second call fails.
+      await own.close();
+      expect((await failure(own.exists(path))).code).toBe('connection-failed');
+      expect(lost).toEqual([]);
+    });
+
+    it('follows a znode on the znode page: data, children, and the list of changes', async () => {
+      const path = `${ROOT}/watch-page`;
+      await session.create(path, encode('start'), 'persistent');
+      const page = new ZookeeperNodeModel({
+        path,
+        connectionName: 'ZooKeeper',
+        readOnly: false,
+        session: () => Promise.resolve(session),
+        watchFlushMs: 20,
+      });
+      await page.refresh();
+      await page.startWatch(() => undefined);
+      await session.setData(path, encode('later'), -1);
+      await vi.waitFor(() => {
+        expect(page.state().value).toEqual({ text: 'later' });
+      });
+      await session.create(`${path}/kid`, new Uint8Array(), 'persistent');
+      await vi.waitFor(() => {
+        expect(page.state().children).toEqual(['kid']);
+      });
+      const kinds = page.state().events?.map((event) => event.kind);
+      expect(kinds).toContain('data');
+      expect(kinds).toContain('children');
+      page.stopWatch();
+      expect(page.state().watching).toBeUndefined();
+    });
+  });
+
+  it('gives an ACL to everything below a znode (V13.31)', async () => {
+    const base = `${ROOT}/acl-tree`;
+    for (const path of [base, `${base}/a`, `${base}/a/deep`, `${base}/b`]) {
+      await session.create(path, new Uint8Array(), 'persistent');
+    }
+    // Everything but admin: the test can still delete what it made.
+    const read = [{ perms: 15, scheme: 'world', id: 'anyone' }];
+    const result = await applyAclTree(session, base, read);
+    expect(result).toEqual({ changed: 3, failed: 0, failures: [], capped: false });
+    for (const path of [`${base}/a`, `${base}/a/deep`, `${base}/b`]) {
+      expect((await session.getAcl(path)).acl).toEqual(read);
+    }
+    // The start keeps its own ACL: the page changes it first, with its version checked.
+    expect((await session.getAcl(base)).acl[0]?.perms).toBe(31);
+  });
+
+  it('applies an ACL below on the znode page, and reports a znode that refuses', async () => {
+    const base = `${ROOT}/acl-page`;
+    await session.create(base, new Uint8Array(), 'persistent');
+    await session.create(`${base}/ok`, new Uint8Array(), 'persistent');
+    await session.create(`${base}/locked`, new Uint8Array(), 'persistent');
+    await session.setAcl(`${base}/locked`, [{ perms: 1, scheme: 'world', id: 'anyone' }], -1);
+    const page = new ZookeeperNodeModel({
+      path: base,
+      connectionName: 'ZooKeeper',
+      readOnly: false,
+      session: () => Promise.resolve(session),
+    });
+    expect(await page.countBelow()).toEqual({ count: 2, capped: false });
+    await page.refresh();
+    const result = await page.saveAcl([{ perms: 15, scheme: 'world', id: 'anyone' }], 0, true);
+    expect(result.saved).toBe(true);
+    expect(result.state.aclTree).toMatchObject({ changed: 1, failed: 1 });
+    expect(result.state.aclTree?.failures[0]).toContain(`${base}/locked`);
+    expect((await session.getAcl(`${base}/ok`)).acl[0]?.perms).toBe(15);
   });
 
   it('closes its session on the server', async () => {

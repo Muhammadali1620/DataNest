@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CREATE_MODES,
+  WATCH_KINDS,
   ZNODE_KINDS,
   zookeeperNodeProtocol,
   zookeeperNodeStateSchema,
@@ -103,5 +104,71 @@ describe('the ZooKeeper znode page requests', () => {
     expect(requests.deleteNode.params.parse({})).toBeDefined();
     expect(requests.copyText.params.parse({ text: '/a' })).toBeDefined();
     expect(() => requests.copyText.params.parse({})).toThrow();
+  });
+});
+
+describe('the ZooKeeper znode page: the ACL below', () => {
+  it('takes the request to give the ACL to everything below, too', () => {
+    const { requests } = zookeeperNodeProtocol.host;
+    const acl = [{ perms: 1, scheme: 'world', id: 'anyone' }];
+    expect(requests.saveAcl.params.parse({ acl, aversion: 0, recursive: true })).toMatchObject({
+      recursive: true,
+    });
+    expect(requests.saveAcl.params.parse({ acl, aversion: 0 })).toBeDefined();
+    expect(() => requests.saveAcl.params.parse({ acl, aversion: 0, recursive: 'yes' })).toThrow();
+  });
+
+  it('takes a report of what was done below', () => {
+    const report = { changed: 3, failed: 1, failures: ['/a: no'], capped: false };
+    expect(zookeeperNodeStateSchema.parse({ ...state, aclTree: report })).toMatchObject({
+      aclTree: report,
+    });
+    for (const bad of [
+      { ...report, changed: -1 },
+      { ...report, failures: Array.from({ length: 11 }, () => 'x') },
+      { ...report, capped: undefined },
+    ]) {
+      expect(() => zookeeperNodeStateSchema.parse({ ...state, aclTree: bad })).toThrow();
+    }
+  });
+});
+
+describe('the ZooKeeper znode page: watching', () => {
+  const event = { at: 1_700_000_000_000, kind: 'data', version: 3, size: 5, children: 2 };
+
+  it('takes a state that is watching, with the changes it saw and a notice', () => {
+    expect(
+      zookeeperNodeStateSchema.parse({
+        ...state,
+        watching: true,
+        events: WATCH_KINDS.map((kind) => ({ ...event, kind })),
+        watchNotice: 'Watching stopped: the session ended',
+      }),
+    ).toMatchObject({ watching: true });
+  });
+
+  it('refuses a change that is not whole, of another kind, or too many of them', () => {
+    for (const bad of [
+      { ...event, kind: 'acl' },
+      { ...event, version: -1 },
+      { ...event, children: 1.5 },
+      { ...event, at: '1' },
+      { ...event, size: undefined },
+    ]) {
+      expect(() => zookeeperNodeStateSchema.parse({ ...state, events: [bad] })).toThrow();
+    }
+    expect(() =>
+      zookeeperNodeStateSchema.parse({
+        ...state,
+        events: Array.from({ length: 201 }, () => event),
+      }),
+    ).toThrow();
+  });
+
+  it('takes the request to watch and to clear', () => {
+    const { requests } = zookeeperNodeProtocol.host;
+    expect(requests.watch.params.parse({ on: true })).toEqual({ on: true });
+    expect(() => requests.watch.params.parse({})).toThrow();
+    expect(requests.clearEvents.params.parse({})).toBeDefined();
   });
 });

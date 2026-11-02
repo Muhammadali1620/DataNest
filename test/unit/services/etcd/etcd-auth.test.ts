@@ -3,10 +3,14 @@ import { DbError } from '../../../../src/core/errors';
 import {
   addRole,
   addUser,
+  authEnabled,
+  authEnableProblem,
   boundsOf,
   changePassword,
   deleteRole,
   deleteUser,
+  disableAuth,
+  enableAuth,
   grantPermission,
   grantRole,
   listRoles,
@@ -221,5 +225,56 @@ describe('what a permission covers', () => {
       permissionText({ type: 'readwrite', key: Uint8Array.of(0), end: Uint8Array.of(0) }),
     ).toBe('readwrite: *');
     expect(permissionText({ type: 'read', key, end: text('/b') })).toBe('read: /app/ … /b');
+  });
+});
+
+describe('turning authentication on and off', () => {
+  it('says authentication is off on a cluster that has it off', async () => {
+    expect(await authEnabled(etcd)).toBe(false);
+  });
+
+  it('says it is on when the cluster says so', async () => {
+    const on = { call: () => Promise.resolve({ enabled: true }) };
+    expect(await authEnabled(on)).toBe(true);
+  });
+
+  it('leaves it undefined when the cluster does not answer the question', async () => {
+    const old = { call: () => Promise.reject(new DbError('not-found', 'Not Found')) };
+    expect(await authEnabled(old)).toBeUndefined();
+  });
+
+  it('does not hide a failure that is not the cluster answering', async () => {
+    const broken = { call: () => Promise.reject(new TypeError('boom')) };
+    await expect(authEnabled(broken)).rejects.toThrow('boom');
+  });
+
+  it('says what the cluster wants first: a root user, then the root role', async () => {
+    expect(await authEnableProblem(etcd)).toBe('no-root-user');
+    await addUser(etcd, 'amy', 'pw');
+    expect(await authEnableProblem(etcd)).toBe('no-root-user');
+    await addUser(etcd, 'root', 'pw');
+    expect(await authEnableProblem(etcd)).toBe('no-root-role');
+    await addRole(etcd, 'root');
+    await grantRole(etcd, 'root', 'root');
+    expect(await authEnableProblem(etcd)).toBeUndefined();
+  });
+
+  it('turns it on once the root user has the root role, and off again', async () => {
+    await addUser(etcd, 'root', 'pw');
+    await addRole(etcd, 'root');
+    await grantRole(etcd, 'root', 'root');
+    await enableAuth(etcd);
+    expect(etcd.users?.get('root')).toBe('pw');
+    // The fake asks for a token from now on; the call for turning it off gets one.
+    etcd.users = undefined;
+    await disableAuth(etcd);
+    expect(etcd.calls).toContain('auth/disable');
+    expect(etcd.users).toBeUndefined();
+  });
+
+  it('shows the refusal of the cluster when it is turned on without a root user', async () => {
+    const error = await enableAuth(etcd).catch((failure: unknown) => failure);
+    expect(error).toMatchObject({ code: 'constraint' });
+    expect((error as DbError).message).toContain('root user does not exist');
   });
 });

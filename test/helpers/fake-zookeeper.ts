@@ -86,6 +86,13 @@ export class FakeZookeeper {
   answerPings = true;
   /** Bytes to send instead of the connect answer (a server that is not ZooKeeper). */
   garbage: Buffer | undefined;
+  /** Watches set (one-shot, as on the real server), by connection (V13.31). */
+  private readonly watches = new Map<
+    net.Socket,
+    { readonly data: Set<string>; readonly children: Set<string> }
+  >();
+  /** The watch notifications sent, as `type:path`, in order. */
+  readonly notifications: string[] = [];
   private zxid = 0n;
   private readonly sockets = new Set<net.Socket>();
   private readonly server: net.Server | tls.Server;
@@ -123,6 +130,26 @@ export class FakeZookeeper {
         resolve();
       });
     });
+  }
+
+  /** Tells the connections that watch `path` what happened (type: 1 created, 2 deleted, 3 data, 4 children). */
+  private fire(type: 1 | 2 | 3 | 4, path: string): void {
+    for (const [socket, watches] of this.watches) {
+      const hit =
+        type === 4
+          ? watches.children.delete(path)
+          : // A deleted znode ends both kinds of watch on it.
+            [watches.data.delete(path), type === 2 && watches.children.delete(path)].some(Boolean);
+      if (!hit) {
+        continue;
+      }
+      this.notifications.push(`${type}:${path}`);
+      const body = new JuteWriter().int(-1).long(this.zxid).int(0).int(type).int(3).string(path);
+      const bytes = body.toBuffer();
+      const head = Buffer.alloc(4);
+      head.writeInt32BE(bytes.length);
+      socket.write(Buffer.concat([head, bytes]));
+    }
   }
 
   /** Drops every open connection, as a server that went down does. */
@@ -223,6 +250,7 @@ export class FakeZookeeper {
     };
     socket.on('close', () => {
       this.sockets.delete(socket);
+      this.watches.delete(socket);
     });
     socket.on('error', () => undefined);
     socket.on('data', (chunk: Buffer) => {
@@ -332,6 +360,23 @@ export class FakeZookeeper {
     const fail = (code: number): void => {
       reply(xid, code);
     };
+    if (type === OP.exists || type === OP.getData || type === OP.getChildren2) {
+      if (reader.bool()) {
+        const mine = this.watches.get(socket) ?? {
+          data: new Set<string>(),
+          children: new Set<string>(),
+        };
+        this.watches.set(socket, mine);
+        // A children watch needs the znode; a data watch is allowed on one that is not there.
+        if (type === OP.getChildren2) {
+          if (node !== undefined) {
+            mine.children.add(path);
+          }
+        } else {
+          mine.data.add(path);
+        }
+      }
+    }
     switch (type) {
       case OP.exists: {
         if (node === undefined) {
@@ -433,6 +478,7 @@ export class FakeZookeeper {
         node.mzxid = this.zxid;
         node.mtime += 1000;
         reply(xid, 0, new JuteWriter().stat(this.statOf(path)));
+        this.fire(3, path);
         return;
       }
       case OP.delete: {
@@ -460,6 +506,8 @@ export class FakeZookeeper {
         parent.cversion += 1;
         parent.pzxid = this.zxid;
         reply(xid, 0);
+        this.fire(2, path);
+        this.fire(4, parentPath);
         return;
       }
       case OP.create: {
@@ -510,6 +558,8 @@ export class FakeZookeeper {
         parent.cversion += 1;
         parent.pzxid = this.zxid;
         reply(xid, 0, new JuteWriter().string(made));
+        this.fire(1, made);
+        this.fire(4, parentPath);
         return;
       }
       default:

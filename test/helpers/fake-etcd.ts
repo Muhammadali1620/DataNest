@@ -65,6 +65,91 @@ export class FakeEtcd {
   failNext: GatewayAnswer | undefined;
   /** The keys the gateway sees as sorted bytes. */
   private readonly store = new Map<string, Stored>();
+  /** The watches that are open (V13.31). */
+  private readonly watchers = new Set<{
+    key: Uint8Array;
+    end: Uint8Array | undefined;
+    send: (message: unknown) => void;
+  }>();
+  /** Fails the next `watch` with this message instead of opening it, once. */
+  failNextWatch: string | undefined;
+  /** Sends every open watch a `canceled` message. */
+  cancelWatches(reason = 'etcdserver: mvcc: required revision has been compacted'): void {
+    for (const watcher of [...this.watchers]) {
+      watcher.send({ result: { header: this.header(), canceled: true, cancel_reason: reason } });
+    }
+    this.watchers.clear();
+  }
+
+  /** Opens a watch like the gateway's stream: a `created` message, then events as they come. */
+  watch(
+    _path: string,
+    body: Readonly<Record<string, unknown>>,
+    onMessage: (message: unknown) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (this.failNextWatch !== undefined) {
+      const message = this.failNextWatch;
+      this.failNextWatch = undefined;
+      return Promise.reject(new DbError('permission-denied', message));
+    }
+    const request = (body.create_request ?? {}) as Record<string, unknown>;
+    const end = request.range_end === undefined ? undefined : unb64(request.range_end);
+    return new Promise<void>((resolve, reject) => {
+      const watcher = {
+        key: unb64(request.key),
+        end,
+        send: (message: unknown) => {
+          try {
+            onMessage(message);
+          } catch (error) {
+            this.watchers.delete(watcher);
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        },
+      };
+      this.watchers.add(watcher);
+      signal.addEventListener(
+        'abort',
+        () => {
+          this.watchers.delete(watcher);
+          resolve();
+        },
+        { once: true },
+      );
+      watcher.send({ result: { header: this.header(), created: true } });
+    });
+  }
+
+  /** Tells the open watches of a change. */
+  private notify(type: 'PUT' | 'DELETE', name: string, stored: Stored, previous?: Stored): void {
+    const key = unb64(name);
+    for (const watcher of this.watchers) {
+      const inside =
+        watcher.end === undefined
+          ? compareBytes(key, watcher.key) === 0
+          : compareBytes(key, watcher.key) >= 0 && compareBytes(key, watcher.end) < 0;
+      if (!inside) {
+        continue;
+      }
+      watcher.send({
+        result: {
+          header: this.header(),
+          events: [
+            {
+              ...(type === 'DELETE' ? { type } : {}),
+              kv:
+                type === 'DELETE'
+                  ? { key: name, mod_revision: String(this.revision) }
+                  : this.wire(name, stored, false),
+              ...(previous === undefined ? {} : { prev_kv: this.wire(name, previous, false) }),
+            },
+          ],
+        },
+      });
+    }
+  }
+
   private readonly leases = new Map<number, Lease>();
   private nextLease = 7_000_000_000_000_000_001n;
   private readonly bigLeases = new Map<string, number>();
@@ -171,6 +256,8 @@ export class FakeEtcd {
         return this.timeToLive(body);
       case 'lease/keepalive':
         return this.keepAlive(body);
+      case 'auth/enable':
+      case 'auth/disable':
       case 'auth/user/list':
       case 'auth/user/get':
       case 'auth/user/add':
@@ -294,13 +381,15 @@ export class FakeEtcd {
     if (old !== undefined && old.lease !== 0 && old.lease !== lease) {
       // A lease that lost its key keeps living; nothing to tidy.
     }
-    this.store.set(name, {
+    const stored: Stored = {
       value,
       create: old?.create ?? this.revision,
       mod: this.revision,
       version: (old?.version ?? 0) + 1,
       lease,
-    });
+    };
+    this.store.set(name, stored);
+    this.notify('PUT', name, stored, old);
   }
 
   private putRequest(body: Record<string, unknown>): GatewayAnswer {
@@ -345,8 +434,9 @@ export class FakeEtcd {
       return {};
     }
     this.revision += 1;
-    for (const [name] of doomed) {
+    for (const [name, stored] of doomed) {
       this.store.delete(name);
+      this.notify('DELETE', name, stored, stored);
     }
     return { deleted: String(doomed.length) };
   }
@@ -425,8 +515,9 @@ export class FakeEtcd {
     const doomed = [...this.store.entries()].filter(([, stored]) => stored.lease === index);
     if (doomed.length > 0) {
       this.revision += 1;
-      for (const [name] of doomed) {
+      for (const [name, stored] of doomed) {
         this.store.delete(name);
+        this.notify('DELETE', name, stored, stored);
       }
     }
     return true;
@@ -451,6 +542,20 @@ export class FakeEtcd {
       body: { header: this.header(), ...extra },
     });
     switch (path) {
+      case 'auth/enable': {
+        const root = this.accountBook.get('root');
+        if (root === undefined) {
+          return fail(9, 'etcdserver: root user does not exist');
+        }
+        if (!root.roles.has('root')) {
+          return fail(9, 'etcdserver: root user does not have root role');
+        }
+        this.users = new Map([...this.accountBook].map(([name, user]) => [name, user.password]));
+        return ok();
+      }
+      case 'auth/disable':
+        this.users = undefined;
+        return ok();
       case 'auth/user/list':
         return ok({ users: [...this.accountBook.keys()] });
       case 'auth/role/list':
@@ -616,6 +721,18 @@ export class FakeEtcdSession implements EtcdSession {
       return Promise.reject(new DbError('connection-failed', 'The session is closed'));
     }
     return this.cluster.call(path, body, options);
+  }
+
+  watch(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    onMessage: (message: unknown) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (this.closed) {
+      return Promise.reject(new DbError('connection-failed', 'The session is closed'));
+    }
+    return this.cluster.watch(path, body, onMessage, signal);
   }
 
   close(): Promise<void> {

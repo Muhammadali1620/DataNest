@@ -7,13 +7,20 @@ import { createHash } from 'node:crypto';
 import { DbError } from '../../core/errors';
 import { msg } from '../../core/user-message';
 import {
+  applyAclTree,
+  type AclTreeResult,
+  countTree,
   deleteTree,
   readNode,
   type ZnodeDetails,
   type ZookeeperCaller,
 } from '../../services/zookeeper/zk-ops';
 import { MAX_STRING_BYTES } from '../../shared/protocols/redis-key';
-import type { ZnodeAclEntry, ZookeeperNodeState } from '../../shared/protocols/zookeeper-node';
+import type {
+  ZnodeAclEntry,
+  ZnodeWatchEventView,
+  ZookeeperNodeState,
+} from '../../shared/protocols/zookeeper-node';
 import { redisValueBytes, type RedisValue, redisValueOf } from '../../shared/redis-value';
 import {
   joinPath,
@@ -22,16 +29,28 @@ import {
   ZK_BAD_VERSION,
   ZK_NODE_EXISTS,
 } from '../../shared/zk-path';
-import type { ZookeeperCreateMode } from '../../drivers/zookeeper-driver';
+import type {
+  ZookeeperCreateMode,
+  ZookeeperSession,
+  ZookeeperWatchKind,
+} from '../../drivers/zookeeper-driver';
 import { aclProblem, isDigestHash } from '../../shared/zk-acl';
 
 export interface ZookeeperNodeModelDeps {
   readonly path: string;
   readonly connectionName: string;
   readonly readOnly: boolean;
-  /** The session of the znode's connection. */
-  readonly session: () => Promise<ZookeeperCaller>;
+  /** The session of the znode's connection; one that can `watchNode` lets the page follow it. */
+  readonly session: () => Promise<ZookeeperCaller & Partial<Pick<ZookeeperSession, 'watchNode'>>>;
+  /** Milliseconds changes are gathered before the page hears of them. */
+  readonly watchFlushMs?: number;
 }
+
+/** How long the changes of a watch are gathered before the page is told. */
+export const DEFAULT_WATCH_FLUSH_MS = 200;
+
+/** Changes the page keeps; the oldest go first. */
+export const MAX_WATCH_EVENTS = 200;
 
 function isCode(error: unknown, code: number): boolean {
   return error instanceof DbError && error.driverCode === code;
@@ -55,6 +74,11 @@ export class ZookeeperNodeModel {
   private details: ZnodeDetails | undefined;
   private conflict = false;
   private aclConflict = false;
+  private watch: { readonly stop: () => void } | undefined;
+  private watchTimer: ReturnType<typeof setTimeout> | undefined;
+  private events: ZnodeWatchEventView[] = [];
+  private watchNotice: string | undefined;
+  private aclTree: AclTreeResult | undefined;
 
   constructor(private readonly deps: ZookeeperNodeModelDeps) {}
 
@@ -92,11 +116,162 @@ export class ZookeeperNodeModel {
       moreChildren: details?.moreChildren ?? false,
       ...(this.conflict ? { conflict: true } : {}),
       ...(this.aclConflict ? { aclConflict: true } : {}),
+      ...(this.watch === undefined ? {} : { watching: true }),
+      ...(this.events.length === 0 ? {} : { events: this.events.map((event) => ({ ...event })) }),
+      ...(this.watchNotice === undefined ? {} : { watchNotice: this.watchNotice }),
+      ...(this.aclTree === undefined
+        ? {}
+        : {
+            aclTree: {
+              changed: this.aclTree.changed,
+              failed: this.aclTree.failed,
+              failures: this.aclTree.failures.map((one) => `${one.path}: ${one.message}`),
+              capped: this.aclTree.capped,
+            },
+          }),
     };
+  }
+
+  /** How many znodes lie below this one (the count stops at a limit), for the question. */
+  async countBelow(): Promise<{ readonly count: number; readonly capped: boolean }> {
+    const counted = await countTree(await this.deps.session(), this.deps.path);
+    return { count: Math.max(0, counted.count - 1), capped: counted.capped };
+  }
+
+  /** True while the znode is watched. */
+  get watching(): boolean {
+    return this.watch !== undefined;
+  }
+
+  /**
+   * Watches the znode: changes are gathered for a moment, the znode is read again, what
+   * happened is added to the list the page shows, and `onChange` is called. The first read
+   * after the watch is set closes the gap between the page's last read and the watch. The
+   * end of the session ends the watch and says so.
+   */
+  async startWatch(onChange: () => void): Promise<ZookeeperNodeState> {
+    this.stopWatch();
+    const session = await this.deps.session();
+    if (session.watchNode === undefined) {
+      throw new DbError('unsupported', msg('This server connection cannot be watched'));
+    }
+    const token: { stop: () => void } = { stop: () => undefined };
+    this.watch = token;
+    this.watchNotice = undefined;
+    let pending: ZookeeperWatchKind[] = [];
+    const flush = (): void => {
+      this.watchTimer = undefined;
+      const batch = pending;
+      pending = [];
+      void this.reread(session).then(
+        () => {
+          if (this.watch === token) {
+            this.record(batch);
+            onChange();
+          }
+        },
+        (error: unknown) => {
+          if (this.watch === token) {
+            this.endWatch(error);
+            onChange();
+          }
+        },
+      );
+    };
+    try {
+      const unsubscribe = await session.watchNode(
+        this.deps.path,
+        (event) => {
+          if (this.watch !== token) {
+            return;
+          }
+          pending.push(event.kind);
+          this.watchTimer ??= setTimeout(flush, this.deps.watchFlushMs ?? DEFAULT_WATCH_FLUSH_MS);
+        },
+        (error) => {
+          if (this.watch === token) {
+            this.endWatch(error);
+            onChange();
+          }
+        },
+      );
+      token.stop = unsubscribe;
+      if (this.watch !== token) {
+        // Stopped while the watch was being set.
+        unsubscribe();
+        return this.state();
+      }
+      await this.reread(session);
+    } catch (error) {
+      if (this.watch === token) {
+        this.watch = undefined;
+        token.stop();
+      }
+      throw error;
+    }
+    return this.state();
+  }
+
+  /** Stops watching; the changes seen stay in the list. */
+  stopWatch(): ZookeeperNodeState {
+    const running = this.watch;
+    this.watch = undefined;
+    running?.stop();
+    if (this.watchTimer !== undefined) {
+      clearTimeout(this.watchTimer);
+      this.watchTimer = undefined;
+    }
+    return this.state();
+  }
+
+  /** Empties the list of changes. */
+  clearEvents(): ZookeeperNodeState {
+    this.events = [];
+    this.watchNotice = undefined;
+    return this.state();
+  }
+
+  private endWatch(error: unknown): void {
+    this.stopWatch();
+    this.watchNotice = msg(
+      'Watching stopped: {0}',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  /** Adds what the batch of reports was to the list, with how the znode looks now. */
+  private record(batch: readonly ZookeeperWatchKind[]): void {
+    const at = Date.now();
+    const stat = this.details?.stat;
+    // Deleting a znode is reported twice (its data, its children): one line is enough.
+    const kinds = batch.includes('deleted')
+      ? batch.filter((kind, index) => kind !== 'deleted' || batch.indexOf('deleted') === index)
+      : batch;
+    const seen = new Set<ZookeeperWatchKind>();
+    for (const kind of kinds) {
+      if (seen.has(kind)) {
+        continue;
+      }
+      seen.add(kind);
+      this.events.push({
+        at,
+        kind,
+        version: stat?.version ?? 0,
+        size: stat?.dataLength ?? 0,
+        children: stat?.numChildren ?? 0,
+      });
+    }
+    this.events = this.events.slice(-MAX_WATCH_EVENTS);
+  }
+
+  /** Reads the znode again without touching the flags of a save. */
+  private async reread(session: ZookeeperCaller): Promise<void> {
+    this.details = await readNode(session, this.deps.path);
   }
 
   /** Reads the znode again. */
   async refresh(): Promise<ZookeeperNodeState> {
+    this.aclTree = undefined;
     this.details = await readNode(await this.deps.session(), this.deps.path);
     this.conflict = false;
     this.aclConflict = false;
@@ -151,6 +326,7 @@ export class ZookeeperNodeModel {
   async saveAcl(
     acl: readonly ZnodeAclEntry[],
     aversion: number,
+    recursive = false,
   ): Promise<{ readonly saved: boolean; readonly state: ZookeeperNodeState }> {
     this.requireWritable();
     if (acl.length === 0) {
@@ -193,7 +369,14 @@ export class ZookeeperNodeModel {
       }
       throw error;
     }
-    return { saved: true, state: await this.refresh() };
+    if (!recursive) {
+      return { saved: true, state: await this.refresh() };
+    }
+    // The znode itself is done, with its version checked; below it the ACLs are replaced.
+    const tree = await applyAclTree(session, this.deps.path, entries);
+    await this.refresh();
+    this.aclTree = tree;
+    return { saved: true, state: this.state() };
   }
 
   /** Creates a child with empty data; returns its path (a sequential one has its number). */

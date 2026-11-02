@@ -13,7 +13,7 @@
   import type { Translate } from '../../lib/i18n';
   import ValueEditor from '../redis-key/ValueEditor.svelte';
   import AclEditor from './AclEditor.svelte';
-  import { aclText, KIND_TONE, timeText } from './node-view';
+  import { aclText, clockTime, KIND_TONE, timeText } from './node-view';
 
   interface Props {
     rpc: RpcPeer<ZookeeperNodeProtocol['webview'], ZookeeperNodeProtocol['host']>;
@@ -33,6 +33,27 @@
   let childMode = $state<'persistent' | 'sequential' | 'container'>('persistent');
   /** Bumped when the server's value should replace what the box shows. */
   let version = $state(0);
+  /** The version of the data the value box was filled at: a save is checked against it. */
+  let readVersion = $state(0);
+
+  /** The znode moved on while the user was typing: the text stays, the save will ask. */
+  const stale = $derived(
+    draft !== undefined && nodeState !== undefined && nodeState.version !== readVersion,
+  );
+  /** The changes the watch saw, newest first. */
+  const changes = $derived([...(nodeState?.events ?? [])].reverse());
+
+  /** What the last "give it to everything below" did, in one paragraph. */
+  function aclTreeText(report: NonNullable<ZookeeperNodeState['aclTree']>): string {
+    return [
+      t('zk.aclTreeDone', report.changed),
+      report.capped ? t('zk.aclTreeCapped') : undefined,
+      report.failed > 0 ? t('zk.aclTreeFailed', report.failed) : undefined,
+      report.failed > 0 ? report.failures.join('; ') : undefined,
+    ]
+      .filter((part): part is string => part !== undefined)
+      .join(' ');
+  }
 
   const kindLabel = $derived(
     nodeState === undefined
@@ -52,9 +73,12 @@
       // A fresh read closes the editor: a refused change shows the ACL as it is now.
       editingAcl = false;
       // A refused save keeps the user's text in the box: only a fresh read replaces it.
-      if (next.conflict !== true) {
+      // A change seen by the watch does not erase what the user is typing either.
+      const keepDraft = next.conflict === true || (next.watching === true && draft !== undefined);
+      if (!keepDraft) {
         version += 1;
         draft = undefined;
+        readVersion = next.version;
       }
     });
     rpc.emit('ready', {});
@@ -88,18 +112,24 @@
     void run(() =>
       rpc.request('save', {
         value,
-        version: state.version,
+        version: overwrite ? state.version : readVersion,
         ...(overwrite ? { overwrite: true } : {}),
       }),
     );
   }
 
-  function saveAcl(acl: ZnodeAclEntry[]): void {
+  function saveAcl(acl: ZnodeAclEntry[], recursive: boolean): void {
     const state = nodeState;
     if (state === undefined) {
       return;
     }
-    void run(() => rpc.request('saveAcl', { acl, aversion: state.aversion }));
+    void run(() =>
+      rpc.request('saveAcl', {
+        acl,
+        aversion: state.aversion,
+        ...(recursive ? { recursive: true } : {}),
+      }),
+    );
   }
 
   function addChild(): void {
@@ -173,6 +203,12 @@
       <div class="notice error problem" role="alert" data-testid="error"><Icon name="error" /><span class="message">{error}</span></div>
     {/if}
 
+    {#if stale}
+      <div class="notice warning problem" role="status" data-testid="stale">
+        <Icon name="warning" /><span class="message">{t('zk.staleDraft', nodeState.version)}</span>
+      </div>
+    {/if}
+
     {#if nodeState.conflict === true}
       <div class="notice warning problem" role="alert" data-testid="conflict">
         <Icon name="warning" />
@@ -193,10 +229,48 @@
       </div>
     {/if}
 
+    {#if nodeState.aclTree !== undefined}
+      <div
+        class="notice {nodeState.aclTree.failed > 0 ? 'warning' : 'info'} problem"
+        role="status"
+        data-testid="acl-tree"
+      >
+        <Icon name={nodeState.aclTree.failed > 0 ? 'warning' : 'check'} />
+        <span class="message">{aclTreeText(nodeState.aclTree)}</span>
+      </div>
+    {/if}
+
     {#if nodeState.aclConflict === true}
       <div class="notice warning problem" role="alert" data-testid="acl-conflict">
         <Icon name="warning" />
         <span class="message">{t('zk.aclConflict', nodeState.aversion)}</span>
+      </div>
+    {/if}
+
+    <div class="watchbar" data-testid="watchbar">
+      <span class="group-icon" title={t('zk.watch')}><Icon name="broadcast" /></span>
+      <button
+        type="button"
+        class="button secondary"
+        class:active={nodeState.watching === true}
+        aria-pressed={nodeState.watching === true}
+        title={t('zk.watchHint')}
+        disabled={busy}
+        onclick={() => void run(() => rpc.request('watch', { on: nodeState?.watching !== true }))}
+        ><Icon name={nodeState.watching === true ? 'debug-stop' : 'broadcast'} />{nodeState.watching === true
+          ? t('zk.watchStop')
+          : t('zk.watch')}</button
+      >
+      {#if nodeState.watching === true}
+        <span class="fact" data-testid="watch-note"
+          >{changes.length === 0 ? t('zk.watchWaiting') : t('zk.watchOn')}</span
+        >
+      {/if}
+    </div>
+
+    {#if nodeState.watchNotice !== undefined}
+      <div class="notice warning problem" role="status" data-testid="watch-notice">
+        <Icon name="warning" /><span class="message">{nodeState.watchNotice}</span>
       </div>
     {/if}
 
@@ -256,6 +330,7 @@
             {#key nodeState.aversion}
               <AclEditor
                 acl={nodeState.acl}
+                below={nodeState.numChildren}
                 {busy}
                 {t}
                 onsave={saveAcl}
@@ -362,10 +437,112 @@
         </section>
       </div>
     {/if}
+
+    {#if changes.length > 0}
+      <section class="changes" data-testid="changes">
+        <header class="changes-head">
+          <span>{t('zk.changes')} · {changes.length}</span>
+          <button
+            type="button"
+            class="button secondary"
+            disabled={busy}
+            onclick={() => void run(() => rpc.request('clearEvents', {}))}>{t('zk.changesClear')}</button
+          >
+        </header>
+        <ul>
+          {#each changes as change, index (`${change.at}:${change.kind}:${index}`)}
+            <li class="change kind-{change.kind}">
+              <span class="badge outline">{t(`zk.change.${change.kind}`)}</span>
+              <span class="fact mono">{clockTime(change.at)}</span>
+              {#if change.kind !== 'deleted'}
+                <span class="fact">{t('zk.version', change.version)}</span>
+                <span class="fact">{t('redis.bytes', change.size)}</span>
+                <span class="fact">{t('zk.children', change.children)}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
   {/if}
 </main>
 
 <style>
+  /* Watching: the switch, and what the page is doing about it. */
+  .watchbar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--dn-gap) var(--dn-gap-s);
+    align-items: center;
+    padding: var(--dn-gap) var(--dn-gap-l);
+    background: var(--vscode-sideBar-background, var(--dn-surface));
+    border-bottom: 1px solid var(--dn-divider);
+  }
+
+  .watchbar .button {
+    min-height: 24px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  .group-icon {
+    display: inline-flex;
+    color: var(--dn-muted);
+  }
+
+  .button.active {
+    color: var(--vscode-charts-green);
+    border-color: var(--vscode-charts-green);
+  }
+
+  /* What the watch saw: the newest change on top, under the znode. */
+  .changes {
+    flex: none;
+    max-height: 32vh;
+    overflow: auto;
+    border-top: 1px solid var(--dn-divider);
+  }
+
+  .changes-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--dn-gap-s) var(--dn-gap-l);
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    background: var(--vscode-sideBar-background, var(--dn-surface));
+  }
+
+  .changes ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .change {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-s) var(--dn-gap-m);
+    align-items: center;
+    padding: 3px var(--dn-gap-l);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  .change.kind-created .badge,
+  .change.kind-data .badge {
+    color: var(--vscode-charts-green);
+  }
+
+  .change.kind-children .badge {
+    color: var(--vscode-charts-blue);
+  }
+
+  .change.kind-deleted .badge {
+    color: var(--dn-danger);
+  }
+
   main {
     position: relative;
     display: flex;

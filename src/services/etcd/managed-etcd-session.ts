@@ -52,6 +52,26 @@ export class ManagedEtcdSession implements EtcdSession {
     }
   }
 
+  /** A stream counts as busy for as long as it runs: the link is not quiet, so no ping. */
+  async watch(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    onMessage: (message: unknown) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    this.busy += 1;
+    this.stopKeepAlive();
+    try {
+      await this.inner.watch(path, body, onMessage, signal);
+    } catch (error) {
+      this.report(error);
+      throw toDbError(error);
+    } finally {
+      this.busy -= 1;
+      this.scheduleKeepAlive();
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     this.stopKeepAlive();

@@ -9,11 +9,15 @@
     acl: readonly ZnodeAclEntry[];
     busy: boolean;
     t: Translate;
-    onsave: (acl: ZnodeAclEntry[]) => void;
+    /** Znodes below this one; with some, the editor offers to give them the ACL, too. */
+    below?: number;
+    onsave: (acl: ZnodeAclEntry[], recursive: boolean) => void;
     oncancel: () => void;
   }
 
-  const { acl, busy, t, onsave, oncancel }: Props = $props();
+  const { acl, busy, t, below = 0, onsave, oncancel }: Props = $props();
+
+  let recursive = $state(false);
 
   // The editor is opened over one ACL; a fresh read closes it and opens a new one.
   // svelte-ignore state_referenced_locally
@@ -97,6 +101,12 @@
     {/each}
   </ul>
   <p class="hint">{t('zk.aclHint')}</p>
+  {#if below > 0}
+    <label class="recursive">
+      <input type="checkbox" bind:checked={recursive} data-testid="acl-recursive" />
+      {t('zk.aclRecursive', below)}
+    </label>
+  {/if}
   <div class="actions">
     <button type="button" class="button secondary" disabled={busy} onclick={add}
       ><Icon name="add" />{t('zk.aclAdd')}</button
@@ -106,7 +116,10 @@
       class="button"
       disabled={busy || !valid}
       onclick={() => {
-        onsave(rows.map((row) => ({ ...row })));
+        onsave(
+          rows.map((row) => ({ ...row })),
+          recursive,
+        );
       }}><Icon name="save" />{t('zk.aclSave')}</button
     >
     <button type="button" class="button secondary" disabled={busy} onclick={oncancel}
@@ -116,6 +129,13 @@
 </div>
 
 <style>
+  .recursive {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    font-size: var(--dn-font-small);
+  }
+
   .editor {
     display: flex;
     flex-direction: column;

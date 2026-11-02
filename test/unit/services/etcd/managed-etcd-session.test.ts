@@ -10,6 +10,7 @@ function inner(call: EtcdSession['call'] = () => Promise.resolve({})): EtcdSessi
     closed: 0,
     server: { version: '3.5.17', clusterId: '1', dbSizeBytes: 0, authenticated: false },
     call,
+    watch: () => Promise.resolve(),
     close: () => {
       state.closed += 1;
       return Promise.resolve();
@@ -119,5 +120,62 @@ describe('ManagedEtcdSession', () => {
     await closing.close();
     await vi.advanceTimersByTimeAsync(1000);
     expect(call).not.toHaveBeenCalled();
+  });
+});
+
+describe('ManagedEtcdSession: watching', () => {
+  it('hands the stream to the session below', async () => {
+    const watch = vi.fn(() => Promise.resolve());
+    const base = inner();
+    base.watch = watch;
+    const session = new ManagedEtcdSession(base, { onLinkLost: vi.fn() });
+    const abort = new AbortController();
+    const onMessage = vi.fn();
+    await session.watch('watch', { a: 1 }, onMessage, abort.signal);
+    expect(watch).toHaveBeenCalledWith('watch', { a: 1 }, onMessage, abort.signal);
+  });
+
+  it('tells the manager when the link is lost, and still throws', async () => {
+    const lost = vi.fn();
+    const base = inner();
+    base.watch = () => Promise.reject(new DbError('connection-failed', 'gone'));
+    const session = new ManagedEtcdSession(base, { onLinkLost: lost });
+    await expect(
+      session.watch('watch', {}, vi.fn(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'connection-failed' });
+    expect(lost).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call a refusal a lost link, and wraps a plain error', async () => {
+    const lost = vi.fn();
+    const base = inner();
+    base.watch = () => Promise.reject(new DbError('permission-denied', 'no'));
+    const session = new ManagedEtcdSession(base, { onLinkLost: lost });
+    await expect(
+      session.watch('watch', {}, vi.fn(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    base.watch = () => Promise.reject(new Error('boom'));
+    await expect(
+      session.watch('watch', {}, vi.fn(), new AbortController().signal),
+    ).rejects.toBeInstanceOf(DbError);
+    expect(lost).not.toHaveBeenCalled();
+  });
+
+  it('is not quiet while the stream runs: no ping, and one when it ends', async () => {
+    const call = vi.fn(() => Promise.resolve({}));
+    const base = inner(call);
+    let end: () => void = () => undefined;
+    base.watch = () =>
+      new Promise<void>((resolve) => {
+        end = resolve;
+      });
+    const session = new ManagedEtcdSession(base, { onLinkLost: vi.fn(), keepAliveMs: 1000 });
+    const running = session.watch('watch', {}, vi.fn(), new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(call).not.toHaveBeenCalled();
+    end();
+    await running;
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(call).toHaveBeenCalledWith('maintenance/status', {});
   });
 });

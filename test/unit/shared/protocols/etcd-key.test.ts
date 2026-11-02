@@ -76,3 +76,54 @@ describe('the etcd key page requests', () => {
     expect(etcdKeyProtocol.host.events.ready.parse({})).toEqual({});
   });
 });
+
+describe('the etcd key page: watching', () => {
+  const event = {
+    at: 1_700_000_000_000,
+    type: 'put',
+    key: '/a',
+    revision: '7',
+    size: 3,
+    preview: 'abc',
+  };
+
+  it('takes a state that is watching, with the changes it saw and a notice', () => {
+    expect(
+      etcdKeyStateSchema.parse({
+        ...state,
+        watching: true,
+        watchPrefix: true,
+        events: [event, { ...event, type: 'delete', size: 0, preview: '' }],
+        watchNotice: 'Watching stopped: gone',
+      }),
+    ).toMatchObject({ watching: true, events: [{ type: 'put' }, { type: 'delete' }] });
+  });
+
+  it('refuses a change that is not whole, of another kind, or too long', () => {
+    for (const bad of [
+      { ...event, type: 'update' },
+      { ...event, revision: 7 },
+      { ...event, size: -1 },
+      { ...event, at: 1.5 },
+      { ...event, preview: 'x'.repeat(301) },
+      { ...event, key: undefined },
+    ]) {
+      expect(() => etcdKeyStateSchema.parse({ ...state, events: [bad] })).toThrow();
+    }
+    expect(() =>
+      etcdKeyStateSchema.parse({ ...state, events: Array.from({ length: 201 }, () => event) }),
+    ).toThrow();
+  });
+
+  it('takes the request to watch, with or without the keys below, and to clear', () => {
+    const { requests } = etcdKeyProtocol.host;
+    expect(requests.watch.params.parse({ on: true })).toEqual({ on: true });
+    expect(requests.watch.params.parse({ on: false, prefix: true })).toEqual({
+      on: false,
+      prefix: true,
+    });
+    expect(() => requests.watch.params.parse({})).toThrow();
+    expect(() => requests.watch.params.parse({ on: 'yes' })).toThrow();
+    expect(requests.clearEvents.params.parse({})).toBeDefined();
+  });
+});

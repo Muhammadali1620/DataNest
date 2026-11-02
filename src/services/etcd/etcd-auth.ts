@@ -31,6 +31,9 @@ export interface EtcdRoleView {
 /** The role etcd needs for a user to change users, roles and the cluster. */
 export const ROOT_ROLE = 'root';
 
+/** The user etcd needs to exist, with the root role, before authentication goes on. */
+export const ROOT_USER = 'root';
+
 const ZERO = Uint8Array.of(0);
 
 function strings(value: unknown): string[] {
@@ -227,4 +230,42 @@ export async function revokePermission(
     key: toBase64(permission.key),
     ...(permission.end.length === 0 ? {} : { range_end: toBase64(permission.end) }),
   });
+}
+
+/**
+ * Is authentication on (V13.31)? `auth/status` answers from etcd 3.5; an older cluster, or
+ * one that wants a sign-in for even this question, leaves it undefined.
+ */
+export async function authEnabled(session: EtcdCaller): Promise<boolean | undefined> {
+  try {
+    return field(await session.call('auth/status', {}), 'enabled') === true;
+  } catch (error) {
+    if (error instanceof DbError) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Why the cluster would refuse to turn authentication on, or undefined when it would not:
+ * it wants a user named `root` that has the role `root`, the only way left to manage it.
+ */
+export async function authEnableProblem(
+  session: EtcdCaller,
+): Promise<'no-root-user' | 'no-root-role' | undefined> {
+  if (!(await listUsers(session)).includes(ROOT_USER)) {
+    return 'no-root-user';
+  }
+  return (await userRoles(session, ROOT_USER)).includes(ROOT_ROLE) ? undefined : 'no-root-role';
+}
+
+/** Turns authentication on: from then on every connection has to sign in with a user. */
+export async function enableAuth(session: EtcdCaller): Promise<void> {
+  await session.call('auth/enable', {});
+}
+
+/** Turns authentication off; the cluster wants the root user for it. */
+export async function disableAuth(session: EtcdCaller): Promise<void> {
+  await session.call('auth/disable', {});
 }

@@ -26,6 +26,7 @@ function inner(overrides: Partial<ZookeeperSession> = {}): ZookeeperSession {
     getAcl: () => Promise.resolve({ acl: [], stat: STAT }),
     setAcl: () => Promise.resolve(STAT),
     serverVersion: () => Promise.resolve('3.9.3'),
+    watchNode: () => Promise.resolve(() => undefined),
     create: (path) => Promise.resolve(path),
     setData: () => Promise.resolve(STAT),
     remove: () => Promise.resolve(),
@@ -121,5 +122,76 @@ describe('ManagedZookeeperSession', () => {
     await expect(
       new ManagedZookeeperSession(inner(), { onLinkLost: () => undefined }).close(),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('ManagedZookeeperSession: watching', () => {
+  it('hands the watch to the session below and returns how to let it go', async () => {
+    const stop = vi.fn();
+    const watchNode = vi.fn(() => Promise.resolve(stop));
+    const managed = new ManagedZookeeperSession(inner({ watchNode }), {
+      onLinkLost: () => undefined,
+    });
+    const onEvent = vi.fn();
+    const release = await managed.watchNode('/a', onEvent, () => undefined);
+    expect(watchNode).toHaveBeenCalledWith('/a', onEvent, expect.any(Function));
+    release();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the manager, and the caller, when the session below loses the link', async () => {
+    const lost = vi.fn();
+    const heard = vi.fn();
+    let onLost: (error: Error) => void = () => undefined;
+    const managed = new ManagedZookeeperSession(
+      inner({
+        watchNode: (_path, _onEvent, callback) => {
+          onLost = callback;
+          return Promise.resolve(() => undefined);
+        },
+      }),
+      { onLinkLost: lost },
+    );
+    await managed.watchNode('/a', () => undefined, heard);
+    const error = new DbError('connection-failed', 'The connection to ZooKeeper was closed');
+    onLost(error);
+    expect(lost).toHaveBeenCalledWith(error);
+    expect(heard).toHaveBeenCalledWith(error);
+  });
+
+  it('tells the manager when the watch cannot be set because the link is gone', async () => {
+    const lost = vi.fn();
+    const managed = new ManagedZookeeperSession(
+      inner({ watchNode: () => Promise.reject(new DbError('connection-failed', 'gone')) }),
+      { onLinkLost: lost },
+    );
+    await expect(
+      managed.watchNode(
+        '/a',
+        () => undefined,
+        () => undefined,
+      ),
+    ).rejects.toMatchObject({
+      code: 'connection-failed',
+    });
+    expect(lost).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call a refusal a lost link', async () => {
+    const lost = vi.fn();
+    const managed = new ManagedZookeeperSession(
+      inner({ watchNode: () => Promise.reject(new DbError('permission-denied', 'no')) }),
+      { onLinkLost: lost },
+    );
+    await expect(
+      managed.watchNode(
+        '/a',
+        () => undefined,
+        () => undefined,
+      ),
+    ).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(lost).not.toHaveBeenCalled();
   });
 });

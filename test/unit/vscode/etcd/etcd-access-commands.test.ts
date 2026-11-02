@@ -9,6 +9,7 @@ import {
   type EtcdAccessUi,
 } from '../../../../src/vscode/etcd/etcd-access-commands';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
+import type { EtcdCaller } from '../../../../src/services/etcd/etcd-client';
 import { FakeEtcd } from '../../../helpers/fake-etcd';
 
 const text = (value: string): Uint8Array => new TextEncoder().encode(value);
@@ -44,6 +45,10 @@ let inputOptions: {
 let pickedConnection: string | undefined;
 
 function handler() {
+  return handlerWith(etcd);
+}
+
+function handlerWith(caller: EtcdCaller) {
   const ui: EtcdAccessUi = {
     input: (options) => {
       inputOptions.push({
@@ -90,7 +95,7 @@ function handler() {
       get: (id) => configs.find((config) => config.id === id),
       list: () => configs,
     },
-    session: () => Promise.resolve(etcd),
+    session: () => Promise.resolve(caller),
     ui,
     texts: { noEtcd: 'No etcd', readOnly: 'Read-only' },
   });
@@ -120,13 +125,19 @@ describe('Users and Roles: the main list', () => {
     expect(shown).toHaveLength(1);
     expect(shown[0]?.title).toBe('Users and Roles');
     expect(shown[0]?.placeHolder).toBe('1 users, 1 roles');
-    expect(shown[0]?.labels).toEqual(['Add a User…', 'Add a Role…', 'amy', 'admins']);
+    expect(shown[0]?.labels).toEqual([
+      'Add a User…',
+      'Add a Role…',
+      'amy',
+      'admins',
+      'Turn Authentication On…',
+    ]);
   });
 
   it('is shown for an empty cluster as well', async () => {
     picks = [undefined];
     await handler()(node('c1'));
-    expect(shown[0]?.labels).toEqual(['Add a User…', 'Add a Role…']);
+    expect(shown[0]?.labels).toEqual(['Add a User…', 'Add a Role…', 'Turn Authentication On…']);
   });
 
   it('picks the only etcd connection when it is run from the palette', async () => {
@@ -417,5 +428,132 @@ describe('Users and Roles: read-only and production', () => {
     picks = ['Add a Role…', undefined];
     await handler()(node('c1'));
     expect([...etcd.roleBook.keys()]).toEqual(['admins']);
+  });
+});
+
+describe('Users and Roles: authentication', () => {
+  /** A cluster with the user root and its role, ready to turn authentication on. */
+  async function withRoot(): Promise<void> {
+    await addUser(etcd, 'root', 'pw');
+    await addRole(etcd, 'root');
+    await grantRole(etcd, 'root', 'root');
+  }
+
+  it('offers to turn it on while it is off, saying so', async () => {
+    picks = [undefined];
+    await handler()(node('c1'));
+    expect(shown[0]?.labels.at(-1)).toBe('Turn Authentication On…');
+  });
+
+  it('offers to turn it off while it is on', async () => {
+    const on = {
+      call: (path: string, body: Record<string, unknown>) =>
+        path === 'auth/status' ? Promise.resolve({ enabled: true }) : etcd.call(path, body),
+    };
+    const ui = handlerWith(on);
+    picks = [undefined];
+    await ui(node('c1'));
+    expect(shown[0]?.labels.at(-1)).toBe('Turn Authentication Off…');
+    expect(shown[0]?.labels).not.toContain('Turn Authentication On…');
+  });
+
+  it('offers neither when the cluster does not say whether it is on', async () => {
+    const unknown = {
+      call: (path: string, body: Record<string, unknown>) =>
+        path === 'auth/status'
+          ? Promise.reject(new DbError('not-found', 'Not Found'))
+          : etcd.call(path, body),
+    };
+    picks = [undefined];
+    await handlerWith(unknown)(node('c1'));
+    expect(shown[0]?.labels.some((label) => label.startsWith('Turn Authentication'))).toBe(false);
+  });
+
+  it('turns it on after a question that says what changes, and tells where to go next', async () => {
+    await withRoot();
+    configs = [etcdConfig('c1', { user: 'amy' })];
+    confirmAnswers = [true];
+    picks = ['Turn Authentication On…'];
+    await handler()(node('c1'));
+    expect(etcd.users?.has('root')).toBe(true);
+    // The menu ends: the session has no user, so it could read nothing more.
+    expect(shown).toHaveLength(1);
+    expect(confirms[0]?.message).toBe('Turn authentication on?');
+    expect(confirms[0]?.detail).toContain('This connection signs in as "amy".');
+    expect(confirms[0]?.detail).toContain('Turning it off again needs the user "root".');
+    expect(infos.at(-1)).toContain('enter the user "root"');
+  });
+
+  it('warns that a connection without a user stops working', async () => {
+    await withRoot();
+    confirmAnswers = [false];
+    picks = ['Turn Authentication On…', undefined];
+    await handler()(node('c1'));
+    expect(confirms[0]?.detail).toContain('This connection has no user: it stops working');
+  });
+
+  it('leaves it off when the question is answered no', async () => {
+    await withRoot();
+    confirmAnswers = [false];
+    picks = ['Turn Authentication On…', undefined];
+    await handler()(node('c1'));
+    expect(etcd.users).toBeUndefined();
+    expect(infos).toEqual([]);
+  });
+
+  it('says what is missing when there is no root user, and when it has no root role', async () => {
+    picks = ['Turn Authentication On…'];
+    const noUser = await handler()(node('c1')).catch((failure: unknown) => failure);
+    expect(noUser).toMatchObject({ code: 'constraint' });
+    expect((noUser as DbError).message).toContain('needs a user named "root"');
+    await addUser(etcd, 'root', 'pw');
+    picks = ['Turn Authentication On…'];
+    const noRole = await handler()(node('c1')).catch((failure: unknown) => failure);
+    expect(noRole).toMatchObject({ code: 'constraint' });
+    expect((noRole as DbError).message).toContain('needs the role "root"');
+    expect(etcd.users).toBeUndefined();
+  });
+
+  it('turns it off after a question', async () => {
+    const on = {
+      call: (path: string, body: Record<string, unknown>) =>
+        path === 'auth/status' ? Promise.resolve({ enabled: true }) : etcd.call(path, body),
+    };
+    confirmAnswers = [true];
+    picks = ['Turn Authentication Off…', undefined];
+    await handlerWith(on)(node('c1'));
+    expect(confirms[0]?.message).toBe('Turn authentication off?');
+    expect(etcd.calls).toContain('auth/disable');
+    expect(infos.at(-1)).toBe('Authentication is off');
+  });
+
+  it('keeps it on when the question is answered no', async () => {
+    const on = {
+      call: (path: string, body: Record<string, unknown>) =>
+        path === 'auth/status' ? Promise.resolve({ enabled: true }) : etcd.call(path, body),
+    };
+    confirmAnswers = [false];
+    picks = ['Turn Authentication Off…', undefined];
+    await handlerWith(on)(node('c1'));
+    expect(etcd.calls).not.toContain('auth/disable');
+    expect(infos).toEqual([]);
+  });
+
+  it('refuses both on a read-only connection, and asks twice on a production one', async () => {
+    await withRoot();
+    configs = [etcdConfig('c1', { readOnly: true })];
+    confirmAnswers = [true];
+    picks = ['Turn Authentication On…'];
+    await expect(handler()(node('c1'))).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(etcd.users).toBeUndefined();
+    configs = [etcdConfig('c1', { production: true })];
+    confirmAnswers = [true, true];
+    picks = ['Turn Authentication On…'];
+    await handler()(node('c1'));
+    expect(confirms.map((one) => one.message)).toEqual([
+      'Turn authentication on?',
+      'Change access on the production connection "etcd c1"?',
+    ]);
+    expect(etcd.users).toBeDefined();
   });
 });

@@ -46,3 +46,11 @@ export function parseLeaseId(text: string): string | undefined {
   const trimmed = text.trim();
   return /^\d{1,20}$/u.test(trimmed) && trimmed !== '0' ? trimmed : undefined;
 }
+
+/** `14:03:09`: the time of day a change was seen, in the viewer's time zone. */
+export function clockTime(at: number): string {
+  const date = new Date(at);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}

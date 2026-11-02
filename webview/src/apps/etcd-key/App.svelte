@@ -10,7 +10,7 @@
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import ValueEditor from '../redis-key/ValueEditor.svelte';
-  import { clock, parseLeaseId, parseSeconds, secondsLeft, toneOf } from './lease-view';
+  import { clock, clockTime, parseLeaseId, parseSeconds, secondsLeft, toneOf } from './lease-view';
 
   interface Props {
     rpc: RpcPeer<EtcdKeyProtocol['webview'], EtcdKeyProtocol['host']>;
@@ -31,6 +31,9 @@
   let now = $state(Date.now());
   /** Bumped when the server's value should replace what the box shows. */
   let version = $state(0);
+  /** The revision the value box was filled at: a save is checked against it, not a later read. */
+  let readRevision = $state('0');
+  let watchPrefix = $state(false);
 
   const left = $derived(
     keyState?.lease === null || keyState?.lease === undefined
@@ -38,6 +41,12 @@
       : secondsLeft(keyState.lease, now - receivedAt),
   );
   const tone = $derived(left === undefined ? undefined : toneOf(left));
+  /** The key moved on while the user was typing: the text stays, the save will ask. */
+  const stale = $derived(
+    draft !== undefined && keyState !== undefined && keyState.modRevision !== readRevision,
+  );
+  /** The changes the watch saw, newest first. */
+  const changes = $derived([...(keyState?.events ?? [])].reverse());
 
   onMount(() => {
     const subscription = rpc.on('state', (next) => {
@@ -45,9 +54,12 @@
       receivedAt = Date.now();
       now = receivedAt;
       // A refused save keeps the user's text in the box: only a fresh read replaces it.
-      if (next.conflict !== true) {
+      // A change seen by the watch does not erase what the user is typing either.
+      const keepDraft = next.conflict === true || (next.watching === true && draft !== undefined);
+      if (!keepDraft) {
         version += 1;
         draft = undefined;
+        readRevision = next.modRevision;
       }
     });
     const timer = setInterval(() => {
@@ -85,7 +97,7 @@
     void run(() =>
       rpc.request('save', {
         value,
-        modRevision: state.modRevision,
+        modRevision: overwrite ? state.modRevision : readRevision,
         ...(overwrite ? { overwrite: true } : {}),
       }),
     );
@@ -151,6 +163,12 @@
       <div class="notice error problem" role="alert" data-testid="error"><Icon name="error" /><span class="message">{error}</span></div>
     {/if}
 
+    {#if stale}
+      <div class="notice warning problem" role="status" data-testid="stale">
+        <Icon name="warning" /><span class="message">{t('etcd.staleDraft', keyState.modRevision)}</span>
+      </div>
+    {/if}
+
     {#if keyState.conflict === true}
       <div class="notice warning problem" role="alert" data-testid="conflict">
         <Icon name="warning" />
@@ -168,6 +186,46 @@
             >
           {/if}
         </span>
+      </div>
+    {/if}
+
+    <div class="keybar" data-testid="watchbar">
+      <span class="group-icon" title={t('etcd.watch')}><Icon name="broadcast" /></span>
+      <button
+        type="button"
+        class="button secondary"
+        class:active={keyState.watching === true}
+        aria-pressed={keyState.watching === true}
+        title={t('etcd.watchHint')}
+        disabled={busy}
+        onclick={() =>
+          void run(() =>
+            rpc.request('watch', { on: keyState?.watching !== true, prefix: watchPrefix }),
+          )}
+        ><Icon name={keyState.watching === true ? 'debug-stop' : 'broadcast'} />{keyState.watching === true
+          ? t('etcd.watchStop')
+          : t('etcd.watch')}</button
+      >
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={keyState.watching === true ? keyState.watchPrefix === true : watchPrefix}
+          disabled={keyState.watching === true}
+          onchange={(event) => {
+            watchPrefix = event.currentTarget.checked;
+          }}
+        />{t('etcd.watchPrefix')}
+      </label>
+      {#if keyState.watching === true}
+        <span class="fact" data-testid="watch-note"
+          >{changes.length === 0 ? t('etcd.watchWaiting') : t('etcd.watchOn')}</span
+        >
+      {/if}
+    </div>
+
+    {#if keyState.watchNotice !== undefined}
+      <div class="notice warning problem" role="status" data-testid="watch-notice">
+        <Icon name="warning" /><span class="message">{keyState.watchNotice}</span>
       </div>
     {/if}
 
@@ -321,6 +379,36 @@
         {/if}
       {/if}
     {/if}
+
+    {#if changes.length > 0}
+      <section class="changes" data-testid="changes">
+        <header class="changes-head">
+          <span>{t('etcd.changes')} · {changes.length}</span>
+          <button
+            type="button"
+            class="button secondary"
+            disabled={busy}
+            onclick={() => void run(() => rpc.request('clearEvents', {}))}>{t('etcd.changesClear')}</button
+          >
+        </header>
+        <ul>
+          {#each changes as change (`${change.at}:${change.revision}:${change.key}`)}
+            <li class="change {change.type}">
+              <span class="badge outline">{change.type === 'put' ? t('etcd.change.put') : t('etcd.change.delete')}</span>
+              <span class="fact mono">{clockTime(change.at)}</span>
+              <span class="fact">{t('etcd.revision', change.revision)}</span>
+              {#if keyState.watchPrefix === true || change.key !== keyState.key.text}
+                <span class="mono key" title={change.key}>{change.key}</span>
+              {/if}
+              {#if change.type === 'put'}
+                <span class="mono preview" title={change.preview}>{change.preview}</span>
+                <span class="fact">{t('redis.bytes', change.size)}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
   {/if}
 </main>
 
@@ -451,6 +539,72 @@
   .lease.ended {
     color: var(--dn-danger);
     border-color: currentColor;
+  }
+
+  .check {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+  }
+
+  /* What the watch saw: the newest change on top, under the value. */
+  .changes {
+    flex: none;
+    max-height: 32vh;
+    overflow: auto;
+    border-top: 1px solid var(--dn-divider);
+  }
+
+  .changes-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--dn-gap-s) var(--dn-gap-l);
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+    background: var(--vscode-sideBar-background, var(--dn-surface));
+  }
+
+  .changes ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .change {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap-s) var(--dn-gap-m);
+    align-items: center;
+    padding: 3px var(--dn-gap-l);
+    border-top: 1px solid var(--dn-divider);
+    font-size: var(--dn-font-small);
+  }
+
+  .change.put .badge {
+    color: var(--vscode-charts-green);
+  }
+
+  .change.delete .badge {
+    color: var(--dn-danger);
+  }
+
+  .change .key {
+    max-width: 30ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .change .preview {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--dn-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* The value fills the page; its Save button is pinned below. */

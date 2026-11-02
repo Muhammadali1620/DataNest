@@ -66,6 +66,8 @@ async function open(
   host.handle('detachLease', reply('detachLease', {}));
   host.handle('revokeLease', reply('revokeLease', { revoked: true }));
   host.handle('deleteKey', reply('deleteKey', { deleted: true }));
+  host.handle('watch', reply('watch', {}));
+  host.handle('clearEvents', reply('clearEvents', {}));
   host.handle('copyText', reply('copyText', {}));
   render(App, { props: { rpc, t: createTranslator(language) } });
   await flush();
@@ -393,5 +395,163 @@ describe('etcd key page: keeping the lease alive (V13.27)', () => {
   it('speaks Russian', async () => {
     await open(state({ lease }), 'ru');
     expect(screen.getByRole('button', { name: 'Продлевать' })).toBeTruthy();
+  });
+});
+
+describe('etcd key page: watching', () => {
+  const put = (revision: string, preview = 'v', key = '/app/config') => ({
+    at: new Date(2026, 0, 2, 14, 3, 9).getTime(),
+    type: 'put' as const,
+    key,
+    revision,
+    size: preview.length,
+    preview,
+  });
+
+  it('offers to watch, and asks the host to start with the box as it is', async () => {
+    const opened = await open(state());
+    expect(screen.queryByTestId('changes')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Watch' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toEqual([{ on: true, prefix: false }]);
+    });
+  });
+
+  it('asks to watch the keys below as well when the box is ticked', async () => {
+    const opened = await open(state());
+    await fireEvent.click(screen.getByLabelText('and the keys below'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Watch' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toEqual([{ on: true, prefix: true }]);
+    });
+  });
+
+  it('shows that it is watching, and waits for the first change', async () => {
+    await open(state({ watching: true, watchPrefix: false }));
+    expect(screen.getByRole('button', { name: 'Stop watching' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByTestId('watch-note').textContent).toContain('waiting for changes');
+    expect(screen.getByLabelText<HTMLInputElement>('and the keys below').disabled).toBe(true);
+  });
+
+  it('asks the host to stop', async () => {
+    const opened = await open(state({ watching: true, watchPrefix: true }));
+    expect(screen.getByLabelText<HTMLInputElement>('and the keys below').checked).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Stop watching' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toEqual([{ on: false, prefix: false }]);
+    });
+  });
+
+  it('lists the changes, the newest first, with time, revision and value', async () => {
+    await open(
+      state({
+        watching: true,
+        watchPrefix: false,
+        events: [put('13', 'first'), put('14', 'second')],
+      }),
+    );
+    const rows = screen.getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain('second');
+    expect(rows[0]?.textContent).toContain('Revision 14');
+    expect(rows[0]?.textContent).toContain('14:03:09');
+    expect(rows[1]?.textContent).toContain('first');
+    expect(screen.getByTestId('watch-note').textContent).toContain('listed below');
+    expect(screen.getByTestId('changes').textContent).toContain('Changes · 2');
+  });
+
+  it('names the key of a change only when it is another key', async () => {
+    await open(
+      state({
+        watching: true,
+        watchPrefix: true,
+        events: [put('13', 'a', '/app/config'), put('14', 'b', '/app/config/child')],
+      }),
+    );
+    const rows = screen.getAllByRole('listitem');
+    expect(rows[0]?.textContent).toContain('/app/config/child');
+    expect(rows[1]?.textContent).toContain('/app/config');
+  });
+
+  it('writes a delete without a value', async () => {
+    await open(
+      state({
+        events: [
+          { at: 1, type: 'delete', key: '/app/config', revision: '15', size: 0, preview: '' },
+        ],
+      }),
+    );
+    const row = must(screen.getAllByRole('listitem')[0]);
+    expect(row.textContent).toContain('Deleted');
+    expect(row.textContent).not.toContain('bytes');
+  });
+
+  it('keeps the list after the watch stops, and says why it stopped', async () => {
+    await open(state({ events: [put('13')], watchNotice: 'Watching stopped: the link was lost' }));
+    expect(screen.getByTestId('changes')).toBeTruthy();
+    expect(screen.getByTestId('watch-notice').textContent).toContain('the link was lost');
+    expect(screen.getByRole('button', { name: 'Watch' })).toBeTruthy();
+  });
+
+  it('clears the list', async () => {
+    const opened = await open(state({ events: [put('13')] }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    await waitFor(() => {
+      expect(sent(opened, 'clearEvents')).toHaveLength(1);
+    });
+  });
+
+  it('can watch a key that is not there yet', async () => {
+    const opened = await open(state({ exists: false, value: undefined, modRevision: '0' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Watch' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toHaveLength(1);
+    });
+  });
+
+  it('keeps what the user is typing when the watch brings a change, and warns', async () => {
+    const opened = await open(state({ watching: true, watchPrefix: false }));
+    await fireEvent.input(screen.getByLabelText('Value'), { target: { value: 'my draft' } });
+    opened.host.emit(
+      'state',
+      state({
+        watching: true,
+        watchPrefix: false,
+        modRevision: '20',
+        value: { text: 'theirs' },
+        events: [put('20', 'theirs')],
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('stale')).not.toBeNull();
+    });
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Value').value).toBe('my draft');
+    expect(screen.getByTestId('stale').textContent).toContain('revision 20');
+    // The save is checked against the revision the box was filled at, so the host refuses it.
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(sent(opened, 'save')).toEqual([{ value: { text: 'my draft' }, modRevision: '12' }]);
+    });
+  });
+
+  it('shows the new value at once when the user has typed nothing', async () => {
+    const opened = await open(state({ watching: true, watchPrefix: false }));
+    opened.host.emit(
+      'state',
+      state({ watching: true, watchPrefix: false, modRevision: '20', value: { text: 'theirs' } }),
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLTextAreaElement>('Value').value).toBe('theirs');
+    });
+    expect(screen.queryByTestId('stale')).toBeNull();
+  });
+
+  it('speaks Russian', async () => {
+    await open(state({ watching: true, watchPrefix: false, events: [put('13')] }), 'ru');
+    expect(screen.getByRole('button', { name: 'Не следить' })).toBeTruthy();
+    expect(screen.getByTestId('changes').textContent).toContain('Изменения');
+    expect(screen.getByLabelText('и за ключами ниже')).toBeTruthy();
   });
 });

@@ -24,3 +24,11 @@ export function timeText(milliseconds: number, locale?: string): string {
   }
   return new Date(milliseconds).toLocaleString(locale);
 }
+
+/** `14:03:09`: the time of day a change was seen, in the viewer's time zone. */
+export function clockTime(at: number): string {
+  const date = new Date(at);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}

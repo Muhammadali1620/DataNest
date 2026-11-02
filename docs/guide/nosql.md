@@ -118,8 +118,18 @@ token is renewed by itself); leave both empty when it has none.
   Keys whose names are not text are shown with `\xHH` for the bytes and found again byte
   for byte.
 
-Not here (yet): watching a key for changes, and etcd's own user, role and cluster
-administration.
+- **Watch** (a button on the key page) follows the key as the cluster changes it: every put
+  and delete is listed with the time, the revision and the start of the new value, and the
+  value above follows it. Tick **and the keys below** to watch every key that starts with
+  this name as well. What you are typing is never replaced: the page warns that the key
+  moved on, and saving then asks, as it always does. A watch ends when you press the
+  button, close the page, or the cluster or the link ends it; the list stays.
+- **etcd Users and Roles…** lists the users and roles, grants roles and permissions, and
+  also turns **authentication on and off** (etcd then wants a user named `root` with the
+  role `root`; once it is on, every connection has to sign in, which the question says).
+
+Not here (yet): etcd's cluster administration (members, snapshots) and watching a prefix
+from the tree.
 
 ## Apache ZooKeeper
 
@@ -149,8 +159,16 @@ znodes are open to everyone. **Chroot** makes a znode such as `/app` the root of
   below them, after saying how many znodes that is.
 - A read-only connection offers no change, and a production one asks before every one.
 
-Not here (yet): watching a znode for changes, ephemeral znodes (they would end with
-DataNest's own session), editing an ACL, and the server's four-letter commands.
+- **Watch** (a button on the znode page) lists every change of the znode as it happens:
+  its data, its children, its creation and its deletion, each with how the znode looks
+  just after it. The page reads the znode again at every change, and never replaces what
+  you are typing. It ends when you press the button, close the page, or the session ends.
+- In the ACL editor, **Give the same ACL to the znodes below, too** replaces the ACL of
+  every znode under this one, after a question that says how many. A znode you may not
+  change is skipped and named in the report.
+
+Not here (yet): ephemeral znodes (they would end with DataNest's own session), and the
+server's four-letter commands.
 
 ## Apache Kafka
 

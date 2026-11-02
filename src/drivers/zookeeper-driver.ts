@@ -46,6 +46,15 @@ export interface ZookeeperAcl {
 /** How a new znode lives: for good, with a counter added to its name, or as a container. */
 export type ZookeeperCreateMode = 'persistent' | 'sequential' | 'container';
 
+/** What happened to a watched znode: it appeared, went, or its data or children changed. */
+export type ZookeeperWatchKind = 'created' | 'deleted' | 'data' | 'children';
+
+export interface ZookeeperWatchEvent {
+  readonly kind: ZookeeperWatchKind;
+  /** The znode, in the connection's chroot. */
+  readonly path: string;
+}
+
 export interface ZookeeperSession {
   readonly server: ZookeeperServerInfo;
   /** The names of the children, with the znode's own stat. */
@@ -72,6 +81,18 @@ export interface ZookeeperSession {
    * Undefined when it does not say. Asked once per session.
    */
   serverVersion(): Promise<string | undefined>;
+  /**
+   * Watches a znode (V13.31): `onEvent` hears of every change of its data and of its
+   * children, and of its creation and deletion, until the returned function is called. A
+   * ZooKeeper watch fires once; the session sets it again by itself before it reports, so
+   * a read made on the report sees everything that follows. `onLost` is called, once, when
+   * the session is gone and no more reports will come. The znode need not exist.
+   */
+  watchNode(
+    path: string,
+    onEvent: (event: ZookeeperWatchEvent) => void,
+    onLost: (error: Error) => void,
+  ): Promise<() => void>;
   /** Writes the data if the znode is still at `version` (`-1`: whatever it is). */
   setData(path: string, data: Uint8Array, version: number): Promise<ZookeeperStat>;
   /** Deletes a znode without children, if it is still at `version` (`-1`: whatever it is). */

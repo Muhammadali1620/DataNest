@@ -10,6 +10,7 @@ import type {
   ZookeeperServerInfo,
   ZookeeperSession,
   ZookeeperStat,
+  ZookeeperWatchEvent,
 } from '../../drivers/zookeeper-driver';
 
 export interface ManagedZookeeperSessionHooks {
@@ -68,6 +69,20 @@ export class ManagedZookeeperSession implements ZookeeperSession {
   serverVersion(): Promise<string | undefined> {
     // Best effort on a second socket: a failure here says nothing about the session.
     return this.inner.serverVersion().catch(() => undefined);
+  }
+
+  async watchNode(
+    path: string,
+    onEvent: (event: ZookeeperWatchEvent) => void,
+    onLost: (error: Error) => void,
+  ): Promise<() => void> {
+    return await this.guard(() =>
+      this.inner.watchNode(path, onEvent, (error) => {
+        // A watch that learns the link is gone tells the manager as a failed call would.
+        this.onLinkLost(error);
+        onLost(error);
+      }),
+    );
   }
 
   async create(path: string, data: Uint8Array, mode: ZookeeperCreateMode): Promise<string> {

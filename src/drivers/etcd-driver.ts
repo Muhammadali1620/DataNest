@@ -36,6 +36,18 @@ export interface EtcdSession {
     body: Readonly<Record<string, unknown>>,
     options?: EtcdCallOptions,
   ): Promise<unknown>;
+  /**
+   * Opens a streaming call (`watch`, V13.31): posts `body` and hands every JSON message
+   * the cluster writes back — one per line — to `onMessage`, until `signal` aborts (the
+   * promise then resolves), the cluster ends the stream (it resolves too), or the link
+   * or the cluster fails (it rejects). A stream is not subject to a time limit.
+   */
+  watch(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    onMessage: (message: unknown) => void,
+    signal: AbortSignal,
+  ): Promise<void>;
   close(): Promise<void>;
 }
 

@@ -125,6 +125,20 @@ export class EtcdKeyPanel implements vscode.Disposable {
       this.push(model.setKeepAlive(on));
       return {};
     });
+    this.rpc.handle('watch', async ({ on, prefix }) => {
+      this.push(
+        on
+          ? await model.startWatch(prefix === true, () => {
+              this.push(model.state());
+            })
+          : model.stopWatch(),
+      );
+      return {};
+    });
+    this.rpc.handle('clearEvents', () => {
+      this.push(model.clearEvents());
+      return Promise.resolve({});
+    });
     this.rpc.handle('detachLease', async () => {
       if (await this.allowed(vscode.l10n.t('Change'))) {
         this.push(await model.detachLease());
@@ -187,6 +201,7 @@ export class EtcdKeyPanel implements vscode.Disposable {
       return;
     }
     this.disposed = true;
+    this.deps.model.stopWatch();
     if (this.timer !== undefined) {
       clearInterval(this.timer);
       this.timer = undefined;

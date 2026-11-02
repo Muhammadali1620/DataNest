@@ -10,6 +10,7 @@ import type {
   ZookeeperServerInfo,
   ZookeeperSession,
   ZookeeperStat,
+  ZookeeperWatchEvent,
 } from '../../src/drivers/zookeeper-driver';
 import type { ResolvedConnectionConfig } from '../../src/shared/connection';
 import { must } from './must';
@@ -74,6 +75,26 @@ export class MemoryTree {
   next(): number {
     this.sequence += 1;
     return this.sequence - 1;
+  }
+
+  /** The watches that are open (V13.31): a change reports to the ones on its path. */
+  readonly watchers = new Set<{
+    path: string;
+    onEvent: (event: ZookeeperWatchEvent) => void;
+    onLost: (error: Error) => void;
+  }>();
+
+  report(kind: ZookeeperWatchEvent['kind'], path: string): void {
+    for (const watcher of [...this.watchers]) {
+      if (watcher.path === path) {
+        watcher.onEvent({ kind, path });
+      }
+    }
+  }
+
+  /** Reports to the parent that its children changed. */
+  reportChildren(path: string): void {
+    this.report('children', path.slice(0, path.lastIndexOf('/')) || '/');
   }
 }
 
@@ -150,6 +171,35 @@ export class FakeZookeeperSession implements ZookeeperSession {
     return Promise.resolve(this.version);
   }
 
+  /** Fails the next `watchNode` with this error, once. */
+  watchFailure: Error | undefined;
+
+  watchNode(
+    path: string,
+    onEvent: (event: ZookeeperWatchEvent) => void,
+    onLost: (error: Error) => void,
+  ): Promise<() => void> {
+    this.alive();
+    if (this.watchFailure !== undefined) {
+      const error = this.watchFailure;
+      this.watchFailure = undefined;
+      return Promise.reject(error);
+    }
+    const watcher = { path, onEvent, onLost };
+    this.tree.watchers.add(watcher);
+    return Promise.resolve(() => {
+      this.tree.watchers.delete(watcher);
+    });
+  }
+
+  /** The link breaks: every open watch hears of it. */
+  lose(error: Error = new DbError('connection-failed', 'The link is gone')): void {
+    for (const watcher of [...this.tree.watchers]) {
+      this.tree.watchers.delete(watcher);
+      watcher.onLost(error);
+    }
+  }
+
   create(path: string, data: Uint8Array, mode: ZookeeperCreateMode): Promise<string> {
     this.alive();
     const parent = path.slice(0, path.lastIndexOf('/')) || '/';
@@ -162,6 +212,8 @@ export class FakeZookeeperSession implements ZookeeperSession {
       return Promise.reject(new DbError('constraint', `${made} exists`, { driverCode: -110 }));
     }
     this.tree.nodes.set(made, { data, version: 0, ephemeralOwner: '0', acl: OPEN });
+    this.tree.report('created', made);
+    this.tree.reportChildren(made);
     return Promise.resolve(made);
   }
 
@@ -176,6 +228,7 @@ export class FakeZookeeperSession implements ZookeeperSession {
     }
     node.data = data;
     node.version += 1;
+    this.tree.report('data', path);
     return Promise.resolve(this.tree.stat(path));
   }
 
@@ -192,6 +245,8 @@ export class FakeZookeeperSession implements ZookeeperSession {
       return Promise.reject(new DbError('constraint', 'not empty', { driverCode: -111 }));
     }
     this.tree.nodes.delete(path);
+    this.tree.report('deleted', path);
+    this.tree.reportChildren(path);
     return Promise.resolve();
   }
 

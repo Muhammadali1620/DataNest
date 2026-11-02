@@ -109,10 +109,10 @@ export class ZookeeperNodePanel implements vscode.Disposable {
       }
       return { saved: result.saved };
     });
-    this.rpc.handle('saveAcl', async ({ acl, aversion }) => {
+    this.rpc.handle('saveAcl', async ({ acl, aversion, recursive }) => {
       if (this.deps.policy.readOnly) {
         // The model refuses with the reason; asking first would be pointless.
-        await model.saveAcl(acl, aversion);
+        await model.saveAcl(acl, aversion, recursive === true);
       }
       if (aclLocksOut(acl) && !(await this.confirmLockout())) {
         return { saved: false };
@@ -120,9 +120,26 @@ export class ZookeeperNodePanel implements vscode.Disposable {
       if (!(await this.allowed(vscode.l10n.t('Change')))) {
         return { saved: false };
       }
-      const result = await model.saveAcl(acl, aversion);
+      if (recursive === true && !(await this.confirmAclTree())) {
+        return { saved: false };
+      }
+      const result = await model.saveAcl(acl, aversion, recursive === true);
       this.push(result.state);
       return { saved: result.saved };
+    });
+    this.rpc.handle('watch', async ({ on }) => {
+      this.push(
+        on
+          ? await model.startWatch(() => {
+              this.push(model.state());
+            })
+          : model.stopWatch(),
+      );
+      return {};
+    });
+    this.rpc.handle('clearEvents', () => {
+      this.push(model.clearEvents());
+      return Promise.resolve({});
     });
     this.rpc.handle('createChild', async ({ name, mode }) => {
       if (!(await this.allowed(vscode.l10n.t('Create')))) {
@@ -161,6 +178,7 @@ export class ZookeeperNodePanel implements vscode.Disposable {
       return;
     }
     this.disposed = true;
+    this.deps.model.stopWatch();
     for (const [id, panel] of ZookeeperNodePanel.open) {
       if (panel === this) {
         ZookeeperNodePanel.open.delete(id);
@@ -206,6 +224,33 @@ export class ZookeeperNodePanel implements vscode.Disposable {
   }
 
   /** An ACL without the admin bit cannot be changed again by anyone but a super user. */
+  /** Asks before the ACL goes to everything below: the old ACLs there are lost for good. */
+  private async confirmAclTree(): Promise<boolean> {
+    const below = await this.deps.model.countBelow();
+    const apply = vscode.l10n.t('Apply to All');
+    const answer = await vscode.window.showWarningMessage(
+      below.capped
+        ? vscode.l10n.t(
+            'Give this ACL to more than {0} znodes below "{1}"?',
+            below.count,
+            this.deps.model.currentPath,
+          )
+        : vscode.l10n.t(
+            'Give this ACL to the {0} znodes below "{1}"?',
+            below.count,
+            this.deps.model.currentPath,
+          ),
+      {
+        modal: true,
+        detail: vscode.l10n.t(
+          'Their present ACLs are replaced and cannot be brought back. A znode this user may not change is skipped and reported.',
+        ),
+      },
+      apply,
+    );
+    return answer === apply;
+  }
+
   private async confirmLockout(): Promise<boolean> {
     const keep = vscode.l10n.t('Save anyway');
     const answer = await vscode.window.showWarningMessage(

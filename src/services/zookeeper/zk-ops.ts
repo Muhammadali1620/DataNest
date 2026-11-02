@@ -231,3 +231,84 @@ export async function deleteTree(
   }
   return deleted;
 }
+
+export interface AclTreeResult {
+  /** Znodes below the start whose ACL was replaced. */
+  readonly changed: number;
+  /** Znodes below the start whose ACL could not be replaced or read, with the first reasons. */
+  readonly failed: number;
+  readonly failures: readonly { readonly path: string; readonly message: string }[];
+  /** The walk stopped at the limit; the znodes after it were not reached. */
+  readonly capped: boolean;
+}
+
+/** Reasons kept of the znodes that refused. */
+export const MAX_ACL_FAILURES = 10;
+
+/**
+ * Gives every znode below `path` (not `path` itself) the same ACL, breadth first (V13.31).
+ * The ACLs are replaced whatever version they are at: they are being overwritten on purpose.
+ * A znode the user may not change, or may not list, is counted as failed and skipped; the
+ * rest goes on. Ephemeral znodes are changed like the others.
+ */
+export async function applyAclTree(
+  session: ZookeeperCaller,
+  path: string,
+  acl: readonly ZookeeperAcl[],
+  limit = COUNT_LIMIT,
+  signal?: AbortSignal,
+): Promise<AclTreeResult> {
+  let changed = 0;
+  let failed = 0;
+  let reached = 0;
+  const failures: { path: string; message: string }[] = [];
+  const fail = (node: string, error: unknown): void => {
+    failed += 1;
+    if (failures.length < MAX_ACL_FAILURES) {
+      failures.push({
+        path: node,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+  let level: string[] = [path];
+  while (level.length > 0) {
+    if (signal?.aborted === true) {
+      return { changed, failed, failures, capped: true };
+    }
+    const next = await mapLimited(level, async (node): Promise<string[]> => {
+      let names: readonly string[];
+      try {
+        names = (await session.children(node)).names;
+      } catch (error) {
+        // A node that went meanwhile has nothing below it; a refusal is a failure to list.
+        if (!(error instanceof DbError && error.code === 'not-found')) {
+          fail(node, error);
+        }
+        return [];
+      }
+      return names.map((name) => joinPath(node, name));
+    });
+    level = next.flat();
+    const room = limit - reached;
+    const capped = level.length > room;
+    if (capped) {
+      level = level.slice(0, Math.max(0, room));
+    }
+    reached += level.length;
+    await mapLimited(level, async (node) => {
+      try {
+        await session.setAcl(node, acl, -1);
+        changed += 1;
+      } catch (error) {
+        if (!(error instanceof DbError && error.code === 'not-found')) {
+          fail(node, error);
+        }
+      }
+    });
+    if (capped) {
+      return { changed, failed, failures, capped: true };
+    }
+  }
+  return { changed, failed, failures, capped: false };
+}

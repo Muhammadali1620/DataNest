@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import {
+  applyAclTree,
   compareNames,
   countTree,
   deleteTree,
@@ -172,5 +173,125 @@ describe('deleteTree', () => {
     await expect(deleteTree(ensemble.session, '/guarded')).rejects.toMatchObject({
       code: 'permission-denied',
     });
+  });
+});
+
+describe('applyAclTree (V13.31)', () => {
+  const OPEN = [{ perms: 31, scheme: 'world', id: 'anyone' }];
+  const READ = [{ perms: 1, scheme: 'world', id: 'anyone' }];
+  const aclOf = (path: string) => ensemble.server.nodes.get(path)?.acl;
+
+  it('gives every znode below the same ACL, deep ones too, and leaves the start alone', async () => {
+    for (const path of ['/t/a', '/t/b', '/t/a/x', '/t/a/x/y']) {
+      ensemble.server.seed(path);
+    }
+    const result = await applyAclTree(ensemble.session, '/t', READ);
+    expect(result).toEqual({ changed: 4, failed: 0, failures: [], capped: false });
+    for (const path of ['/t/a', '/t/b', '/t/a/x', '/t/a/x/y']) {
+      expect(aclOf(path)).toEqual(READ);
+    }
+    expect(aclOf('/t')).toEqual(OPEN);
+    expect(aclOf('/')).toEqual(OPEN);
+  });
+
+  it('does nothing for a znode without children', async () => {
+    ensemble.server.seed('/lonely');
+    expect(await applyAclTree(ensemble.session, '/lonely', READ)).toEqual({
+      changed: 0,
+      failed: 0,
+      failures: [],
+      capped: false,
+    });
+  });
+
+  it('replaces an ACL whatever version it is at', async () => {
+    ensemble.server.seed('/t/a');
+    await ensemble.session.setAcl('/t/a', OPEN, -1);
+    await ensemble.session.setAcl('/t/a', OPEN, -1);
+    expect(ensemble.server.nodes.get('/t/a')?.aversion).toBe(2);
+    await applyAclTree(ensemble.session, '/t', READ);
+    expect(aclOf('/t/a')).toEqual(READ);
+    expect(ensemble.server.nodes.get('/t/a')?.aversion).toBe(3);
+  });
+
+  it('skips a znode the user may not change, reports it, and goes on with the rest', async () => {
+    ensemble.server.seed('/t/ok');
+    ensemble.server.seed('/t/locked', '', {
+      acl: [{ perms: 1, scheme: 'world', id: 'anyone' }],
+    });
+    ensemble.server.seed('/t/ok/deep');
+    const result = await applyAclTree(ensemble.session, '/t', [
+      { perms: 3, scheme: 'world', id: 'anyone' },
+    ]);
+    expect(result.changed).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]?.path).toBe('/t/locked');
+    expect(aclOf('/t/ok/deep')).toEqual([{ perms: 3, scheme: 'world', id: 'anyone' }]);
+    expect(aclOf('/t/locked')).toEqual(READ);
+  });
+
+  it('reports a znode whose children it may not list, and still changes it', async () => {
+    ensemble.server.seed('/t/hidden/inner');
+    // The ACL lets nobody read the list of children, but anyone change the ACL.
+    ensemble.server.seed('/t/hidden', '', {
+      acl: [{ perms: 16, scheme: 'world', id: 'anyone' }],
+    });
+    // The new ACL keeps the list of children closed, so the walk cannot go in.
+    const ADMIN = [{ perms: 16, scheme: 'world', id: 'anyone' }];
+    const result = await applyAclTree(ensemble.session, '/t', ADMIN);
+    expect(result.changed).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.failures[0]?.path).toBe('/t/hidden');
+    expect(aclOf('/t/hidden')).toEqual(ADMIN);
+    expect(aclOf('/t/hidden/inner')).toEqual(OPEN);
+  });
+
+  it('keeps the first reasons only, but counts them all', async () => {
+    for (let index = 0; index < 15; index += 1) {
+      ensemble.server.seed(`/t/n${index}`, '', {
+        acl: [{ perms: 1, scheme: 'world', id: 'anyone' }],
+      });
+    }
+    const result = await applyAclTree(ensemble.session, '/t', READ);
+    expect(result.failed).toBe(15);
+    expect(result.failures).toHaveLength(10);
+    expect(result.changed).toBe(0);
+  });
+
+  it('stops at the limit and says so', async () => {
+    for (let index = 0; index < 10; index += 1) {
+      ensemble.server.seed(`/t/n${index}`);
+    }
+    const result = await applyAclTree(ensemble.session, '/t', READ, 4);
+    expect(result.capped).toBe(true);
+    expect(result.changed).toBe(4);
+    const done = [...ensemble.server.nodes.entries()].filter(
+      ([path, node]) => path.startsWith('/t/') && node.acl[0]?.perms === 1,
+    );
+    expect(done).toHaveLength(4);
+  });
+
+  it('stops when it is told to', async () => {
+    ensemble.server.seed('/t/a/b');
+    const abort = new AbortController();
+    abort.abort();
+    const result = await applyAclTree(ensemble.session, '/t', READ, 100, abort.signal);
+    expect(result).toMatchObject({ changed: 0, capped: true });
+    expect(aclOf('/t/a')).toEqual(OPEN);
+  });
+
+  it('copes with a znode that went meanwhile', async () => {
+    ensemble.server.seed('/t/a');
+    const real = ensemble.session.setAcl.bind(ensemble.session);
+    const flaky = {
+      children: ensemble.session.children.bind(ensemble.session),
+      setAcl: async (...args: Parameters<typeof real>) => {
+        ensemble.server.nodes.delete('/t/a');
+        return await real(...args);
+      },
+    };
+    const result = await applyAclTree(flaky as never, '/t', READ);
+    expect(result).toEqual({ changed: 0, failed: 0, failures: [], capped: false });
   });
 });

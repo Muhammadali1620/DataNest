@@ -16,7 +16,8 @@ import {
   putEntry,
   revokeLease,
 } from '../../services/etcd/etcd-client';
-import { type EtcdKeyState } from '../../shared/protocols/etcd-key';
+import { type EtcdWatcher, type EtcdWatchEvent, watchKeys } from '../../services/etcd/etcd-watch';
+import { type EtcdKeyState, type EtcdWatchEventView } from '../../shared/protocols/etcd-key';
 import { MAX_STRING_BYTES } from '../../shared/protocols/redis-key';
 import { type RedisKeyRef, redisKeyBytes } from '../../shared/redis-key';
 import { redisValueBytes, type RedisValue, redisValueOf } from '../../shared/redis-value';
@@ -25,8 +26,37 @@ export interface EtcdKeyModelDeps {
   readonly key: RedisKeyRef;
   readonly connectionName: string;
   readonly readOnly: boolean;
-  /** The session of the key's connection. */
-  readonly session: () => Promise<EtcdCaller>;
+  /** The session of the key's connection; one that can `watch` lets the page follow the key. */
+  readonly session: () => Promise<EtcdCaller & Partial<EtcdWatcher>>;
+  /** Milliseconds changes are gathered before the page hears of them. */
+  readonly watchFlushMs?: number;
+}
+
+/** How long the changes of a watch are gathered before the page is told. */
+export const DEFAULT_WATCH_FLUSH_MS = 200;
+
+/** Changes the page keeps; the oldest go first. */
+export const MAX_WATCH_EVENTS = 200;
+
+const PREVIEW_CHARS = 200;
+
+function textOf(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+/** The start of a value for the list of changes: text when it is text, else hex. */
+function previewOf(bytes: Uint8Array): string {
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, 400));
+    return text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : text;
+  } catch {
+    const head = Array.from(bytes.subarray(0, 32), (byte) => byte.toString(16).padStart(2, '0'));
+    return `0x${head.join('')}${bytes.length > 32 ? '…' : ''}`;
+  }
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }
 
 interface LeaseView {
@@ -40,6 +70,12 @@ export class EtcdKeyModel {
   private lease: LeaseView | undefined;
   private conflict = false;
   private keeping = false;
+  private watch: AbortController | undefined;
+  private watchPrefix = false;
+  private watchTimer: ReturnType<typeof setTimeout> | undefined;
+  private watchPending: EtcdWatchEvent[] = [];
+  private events: EtcdWatchEventView[] = [];
+  private watchNotice: string | undefined;
 
   constructor(private readonly deps: EtcdKeyModelDeps) {}
 
@@ -65,7 +101,154 @@ export class EtcdKeyModel {
       lease: this.lease ?? null,
       ...(this.conflict ? { conflict: true } : {}),
       ...(this.keeping && this.lease !== undefined ? { keepingAlive: true } : {}),
+      ...(this.watch === undefined ? {} : { watching: true, watchPrefix: this.watchPrefix }),
+      ...(this.events.length === 0 ? {} : { events: this.events.map((event) => ({ ...event })) }),
+      ...(this.watchNotice === undefined ? {} : { watchNotice: this.watchNotice }),
     };
+  }
+
+  /** True while the key is watched. */
+  get watching(): boolean {
+    return this.watch !== undefined;
+  }
+
+  /**
+   * Watches the key (and, with `prefix`, every key below it): changes are gathered for a
+   * moment, added to the list the page shows, and the key is read again when it is one of
+   * them; `onChange` is called after each batch. The first read after the cluster accepts
+   * the watch closes the gap between the page's last read and the watch. A failure ends the
+   * watch and says why.
+   */
+  async startWatch(prefix: boolean, onChange: () => void): Promise<EtcdKeyState> {
+    this.stopWatch();
+    const session = await this.deps.session();
+    if (session.watch === undefined) {
+      throw new DbError('unsupported', msg('This cluster connection cannot be watched'));
+    }
+    const watcher: EtcdWatcher = { watch: session.watch.bind(session) };
+    const abort = new AbortController();
+    this.watch = abort;
+    this.watchPrefix = prefix;
+    this.watchNotice = undefined;
+    const key = redisKeyBytes(this.deps.key);
+    let again = false;
+    const flush = (): void => {
+      this.watchTimer = undefined;
+      const batch = this.takeWatched();
+      const touched = again || batch.some((event) => sameBytes(event.key, key));
+      again = false;
+      if (!touched) {
+        onChange();
+        return;
+      }
+      void this.reread(session).then(
+        () => {
+          if (this.watch === abort) {
+            onChange();
+          }
+        },
+        (error: unknown) => {
+          if (this.watch === abort) {
+            this.endWatch(abort, error);
+            onChange();
+          }
+        },
+      );
+    };
+    const schedule = (): void => {
+      this.watchTimer ??= setTimeout(flush, this.deps.watchFlushMs ?? DEFAULT_WATCH_FLUSH_MS);
+    };
+    void watchKeys(
+      watcher,
+      key,
+      {
+        prefix,
+        onCreated: () => {
+          again = true;
+          schedule();
+        },
+      },
+      (events) => {
+        if (this.watch !== abort) {
+          return;
+        }
+        this.watchPending.push(...events);
+        schedule();
+      },
+      abort.signal,
+    ).then(
+      () => {
+        // The cluster closed the stream: the same as a failure, unless the user stopped it.
+        if (this.watch === abort) {
+          this.endWatch(
+            abort,
+            new DbError('connection-failed', msg('The cluster closed the watch')),
+          );
+          onChange();
+        }
+      },
+      (error: unknown) => {
+        if (this.watch === abort) {
+          this.endWatch(abort, error);
+          onChange();
+        }
+      },
+    );
+    return this.state();
+  }
+
+  /** Stops watching; the changes seen stay in the list. */
+  stopWatch(): EtcdKeyState {
+    const running = this.watch;
+    this.watch = undefined;
+    running?.abort();
+    if (this.watchTimer !== undefined) {
+      clearTimeout(this.watchTimer);
+      this.watchTimer = undefined;
+    }
+    this.takeWatched();
+    return this.state();
+  }
+
+  /** Empties the list of changes. */
+  clearEvents(): EtcdKeyState {
+    this.events = [];
+    this.watchNotice = undefined;
+    return this.state();
+  }
+
+  private endWatch(abort: AbortController, error: unknown): void {
+    this.stopWatch();
+    abort.abort();
+    this.watchNotice = msg(
+      'Watching stopped: {0}',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  /** Moves the changes gathered so far into the list; returns them. */
+  private takeWatched(): EtcdWatchEvent[] {
+    const batch = this.watchPending;
+    this.watchPending = [];
+    const at = Date.now();
+    this.events = [
+      ...this.events,
+      ...batch.map((event): EtcdWatchEventView => ({
+        at,
+        type: event.type,
+        key: textOf(event.key),
+        revision: event.modRevision,
+        size: event.value.length,
+        preview: event.type === 'delete' ? '' : previewOf(event.value),
+      })),
+    ].slice(-MAX_WATCH_EVENTS);
+    return batch;
+  }
+
+  /** Reads the key and its lease again without touching the flags of a save. */
+  private async reread(session: EtcdCaller): Promise<void> {
+    this.entry = await getEntry(session, redisKeyBytes(this.deps.key));
+    this.lease = await this.leaseOf(session, this.entry);
   }
 
   /** Reads the key and its lease again. */

@@ -5,7 +5,17 @@
 // before writing to production; a read-only connection is refused there.
 
 import { defineProtocol } from '../rpc';
-import { boolean, type Infer, nullable, number, object, optional, string } from '../schema';
+import {
+  array,
+  boolean,
+  type Infer,
+  literal,
+  nullable,
+  number,
+  object,
+  optional,
+  string,
+} from '../schema';
 import { redisKeyRefSchema, redisValueSchema } from './redis-key';
 
 export const leaseSchema = object({
@@ -15,6 +25,20 @@ export const leaseSchema = object({
   ttl: number({ integer: true }),
   /** Seconds it was granted for. */
   grantedTtl: number({ integer: true }),
+});
+
+/** One change the watch saw (V13.31). */
+export const etcdWatchEventSchema = object({
+  /** Milliseconds since the epoch, when the host heard of it. */
+  at: number({ integer: true, min: 0 }),
+  type: literal('put', 'delete'),
+  /** The key that changed (below the watched one when a prefix is watched). */
+  key: string({ maxLength: 20_000 }),
+  revision: string({ maxLength: 24 }),
+  /** Bytes of the value after the change; 0 after a delete. */
+  size: number({ integer: true, min: 0 }),
+  /** The start of the new value as text (a hint for binary data), cut short. */
+  preview: string({ maxLength: 300 }),
 });
 
 export const etcdKeyStateSchema = object({
@@ -36,6 +60,14 @@ export const etcdKeyStateSchema = object({
   conflict: optional(boolean()),
   /** The host renews the key's lease while this page is open (V13.27). */
   keepingAlive: optional(boolean()),
+  /** The host watches the key (or the keys below it) and lists what changes (V13.31). */
+  watching: optional(boolean()),
+  /** The watch covers every key below this one as well. */
+  watchPrefix: optional(boolean()),
+  /** What the watch saw, the newest last; kept after the watch stops. */
+  events: optional(array(etcdWatchEventSchema, { maxLength: 200 })),
+  /** Why the watch stopped by itself (the link broke, the cluster ended it). */
+  watchNotice: optional(string({ maxLength: 1000 })),
 });
 
 export const etcdKeyProtocol = defineProtocol({
@@ -70,6 +102,16 @@ export const etcdKeyProtocol = defineProtocol({
        * lease goes, or this is switched off.
        */
       keepAlive: { params: object({ on: boolean() }), result: object({}) },
+      /**
+       * Starts or stops watching the key (V13.31); with `prefix`, every key below it too.
+       * Changes arrive as new states, in batches, and the page lists them.
+       */
+      watch: {
+        params: object({ on: boolean(), prefix: optional(boolean()) }),
+        result: object({}),
+      },
+      /** Empties the list of changes the watch saw. */
+      clearEvents: { params: object({}), result: object({}) },
       /** Lets go of the key's lease; the key stays for good. */
       detachLease: { params: object({}), result: object({}) },
       /** Revokes the key's lease after the user agrees: every key it holds goes. */
@@ -97,3 +139,4 @@ export type EtcdKeyProtocol = typeof etcdKeyProtocol;
 
 export type EtcdKeyState = Infer<typeof etcdKeyStateSchema>;
 export type EtcdLease = Infer<typeof leaseSchema>;
+export type EtcdWatchEventView = Infer<typeof etcdWatchEventSchema>;

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import { driver } from '../../../src/drivers/etcd';
 import type { EtcdSession } from '../../../src/drivers/etcd-driver';
@@ -17,10 +17,14 @@ import {
 import {
   addRole,
   addUser,
+  authEnabled,
+  authEnableProblem,
   boundsOf,
   changePassword,
   deleteRole,
   deleteUser,
+  disableAuth,
+  enableAuth,
   grantPermission,
   grantRole,
   listRoles,
@@ -33,6 +37,7 @@ import {
   userRoles,
 } from '../../../src/services/etcd/etcd-auth';
 import { listPage } from '../../../src/services/etcd/key-listing';
+import { type EtcdWatchEvent, watchKeys } from '../../../src/services/etcd/etcd-watch';
 import { prefixEnd } from '../../../src/services/etcd/etcd-codec';
 import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
 import { redisKeyBytes, redisKeyRef } from '../../../src/shared/redis-key';
@@ -585,6 +590,171 @@ describe('etcd driver on an etcd cluster', () => {
       expect(redisValueOf(new Uint8Array(3)).text).toBeDefined();
     });
   });
+
+  // V13.31: the gateway's `watch` stream, read the way the key page reads it.
+  describe('watching', () => {
+    /** Opens a watch and waits until the cluster has accepted it. */
+    async function watch(
+      key: string,
+      options: { prefix?: boolean; startRevision?: string } = {},
+    ): Promise<{
+      events: EtcdWatchEvent[];
+      stop: () => Promise<void>;
+      done: Promise<unknown>;
+    }> {
+      const events: EtcdWatchEvent[] = [];
+      const abort = new AbortController();
+      let created = false;
+      const done = watchKeys(
+        session,
+        encode(key),
+        {
+          ...options,
+          onCreated: () => {
+            created = true;
+          },
+        },
+        (batch) => {
+          events.push(...batch);
+        },
+        abort.signal,
+      ).catch((error: unknown) => error);
+      await vi.waitFor(() => {
+        expect(created).toBe(true);
+      });
+      return {
+        events,
+        stop: async () => {
+          abort.abort();
+          await done;
+        },
+        done,
+      };
+    }
+
+    it('sees a new key, a change with the value before it, and a delete', async () => {
+      const key = '/dn-it/watch/one';
+      const watching = await watch(key);
+      await putEntry(session, encode(key), { value: encode('a') });
+      await putEntry(session, encode(key), { value: encode('b') });
+      await deleteEntry(session, encode(key));
+      await vi.waitFor(() => {
+        expect(watching.events).toHaveLength(3);
+      });
+      await watching.stop();
+      const [created, changed, deleted] = watching.events;
+      expect(created).toMatchObject({ type: 'put', version: 1 });
+      expect(created?.previous).toBeUndefined();
+      expect(decode(changed?.value ?? new Uint8Array())).toBe('b');
+      expect(decode(changed?.previous ?? new Uint8Array())).toBe('a');
+      expect(changed).toMatchObject({ type: 'put', version: 2 });
+      expect(deleted).toMatchObject({ type: 'delete', version: 0 });
+      expect(decode(deleted?.previous ?? new Uint8Array())).toBe('b');
+      expect(Number(deleted?.modRevision)).toBeGreaterThan(Number(changed?.modRevision));
+    });
+
+    it('sees the keys below a prefix and none outside it', async () => {
+      const watching = await watch('/dn-it/watch/tree/', { prefix: true });
+      await putEntry(session, encode('/dn-it/watch/tree/a'), { value: encode('1') });
+      await putEntry(session, encode('/dn-it/watch/tree/b/c'), { value: encode('2') });
+      await putEntry(session, encode('/dn-it/watch/other'), { value: encode('3') });
+      await vi.waitFor(() => {
+        expect(watching.events).toHaveLength(2);
+      });
+      await watching.stop();
+      expect(watching.events.map((event) => decode(event.key)).sort()).toEqual([
+        '/dn-it/watch/tree/a',
+        '/dn-it/watch/tree/b/c',
+      ]);
+    });
+
+    it('replays history from a revision', async () => {
+      const key = '/dn-it/watch/replay';
+      const first = await putEntry(session, encode(key), { value: encode('old') });
+      expect(first.done).toBe(true);
+      const at = (await getEntry(session, encode(key)))?.modRevision ?? '0';
+      await putEntry(session, encode(key), { value: encode('new') });
+      const watching = await watch(key, { startRevision: at });
+      await vi.waitFor(() => {
+        expect(watching.events).toHaveLength(2);
+      });
+      await watching.stop();
+      expect(watching.events.map((event) => decode(event.value))).toEqual(['old', 'new']);
+    });
+
+    it('sees the key a lease takes with it when it ends', async () => {
+      const key = '/dn-it/watch/leased';
+      const lease = await grantLease(session, 60);
+      await putEntry(session, encode(key), { value: encode('x'), lease: lease.id });
+      const watching = await watch(key);
+      await revokeLease(session, lease.id);
+      await vi.waitFor(() => {
+        expect(watching.events).toHaveLength(1);
+      });
+      await watching.stop();
+      expect(watching.events[0]).toMatchObject({ type: 'delete' });
+    });
+
+    it('ends without an error when it is stopped, and hears nothing after', async () => {
+      const key = '/dn-it/watch/stopped';
+      const watching = await watch(key);
+      await watching.stop();
+      expect(await watching.done).toBeUndefined();
+      await putEntry(session, encode(key), { value: encode('late') });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(watching.events).toEqual([]);
+    });
+
+    it('is cancelled with a reason when it asks for history the cluster has compacted', async () => {
+      const key = '/dn-it/watch/compacted';
+      for (const value of ['1', '2', '3']) {
+        await putEntry(session, encode(key), { value: encode(value) });
+      }
+      const head = (await getEntry(session, encode(key)))?.modRevision ?? '0';
+      await session.call('kv/compaction', { revision: head, physical: true });
+      const result = await watchKeys(
+        session,
+        encode(key),
+        { startRevision: '1' },
+        () => undefined,
+        AbortSignal.timeout(5000),
+      ).catch((error: unknown) => error);
+      expect(result).toBeInstanceOf(DbError);
+      expect((result as DbError).message).toMatch(/compacted/iu);
+    });
+
+    it('follows a key on the key page: the value, the version and the list of changes', async () => {
+      const key = '/dn-it/watch/page';
+      await putEntry(session, encode(key), { value: encode('start') });
+      const page = new EtcdKeyModel({
+        key: redisKeyRef(encode(key)),
+        connectionName: 'etcd',
+        readOnly: false,
+        session: () => Promise.resolve(session),
+        watchFlushMs: 20,
+      });
+      await page.refresh();
+      const changed = vi.fn();
+      await page.startWatch(false, changed);
+      // The first call comes once the cluster has the watch: changes after it are listed.
+      await vi.waitFor(() => {
+        expect(changed).toHaveBeenCalled();
+      });
+      await putEntry(session, encode(key), { value: encode('later') });
+      await vi.waitFor(() => {
+        expect(page.state().value).toEqual({ text: 'later' });
+      });
+      expect(page.state()).toMatchObject({ watching: true, version: 2 });
+      expect(page.state().events?.at(-1)).toMatchObject({ type: 'put', preview: 'later' });
+      await deleteEntry(session, encode(key));
+      await vi.waitFor(() => {
+        expect(page.state().exists).toBe(false);
+      });
+      expect(page.state().events?.at(-1)).toMatchObject({ type: 'delete' });
+      page.stopWatch();
+      expect(page.state().watching).toBeUndefined();
+    });
+  });
 });
 
 describe('etcd driver with authentication on', () => {
@@ -682,6 +852,40 @@ describe('etcd driver with authentication on', () => {
       expect(error.code).toBe('permission-denied');
     } finally {
       await reader.close();
+    }
+  });
+
+  // V13.31: turning authentication off and on again from the app, as root.
+  it('is seen as on by a signed-in session, which has the root user and role', async () => {
+    const session = await driver.openSession(config(root));
+    try {
+      expect(await authEnabled(session)).toBe(true);
+      expect(await authEnableProblem(session)).toBeUndefined();
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('is turned off by root, and on again once there is a root user with the root role', async () => {
+    const session = await driver.openSession(config(root));
+    try {
+      await disableAuth(session);
+    } finally {
+      await session.close();
+    }
+    const open = await driver.openSession(config());
+    try {
+      expect(await authEnabled(open)).toBe(false);
+      expect(await authEnableProblem(open)).toBeUndefined();
+      await enableAuth(open);
+    } finally {
+      await open.close();
+    }
+    const again = await driver.openSession(config(root));
+    try {
+      expect(await authEnabled(again)).toBe(true);
+    } finally {
+      await again.close();
     }
   });
 });

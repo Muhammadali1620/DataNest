@@ -19,6 +19,20 @@ export const znodeAclSchema = object({
   id: string({ maxLength: 2000 }),
 });
 
+export const WATCH_KINDS = ['created', 'deleted', 'data', 'children'] as const;
+
+/** One change the watch saw (V13.31), with how the znode looked just after it. */
+export const znodeWatchEventSchema = object({
+  /** Milliseconds since the epoch, when the host heard of it. */
+  at: number({ integer: true, min: 0 }),
+  kind: literal(...WATCH_KINDS),
+  /** The version of the data and the size of the data after the change. */
+  version: number({ integer: true, min: 0 }),
+  size: number({ integer: true, min: 0 }),
+  /** The number of children after the change. */
+  children: number({ integer: true, min: 0 }),
+});
+
 export const zookeeperNodeStateSchema = object({
   path: string({ maxLength: 20_000 }),
   connectionName: string({ maxLength: 500 }),
@@ -52,6 +66,22 @@ export const zookeeperNodeStateSchema = object({
   conflict: optional(boolean()),
   /** The last change of ACL was refused because the ACL changed after the page read it. */
   aclConflict: optional(boolean()),
+  /** The host watches the znode and shows what changes (V13.31). */
+  watching: optional(boolean()),
+  /** What the watch saw, the newest last; kept after the watch stops. */
+  events: optional(array(znodeWatchEventSchema, { maxLength: 200 })),
+  /** Why the watch stopped by itself (the session was lost). */
+  watchNotice: optional(string({ maxLength: 1000 })),
+  /** What the last "apply to everything below" did (V13.31). */
+  aclTree: optional(
+    object({
+      changed: number({ integer: true, min: 0 }),
+      failed: number({ integer: true, min: 0 }),
+      /** The first reasons, one line each: `path: reason`. */
+      failures: array(string({ maxLength: 2000 }), { maxLength: 10 }),
+      capped: boolean(),
+    }),
+  ),
 });
 
 export const zookeeperNodeProtocol = defineProtocol({
@@ -80,9 +110,18 @@ export const zookeeperNodeProtocol = defineProtocol({
         params: object({
           acl: array(znodeAclSchema, { maxLength: 200 }),
           aversion: number({ integer: true, min: 0 }),
+          /** Give the same ACL to every znode below, too (V13.31); the host asks first. */
+          recursive: optional(boolean()),
         }),
         result: object({ saved: boolean() }),
       },
+      /**
+       * Starts or stops watching the znode (V13.31): its data, its children, its ACL-free
+       * life and death. Changes arrive as new states, in batches, and the page lists them.
+       */
+      watch: { params: object({ on: boolean() }), result: object({}) },
+      /** Empties the list of changes the watch saw. */
+      clearEvents: { params: object({}), result: object({}) },
       /** Creates a child znode with empty data and opens its page. */
       createChild: {
         params: object({
@@ -116,3 +155,4 @@ export type ZookeeperNodeProtocol = typeof zookeeperNodeProtocol;
 
 export type ZookeeperNodeState = Infer<typeof zookeeperNodeStateSchema>;
 export type ZnodeAclEntry = Infer<typeof znodeAclSchema>;
+export type ZnodeWatchEventView = Infer<typeof znodeWatchEventSchema>;

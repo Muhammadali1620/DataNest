@@ -329,3 +329,71 @@ describe('saveAcl (V13.27)', () => {
     }
   });
 });
+
+describe('saveAcl for everything below (V13.31)', () => {
+  const READ = [{ perms: 1, scheme: 'world', id: 'anyone' }];
+  const ALL = [{ perms: 31, scheme: 'world', id: 'anyone' }];
+
+  it('counts the znodes below, not the znode itself', async () => {
+    tree.put('/app/a/x');
+    expect(await model('/app').countBelow()).toEqual({ count: 3, capped: false });
+    expect(await model('/app/b').countBelow()).toEqual({ count: 0, capped: false });
+  });
+
+  it('changes the ACL of the znode and of everything below, and says how many', async () => {
+    tree.put('/app/a/x');
+    const one = model('/app');
+    await one.refresh();
+    const result = await one.saveAcl([{ perms: 31, scheme: 'world', id: 'anyone' }], 0, true);
+    expect(result.saved).toBe(true);
+    expect(result.state.aclTree).toEqual({ changed: 3, failed: 0, failures: [], capped: false });
+    expect(result.state.aversion).toBe(1);
+    expect(tree.nodes.get('/app/a/x')?.aversion).toBe(1);
+    expect(ALL).toBeDefined();
+  });
+
+  it('does not touch what is below when it is not asked to', async () => {
+    const one = model('/app');
+    await one.refresh();
+    const result = await one.saveAcl(ALL, 0);
+    expect(result.state.aclTree).toBeUndefined();
+    expect(tree.nodes.get('/app/a')?.aversion ?? 0).toBe(0);
+  });
+
+  it('does not go below when the ACL of the znode itself was refused', async () => {
+    const one = model('/app');
+    await one.refresh();
+    const result = await one.saveAcl(ALL, 5, true);
+    expect(result.saved).toBe(false);
+    expect(result.state.aclConflict).toBe(true);
+    expect(result.state.aclTree).toBeUndefined();
+    expect(tree.nodes.get('/app/a')?.aversion ?? 0).toBe(0);
+  });
+
+  it('reports what it could not change, with the path and the reason', async () => {
+    const one = model('/app');
+    await one.refresh();
+    session.setAcl = (path, acl, version) =>
+      path === '/app/a'
+        ? Promise.reject(new DbError('permission-denied', 'not allowed'))
+        : FakeZookeeperSession.prototype.setAcl.call(session, path, acl, version);
+    const result = await one.saveAcl(READ, 0, true);
+    expect(result.state.aclTree).toMatchObject({
+      changed: 1,
+      failed: 1,
+      failures: ['/app/a: not allowed'],
+    });
+  });
+
+  it('forgets the report when the znode is read again', async () => {
+    const one = model('/app');
+    await one.refresh();
+    await one.saveAcl(READ, 0, true);
+    expect((await one.refresh()).aclTree).toBeUndefined();
+  });
+
+  it('is refused on a read-only connection, below as well', async () => {
+    const one = model('/app', true);
+    await expect(one.saveAcl(READ, 0, true)).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+});

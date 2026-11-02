@@ -75,6 +75,8 @@ async function open(
   host.handle('createChild', reply('createChild', { path: '/app/config/x' }));
   host.handle('openChild', reply('openChild', {}));
   host.handle('deleteNode', reply('deleteNode', { deleted: true }));
+  host.handle('watch', reply('watch', {}));
+  host.handle('clearEvents', reply('clearEvents', {}));
   host.handle('copyText', reply('copyText', {}));
   render(App, { props: { rpc, t: createTranslator(language) } });
   await flush();
@@ -501,5 +503,189 @@ describe('ZooKeeper znode page: the ACL editor (V13.27)', () => {
     await open(state(), 'ru');
     await fireEvent.click(screen.getByRole('button', { name: 'Изменить ACL' }));
     expect(screen.getByRole('button', { name: 'Сохранить ACL' })).toBeTruthy();
+  });
+});
+
+describe('ZooKeeper znode page: watching', () => {
+  const change = (kind: 'created' | 'deleted' | 'data' | 'children', version = 4) => ({
+    at: new Date(2026, 0, 2, 14, 3, 9).getTime(),
+    kind,
+    version,
+    size: 7,
+    children: 2,
+  });
+
+  it('offers to watch, and asks the host to start', async () => {
+    const opened = await open(state());
+    expect(screen.queryByTestId('changes')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Watch' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toEqual([{ on: true }]);
+    });
+  });
+
+  it('shows that it is watching, and asks the host to stop', async () => {
+    const opened = await open(state({ watching: true }));
+    expect(screen.getByRole('button', { name: 'Stop watching' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByTestId('watch-note').textContent).toContain('waiting for changes');
+    await fireEvent.click(screen.getByRole('button', { name: 'Stop watching' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toEqual([{ on: false }]);
+    });
+  });
+
+  it('lists the changes, the newest first, with what the znode looked like after them', async () => {
+    await open(state({ watching: true, events: [change('data', 3), change('children', 4)] }));
+    const rows = screen.getAllByRole('listitem').filter((row) => row.classList.contains('change'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain('Children changed');
+    expect(rows[0]?.textContent).toContain('Version 4');
+    expect(rows[0]?.textContent).toContain('7 bytes');
+    expect(rows[0]?.textContent).toContain('14:03:09');
+    expect(rows[1]?.textContent).toContain('Data changed');
+    expect(screen.getByTestId('watch-note').textContent).toContain('listed below');
+    expect(screen.getByTestId('changes').textContent).toContain('Changes · 2');
+  });
+
+  it('names created and deleted, and gives a deleted znode no numbers', async () => {
+    await open(state({ events: [change('created'), change('deleted')] }));
+    const rows = screen.getAllByRole('listitem').filter((row) => row.classList.contains('change'));
+    expect(rows[0]?.textContent).toContain('Deleted');
+    expect(rows[0]?.textContent).not.toContain('bytes');
+    expect(rows[1]?.textContent).toContain('Created');
+  });
+
+  it('keeps the list after the watch stops, and says why it stopped', async () => {
+    await open(
+      state({ events: [change('data')], watchNotice: 'Watching stopped: the session ended' }),
+    );
+    expect(screen.getByTestId('changes')).toBeTruthy();
+    expect(screen.getByTestId('watch-notice').textContent).toContain('the session ended');
+    expect(screen.getByRole('button', { name: 'Watch' })).toBeTruthy();
+  });
+
+  it('clears the list', async () => {
+    const opened = await open(state({ events: [change('data')] }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    await waitFor(() => {
+      expect(sent(opened, 'clearEvents')).toHaveLength(1);
+    });
+  });
+
+  it('can watch a znode that is not there yet', async () => {
+    const opened = await open(state({ exists: false, value: undefined }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Watch' }));
+    await waitFor(() => {
+      expect(sent(opened, 'watch')).toHaveLength(1);
+    });
+  });
+
+  it('keeps what the user is typing when the watch brings a change, and warns', async () => {
+    const opened = await open(state({ watching: true }));
+    await fireEvent.input(screen.getByLabelText('Value'), { target: { value: 'my draft' } });
+    opened.host.emit('state', state({ watching: true, version: 6, value: { text: 'theirs' } }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('stale')).not.toBeNull();
+    });
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Value').value).toBe('my draft');
+    expect(screen.getByTestId('stale').textContent).toContain('version 6');
+    // The save is checked against the version the box was filled at, so the host refuses it.
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(sent(opened, 'save')).toEqual([{ value: { text: 'my draft' }, version: 3 }]);
+    });
+  });
+
+  it('shows the new data at once when the user has typed nothing', async () => {
+    const opened = await open(state({ watching: true }));
+    opened.host.emit('state', state({ watching: true, version: 6, value: { text: 'theirs' } }));
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLTextAreaElement>('Value').value).toBe('theirs');
+    });
+    expect(screen.queryByTestId('stale')).toBeNull();
+  });
+
+  it('speaks Russian', async () => {
+    await open(state({ watching: true, events: [change('children')] }), 'ru');
+    expect(screen.getByRole('button', { name: 'Не следить' })).toBeTruthy();
+    expect(screen.getByTestId('changes').textContent).toContain('Изменения');
+    expect(screen.getByTestId('changes').textContent).toContain('Потомки изменены');
+  });
+});
+
+describe('ZooKeeper znode page: the ACL below (V13.31)', () => {
+  const editButton = () => screen.getByRole('button', { name: 'Edit the ACL' });
+
+  it('offers the box when the znode has children, and sends the flag when it is ticked', async () => {
+    const opened = await open(state({ numChildren: 4 }));
+    await fireEvent.click(editButton());
+    const editor = within(screen.getByTestId('acl-editor'));
+    expect(editor.getByTestId('acl-recursive').parentElement?.textContent).toContain(
+      'Give the same ACL to the 4 znodes below, too',
+    );
+    await fireEvent.click(editor.getByTestId('acl-recursive'));
+    await fireEvent.click(editor.getByRole('button', { name: 'Save the ACL' }));
+    await waitFor(() => {
+      expect(sent(opened, 'saveAcl')).toHaveLength(1);
+    });
+    expect(sent(opened, 'saveAcl')[0]).toMatchObject({ aversion: 1, recursive: true });
+  });
+
+  it('sends no flag when the box stays empty', async () => {
+    const opened = await open(state({ numChildren: 4 }));
+    await fireEvent.click(editButton());
+    await fireEvent.click(
+      within(screen.getByTestId('acl-editor')).getByRole('button', { name: 'Save the ACL' }),
+    );
+    await waitFor(() => {
+      expect(sent(opened, 'saveAcl')).toHaveLength(1);
+    });
+    expect(sent(opened, 'saveAcl')[0]).not.toHaveProperty('recursive');
+  });
+
+  it('offers no box for a znode without children', async () => {
+    await open(state({ numChildren: 0, children: [] }));
+    await fireEvent.click(editButton());
+    expect(screen.queryByTestId('acl-recursive')).toBeNull();
+  });
+
+  it('says how many znodes below got the ACL', async () => {
+    await open(state({ aclTree: { changed: 7, failed: 0, failures: [], capped: false } }));
+    const note = screen.getByTestId('acl-tree');
+    expect(note.textContent).toContain('The ACL was given to 7 znodes below.');
+    expect(note.classList.contains('warning')).toBe(false);
+  });
+
+  it('lists the znodes that refused, and says when the walk was cut', async () => {
+    await open(
+      state({
+        aclTree: {
+          changed: 5,
+          failed: 2,
+          failures: ['/a/b: not allowed', '/a/c: not allowed'],
+          capped: true,
+        },
+      }),
+    );
+    const note = screen.getByTestId('acl-tree');
+    expect(note.classList.contains('warning')).toBe(true);
+    expect(note.textContent).toContain('2 could not be changed:');
+    expect(note.textContent).toContain('/a/b: not allowed; /a/c: not allowed');
+    expect(note.textContent).toContain('stopped at its limit');
+  });
+
+  it('is not shown when nothing was done below', async () => {
+    await open(state());
+    expect(screen.queryByTestId('acl-tree')).toBeNull();
+  });
+
+  it('speaks Russian', async () => {
+    await open(
+      state({ numChildren: 4, aclTree: { changed: 7, failed: 0, failures: [], capped: false } }),
+      'ru',
+    );
+    expect(screen.getByTestId('acl-tree').textContent).toContain('ACL выдан узлам ниже: 7.');
   });
 });

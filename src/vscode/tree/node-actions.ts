@@ -33,6 +33,10 @@ export function nodeSqlTargetOf(node: TreeNode): NodeSqlTarget | undefined {
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'folder':
     case 'group':
     case 'message':
@@ -122,6 +126,10 @@ export function actionsOf(node: TreeNode): readonly Command[] {
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'folder':
     case 'group':
     case 'message':

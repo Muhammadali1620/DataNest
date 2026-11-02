@@ -158,3 +158,40 @@ when the listener is encrypted.
 
 Not here (yet): a live view of new messages, Avro/Protobuf decoding through a schema
 registry, committing offsets for a group, ACLs and the cluster's configuration.
+
+## RabbitMQ
+
+DataNest browses a RabbitMQ broker through the HTTP API of its **management plugin**, so
+nothing native and no AMQP client is needed. Give the broker's address in the Host box and
+the plugin's port (15672 by default, **not** the AMQP port 5672) in the Port box, and sign
+in with a user that has the `management` tag; an empty user is `guest`, which a broker
+accepts only from its own machine. The **Virtual host** box is optional: filled in, the
+tree shows only that virtual host, which is what a user who may see just one needs.
+
+- The tree shows the **virtual hosts**, each with its **Queues** and **Exchanges**. A queue
+  is coloured green while it is empty, orange while messages wait and red when it is down,
+  and says how many are ready, unacknowledged and how many consumers it has; an exchange
+  has an icon and a colour for its type. A folder lists the first 500 and counts the rest.
+  **New Queue…** (classic, quorum or stream) and **New Exchange…** ask for a name and a
+  type; **Remove All Messages** and **Delete** ask first.
+- **Open Queue or Exchange** (a click) opens its page: the four figures of a queue as
+  coloured cards with a bar for ready against unacknowledged, its properties (type, state,
+  memory, policy, node), its arguments, and its **bindings**. Every queue is also bound to
+  the default exchange under its own name, as the broker has it.
+- **Look at the first messages** shows up to 100 messages of a queue with their payload (text,
+  JSON or hex), routing key, size and properties. **Nothing is taken from the queue:** each
+  message is fetched with `ack_requeue_true`, which puts it back at once. The broker marks
+  a message it has handed out before as redelivered, so the next look shows the flag, and a
+  message put back may change its place among the others. A payload is cut at 256 KB; its
+  real length stays visible.
+- **Publish a message** sends one through the default exchange to the queue, or through
+  an exchange with a routing key; give a payload (text, JSON or hex), a content type,
+  persistence and headers. You are told when no queue took the message.
+- A read-only connection offers no change, and a production one asks before publishing or
+  creating anything.
+- Every request opens a connection of its own: the plugin closes idle connections at
+  moments of its own, and one sent down a connection it has just closed would fail, even
+  a publish that must not be sent twice.
+
+Not here (yet): creating and removing bindings, consumers and connections of the broker,
+users, permissions and policies, and a live view of the rates.

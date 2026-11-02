@@ -35,6 +35,12 @@ import {
   kafkaTopicItem,
   kafkaTopicsItem,
 } from './kafka-items';
+import {
+  rabbitExchangeItem,
+  rabbitFolderItem,
+  rabbitQueueItem,
+  rabbitVhostItem,
+} from './rabbitmq-items';
 import type { EtcdKeyBrowser } from '../../services/etcd/key-browser';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
 import {
@@ -161,6 +167,14 @@ export class ConnectionsTreeProvider
           noLag: vscode.l10n.t('The group has committed no offsets'),
           lagLine: (topic, partition, lag) =>
             vscode.l10n.t('{0} [{1}]: {2} behind', topic, partition, lag),
+        },
+      },
+      rabbit: {
+        texts: {
+          noVhosts: vscode.l10n.t('No virtual hosts'),
+          noQueues: vscode.l10n.t('No queues'),
+          noExchanges: vscode.l10n.t('No exchanges'),
+          more: (count) => vscode.l10n.t('… and {0} more that are not shown', count),
         },
       },
       ...(deps.redisKeySeparator === undefined
@@ -640,6 +654,14 @@ export class ConnectionsTreeProvider
         return kafkaGroupsItem(node);
       case 'kafkaGroup':
         return kafkaGroupItem(node);
+      case 'rabbitVhost':
+        return rabbitVhostItem(node);
+      case 'rabbitFolder':
+        return rabbitFolderItem(node);
+      case 'rabbitQueue':
+        return rabbitQueueItem(node);
+      case 'rabbitExchange':
+        return rabbitExchangeItem(node);
       case 'message': {
         const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
         item.id = nodeId(node);

@@ -12,6 +12,7 @@ import { TEST_CASSANDRA } from './cassandra-servers';
 import { TEST_LOKI } from './loki-servers';
 import { TEST_KAFKA } from './kafka-servers';
 import { TEST_NEO4J } from './neo4j-servers';
+import { TEST_RABBITMQ } from './rabbitmq-servers';
 import { TEST_LIBSQL } from './libsql-servers';
 import { TEST_MONGO } from './mongo-servers';
 import { TEST_REDIS, TEST_REDISJSON } from './redis-servers';
@@ -133,6 +134,11 @@ const DEFINITIONS = {
     always: false,
     folders: ['kafka'],
     endpoints: () => [{ name: 'kafka', host: TEST_KAFKA.host, port: TEST_KAFKA.port }],
+  },
+  rabbitmq: {
+    always: false,
+    folders: ['rabbitmq'],
+    endpoints: () => [{ name: 'rabbitmq', host: TEST_RABBITMQ.host, port: TEST_RABBITMQ.port }],
   },
   etcd: {
     always: false,

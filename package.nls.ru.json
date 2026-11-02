@@ -253,5 +253,10 @@
   "commands.kafka.openTopic.title": "Открыть топик Kafka",
   "commands.kafka.newTopic.title": "Новый топик Kafka…",
   "commands.kafka.deleteTopic.title": "Удалить топик Kafka",
-  "configuration.kafka.showInternalTopics.description": "Показывать в дереве служебные топики Kafka (`__consumer_offsets`, `_schemas`, …)."
+  "configuration.kafka.showInternalTopics.description": "Показывать в дереве служебные топики Kafka (`__consumer_offsets`, `_schemas`, …).",
+  "commands.rabbitmq.openObject.title": "Открыть очередь или обменник",
+  "commands.rabbitmq.newQueue.title": "Новая очередь…",
+  "commands.rabbitmq.newExchange.title": "Новый обменник…",
+  "commands.rabbitmq.purgeQueue.title": "Убрать все сообщения",
+  "commands.rabbitmq.deleteObject.title": "Удалить"
 }

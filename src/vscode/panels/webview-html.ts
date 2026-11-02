@@ -48,6 +48,7 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'er-diagram': 'type-hierarchy',
   'etcd-key': 'key',
   'kafka-topic': 'comment-discussion',
+  'rabbitmq-object': 'mail',
   manager: 'dashboard',
   'mongo-documents': 'json',
   ping: 'debug-disconnect',

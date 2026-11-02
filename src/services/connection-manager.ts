@@ -25,6 +25,7 @@ import type { Driver, Session, TransactionState } from '../drivers/driver';
 import type { ElasticDriver, ElasticSession } from '../drivers/elastic-driver';
 import type { EtcdDriver, EtcdSession } from '../drivers/etcd-driver';
 import type { KafkaDriver, KafkaSession } from '../drivers/kafka-driver';
+import type { RabbitDriver, RabbitSession } from '../drivers/rabbitmq-driver';
 import type { MongoDriver, MongoSession } from '../drivers/mongo-driver';
 import type { RedisDriver, RedisSession } from '../drivers/redis-driver';
 import type { ConnectionStore } from './connection-store';
@@ -32,6 +33,7 @@ import { ManagedSession } from './managed-session';
 import { ManagedElasticSession } from './elasticsearch/managed-elastic-session';
 import { ManagedEtcdSession } from './etcd/managed-etcd-session';
 import { ManagedKafkaSession } from './kafka/managed-kafka-session';
+import { ManagedRabbitSession } from './rabbitmq/managed-rabbit-session';
 import { ManagedMongoSession } from './mongodb/managed-mongo-session';
 import { ManagedRedisSession } from './redis/managed-redis-session';
 import { setUpRedisSession } from './redis/redis-setup';
@@ -77,6 +79,8 @@ export interface DriverProvider {
   getEtcd?(): Promise<EtcdDriver>;
   /** Needed only by Kafka connections (V13.23). */
   getKafka?(): Promise<KafkaDriver>;
+  /** Needed only by RabbitMQ connections (V13.26). */
+  getRabbit?(): Promise<RabbitDriver>;
 }
 
 /** The slice of TunnelPool the manager needs. */
@@ -120,7 +124,12 @@ type Holder =
       readonly session: ElasticSession;
     }
   | { readonly family: 'etcd'; readonly target: SessionTarget; readonly session: EtcdSession }
-  | { readonly family: 'kafka'; readonly target: SessionTarget; readonly session: KafkaSession };
+  | { readonly family: 'kafka'; readonly target: SessionTarget; readonly session: KafkaSession }
+  | {
+      readonly family: 'rabbitmq';
+      readonly target: SessionTarget;
+      readonly session: RabbitSession;
+    };
 
 const DISCONNECTED: ConnectionState = { status: 'disconnected' };
 
@@ -258,6 +267,12 @@ export class ConnectionManager implements Disposable {
     return held?.family === 'kafka' ? held.session : undefined;
   }
 
+  /** The live RabbitMQ session of an owner, or undefined when it holds none. */
+  rabbitSessionOf(owner: string): RabbitSession | undefined {
+    const held = this.holders.get(owner);
+    return held?.family === 'rabbitmq' ? held.session : undefined;
+  }
+
   /** Connection ids that currently hold at least one live session. */
   connectedIds(): string[] {
     return [...new Set([...this.holders.values()].map((held) => held.target.connectionId))];
@@ -318,6 +333,15 @@ export class ConnectionManager implements Disposable {
     const held = await this.acquireHolder(owner, target, 'kafka');
     if (held.family !== 'kafka') {
       throw new DbError('internal', msg('Expected a Kafka session'));
+    }
+    return held.session;
+  }
+
+  /** Like `acquire`, for a RabbitMQ connection (V13.26). */
+  async acquireRabbit(owner: string, target: SessionTarget): Promise<RabbitSession> {
+    const held = await this.acquireHolder(owner, target, 'rabbitmq');
+    if (held.family !== 'rabbitmq') {
+      throw new DbError('internal', msg('Expected a RabbitMQ session'));
     }
     return held.session;
   }
@@ -388,6 +412,10 @@ export class ConnectionManager implements Disposable {
     }
     if (this.familyOf(connectionId) === 'kafka') {
       await this.acquireKafka(ConnectionManager.treeOwner(connectionId), { connectionId });
+      return;
+    }
+    if (this.familyOf(connectionId) === 'rabbitmq') {
+      await this.acquireRabbit(ConnectionManager.treeOwner(connectionId), { connectionId });
       return;
     }
     if (this.familyOf(connectionId) === 'redis') {
@@ -465,6 +493,10 @@ export class ConnectionManager implements Disposable {
       await this.testKafka(input, password, ssh, proxyPassword);
       return;
     }
+    if (input.driver === 'rabbitmq') {
+      await this.testRabbit(input, password, ssh, proxyPassword);
+      return;
+    }
     const driver = await this.sqlDriver(input.driver, input.plugin);
     const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
@@ -530,19 +562,25 @@ export class ConnectionManager implements Disposable {
     }
   }
 
-  private async testMongo(
+  /**
+   * Opens a session of a family that has no setup of its own, with the settings of the form,
+   * and closes it again: opening reaches the server, signs in and asks who it is, which
+   * proves that the address, the login and the tunnel work.
+   */
+  private async testSession(
     input: ConnectionInput,
     password: string | undefined,
     ssh: Readonly<Record<string, SshHopSecrets>>,
     proxyPassword: string | undefined,
+    driver: {
+      openSession(config: ResolvedConnectionConfig): Promise<{ close(): Promise<void> }>;
+    },
   ): Promise<void> {
-    const driver = await this.mongoDriver();
     const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
-      let session: MongoSession;
+      let session: { close(): Promise<void> };
       try {
-        // Opening signs in and asks the server who it is: that proves the link works.
         session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
       } catch (error) {
         throw tunnel?.forwardError() ?? error;
@@ -551,6 +589,15 @@ export class ConnectionManager implements Disposable {
     } finally {
       await tunnel?.close();
     }
+  }
+
+  private async testMongo(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
+  ): Promise<void> {
+    await this.testSession(input, password, ssh, proxyPassword, await this.mongoDriver());
   }
 
   private async testElastic(
@@ -559,21 +606,7 @@ export class ConnectionManager implements Disposable {
     ssh: Readonly<Record<string, SshHopSecrets>>,
     proxyPassword: string | undefined,
   ): Promise<void> {
-    const driver = await this.elasticDriver();
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
-    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
-    try {
-      let session: ElasticSession;
-      try {
-        // Opening asks the cluster who it is, signed in: that proves the link works.
-        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
-      } catch (error) {
-        throw tunnel?.forwardError() ?? error;
-      }
-      await session.close().catch(() => undefined);
-    } finally {
-      await tunnel?.close();
-    }
+    await this.testSession(input, password, ssh, proxyPassword, await this.elasticDriver());
   }
 
   private async testEtcd(
@@ -582,21 +615,7 @@ export class ConnectionManager implements Disposable {
     ssh: Readonly<Record<string, SshHopSecrets>>,
     proxyPassword: string | undefined,
   ): Promise<void> {
-    const driver = await this.etcdDriver();
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
-    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
-    try {
-      let session: EtcdSession;
-      try {
-        // Opening signs in and asks the cluster its status: that proves the link works.
-        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
-      } catch (error) {
-        throw tunnel?.forwardError() ?? error;
-      }
-      await session.close().catch(() => undefined);
-    } finally {
-      await tunnel?.close();
-    }
+    await this.testSession(input, password, ssh, proxyPassword, await this.etcdDriver());
   }
 
   private async testKafka(
@@ -605,21 +624,16 @@ export class ConnectionManager implements Disposable {
     ssh: Readonly<Record<string, SshHopSecrets>>,
     proxyPassword: string | undefined,
   ): Promise<void> {
-    const driver = await this.kafkaDriver();
-    const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
-    const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
-    try {
-      let session: KafkaSession;
-      try {
-        // Opening reaches the brokers and asks for the cluster: that proves the link works.
-        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
-      } catch (error) {
-        throw tunnel?.forwardError() ?? error;
-      }
-      await session.close().catch(() => undefined);
-    } finally {
-      await tunnel?.close();
-    }
+    await this.testSession(input, password, ssh, proxyPassword, await this.kafkaDriver());
+  }
+
+  private async testRabbit(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
+  ): Promise<void> {
+    await this.testSession(input, password, ssh, proxyPassword, await this.rabbitDriver());
   }
 
   /** True when the saved connection refuses every change (V4.6). */
@@ -679,7 +693,9 @@ export class ConnectionManager implements Disposable {
                 ? await this.openEtcd(owner, target, config)
                 : config.driver === 'kafka'
                   ? await this.openKafka(owner, target, config)
-                  : await this.openSql(owner, target, config, config.driver);
+                  : config.driver === 'rabbitmq'
+                    ? await this.openRabbit(owner, target, config)
+                    : await this.openSql(owner, target, config, config.driver);
       this.holders.set(owner, holder);
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -905,6 +921,35 @@ export class ConnectionManager implements Disposable {
     return { family: 'kafka', target, session };
   }
 
+  private async openRabbit(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+  ): Promise<Holder> {
+    const driver = await this.rabbitDriver();
+    const password = await this.store.getPassword(config.id);
+    const lease = await this.leaseTunnel(config);
+    let opened: RabbitSession;
+    try {
+      opened = await driver.openSession(resolve(config, target, password, lease));
+    } catch (error) {
+      await lease?.release();
+      throw lease?.forwardError() ?? error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedRabbitSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+      keepAliveMs: keepAliveMsOf(config),
+    });
+    session.scheduleKeepAlive();
+    return { family: 'rabbitmq', target, session };
+  }
+
   /** A connect that finished after dispose() must not leave a live link behind. */
   private async closeIfDisposed(
     opened: { close(): Promise<void> },
@@ -929,6 +974,13 @@ export class ConnectionManager implements Disposable {
       throw new DbError('unsupported', msg('Elasticsearch is not available'));
     }
     return await this.drivers.getElastic();
+  }
+
+  private async rabbitDriver(): Promise<RabbitDriver> {
+    if (this.drivers.getRabbit === undefined) {
+      throw new DbError('unsupported', msg('RabbitMQ is not available'));
+    }
+    return await this.drivers.getRabbit();
   }
 
   private async kafkaDriver(): Promise<KafkaDriver> {
@@ -1106,6 +1158,8 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
         return msg('"{0}" is an etcd connection: it has keys, not SQL tables', config.name);
       case 'kafka':
         return msg('"{0}" is a Kafka connection: it has topics, not SQL tables', config.name);
+      case 'rabbitmq':
+        return msg('"{0}" is a RabbitMQ connection: it has queues, not SQL tables', config.name);
       case 'sql':
         return msg('"{0}" is a SQL connection', config.name);
     }
@@ -1121,6 +1175,8 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
       return msg('"{0}" is not an etcd connection', config.name);
     case 'kafka':
       return msg('"{0}" is not a Kafka connection', config.name);
+    case 'rabbitmq':
+      return msg('"{0}" is not a RabbitMQ connection', config.name);
   }
 }
 

@@ -65,6 +65,7 @@ describe('the Russian dictionary', () => {
     'tools.set.group.redis',
     'tools.kind.unicode',
     'form.driver.kafka',
+    'form.driver.rabbitmq',
     'form.driver.mysql',
     'form.driver.postgres',
     'form.driver.sqlite',

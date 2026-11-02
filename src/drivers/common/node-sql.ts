@@ -144,6 +144,7 @@ export function columnSql(
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
     case 'influxdb':
       throw new Error('This connection has no SQL columns');
   }
@@ -247,6 +248,7 @@ export function indexSql(
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
     case 'influxdb':
     case 'loki':
       throw new Error('This connection has no SQL indexes');
@@ -296,6 +298,7 @@ export function foreignKeySql(
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
     case 'influxdb':
     case 'loki':
       throw new Error('This connection has no SQL foreign keys');

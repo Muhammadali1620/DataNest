@@ -92,6 +92,10 @@ export function dumpStartOf(
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':

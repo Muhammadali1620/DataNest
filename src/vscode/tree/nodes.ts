@@ -91,6 +91,17 @@ export const TREE_CONTEXT = {
   /** The "Consumer groups" folder, and one group in it. */
   kafkaGroups: 'datanest.kafkaGroups',
   kafkaGroup: 'datanest.kafkaGroup',
+  /** RabbitMQ connections (V13.26) share the connection menus but none of the SQL ones. */
+  rabbitConnection: 'datanest.rabbitConnection',
+  rabbitConnectionConnected: 'datanest.rabbitConnection.connected',
+  projectRabbitConnection: 'datanest.projectRabbitConnection',
+  projectRabbitConnectionConnected: 'datanest.projectRabbitConnection.connected',
+  /** A virtual host, and its "Queues" and "Exchanges" folders. */
+  rabbitVhost: 'datanest.rabbitVhost',
+  rabbitQueues: 'datanest.rabbitQueues',
+  rabbitExchanges: 'datanest.rabbitExchanges',
+  rabbitQueue: 'datanest.rabbitQueue',
+  rabbitExchange: 'datanest.rabbitExchange',
   database: 'datanest.database',
   schema: 'datanest.schema',
   group: 'datanest.group',
@@ -446,6 +457,41 @@ export interface KafkaGroupNode {
   readonly members: number;
 }
 
+/** A virtual host of a RabbitMQ connection (V13.26). */
+export interface RabbitVhostNode {
+  readonly kind: 'rabbitVhost';
+  readonly connectionId: string;
+  readonly vhost: string;
+}
+
+/** The "Queues" or "Exchanges" folder of a virtual host. */
+export interface RabbitFolderNode {
+  readonly kind: 'rabbitFolder';
+  readonly connectionId: string;
+  readonly vhost: string;
+  readonly folder: 'queues' | 'exchanges';
+}
+
+export interface RabbitQueueNode {
+  readonly kind: 'rabbitQueue';
+  readonly connectionId: string;
+  readonly vhost: string;
+  readonly queue: string;
+  readonly state: string;
+  readonly ready: number;
+  readonly unacked: number;
+  readonly consumers: number;
+}
+
+export interface RabbitExchangeNode {
+  readonly kind: 'rabbitExchange';
+  readonly connectionId: string;
+  readonly vhost: string;
+  /** Empty for the default exchange. */
+  readonly exchange: string;
+  readonly exchangeType: string;
+}
+
 /** A leaf that explains something instead of listing objects: an error or "empty". */
 export interface MessageNode {
   readonly kind: 'message';
@@ -493,6 +539,10 @@ export type TreeNode =
   | KafkaPartitionNode
   | KafkaGroupsNode
   | KafkaGroupNode
+  | RabbitVhostNode
+  | RabbitFolderNode
+  | RabbitQueueNode
+  | RabbitExchangeNode
   | MessageNode;
 
 /** Where in the database a node lives; the root scope is empty. */
@@ -540,6 +590,10 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'message':
       return {};
   }
@@ -670,6 +724,14 @@ export function nodeId(node: TreeNode): string {
       return join(['kafkaGroups', node.connectionId]);
     case 'kafkaGroup':
       return join(['kafkaGroup', node.connectionId, node.group]);
+    case 'rabbitVhost':
+      return join(['rabbitVhost', node.connectionId, node.vhost]);
+    case 'rabbitFolder':
+      return join(['rabbitFolder', node.connectionId, node.vhost, node.folder]);
+    case 'rabbitQueue':
+      return join(['rabbitQueue', node.connectionId, node.vhost, node.queue]);
+    case 'rabbitExchange':
+      return join(['rabbitExchange', node.connectionId, node.vhost, node.exchange]);
     case 'message':
       return join(['message', node.connectionId ?? '', node.text]);
   }
@@ -734,6 +796,10 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'kafkaPartition' ||
     kind === 'kafkaGroups' ||
     kind === 'kafkaGroup' ||
+    kind === 'rabbitVhost' ||
+    kind === 'rabbitFolder' ||
+    kind === 'rabbitQueue' ||
+    kind === 'rabbitExchange' ||
     kind === 'message'
   );
 }
@@ -783,6 +849,12 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.topic;
     case 'kafkaGroup':
       return node.group;
+    case 'rabbitVhost':
+      return node.vhost;
+    case 'rabbitQueue':
+      return node.queue;
+    case 'rabbitExchange':
+      return node.exchange === '' ? undefined : node.exchange;
     case 'project':
     case 'connection':
     case 'group':
@@ -796,6 +868,7 @@ export function nameOf(node: TreeNode): string | undefined {
     case 'kafkaTopics':
     case 'kafkaPartition':
     case 'kafkaGroups':
+    case 'rabbitFolder':
     case 'message':
       return undefined;
   }
@@ -858,6 +931,10 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'message':
       return undefined;
   }
@@ -870,6 +947,15 @@ export function connectionContext(options: {
   readonly family: DriverFamily;
 }): string {
   const { project, connected, family } = options;
+  if (family === 'rabbitmq') {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectRabbitConnectionConnected
+        : TREE_CONTEXT.projectRabbitConnection
+      : connected
+        ? TREE_CONTEXT.rabbitConnectionConnected
+        : TREE_CONTEXT.rabbitConnection;
+  }
   if (family === 'kafka') {
     return project
       ? connected

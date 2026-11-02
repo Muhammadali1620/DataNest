@@ -80,6 +80,12 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="2.500"/><circle cx="18" cy="18" r="2.500"/><path d="M8.500 10.700l7.200-3.600M8.500 13.300l7.200 3.600" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"/>',
   },
+  // An envelope: a message waiting in a queue (V13.26); the vendor's logo is not ours to use.
+  rabbitmq: {
+    hex: '#e11d48',
+    ink: WHITE,
+    body: '<rect x="3" y="6" width="18" height="12" rx="2.500" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.500 8.500L12 13.500l7.500-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  },
   // A ring around a core.
   oracle: {
     hex: '#c74634',

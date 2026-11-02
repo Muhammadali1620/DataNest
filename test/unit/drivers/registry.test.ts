@@ -225,6 +225,20 @@ describe('DriverRegistry', () => {
       ).rejects.toThrow('unexpected module shape');
     });
 
+    it('loads the RabbitMQ driver and refuses it as any other (V13.26)', async () => {
+      const rabbit = { id: 'rabbitmq', openSession: () => Promise.reject(new Error('unused')) };
+      const loader = vi.fn(() => Promise.resolve({ driver: rabbit }));
+      const registry = registryWith(loader as never);
+      expect(await registry.getRabbit()).toBe(rabbit);
+      expect(loader).toHaveBeenCalledWith('rabbitmq');
+      await expect(registry.get('rabbitmq' as BuiltInSqlDriverId)).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+      await expect(
+        registryWith(() => Promise.resolve({ driver: redis })).getRabbit(),
+      ).rejects.toThrow('unexpected module shape');
+    });
+
     it('rejects a SQL bundle that carries no dialect', async () => {
       await expect(
         registryWith(() =>

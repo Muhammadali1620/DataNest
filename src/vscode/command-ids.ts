@@ -214,6 +214,12 @@ export const COMMAND_IDS = {
   kafkaOpenTopic: 'datanest.kafka.openTopic',
   kafkaNewTopic: 'datanest.kafka.newTopic',
   kafkaDeleteTopic: 'datanest.kafka.deleteTopic',
+  /** Opens the page of a RabbitMQ queue or exchange: its figures, bindings and messages. */
+  rabbitOpenObject: 'datanest.rabbitmq.openObject',
+  rabbitNewQueue: 'datanest.rabbitmq.newQueue',
+  rabbitNewExchange: 'datanest.rabbitmq.newExchange',
+  rabbitPurgeQueue: 'datanest.rabbitmq.purgeQueue',
+  rabbitDeleteObject: 'datanest.rabbitmq.deleteObject',
   /** A MongoDB database comes to be with its first collection (V7.5). */
   mongoNewDatabase: 'datanest.mongo.newDatabase',
   mongoDropDatabase: 'datanest.mongo.dropDatabase',

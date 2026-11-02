@@ -93,6 +93,7 @@
     cassandra: 'form.driver.cassandra',
     etcd: 'form.driver.etcd',
     kafka: 'form.driver.kafka',
+    rabbitmq: 'form.driver.rabbitmq',
     influxdb: 'form.driver.influxdb',
     loki: 'form.driver.loki',
     plugin: 'form.driver.plugin',
@@ -119,6 +120,7 @@
   const isCassandra = $derived(fields?.driver === 'cassandra');
   const isEtcd = $derived(fields?.driver === 'etcd');
   const isKafka = $derived(fields?.driver === 'kafka');
+  const isRabbit = $derived(fields?.driver === 'rabbitmq');
   const isInflux = $derived(fields?.driver === 'influxdb');
   const isLoki = $derived(fields?.driver === 'loki');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
@@ -439,6 +441,8 @@
                     ? t('form.kafka.hostHint')
                   : isLoki
                     ? t('form.loki.hostHint')
+                  : isRabbit
+                    ? t('form.rabbit.hostHint')
                   : isNeo4j
                     ? t('form.neo4j.hostHint')
                   : isCassandra
@@ -602,6 +606,8 @@
                   ? t('form.redis.userHint')
                   : isKafka
                     ? t('form.kafka.userHint')
+                  : isRabbit
+                    ? t('form.rabbit.userHint')
                   : isEtcd
                     ? t('form.etcd.userHint')
                     : isInflux
@@ -713,6 +719,8 @@
                     ? t('form.loki.tenant')
                     : isCassandra
                       ? t('form.cassandra.keyspace')
+                    : isRabbit
+                      ? t('form.rabbit.vhost')
                       : t('form.database')}
               hint={isRedis
                 ? t('form.redis.databaseHint')
@@ -724,7 +732,9 @@
                       ? t('form.loki.tenantHint')
                       : isCassandra
                       ? t('form.cassandra.keyspaceHint')
-                      : t('form.databaseHint')}
+                      : isRabbit
+                        ? t('form.rabbit.vhostHint')
+                        : t('form.databaseHint')}
               error={isRedis
                 ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
                 : undefined}
@@ -743,6 +753,8 @@
                       ? t('form.loki.tenant')
                       : isCassandra
                         ? t('form.cassandra.keyspace')
+                      : isRabbit
+                        ? t('form.rabbit.vhost')
                         : t('form.database')}
                 autocomplete="off"
               />

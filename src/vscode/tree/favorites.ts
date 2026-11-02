@@ -184,6 +184,10 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'message':
       return undefined;
   }

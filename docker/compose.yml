@@ -488,6 +488,24 @@ services:
           '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1',
         ]
 
+  # RabbitMQ (V13.26), group `rabbitmq`: one node with the management plugin, whose HTTP API
+  # is all the extension speaks (AMQP is not published). The default `guest` user may only
+  # sign in from the machine itself, so the tests use a user of their own (see
+  # test/helpers/rabbitmq-servers.ts). Memory is capped, so the broker sizes itself to it.
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: datanest-rabbitmq
+    profiles: [rabbitmq]
+    environment:
+      RABBITMQ_DEFAULT_USER: datanest
+      RABBITMQ_DEFAULT_PASS: datanest-test-password
+    mem_limit: 512m
+    ports:
+      - 127.0.0.1:7156:15672
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+
   etcd:
     image: quay.io/coreos/etcd:v3.5.17
     container_name: datanest-etcd

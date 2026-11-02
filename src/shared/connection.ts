@@ -15,6 +15,7 @@ export const DRIVER_IDS = [
   'elasticsearch',
   'etcd',
   'kafka',
+  'rabbitmq',
   'libsql',
   'influxdb',
   'neo4j',
@@ -34,24 +35,26 @@ export function isDriverId(value: unknown): value is DriverId {
  * SQL editor; Redis has commands and keys, MongoDB collections of documents (D88), each
  * with a UI of its own; Elasticsearch speaks HTTP and JSON (D91); etcd is a tree of keys
  * with leases (V13.19); Kafka is a list of topics with partitions and consumer groups
- * (V13.23). Connections, folders, secrets, SSH and the connection form are the
+ * (V13.23); RabbitMQ is virtual hosts with queues and exchanges (V13.26). Connections, folders, secrets, SSH and the connection form are the
  * same for all.
  */
-export type DriverFamily = 'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka';
+export type DriverFamily =
+  'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka' | 'rabbitmq';
 
 export function driverFamily(driver: DriverId): DriverFamily {
   return driver === 'redis' ||
     driver === 'mongodb' ||
     driver === 'elasticsearch' ||
     driver === 'etcd' ||
-    driver === 'kafka'
+    driver === 'kafka' ||
+    driver === 'rabbitmq'
     ? driver
     : 'sql';
 }
 
 export type SqlDriverId = Exclude<
   DriverId,
-  'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka'
+  'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka' | 'rabbitmq'
 >;
 
 export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
@@ -97,6 +100,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   etcd: 2379,
   // A broker's listener; several brokers go in the host box, separated by commas.
   kafka: 9092,
+  // The management plugin's HTTP API; AMQP (5672) is not spoken.
+  rabbitmq: 15672,
   // sqld's own HTTP port; Turso and other hosted servers answer on 443 with TLS.
   libsql: 8080,
   // The HTTP API of InfluxDB 2.x; HTTPS is served on the same port.
@@ -532,6 +537,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
     case 'mongodb':
       return {
         connectTimeout: true,
@@ -590,6 +596,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     // One flat key space; folders are made from the key names.
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
       return { databases: false, schemas: false };
     // Buckets are the databases; the system ones are hidden with the other system objects.
     case 'influxdb':

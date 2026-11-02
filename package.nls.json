@@ -253,5 +253,10 @@
   "commands.kafka.openTopic.title": "Open Kafka Topic",
   "commands.kafka.newTopic.title": "New Kafka Topic…",
   "commands.kafka.deleteTopic.title": "Delete Kafka Topic",
-  "configuration.kafka.showInternalTopics.description": "List Kafka's own topics (`__consumer_offsets`, `_schemas`, …) in the tree."
+  "configuration.kafka.showInternalTopics.description": "List Kafka's own topics (`__consumer_offsets`, `_schemas`, …) in the tree.",
+  "commands.rabbitmq.openObject.title": "Open Queue or Exchange",
+  "commands.rabbitmq.newQueue.title": "New Queue…",
+  "commands.rabbitmq.newExchange.title": "New Exchange…",
+  "commands.rabbitmq.purgeQueue.title": "Remove All Messages",
+  "commands.rabbitmq.deleteObject.title": "Delete"
 }

@@ -54,6 +54,12 @@ import {
   kafkaTopicChildren,
   type KafkaTreeDeps,
 } from './kafka-tree';
+import {
+  rabbitFolderChildren,
+  rabbitObjectChildren,
+  rabbitVhostChildren,
+  type RabbitTreeDeps,
+} from './rabbitmq-tree';
 import { displayKey, type RedisKeyRef, redisKeyBytes, redisKeyRef } from '../../shared/redis-key';
 import { childFolders, parentFolder } from '../../shared/folder-path';
 
@@ -126,6 +132,8 @@ export interface TreeModelDeps {
   readonly etcdKeys?: EtcdKeyBrowser;
   /** What the Kafka folders need besides the manager (V13.23); without it they are empty. */
   readonly kafka?: Omit<KafkaTreeDeps, 'manager'>;
+  /** What the RabbitMQ folders need besides the manager (V13.26); without it they are empty. */
+  readonly rabbit?: Omit<RabbitTreeDeps, 'manager'>;
   /** `datanest.redis.keySeparator`, for the prefix a folder copies. */
   readonly redisKeySeparator?: () => string;
   readonly projects?: ProjectSource;
@@ -326,6 +334,12 @@ export class TreeModel {
         return await this.withKafka((deps) => kafkaGroupChildren(deps, node));
       case 'kafkaGroup':
         return await this.withKafka((deps) => kafkaLagChildren(deps, node));
+      case 'rabbitVhost':
+        return rabbitFolderChildren(node);
+      case 'rabbitFolder':
+        return await this.withRabbit((deps) => rabbitObjectChildren(deps, node));
+      case 'rabbitQueue':
+      case 'rabbitExchange':
       case 'kafkaPartition':
       case 'column':
       case 'object':
@@ -341,6 +355,13 @@ export class TreeModel {
       case 'message':
         return [];
     }
+  }
+
+  private async withRabbit(
+    list: (deps: RabbitTreeDeps) => Promise<TreeNode[]>,
+  ): Promise<TreeNode[]> {
+    const { rabbit } = this.deps;
+    return rabbit === undefined ? [] : await list({ manager: this.deps.manager, ...rabbit });
   }
 
   private async withKafka(list: (deps: KafkaTreeDeps) => Promise<TreeNode[]>): Promise<TreeNode[]> {
@@ -395,6 +416,24 @@ export class TreeModel {
         return { kind: 'kafkaTopics', connectionId: node.connectionId };
       case 'kafkaGroup':
         return { kind: 'kafkaGroups', connectionId: node.connectionId };
+      case 'rabbitVhost':
+        return { kind: 'connection', connectionId: node.connectionId };
+      case 'rabbitFolder':
+        return { kind: 'rabbitVhost', connectionId: node.connectionId, vhost: node.vhost };
+      case 'rabbitQueue':
+        return {
+          kind: 'rabbitFolder',
+          connectionId: node.connectionId,
+          vhost: node.vhost,
+          folder: 'queues',
+        };
+      case 'rabbitExchange':
+        return {
+          kind: 'rabbitFolder',
+          connectionId: node.connectionId,
+          vhost: node.vhost,
+          folder: 'exchanges',
+        };
       case 'kafkaPartition':
         return {
           kind: 'kafkaTopic',
@@ -502,6 +541,14 @@ export class TreeModel {
       // Connect now, so a wrong address shows as the connection's error and not as an empty list.
       await this.deps.manager.connectAny(connectionId);
       return kafkaConnectionChildren(connectionId);
+    }
+    if (this.driverIdOf(connectionId) === 'rabbitmq') {
+      const { rabbit } = this.deps;
+      // Connect now, so a wrong address shows as the connection's error and not as an empty list.
+      await this.deps.manager.connectAny(connectionId);
+      return rabbit === undefined
+        ? []
+        : await rabbitVhostChildren({ manager: this.deps.manager, ...rabbit }, connectionId);
     }
     const capabilities = await this.capabilitiesOf(connectionId);
     const metadata = await this.metadataOf(connectionId);

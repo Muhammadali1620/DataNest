@@ -71,6 +71,7 @@ jobs:
             libsql,
             etcd,
             kafka,
+            rabbitmq,
             influxdb,
             neo4j,
             cassandra,

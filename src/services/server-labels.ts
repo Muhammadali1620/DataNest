@@ -19,6 +19,7 @@ type Reader = Pick<
   | 'acquireElastic'
   | 'acquireEtcd'
   | 'acquireKafka'
+  | 'acquireRabbit'
 >;
 
 /** `15.19 (Debian 15.19-1.pgdg120+1)` → `15.19`; `10.11.6-MariaDB-1:…` → `10.11.6`. */
@@ -86,6 +87,9 @@ export async function readServerVersion(
     const kafka = await manager.acquireKafka(owner, { connectionId });
     return msg('Brokers: {0}', kafka.server.brokers);
   }
+  if (driver === 'rabbitmq') {
+    return shortVersion((await manager.acquireRabbit(owner, { connectionId })).server.version);
+  }
   const session = await browseSession(manager, connectionId);
   const [row] = await namedRows(session, VERSION_SQL[driver]);
   const text = row === undefined ? undefined : textOf(row, 'version');
@@ -150,6 +154,7 @@ WHERE active AND database = ${dialect.literal(database)}`;
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
       return undefined;
   }
 }

@@ -45,6 +45,10 @@ export function compareStartOf(target: TreeNode): CompareStart | undefined {
     case 'kafkaPartition':
     case 'kafkaGroups':
     case 'kafkaGroup':
+    case 'rabbitVhost':
+    case 'rabbitFolder':
+    case 'rabbitQueue':
+    case 'rabbitExchange':
     case 'redisFolder':
     case 'redisKey':
     case 'redisMore':

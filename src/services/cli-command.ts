@@ -56,6 +56,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   etcd: [],
   // Reached through the client protocol; the console tools take other options.
   kafka: [],
+  // Reached over the management HTTP API; `rabbitmqadmin` takes other options.
+  rabbitmq: [],
 };
 
 /** The program's path, looked up like a shell would; undefined when it is not installed. */
@@ -236,6 +238,7 @@ export function cliCommand(
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':
+    case 'rabbitmq':
       return undefined;
   }
 }

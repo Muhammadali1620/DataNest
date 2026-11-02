@@ -370,6 +370,8 @@ export function targetType(
       throw new DbError('unsupported', msg('Tables cannot be copied to etcd'));
     case 'kafka':
       throw new DbError('unsupported', msg('Tables cannot be copied to Kafka'));
+    case 'rabbitmq':
+      throw new DbError('unsupported', msg('Tables cannot be copied to RabbitMQ'));
   }
 }
 

@@ -112,6 +112,10 @@ import { KafkaTopicModel } from './panels/kafka-topic-model';
 import { KafkaTopicPanel } from './panels/kafka-topic-panel';
 import { kafkaCommandHandlers } from './kafka/kafka-commands';
 import { kafkaCommandUi } from './kafka/kafka-ui';
+import { RabbitObjectModel } from './panels/rabbitmq-object-model';
+import { RabbitObjectPanel } from './panels/rabbitmq-object-panel';
+import { rabbitCommandHandlers } from './rabbitmq/rabbitmq-commands';
+import { rabbitCommandUi } from './rabbitmq/rabbitmq-ui';
 import { describeTarget, type DriverId } from '../shared/connection';
 import { keyNodeOf, type RedisPlace, redisKeyCommandHandlers } from './redis/redis-key-commands';
 import { redisKeyFileCommandHandlers } from './redis/redis-key-file-commands';
@@ -505,6 +509,46 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     openTopic: openKafkaTopic,
     texts: {
       noKafka: vscode.l10n.t('There is no Kafka connection yet'),
+      readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+    },
+  });
+  /** The tree's session of a RabbitMQ connection. */
+  const rabbitSession = async (connectionId: string) =>
+    await deps.manager.acquireRabbit(ConnectionManager.treeOwner(connectionId), { connectionId });
+  const openRabbitObject = (
+    connectionId: string,
+    kind: 'queue' | 'exchange',
+    vhost: string,
+    name: string,
+  ): Promise<void> => {
+    const config = deps.store.get(connectionId);
+    RabbitObjectPanel.show({
+      extensionUri: deps.extensionUri,
+      logger: deps.logger,
+      connectionId,
+      policy: policyOf(config),
+      model: new RabbitObjectModel({
+        kind,
+        vhost,
+        name,
+        connectionName: config?.name ?? '',
+        readOnly: config?.readOnly === true,
+        session: async () => await rabbitSession(connectionId),
+      }),
+      onDeleted: () => {
+        deps.tree.refresh();
+      },
+    });
+    return Promise.resolve();
+  };
+  const rabbitCommands = rabbitCommandHandlers({
+    store: deps.store,
+    session: rabbitSession,
+    tree: deps.tree,
+    ui: rabbitCommandUi(deps.store),
+    openObject: openRabbitObject,
+    texts: {
+      noRabbit: vscode.l10n.t('There is no RabbitMQ connection yet'),
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
     },
   });
@@ -1145,6 +1189,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.kafkaOpenTopic]: kafkaCommands.openTopic,
     [COMMAND_IDS.kafkaNewTopic]: kafkaCommands.newTopic,
     [COMMAND_IDS.kafkaDeleteTopic]: kafkaCommands.deleteTopic,
+    [COMMAND_IDS.rabbitOpenObject]: rabbitCommands.openObject,
+    [COMMAND_IDS.rabbitNewQueue]: rabbitCommands.newQueue,
+    [COMMAND_IDS.rabbitNewExchange]: rabbitCommands.newExchange,
+    [COMMAND_IDS.rabbitPurgeQueue]: rabbitCommands.purgeQueue,
+    [COMMAND_IDS.rabbitDeleteObject]: rabbitCommands.deleteObject,
     [COMMAND_IDS.redisNewKey]: redisKeyCommands.newKey,
     [COMMAND_IDS.redisRenameKey]: redisKeyCommands.renameKey,
     [COMMAND_IDS.redisOpenConsole]: redisKeyCommands.openConsole,

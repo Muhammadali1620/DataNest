@@ -93,12 +93,18 @@ describe('sizeSql', () => {
     expect(ask('clickhouse')).toBeUndefined();
   });
 
-  it.each(['sqlite', 'oracle', 'redis', 'mongodb', 'elasticsearch', 'etcd', 'kafka'] as const)(
-    'has no cheap way for %s',
-    (driver) => {
-      expect(ask(driver, 'x', 'y')).toBeUndefined();
-    },
-  );
+  it.each([
+    'sqlite',
+    'oracle',
+    'redis',
+    'mongodb',
+    'elasticsearch',
+    'etcd',
+    'kafka',
+    'rabbitmq',
+  ] as const)('has no cheap way for %s', (driver) => {
+    expect(ask(driver, 'x', 'y')).toBeUndefined();
+  });
 });
 
 function managerWith(sql: (statement: string) => ReturnType<typeof records>, dialect = DIALECT) {
@@ -120,6 +126,7 @@ function managerWith(sql: (statement: string) => ReturnType<typeof records>, dia
     acquireElastic: vi.fn(),
     acquireEtcd: vi.fn(),
     acquireKafka: vi.fn(),
+    acquireRabbit: vi.fn(),
   };
   return { manager: manager as never, acquire, executed };
 }
@@ -191,6 +198,14 @@ describe('readServerVersion', () => {
     typed.acquireKafka.mockResolvedValue({ server: { clusterId: 'c', brokers: 3 } });
     expect(await readServerVersion(manager, 'c1', 'kafka')).toBe('Brokers: 3');
     expect(typed.acquireKafka).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
+  });
+
+  it('labels a RabbitMQ connection with the version of the broker (V13.26)', async () => {
+    const { manager } = managerWith(() => records([]));
+    const typed = manager as unknown as { acquireRabbit: ReturnType<typeof vi.fn> };
+    typed.acquireRabbit.mockResolvedValue({ server: { version: '3.13.7' } });
+    expect(await readServerVersion(manager, 'c1', 'rabbitmq')).toBe('3.13.7');
+    expect(typed.acquireRabbit).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
   });
 });
 

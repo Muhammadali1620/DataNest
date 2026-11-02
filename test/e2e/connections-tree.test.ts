@@ -135,6 +135,11 @@ describe('connections view', () => {
       'datanest.kafka.openTopic',
       'datanest.kafka.newTopic',
       'datanest.kafka.deleteTopic',
+      'datanest.rabbitmq.openObject',
+      'datanest.rabbitmq.newQueue',
+      'datanest.rabbitmq.newExchange',
+      'datanest.rabbitmq.purgeQueue',
+      'datanest.rabbitmq.deleteObject',
     ]) {
       assert.ok(all.includes(id), `${id} is not registered`);
     }
@@ -187,6 +192,16 @@ describe('connections view', () => {
   it('Kafka topic commands without a node do nothing', async () => {
     // They belong to tree items; from elsewhere there is no topic to act on.
     for (const id of ['datanest.kafka.openTopic', 'datanest.kafka.deleteTopic']) {
+      await vscode.commands.executeCommand(id);
+    }
+  });
+
+  it('RabbitMQ commands that act on a node do nothing without one', async () => {
+    for (const id of [
+      'datanest.rabbitmq.openObject',
+      'datanest.rabbitmq.purgeQueue',
+      'datanest.rabbitmq.deleteObject',
+    ]) {
       await vscode.commands.executeCommand(id);
     }
   });

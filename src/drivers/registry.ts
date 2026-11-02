@@ -14,6 +14,7 @@ import type { Driver, DriverModule } from './driver';
 import type { ElasticDriver, ElasticDriverModule } from './elastic-driver';
 import type { EtcdDriver, EtcdDriverModule } from './etcd-driver';
 import type { KafkaDriver, KafkaDriverModule } from './kafka-driver';
+import type { RabbitDriver, RabbitDriverModule } from './rabbitmq-driver';
 import type { MongoDriver, MongoDriverModule } from './mongo-driver';
 import type { PluginDrivers } from './plugin/plugin-drivers';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
@@ -28,6 +29,7 @@ export type DriverLoader = (
   | ElasticDriverModule
   | EtcdDriverModule
   | KafkaDriverModule
+  | RabbitDriverModule
 >;
 
 /**
@@ -40,7 +42,8 @@ export function createBundleDriverLoader(bundlePath: string): DriverLoader {
 }
 
 /** A SQL driver, the Redis one (D81) or the MongoDB one (D88), as the bundle exports it. */
-type AnyDriver = Driver | RedisDriver | MongoDriver | ElasticDriver | EtcdDriver | KafkaDriver;
+type AnyDriver =
+  Driver | RedisDriver | MongoDriver | ElasticDriver | EtcdDriver | KafkaDriver | RabbitDriver;
 
 export class DriverRegistry {
   private readonly loader: DriverLoader;
@@ -129,6 +132,15 @@ export class DriverRegistry {
     return driver;
   }
 
+  /** Loads the RabbitMQ driver on first use (V13.26). */
+  async getRabbit(): Promise<RabbitDriver> {
+    const driver = await this.loadOnce('rabbitmq');
+    if (isSqlDriverShaped(driver) || driver.id !== 'rabbitmq') {
+      throw new DbError('internal', msg('Driver "rabbitmq" is broken: unexpected module shape'));
+    }
+    return driver;
+  }
+
   private async loadOnce(id: DriverId): Promise<AnyDriver> {
     let promise = this.loading.get(id);
     if (!promise) {
@@ -155,7 +167,8 @@ export class DriverRegistry {
       | MongoDriverModule
       | ElasticDriverModule
       | EtcdDriverModule
-      | KafkaDriverModule;
+      | KafkaDriverModule
+      | RabbitDriverModule;
     try {
       module = await this.loader(id);
     } catch (error) {
@@ -191,6 +204,6 @@ function isSqlDriverShaped(value: unknown): value is Driver {
 function isFamilyDriverShaped(
   value: unknown,
   id: DriverId,
-): value is RedisDriver | MongoDriver | ElasticDriver | EtcdDriver | KafkaDriver {
+): value is RedisDriver | MongoDriver | ElasticDriver | EtcdDriver | KafkaDriver | RabbitDriver {
   return isObject(value) && value.id === id && typeof value.openSession === 'function';
 }

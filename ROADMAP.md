@@ -658,7 +658,4 @@
 - RabbitMQ (из V13.26, V13.32): параметры кластера, формы для политик
 - Kafka (из V13.23, V13.29): Avro/Protobuf через реестр схем, ACL и настройки кластера, GSSAPI/OAuth
 - SQLite на сервере (из V13.33): запись через консольную `sqlite3` без `python3`; сервер на Windows; чтение внутри открытой транзакции
-- Из чек-листа паритета V10.1 ([`docs/research/v10.1-parity-checklist.md`](docs/research/v10.1-parity-checklist.md)), после 1.0 по отзывам:
-  - подключения: вход в SQL Server через Windows (NTLM) — когда будет сервер с доменом для проверки;
-  - СУБД: Db2, Hive, Presto/Trino, Exasol, Dameng, TDengine (нужен клиент без Java и нативного кода); пресеты Greenplum, Kingbase, GaussDB, Doris (после проверки на настоящем сервере).
-  - Не делаем: DuckDB (нет клиента без нативного кода, база не популярна); всё, что требует облачного аккаунта, токена, подписки или авторизации (Snowflake, BigQuery, Amazon Redshift, Athena, Databricks, Cloudflare D1, Azure AD). Берём только то, что работает без облака: локальный/свой сервер или бесплатный сервис без входа.
+- Не делаем (решено): DuckDB; Db2, Hive, Presto/Trino, Exasol, Dameng, TDengine; пресеты Greenplum, Kingbase, GaussDB, Doris; вход в SQL Server через NTLM (нужен домен); всё, что требует облачного аккаунта, токена, подписки или авторизации (Snowflake, BigQuery, Amazon Redshift, Athena, Databricks, Cloudflare D1, Azure AD, Grafana Cloud). Берём только то, что проверяется на своём Docker-сервере или бесплатном сервисе без входа.

@@ -92,8 +92,8 @@ describe('ZooKeeper nodes', () => {
     }
   });
 
-  it('cannot be starred yet: only their connection can', () => {
-    expect(refOf(node)).toBeUndefined();
+  it('can be starred by path; the "load more" leaf cannot (V13.27)', () => {
+    expect(refOf(node)).toEqual({ kind: 'zookeeperNode', connectionId: 'c1', path: '/app/db' });
     expect(refOf(more)).toBeUndefined();
     expect(refOf({ kind: 'connection', connectionId: 'c1' })).toEqual({
       kind: 'connection',

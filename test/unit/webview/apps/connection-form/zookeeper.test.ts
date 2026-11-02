@@ -106,6 +106,26 @@ describe('connection form: ZooKeeper (V13.24)', () => {
     expect(screen.queryByLabelText('SSL / TLS')).not.toBeNull();
   });
 
+  it('asks for the session timeout and sends it as seconds (V13.27)', async () => {
+    const { host } = await withState(zookeeper());
+    const drafts: ConnectionDraft[] = [];
+    host.handle('save', (draft) => {
+      drafts.push(draft);
+      return { connectionId: 'c1' };
+    });
+    await fireEvent.input(field('Session timeout, s'), { target: { value: '30' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(drafts).toHaveLength(1);
+    });
+    expect(drafts[0]?.input.options).toEqual({ sessionTimeout: 30 });
+  });
+
+  it('does not offer the session timeout to the other drivers', async () => {
+    await withState(zookeeper({ input: { name: '', driver: 'postgres', host: 'h' } }));
+    expect(screen.queryByLabelText('Session timeout, s')).toBeNull();
+  });
+
   it('has no init SQL to offer', async () => {
     await withState(zookeeper());
     expect(screen.queryByLabelText('Init SQL')).toBeNull();

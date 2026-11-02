@@ -57,6 +57,8 @@ export class FakeEtcd {
   readonly calls: string[] = [];
   /** The request bodies, in order. */
   readonly bodies: Record<string, unknown>[] = [];
+  /** The ids of the leases renewed, in order. */
+  readonly keepAlives: string[] = [];
   readonly version = '3.5.17';
   revision = 1;
   /** Fails the next call with this answer, once. */
@@ -167,6 +169,22 @@ export class FakeEtcd {
         return this.revoke(body);
       case 'lease/timetolive':
         return this.timeToLive(body);
+      case 'lease/keepalive':
+        return this.keepAlive(body);
+      case 'auth/user/list':
+      case 'auth/user/get':
+      case 'auth/user/add':
+      case 'auth/user/delete':
+      case 'auth/user/changepw':
+      case 'auth/user/grant':
+      case 'auth/user/revoke':
+      case 'auth/role/list':
+      case 'auth/role/get':
+      case 'auth/role/add':
+      case 'auth/role/delete':
+      case 'auth/role/grant':
+      case 'auth/role/revoke':
+        return this.accounts(path, body);
       default:
         return { status: 404, body: { code: 12, message: 'Not Found' } };
     }
@@ -418,6 +436,152 @@ export class FakeEtcd {
     return this.revokeLease(String(body.ID))
       ? { status: 200, body: { header: this.header() } }
       : fail(5, 'etcdserver: requested lease not found', 404);
+  }
+
+  /** Users, with their password and roles, that the account calls manage (not the sign-in ones). */
+  readonly accountBook = new Map<string, { password: string; roles: Set<string> }>();
+  /** Roles with the permissions as the gateway writes them. */
+  readonly roleBook = new Map<string, Record<string, unknown>[]>();
+
+  /** The account calls answer FailedPrecondition (9) for a name that is not there or is taken, as etcd does. */
+  private accounts(path: string, body: Record<string, unknown>): GatewayAnswer {
+    const text = (name: string): string => (typeof body[name] === 'string' ? body[name] : '');
+    const ok = (extra: Record<string, unknown> = {}): GatewayAnswer => ({
+      status: 200,
+      body: { header: this.header(), ...extra },
+    });
+    switch (path) {
+      case 'auth/user/list':
+        return ok({ users: [...this.accountBook.keys()] });
+      case 'auth/role/list':
+        return ok({ roles: [...this.roleBook.keys()] });
+      case 'auth/user/get': {
+        const user = this.accountBook.get(text('name'));
+        return user === undefined
+          ? fail(9, 'etcdserver: user name not found')
+          : ok({ roles: [...user.roles] });
+      }
+      case 'auth/user/add':
+        if (text('name') === '') {
+          return fail(3, 'etcdserver: user name is empty');
+        }
+        if (this.accountBook.has(text('name'))) {
+          return fail(9, 'etcdserver: user name already exists');
+        }
+        this.accountBook.set(text('name'), { password: text('password'), roles: new Set() });
+        return ok();
+      case 'auth/user/delete':
+        return this.accountBook.delete(text('name'))
+          ? ok()
+          : fail(9, 'etcdserver: user name not found');
+      case 'auth/user/changepw': {
+        const user = this.accountBook.get(text('name'));
+        if (user === undefined) {
+          return fail(9, 'etcdserver: user name not found');
+        }
+        user.password = text('password');
+        return ok();
+      }
+      case 'auth/user/grant': {
+        const user = this.accountBook.get(text('user'));
+        if (user === undefined) {
+          return fail(9, 'etcdserver: user name not found');
+        }
+        if (!this.roleBook.has(text('role'))) {
+          return fail(9, 'etcdserver: role name not found');
+        }
+        user.roles.add(text('role'));
+        return ok();
+      }
+      case 'auth/user/revoke': {
+        const user = this.accountBook.get(text('name'));
+        if (user === undefined) {
+          return fail(9, 'etcdserver: user name not found');
+        }
+        if (!user.roles.delete(text('role'))) {
+          return fail(9, 'etcdserver: role is not granted to the user');
+        }
+        return ok();
+      }
+      case 'auth/role/get': {
+        const perms = this.roleBook.get(text('role'));
+        return perms === undefined
+          ? fail(9, 'etcdserver: role name not found')
+          : ok({ perm: perms });
+      }
+      case 'auth/role/add':
+        if (text('name') === '') {
+          return fail(3, 'etcdserver: role name is empty');
+        }
+        if (this.roleBook.has(text('name'))) {
+          return fail(9, 'etcdserver: role name already exists');
+        }
+        this.roleBook.set(text('name'), []);
+        return ok();
+      case 'auth/role/delete': {
+        if (!this.roleBook.delete(text('role'))) {
+          return fail(9, 'etcdserver: role name not found');
+        }
+        for (const user of this.accountBook.values()) {
+          user.roles.delete(text('role'));
+        }
+        return ok();
+      }
+      case 'auth/role/grant': {
+        const perms = this.roleBook.get(text('name'));
+        if (perms === undefined) {
+          return fail(9, 'etcdserver: role name not found');
+        }
+        const perm = body.perm as Record<string, unknown>;
+        // The gateway leaves out the default permission type, READ.
+        const { permType, ...rest } = perm;
+        const stored = permType === 'READ' ? rest : perm;
+        const same = (item: Record<string, unknown>): boolean =>
+          item.key === perm.key && item.range_end === perm.range_end;
+        const index = perms.findIndex(same);
+        if (index >= 0) {
+          perms[index] = stored;
+        } else {
+          perms.push(stored);
+        }
+        return ok();
+      }
+      default: {
+        const perms = this.roleBook.get(text('role'));
+        if (perms === undefined) {
+          return fail(9, 'etcdserver: role name not found');
+        }
+        const index = perms.findIndex(
+          (item) => item.key === body.key && item.range_end === body.range_end,
+        );
+        if (index < 0) {
+          return fail(9, 'etcdserver: permission is not granted to the role');
+        }
+        perms.splice(index, 1);
+        return ok();
+      }
+    }
+  }
+
+  /** Renews a lease to the time it was granted for; a lease that is gone answers `TTL: 0`, as etcd does. */
+  private keepAlive(body: Record<string, unknown>): GatewayAnswer {
+    const id = String(body.ID);
+    const index = this.bigLeases.get(id);
+    const lease = index === undefined ? undefined : this.leases.get(index);
+    if (lease !== undefined) {
+      lease.ttl = lease.grantedTtl;
+    }
+    this.keepAlives.push(id);
+    return {
+      status: 200,
+      body: {
+        result: {
+          header: this.header(),
+          ID: id,
+          ...(lease === undefined ? { TTL: '0' } : { TTL: String(lease.ttl) }),
+        },
+      },
+    };
   }
 
   private timeToLive(body: Record<string, unknown>): GatewayAnswer {

@@ -228,6 +228,19 @@ export async function revokeLease(session: EtcdCaller, id: string): Promise<void
   await session.call('lease/revoke', { ID: int64(id) });
 }
 
+/**
+ * Renews a lease (the `lease/keepalive` stream asked once, V13.27): the seconds it has now,
+ * `0` when the lease is gone (it ended, was revoked, or never existed).
+ */
+export async function keepAliveLease(session: EtcdCaller, id: string): Promise<number> {
+  const answer = asObject<{ result?: unknown; TTL?: unknown }>(
+    await session.call('lease/keepalive', { ID: int64(id) }),
+  );
+  // The gateway wraps a stream's message in `result`.
+  const message = answer.result === undefined ? answer : asObject<{ TTL?: unknown }>(answer.result);
+  return count(message.TTL);
+}
+
 /** How long a lease has left, or undefined for the id `0` (no lease). */
 export async function leaseInfo(session: EtcdCaller, id: string): Promise<LeaseInfo | undefined> {
   if (id === '0') {

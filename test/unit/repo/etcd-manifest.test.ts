@@ -30,9 +30,11 @@ const palette = manifest.contributes.menus.commandPalette ?? [];
 const entriesOf = (command: string): MenuEntry[] =>
   context.filter((entry) => entry.command === command);
 
-/** The contexts a `when` names, as `viewItem == x` terms. */
+/** The contexts a `when` names, as `viewItem == x` terms (the starred forms of nodes, V13.27, left out). */
 const contextsOf = (when: string | undefined): string[] =>
-  [...(when ?? '').matchAll(/viewItem == ([\w.]+)/gu)].map((match) => match[1] ?? '');
+  [...(when ?? '').matchAll(/viewItem == ([\w.]+)/gu)]
+    .map((match) => match[1] ?? '')
+    .filter((name) => !/^datanest\.(etcdFolder|etcdKey)\.starred$/u.test(name));
 
 const ETCD_COMMANDS = [
   [COMMAND_IDS.etcdLoadMoreKeys, 'loadMoreKeys', '$(ellipsis)'],
@@ -66,6 +68,36 @@ describe('etcd commands', () => {
     for (const id of [COMMAND_IDS.etcdFindKey, COMMAND_IDS.etcdNewKey]) {
       expect(palette.find((entry) => entry.command === id)).toBeUndefined();
     }
+  });
+});
+
+describe('etcd users and roles (V13.27)', () => {
+  it('is a command with an icon and titles in both languages, open to the palette', () => {
+    const command = manifest.contributes.commands.find(
+      (c) => c.command === COMMAND_IDS.etcdManageAccess,
+    );
+    expect(command).toMatchObject({
+      category: 'DataNest',
+      icon: '$(organization)',
+      title: '%commands.etcd.manageAccess.title%',
+    });
+    expect(nls['commands.etcd.manageAccess.title']).toBeTruthy();
+    expect(nlsRu['commands.etcd.manageAccess.title']).toBeTruthy();
+    expect(nlsRu['commands.etcd.manageAccess.title']).not.toBe(
+      nls['commands.etcd.manageAccess.title'],
+    );
+    expect(palette.find((entry) => entry.command === COMMAND_IDS.etcdManageAccess)).toBeUndefined();
+  });
+
+  it('shows in the menu of a connected etcd connection and nowhere else', () => {
+    const entries = entriesOf(COMMAND_IDS.etcdManageAccess);
+    expect(entries).toHaveLength(1);
+    expect(contextsOf(entries[0]?.when)).toEqual([
+      TREE_CONTEXT.etcdConnectionConnected,
+      `${TREE_CONTEXT.etcdConnectionConnected}.starred`,
+      TREE_CONTEXT.projectEtcdConnectionConnected,
+      `${TREE_CONTEXT.projectEtcdConnectionConnected}.starred`,
+    ]);
   });
 });
 

@@ -8,11 +8,30 @@ import {
   deletePrefix,
   getEntry,
   grantLease,
+  keepAliveLease,
   leaseInfo,
   putEntry,
   range,
   revokeLease,
 } from '../../../src/services/etcd/etcd-client';
+import {
+  addRole,
+  addUser,
+  boundsOf,
+  changePassword,
+  deleteRole,
+  deleteUser,
+  grantPermission,
+  grantRole,
+  listRoles,
+  listUsers,
+  permissionText,
+  revokePermission,
+  revokeRole,
+  roleView,
+  scopeOf,
+  userRoles,
+} from '../../../src/services/etcd/etcd-auth';
 import { listPage } from '../../../src/services/etcd/key-listing';
 import { prefixEnd } from '../../../src/services/etcd/etcd-codec';
 import type { ResolvedConnectionConfig } from '../../../src/shared/connection';
@@ -236,7 +255,95 @@ describe('etcd driver on an etcd cluster', () => {
     });
   });
 
+  describe('users and roles (V13.27)', () => {
+    afterAll(async () => {
+      for (const user of await listUsers(session)) {
+        if (user.startsWith('dn-it-')) {
+          await deleteUser(session, user);
+        }
+      }
+      for (const role of await listRoles(session)) {
+        if (role.startsWith('dn-it-')) {
+          await deleteRole(session, role);
+        }
+      }
+    });
+
+    it('adds a role with permissions of each shape and reads them back as the cluster stores them', async () => {
+      await addRole(session, 'dn-it-role');
+      const prefix = boundsOf('prefix', encode('/dn-it/app/'));
+      const all = boundsOf('all', new Uint8Array());
+      await grantPermission(session, 'dn-it-role', { type: 'readwrite', ...prefix });
+      await grantPermission(session, 'dn-it-role', {
+        type: 'read',
+        ...boundsOf('key', encode('/dn-it/one')),
+      });
+      await grantPermission(session, 'dn-it-role', { type: 'write', ...all });
+      const { permissions } = await roleView(session, 'dn-it-role');
+      expect(permissions.map(permissionText).sort()).toEqual(
+        ['read: /dn-it/one', 'readwrite: /dn-it/app/*', 'write: *'].sort(),
+      );
+      expect(permissions.map((one) => scopeOf(one)).sort()).toEqual(['all', 'key', 'prefix']);
+      await revokePermission(session, 'dn-it-role', all);
+      expect((await roleView(session, 'dn-it-role')).permissions).toHaveLength(2);
+    });
+
+    it('adds a user, grants and revokes a role, changes the password and deletes the user', async () => {
+      await addUser(session, 'dn-it-user', 'one');
+      expect(await listUsers(session)).toContain('dn-it-user');
+      await grantRole(session, 'dn-it-user', 'dn-it-role');
+      expect(await userRoles(session, 'dn-it-user')).toEqual(['dn-it-role']);
+      await changePassword(session, 'dn-it-user', 'two');
+      await revokeRole(session, 'dn-it-user', 'dn-it-role');
+      expect(await userRoles(session, 'dn-it-user')).toEqual([]);
+      await deleteUser(session, 'dn-it-user');
+      expect(await listUsers(session)).not.toContain('dn-it-user');
+    });
+
+    it('reports a missing user, a duplicate role and a role that is not granted', async () => {
+      // etcd answers FailedPrecondition for a name that is not there or is taken.
+      expect((await failure(deleteUser(session, 'dn-it-nobody'))).code).toBe('constraint');
+      expect((await failure(userRoles(session, 'dn-it-nobody'))).code).toBe('constraint');
+      expect((await failure(addRole(session, 'dn-it-role'))).code).toBe('constraint');
+      expect((await failure(roleView(session, 'dn-it-nope'))).code).toBe('constraint');
+      await addUser(session, 'dn-it-plain', 'pw');
+      // etcd refuses to take back a role the user does not have.
+      await failure(revokeRole(session, 'dn-it-plain', 'dn-it-role'));
+      await deleteUser(session, 'dn-it-plain');
+      await deleteRole(session, 'dn-it-role');
+      expect(await listRoles(session)).not.toContain('dn-it-role');
+    });
+  });
+
   describe('leases', () => {
+    it('renews a lease with keepalive, and says 0 for one that is gone (V13.27)', async () => {
+      const lease = await grantLease(session, 120);
+      expect(await keepAliveLease(session, lease.id)).toBe(120);
+      await revokeLease(session, lease.id);
+      expect(await keepAliveLease(session, lease.id)).toBe(0);
+    });
+
+    it('is renewed by the page model while it keeps the lease alive', async () => {
+      const key = redisKeyRef(encode('/dn-it/lease/kept'));
+      const lease = await grantLease(session, 120);
+      await putEntry(session, redisKeyBytes(key), { value: encode('v'), lease: lease.id });
+      const model = new EtcdKeyModel({
+        key,
+        connectionName: 'etcd',
+        readOnly: false,
+        session: () => Promise.resolve(session),
+      });
+      await model.refresh();
+      expect(model.setKeepAlive(true).keepingAlive).toBe(true);
+      const renewed = await model.renew();
+      expect(renewed.lease).toMatchObject({ id: lease.id, grantedTtl: 120 });
+      expect(renewed.keepingAlive).toBe(true);
+      await revokeLease(session, lease.id);
+      const ended = await model.renew();
+      expect(ended.exists).toBe(false);
+      expect(ended.keepingAlive).toBeUndefined();
+    });
+
     it('grants a lease, attaches it, lets go of it and revokes it', async () => {
       const key = encode('/dn-it/lease/a');
       const lease = await grantLease(session, 120);

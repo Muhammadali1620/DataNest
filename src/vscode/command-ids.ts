@@ -208,6 +208,8 @@ export const COMMAND_IDS = {
   /** Finds etcd keys by the beginning of their names. */
   etcdFindKey: 'datanest.etcd.findKey',
   etcdNewKey: 'datanest.etcd.newKey',
+  /** Users, roles and permissions of an etcd cluster, in pickers (V13.27). */
+  etcdManageAccess: 'datanest.etcd.manageAccess',
   /** Deletes the clicked key, every selected one, or all the keys of a folder. */
   etcdDeleteKeys: 'datanest.etcd.deleteKeys',
   /** Brings the next page of children of a ZooKeeper znode into the tree (V13.24). */

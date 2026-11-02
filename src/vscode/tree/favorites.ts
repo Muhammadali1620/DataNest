@@ -5,7 +5,9 @@
 import { type Disposable, toDisposable } from '../../core/disposable';
 import type { TableKind } from '../../core/model/objects';
 import type { KeyValueState } from '../../services/connection-store';
+import { displayKey, type RedisKeyRef, redisKeyBytes } from '../../shared/redis-key';
 import { isPlainObject } from '../../shared/schema';
+import { nameOf } from '../../shared/zk-path';
 import { TREE_CONTEXT, type TreeNode, nodeId } from './nodes';
 
 export const FAVORITES_STATE_KEY = 'favorites';
@@ -41,7 +43,10 @@ export type FavoriteRef =
     }
   | { readonly kind: 'elasticIndex'; readonly connectionId: string; readonly name: string }
   | { readonly kind: 'kafkaTopic'; readonly connectionId: string; readonly name: string }
-  | { readonly kind: 'kafkaGroup'; readonly connectionId: string; readonly name: string };
+  | { readonly kind: 'kafkaGroup'; readonly connectionId: string; readonly name: string }
+  | { readonly kind: 'etcdFolder'; readonly connectionId: string; readonly prefix: RedisKeyRef }
+  | { readonly kind: 'etcdKey'; readonly connectionId: string; readonly key: RedisKeyRef }
+  | { readonly kind: 'zookeeperNode'; readonly connectionId: string; readonly path: string };
 
 /**
  * A starred node wears its usual context value plus this suffix, so the menus can offer
@@ -84,6 +89,17 @@ export const FAVORITABLE_CONTEXTS: readonly string[] = [
   TREE_CONTEXT.elasticIndex,
   TREE_CONTEXT.kafkaTopic,
   TREE_CONTEXT.kafkaGroup,
+  TREE_CONTEXT.etcdConnection,
+  TREE_CONTEXT.etcdConnectionConnected,
+  TREE_CONTEXT.projectEtcdConnection,
+  TREE_CONTEXT.projectEtcdConnectionConnected,
+  TREE_CONTEXT.zookeeperConnection,
+  TREE_CONTEXT.zookeeperConnectionConnected,
+  TREE_CONTEXT.projectZookeeperConnection,
+  TREE_CONTEXT.projectZookeeperConnectionConnected,
+  TREE_CONTEXT.etcdFolder,
+  TREE_CONTEXT.etcdKey,
+  TREE_CONTEXT.zookeeperNode,
 ];
 
 /** The context value of a node, marked as starred. */
@@ -170,6 +186,12 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
       return { kind: 'kafkaTopic', connectionId: node.connectionId, name: node.topic };
     case 'kafkaGroup':
       return { kind: 'kafkaGroup', connectionId: node.connectionId, name: node.group };
+    case 'etcdFolder':
+      return { kind: 'etcdFolder', connectionId: node.connectionId, prefix: node.prefix };
+    case 'etcdKey':
+      return { kind: 'etcdKey', connectionId: node.connectionId, key: node.key };
+    case 'zookeeperNode':
+      return { kind: 'zookeeperNode', connectionId: node.connectionId, path: node.path };
     case 'project':
     case 'connectionFolder':
     case 'group':
@@ -188,10 +210,7 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
     case 'redisMore':
     case 'mongoIndex':
     case 'elasticField':
-    case 'etcdFolder':
-    case 'etcdKey':
     case 'etcdMore':
-    case 'zookeeperNode':
     case 'zookeeperMore':
     case 'kafkaTopics':
     case 'kafkaPartition':
@@ -269,7 +288,35 @@ export function nodeOfRef(ref: FavoriteRef): TreeNode {
         state: '',
         members: 0,
       };
+    case 'etcdFolder':
+      return {
+        kind: 'etcdFolder',
+        connectionId: ref.connectionId,
+        prefix: ref.prefix,
+        name: lastSegment(ref.prefix),
+      };
+    case 'etcdKey':
+      return {
+        kind: 'etcdKey',
+        connectionId: ref.connectionId,
+        key: ref.key,
+        name: lastSegment(ref.key),
+      };
+    case 'zookeeperNode':
+      return {
+        kind: 'zookeeperNode',
+        connectionId: ref.connectionId,
+        path: ref.path,
+        name: nameOf(ref.path),
+      };
   }
+}
+
+/** The last part of an etcd key or folder name, without a closing slash. */
+function lastSegment(key: RedisKeyRef): string {
+  const bytes = redisKeyBytes(key);
+  const body = bytes.at(-1) === 0x2f ? bytes.subarray(0, -1) : bytes;
+  return displayKey(body.subarray(body.lastIndexOf(0x2f) + 1));
 }
 
 /** Two descriptors of one node have the same key. */
@@ -281,6 +328,19 @@ const COLLECTION_TYPES: readonly unknown[] = ['collection', 'view', 'timeseries'
 
 function text(value: unknown): value is string {
   return typeof value === 'string' && value !== '' && value.length <= 1000;
+}
+
+/** A saved key name: its text, and the exact bytes in hex when the text is not them. */
+function keyRef(value: unknown): RedisKeyRef | undefined {
+  if (!isPlainObject(value) || typeof value.text !== 'string' || value.text.length > 4000) {
+    return undefined;
+  }
+  if (value.hex === undefined) {
+    return { text: value.text };
+  }
+  return typeof value.hex === 'string' && /^(?:[0-9a-f]{2})*$/u.test(value.hex)
+    ? { text: value.text, hex: value.hex }
+    : undefined;
 }
 
 function optionalText(value: unknown): value is string | undefined {
@@ -342,6 +402,20 @@ export function parseRef(value: unknown): FavoriteRef | undefined {
     case 'kafkaTopic':
     case 'kafkaGroup':
       return text(name) ? { kind: value.kind, connectionId, name } : undefined;
+    case 'etcdFolder':
+    case 'etcdKey': {
+      const part = keyRef(value.kind === 'etcdFolder' ? value.prefix : value.key);
+      if (part === undefined) {
+        return undefined;
+      }
+      return value.kind === 'etcdFolder'
+        ? { kind: 'etcdFolder', connectionId, prefix: part }
+        : { kind: 'etcdKey', connectionId, key: part };
+    }
+    case 'zookeeperNode':
+      return typeof value.path === 'string' && /^\/./u.test(value.path) && value.path.length <= 4000
+        ? { kind: 'zookeeperNode', connectionId, path: value.path }
+        : undefined;
     default:
       return undefined;
   }

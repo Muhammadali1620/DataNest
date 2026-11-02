@@ -11,6 +11,7 @@ import {
   type EtcdCaller,
   getEntry,
   grantLease,
+  keepAliveLease,
   leaseInfo,
   putEntry,
   revokeLease,
@@ -38,6 +39,7 @@ export class EtcdKeyModel {
   private entry: EtcdEntry | undefined;
   private lease: LeaseView | undefined;
   private conflict = false;
+  private keeping = false;
 
   constructor(private readonly deps: EtcdKeyModelDeps) {}
 
@@ -62,6 +64,7 @@ export class EtcdKeyModel {
       version: entry?.version ?? 0,
       lease: this.lease ?? null,
       ...(this.conflict ? { conflict: true } : {}),
+      ...(this.keeping && this.lease !== undefined ? { keepingAlive: true } : {}),
     };
   }
 
@@ -154,6 +157,41 @@ export class EtcdKeyModel {
       this.lease = await this.leaseOf(session, this.entry);
       this.conflict = true;
       return this.state();
+    }
+    return await this.refresh();
+  }
+
+  /** Is the lease being renewed? False once it has nothing to renew. */
+  get keepingAlive(): boolean {
+    return this.keeping && this.lease !== undefined;
+  }
+
+  /** Switches the renewal of the key's lease on or off (V13.27); needs a lease to renew. */
+  setKeepAlive(on: boolean): EtcdKeyState {
+    if (on) {
+      this.requireWritable();
+      if (this.lease === undefined || this.lease.ttl <= 0) {
+        throw new DbError('not-found', msg('The key has no lease to renew'));
+      }
+    }
+    this.keeping = on;
+    return this.state();
+  }
+
+  /**
+   * Renews the lease once and shows the time it has now. A lease that is gone (or a key
+   * that is) ends the renewal; the page then shows what is left.
+   */
+  async renew(): Promise<EtcdKeyState> {
+    const session = await this.deps.session();
+    const current = await getEntry(session, redisKeyBytes(this.deps.key));
+    if (current === undefined || current.lease === '0') {
+      this.keeping = false;
+      return await this.refresh();
+    }
+    const ttl = await keepAliveLease(session, current.lease);
+    if (ttl <= 0) {
+      this.keeping = false;
     }
     return await this.refresh();
   }

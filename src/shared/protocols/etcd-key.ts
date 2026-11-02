@@ -34,6 +34,8 @@ export const etcdKeyStateSchema = object({
   lease: nullable(leaseSchema),
   /** The last save was refused because the key changed after the page read it. */
   conflict: optional(boolean()),
+  /** The host renews the key's lease while this page is open (V13.27). */
+  keepingAlive: optional(boolean()),
 });
 
 export const etcdKeyProtocol = defineProtocol({
@@ -62,6 +64,12 @@ export const etcdKeyProtocol = defineProtocol({
         }),
         result: object({}),
       },
+      /**
+       * Starts or stops renewing the key's lease while the page is open (V13.27): the host
+       * renews it every third of the time it was granted for, until the page closes, the
+       * lease goes, or this is switched off.
+       */
+      keepAlive: { params: object({ on: boolean() }), result: object({}) },
       /** Lets go of the key's lease; the key stays for good. */
       detachLease: { params: object({}), result: object({}) },
       /** Revokes the key's lease after the user agrees: every key it holds goes. */

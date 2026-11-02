@@ -28,6 +28,9 @@ import { JuteReader, JuteWriter, MAX_FRAME_BYTES } from './jute';
 /** The session timeout asked for, in milliseconds; the server may shorten or lengthen it. */
 export const SESSION_TIMEOUT_MS = 15_000;
 
+/** Milliseconds the server has to answer a four-letter command. */
+const FOUR_LETTER_TIMEOUT_MS = 3000;
+
 /** Milliseconds a request waits for its answer. */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -39,6 +42,7 @@ const OP = {
   getData: 4,
   setData: 5,
   getAcl: 6,
+  setAcl: 7,
   ping: 11,
   getChildren2: 12,
   auth: 100,
@@ -115,6 +119,8 @@ export interface ZookeeperTarget {
   readonly tls?: TlsMaterial;
   readonly serverName: string;
   readonly connectTimeoutMs: number;
+  /** The session timeout to ask for. */
+  readonly sessionTimeoutMs: number;
 }
 
 export function zookeeperTarget(
@@ -129,6 +135,10 @@ export function zookeeperTarget(
     ...(material === undefined ? {} : { tls: material }),
     serverName: material?.serverName ?? config.host ?? 'localhost',
     connectTimeoutMs: (config.options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_SECONDS) * 1000,
+    sessionTimeoutMs:
+      config.options?.sessionTimeout === undefined
+        ? SESSION_TIMEOUT_MS
+        : config.options.sessionTimeout * 1000,
   };
 }
 
@@ -141,6 +151,7 @@ class ZookeeperConnection implements ZookeeperSession {
   };
 
   private socket: net.Socket | undefined;
+  private endpoint: ZookeeperEndpoint | undefined;
   private received: Buffer = Buffer.alloc(0);
   private readonly pending = new Map<number, Pending>();
   private xid = 0;
@@ -176,6 +187,8 @@ class ZookeeperConnection implements ZookeeperSession {
     this.received = Buffer.alloc(0);
     const socket = await this.connect(endpoint);
     this.socket = socket;
+    this.endpoint = endpoint;
+    this.version = undefined;
     socket.on('data', (chunk: Buffer) => {
       this.take(chunk);
     });
@@ -293,7 +306,7 @@ class ZookeeperConnection implements ZookeeperSession {
       const request = new JuteWriter()
         .int(0) // protocol version
         .long(0n) // last zxid seen
-        .int(SESSION_TIMEOUT_MS)
+        .int(this.target.sessionTimeoutMs)
         .long(0n) // no session to resume
         .bytes(Buffer.alloc(16)) // its password
         .bool(false); // a read-only session is not wanted
@@ -510,6 +523,56 @@ class ZookeeperConnection implements ZookeeperSession {
       (reader) => ({ acl: reader.aclList(), stat: reader.stat() }),
       path,
     );
+  }
+
+  async setAcl(
+    path: string,
+    acl: readonly ZookeeperAcl[],
+    version: number,
+  ): Promise<ZookeeperStat> {
+    return await this.request(
+      OP.setAcl,
+      new JuteWriter().string(this.absolute(path)).acl(acl).int(version),
+      (reader) => reader.stat(),
+      path,
+    );
+  }
+
+  private version: Promise<string | undefined> | undefined;
+
+  serverVersion(): Promise<string | undefined> {
+    this.version ??= this.askVersion();
+    return this.version;
+  }
+
+  /** `srvr` over a plain second socket to the server this session sits on. */
+  private askVersion(): Promise<string | undefined> {
+    const endpoint = this.endpoint;
+    if (endpoint === undefined || this.target.tls !== undefined) {
+      return Promise.resolve(undefined);
+    }
+    return new Promise<string | undefined>((resolve) => {
+      let text = '';
+      const socket = net.connect({ host: endpoint.host, port: endpoint.port });
+      const finish = (): void => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(/^Zookeeper version:\s*(\d+(?:\.\d+){0,3})/imu.exec(text)?.[1]);
+      };
+      const timer = setTimeout(finish, FOUR_LETTER_TIMEOUT_MS);
+      socket.setEncoding('utf8');
+      socket.on('connect', () => {
+        socket.write('srvr');
+      });
+      socket.on('data', (chunk: string) => {
+        text += chunk;
+        if (text.length > 4096) {
+          finish();
+        }
+      });
+      socket.on('end', finish);
+      socket.on('error', finish);
+    });
   }
 
   async create(path: string, data: Uint8Array, mode: ZookeeperCreateMode): Promise<string> {

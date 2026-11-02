@@ -19,6 +19,7 @@ const OPEN: ZookeeperAcl[] = [{ perms: 31, scheme: 'world', id: 'anyone' }];
 export interface MemoryNode {
   data: Uint8Array;
   version: number;
+  aversion?: number;
   ephemeralOwner: string;
   acl: ZookeeperAcl[];
 }
@@ -63,7 +64,7 @@ export class MemoryTree {
       mtime: 1_700_000_100_000,
       version: node.version,
       cversion: 0,
-      aversion: 0,
+      aversion: node.aversion ?? 0,
       ephemeralOwner: node.ephemeralOwner,
       dataLength: node.data.length,
       numChildren: this.children(path).length,
@@ -123,6 +124,30 @@ export class FakeZookeeperSession implements ZookeeperSession {
     return node === undefined
       ? Promise.reject(missing(path))
       : Promise.resolve({ acl: node.acl, stat: this.tree.stat(path) });
+  }
+
+  /** The version `serverVersion` answers; undefined: the server does not say. */
+  version: string | undefined = '3.9.3';
+
+  setAcl(path: string, acl: readonly ZookeeperAcl[], version: number): Promise<ZookeeperStat> {
+    this.alive();
+    const node = this.tree.nodes.get(path);
+    if (node === undefined) {
+      return Promise.reject(missing(path));
+    }
+    if (version !== -1 && version !== (node.aversion ?? 0)) {
+      return Promise.reject(new DbError('constraint', 'bad version', { driverCode: -103 }));
+    }
+    if (acl.length === 0) {
+      return Promise.reject(new DbError('permission-denied', 'invalid ACL', { driverCode: -114 }));
+    }
+    node.acl = [...acl];
+    node.aversion = (node.aversion ?? 0) + 1;
+    return Promise.resolve(this.tree.stat(path));
+  }
+
+  serverVersion(): Promise<string | undefined> {
+    return Promise.resolve(this.version);
   }
 
   create(path: string, data: Uint8Array, mode: ZookeeperCreateMode): Promise<string> {

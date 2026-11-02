@@ -50,6 +50,8 @@ export const zookeeperNodeStateSchema = object({
   moreChildren: boolean(),
   /** The last save was refused because the znode changed after the page read it. */
   conflict: optional(boolean()),
+  /** The last change of ACL was refused because the ACL changed after the page read it. */
+  aclConflict: optional(boolean()),
 });
 
 export const zookeeperNodeProtocol = defineProtocol({
@@ -67,6 +69,17 @@ export const zookeeperNodeProtocol = defineProtocol({
           value: redisValueSchema,
           version: number({ integer: true, min: 0 }),
           overwrite: optional(boolean()),
+        }),
+        result: object({ saved: boolean() }),
+      },
+      /**
+       * Replaces the ACL (V13.27). `aversion` is the ACL version the page read; a changed
+       * ACL is refused. A digest entry may be typed `user:password`: the host hashes it.
+       */
+      saveAcl: {
+        params: object({
+          acl: array(znodeAclSchema, { maxLength: 200 }),
+          aversion: number({ integer: true, min: 0 }),
         }),
         result: object({ saved: boolean() }),
       },

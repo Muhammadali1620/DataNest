@@ -318,6 +318,86 @@ describe('leases', () => {
   });
 });
 
+describe('keeping a lease alive (V13.27)', () => {
+  async function leased(key = '/k'): Promise<{ one: EtcdKeyModel; id: string }> {
+    const lease = await grantLease(etcd, 90);
+    etcd.seed(key, 'v', 0);
+    await etcd.call('kv/put', { key: Buffer.from(key).toString('base64'), lease: lease.id });
+    const one = model(key);
+    await one.refresh();
+    return { one, id: lease.id };
+  }
+
+  it('is off until asked, then shown in the state and renews the lease on every tick', async () => {
+    const { one, id } = await leased();
+    expect(one.keepingAlive).toBe(false);
+    expect(one.state().keepingAlive).toBeUndefined();
+    expect(one.setKeepAlive(true).keepingAlive).toBe(true);
+    etcd.setLeaseTtl(id, 10);
+    const state = await one.renew();
+    expect(etcd.keepAlives).toEqual([id]);
+    expect(state.lease).toEqual({ id, ttl: 90, grantedTtl: 90 });
+    expect(state.keepingAlive).toBe(true);
+    expect(one.keepingAlive).toBe(true);
+  });
+
+  it('switches off', async () => {
+    const { one } = await leased();
+    one.setKeepAlive(true);
+    expect(one.setKeepAlive(false).keepingAlive).toBeUndefined();
+    expect(one.keepingAlive).toBe(false);
+  });
+
+  it('stops by itself when the lease has ended', async () => {
+    const { one, id } = await leased();
+    one.setKeepAlive(true);
+    etcd.expire(id);
+    const state = await one.renew();
+    expect(state.keepingAlive).toBeUndefined();
+    expect(one.keepingAlive).toBe(false);
+  });
+
+  it('stops by itself when the key lost its lease or is gone', async () => {
+    const { one } = await leased();
+    one.setKeepAlive(true);
+    etcd.seed('/k', 'again', 0);
+    expect((await one.renew()).lease).toBeNull();
+    expect(one.keepingAlive).toBe(false);
+    expect(etcd.keepAlives).toEqual([]);
+    one.setKeepAlive(false);
+    const second = await leased('/j');
+    second.one.setKeepAlive(true);
+    await etcd.call('kv/deleterange', { key: Buffer.from('/j').toString('base64') });
+    expect((await second.one.renew()).exists).toBe(false);
+    expect(second.one.keepingAlive).toBe(false);
+  });
+
+  it('refuses a key without a lease, a lease that has ended and a read-only connection', async () => {
+    etcd.seed('/plain', 'v');
+    const plain = model('/plain');
+    await plain.refresh();
+    expect(() => plain.setKeepAlive(true)).toThrow(expect.objectContaining({ code: 'not-found' }));
+    const { one, id } = await leased();
+    etcd.setLeaseTtl(id, -1);
+    await one.refresh();
+    expect(() => one.setKeepAlive(true)).toThrow(expect.objectContaining({ code: 'not-found' }));
+    const locked = model('/k', true);
+    await locked.refresh();
+    expect(() => locked.setKeepAlive(true)).toThrow(
+      expect.objectContaining({ code: 'permission-denied' }),
+    );
+    expect(locked.setKeepAlive(false).keepingAlive).toBeUndefined();
+  });
+
+  it('lets the lease and the renewal go together when the key is detached from it', async () => {
+    const { one } = await leased();
+    one.setKeepAlive(true);
+    const state = await one.detachLease();
+    expect(state.lease).toBeNull();
+    expect(state.keepingAlive).toBeUndefined();
+  });
+});
+
 describe('deleting and read-only', () => {
   it('deletes the key', async () => {
     etcd.seed('/k', 'v');

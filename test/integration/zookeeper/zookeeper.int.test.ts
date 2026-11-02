@@ -288,6 +288,87 @@ describe('ZooKeeper driver on a ZooKeeper server', () => {
     expect(await session.exists(`${path}/kid`)).toBeUndefined();
   });
 
+  it('changes the ACL through the page model, hashing a digest and refusing a stale version (V13.27)', async () => {
+    const path = `${ROOT}/acl`;
+    await session.create(path, encode('x'), 'persistent');
+    const model = new ZookeeperNodeModel({
+      path,
+      connectionName: 'ZooKeeper',
+      readOnly: false,
+      session: () => Promise.resolve(session),
+    });
+    const loaded = await model.refresh();
+    // Everyone keeps the admin permission, so the page still sees what it stored.
+    const acl = [
+      { perms: 31, scheme: 'digest', id: 'alice:secret' },
+      { perms: 31, scheme: 'world', id: 'anyone' },
+    ];
+    const saved = await model.saveAcl(acl, loaded.aversion);
+    expect(saved.saved).toBe(true);
+    expect(saved.state.aversion).toBe(1);
+    expect(saved.state.acl[0]?.id).toMatch(/^alice:[A-Za-z0-9+/]{27}=$/u);
+    expect(saved.state.acl[0]?.id).not.toContain('secret');
+    // The ACL version the page read is gone: the change is refused and the new ACL shown.
+    const stale = await model.saveAcl(acl, 0);
+    expect(stale.saved).toBe(false);
+    expect(stale.state.aclConflict).toBe(true);
+    expect(stale.state.aversion).toBe(1);
+  });
+
+  it('is shown the digest id hidden when it lacks the admin permission, and will not write it back', async () => {
+    const path = `${ROOT}/hidden`;
+    await session.create(path, encode('x'), 'persistent');
+    const owner = await driver.openSession(config({ user: 'alice', password: 'secret' }));
+    try {
+      await owner.setAcl(
+        path,
+        [
+          { perms: 31, scheme: 'auth', id: '' },
+          { perms: 1, scheme: 'world', id: 'anyone' },
+        ],
+        -1,
+      );
+      const model = new ZookeeperNodeModel({
+        path,
+        connectionName: 'ZooKeeper',
+        readOnly: false,
+        session: () => Promise.resolve(session),
+      });
+      const shown = await model.refresh();
+      expect(shown.acl).toEqual([
+        { perms: 31, scheme: 'digest', id: 'alice:x' },
+        { perms: 1, scheme: 'world', id: 'anyone' },
+      ]);
+      await expect(model.saveAcl(shown.acl, shown.aversion)).rejects.toMatchObject({
+        code: 'syntax',
+      });
+      // Without the admin permission the server refuses before it looks at the version.
+      expect(
+        await failure(session.setAcl(path, [{ perms: 1, scheme: 'world', id: 'anyone' }], -1)),
+      ).toMatchObject({ code: 'permission-denied' });
+    } finally {
+      await owner.close();
+    }
+  });
+
+  it('refuses an ACL the server finds invalid, as permission-denied', async () => {
+    const path = `${ROOT}/badacl`;
+    await session.create(path, new Uint8Array(), 'persistent');
+    expect(
+      await failure(session.setAcl(path, [{ perms: 31, scheme: 'kerberos', id: 'x' }], -1)),
+    ).toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('asks the server for its version with srvr, and for the session timeout it wants (V13.27)', async () => {
+    expect(await session.serverVersion()).toMatch(/^3\.\d+\.\d+$/u);
+    const quick = await driver.openSession(config({ options: { sessionTimeout: 10 } }));
+    try {
+      expect(quick.server.sessionTimeoutMs).toBe(10_000);
+    } finally {
+      await quick.close();
+    }
+  });
+
   it('counts and deletes a whole subtree', async () => {
     await session.create(`${ROOT}/tree`, new Uint8Array(), 'persistent');
     for (const a of ['x', 'y']) {

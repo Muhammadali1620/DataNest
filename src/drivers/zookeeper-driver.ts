@@ -60,6 +60,18 @@ export interface ZookeeperSession {
   ): Promise<{ readonly acl: readonly ZookeeperAcl[]; readonly stat: ZookeeperStat }>;
   /** Creates a znode and returns its path (a sequential one gets its number). */
   create(path: string, data: Uint8Array, mode: ZookeeperCreateMode): Promise<string>;
+  /**
+   * Replaces the ACL of a znode if its ACL is still at `version` (`-1`: whatever it is).
+   * Returns the new stat. The server refuses an ACL it finds invalid, or one that would
+   * lock the znode away from everybody.
+   */
+  setAcl(path: string, acl: readonly ZookeeperAcl[], version: number): Promise<ZookeeperStat>;
+  /**
+   * The version of the server (`3.9.3`), read with the `srvr` four-letter command, which
+   * the server answers on the client port when it allows it (the default allows `srvr`).
+   * Undefined when it does not say. Asked once per session.
+   */
+  serverVersion(): Promise<string | undefined>;
   /** Writes the data if the znode is still at `version` (`-1`: whatever it is). */
   setData(path: string, data: Uint8Array, version: number): Promise<ZookeeperStat>;
   /** Deletes a znode without children, if it is still at `version` (`-1`: whatever it is). */

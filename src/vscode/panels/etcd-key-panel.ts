@@ -48,6 +48,7 @@ export class EtcdKeyPanel implements vscode.Disposable {
   private readonly log: Logger;
   private state: EtcdKeyState | undefined;
   private disposed = false;
+  private timer: ReturnType<typeof setInterval> | undefined;
 
   /** Opens the page of a key, or brings its open page forward and reads it again. */
   static show(deps: EtcdKeyPanelDeps): EtcdKeyPanel {
@@ -117,6 +118,13 @@ export class EtcdKeyPanel implements vscode.Disposable {
       }
       return {};
     });
+    this.rpc.handle('keepAlive', async ({ on }) => {
+      if (on && !(await this.allowed(vscode.l10n.t('Keep alive')))) {
+        return {};
+      }
+      this.push(model.setKeepAlive(on));
+      return {};
+    });
     this.rpc.handle('detachLease', async () => {
       if (await this.allowed(vscode.l10n.t('Change'))) {
         this.push(await model.detachLease());
@@ -142,11 +150,47 @@ export class EtcdKeyPanel implements vscode.Disposable {
     });
   }
 
+  /** Renews the lease every third of the time it was granted for, while the model asks. */
+  private arm(): void {
+    if (this.timer !== undefined) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
+    if (this.disposed || !this.deps.model.keepingAlive) {
+      return;
+    }
+    const granted = this.state?.lease?.grantedTtl ?? 0;
+    const every = Math.min(60_000, Math.max(1000, Math.round((granted * 1000) / 3)));
+    this.timer = setInterval(() => {
+      if (!this.deps.model.keepingAlive) {
+        this.arm();
+        return;
+      }
+      void this.deps.model.renew().then(
+        (state) => {
+          this.push(state);
+        },
+        (error: unknown) => {
+          // A link that failed ends the renewal; the user sees the reason and can restart it.
+          this.log.warn('Renewing the lease failed', error);
+          this.push(this.deps.model.setKeepAlive(false));
+          void vscode.window.showErrorMessage(
+            vscode.l10n.t('DataNest: {0}', error instanceof Error ? error.message : String(error)),
+          );
+        },
+      );
+    }, every);
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;
     }
     this.disposed = true;
+    if (this.timer !== undefined) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
     for (const [id, panel] of EtcdKeyPanel.open) {
       if (panel === this) {
         EtcdKeyPanel.open.delete(id);
@@ -172,6 +216,7 @@ export class EtcdKeyPanel implements vscode.Disposable {
     if (!this.disposed) {
       this.rpc.emit('state', state);
     }
+    this.arm();
   }
 
   /** True once the connection allows the change; production asks every time. */

@@ -200,6 +200,19 @@
           </span>
           <span class="fact mono">{keyState.lease.id}</span>
           {#if !keyState.readOnly}
+            {#if left > 0 || keyState.keepingAlive === true}
+              <button
+                type="button"
+                class="button secondary"
+                class:active={keyState.keepingAlive === true}
+                aria-pressed={keyState.keepingAlive === true}
+                title={t('etcd.keepAliveHint')}
+                disabled={busy}
+                onclick={() =>
+                  void run(() => rpc.request('keepAlive', { on: keyState?.keepingAlive !== true }))}
+                ><Icon name="sync" spin={keyState.keepingAlive === true} />{t('etcd.keepAlive')}</button
+              >
+            {/if}
             <button
               type="button"
               class="button secondary"
@@ -418,6 +431,11 @@
 
   .id-input {
     width: 180px;
+  }
+
+  .button.active {
+    color: var(--vscode-charts-green);
+    border-color: var(--vscode-charts-green);
   }
 
   .lease.ok {

@@ -30,6 +30,8 @@ export interface EtcdCommandUi {
     readonly prompt: string;
     readonly value?: string;
     readonly placeHolder?: string;
+    /** Hides what is typed (V13.27). */
+    readonly password?: boolean;
     readonly validate?: (value: string) => string | undefined;
   }): Promise<string | undefined>;
   /** Lets the user pick one of the keys; undefined when they back out. */

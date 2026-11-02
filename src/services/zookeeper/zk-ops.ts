@@ -9,7 +9,7 @@ import { joinPath, ROOT_PATH } from '../../shared/zk-path';
 
 export type ZookeeperCaller = Pick<
   ZookeeperSession,
-  'children' | 'getData' | 'exists' | 'getAcl' | 'create' | 'setData' | 'remove'
+  'children' | 'getData' | 'exists' | 'getAcl' | 'setAcl' | 'create' | 'setData' | 'remove'
 >;
 
 /** Requests that run together while the stats of a page, or a subtree, are read. */

@@ -24,6 +24,8 @@ function inner(overrides: Partial<ZookeeperSession> = {}): ZookeeperSession {
     getData: () => Promise.resolve({ data: new Uint8Array([1]), stat: STAT }),
     exists: () => Promise.resolve(STAT),
     getAcl: () => Promise.resolve({ acl: [], stat: STAT }),
+    setAcl: () => Promise.resolve(STAT),
+    serverVersion: () => Promise.resolve('3.9.3'),
     create: (path) => Promise.resolve(path),
     setData: () => Promise.resolve(STAT),
     remove: () => Promise.resolve(),
@@ -43,6 +45,28 @@ describe('ManagedZookeeperSession', () => {
     expect(await managed.create('/x', new Uint8Array(), 'persistent')).toBe('/x');
     expect(await managed.setData('/x', new Uint8Array(), 0)).toBe(STAT);
     await managed.remove('/x', -1);
+    expect(await managed.setAcl('/x', [], 0)).toBe(STAT);
+    expect(await managed.serverVersion()).toBe('3.9.3');
+  });
+
+  it('tells the manager when a change of ACL finds the link lost', async () => {
+    const lost = vi.fn();
+    const managed = new ManagedZookeeperSession(
+      inner({ setAcl: () => Promise.reject(new DbError('connection-failed', 'gone')) }),
+      { onLinkLost: lost },
+    );
+    await expect(managed.setAcl('/x', [], 0)).rejects.toMatchObject({ code: 'connection-failed' });
+    expect(lost).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not take a failed version question for a lost link', async () => {
+    const lost = vi.fn();
+    const managed = new ManagedZookeeperSession(
+      inner({ serverVersion: () => Promise.reject(new Error('refused')) }),
+      { onLinkLost: lost },
+    );
+    expect(await managed.serverVersion()).toBeUndefined();
+    expect(lost).not.toHaveBeenCalled();
   });
 
   it('tells the manager when the link is lost, and still throws', async () => {

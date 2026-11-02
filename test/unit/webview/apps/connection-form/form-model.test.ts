@@ -64,6 +64,7 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     connectTimeout: '',
     queryTimeout: '',
     keepAlive: '',
+    sessionTimeout: '',
     timeZone: '',
     charset: '',
     initSql: '',
@@ -135,6 +136,7 @@ describe('fieldsFrom', () => {
       connectTimeout: '',
       queryTimeout: '',
       keepAlive: '',
+      sessionTimeout: '',
       timeZone: '',
       charset: '',
       initSql: '',
@@ -866,11 +868,29 @@ describe('session options (V4.9)', () => {
     expect(problemsOf(fields({ connectTimeout: '30', keepAlive: '0' }))).toEqual([]);
   });
 
+  it('offers the session timeout to ZooKeeper only, flags it out of range (V13.27)', () => {
+    expect(toOptions(fields({ driver: 'zookeeper', sessionTimeout: '30' }))).toEqual({
+      sessionTimeout: 30,
+    });
+    expect(toOptions(fields({ driver: 'etcd', sessionTimeout: '30' }))).toBeUndefined();
+    expect(problemsOf(fields({ driver: 'zookeeper', sessionTimeout: '1' }))).toContain(
+      'session-timeout-invalid',
+    );
+    expect(problemsOf(fields({ driver: 'zookeeper', sessionTimeout: '601' }))).toContain(
+      'session-timeout-invalid',
+    );
+    expect(problemsOf(fields({ driver: 'zookeeper', sessionTimeout: 'x' }))).toContain(
+      'session-timeout-invalid',
+    );
+    expect(problemsOf(fields({ driver: 'zookeeper', sessionTimeout: '2' }))).toEqual([]);
+  });
+
   it('has a message for every option problem', () => {
     for (const problem of [
       'connect-timeout-invalid',
       'query-timeout-invalid',
       'keep-alive-invalid',
+      'session-timeout-invalid',
       'time-zone-invalid',
       'charset-invalid',
       'init-sql-too-long',

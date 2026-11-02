@@ -331,19 +331,72 @@ describe('the star on the context value', () => {
 });
 
 describe('etcd nodes (V13.19)', () => {
-  it('cannot be starred yet: only their connection can', () => {
+  it('can be starred as folders and keys; the "load more" leaf cannot (V13.27)', () => {
     expect(
       refOf({ kind: 'etcdFolder', connectionId: 'c1', prefix: { text: '/a/' }, name: 'a' }),
-    ).toBeUndefined();
-    expect(
-      refOf({ kind: 'etcdKey', connectionId: 'c1', key: { text: '/a' }, name: 'a' }),
-    ).toBeUndefined();
+    ).toEqual({ kind: 'etcdFolder', connectionId: 'c1', prefix: { text: '/a/' } });
+    expect(refOf({ kind: 'etcdKey', connectionId: 'c1', key: { text: '/a' }, name: 'a' })).toEqual({
+      kind: 'etcdKey',
+      connectionId: 'c1',
+      key: { text: '/a' },
+    });
     expect(
       refOf({ kind: 'etcdMore', connectionId: 'c1', prefix: { text: '' }, loaded: 1 }),
     ).toBeUndefined();
     expect(refOf({ kind: 'connection', connectionId: 'c1' })).toEqual({
       kind: 'connection',
       connectionId: 'c1',
+    });
+  });
+});
+
+describe('etcd and ZooKeeper stars (V13.27)', () => {
+  const nodes: TreeNode[] = [
+    { kind: 'etcdFolder', connectionId: 'c1', prefix: { text: '/app/' }, name: 'app' },
+    { kind: 'etcdKey', connectionId: 'c1', key: { text: '/app/db' }, name: 'db' },
+    { kind: 'zookeeperNode', connectionId: 'c1', path: '/app/db', name: 'db' },
+  ];
+
+  it('gives a node back with the name shown in the tree, found again by id', () => {
+    for (const node of nodes) {
+      const ref = refOf(node);
+      expect(ref).toBeDefined();
+      if (ref === undefined) {
+        continue;
+      }
+      expect(nodeOfRef(ref)).toMatchObject({ kind: node.kind });
+      expect(nodeId(nodeOfRef(ref))).toBe(nodeId(node));
+      expect(parseRef(JSON.parse(JSON.stringify(ref)))).toEqual(ref);
+    }
+  });
+
+  it('takes the name of a folder without its closing slash', () => {
+    const node = nodeOfRef({ kind: 'etcdFolder', connectionId: 'c', prefix: { text: '/a/b/' } });
+    expect(node).toMatchObject({ name: 'b' });
+  });
+
+  it('refuses saved data that is not a key or a path', () => {
+    for (const value of [
+      { kind: 'etcdKey', connectionId: 'c' },
+      { kind: 'etcdKey', connectionId: 'c', key: 'x' },
+      { kind: 'etcdKey', connectionId: 'c', key: { text: 1 } },
+      { kind: 'etcdKey', connectionId: 'c', key: { text: 'a', hex: 'zz' } },
+      { kind: 'etcdKey', connectionId: 'c', key: { text: 'a', hex: 'abc' } },
+      { kind: 'etcdFolder', connectionId: 'c', prefix: null },
+      { kind: 'zookeeperNode', connectionId: 'c' },
+      { kind: 'zookeeperNode', connectionId: 'c', path: '/' },
+      { kind: 'zookeeperNode', connectionId: 'c', path: 'app' },
+      { kind: 'zookeeperNode', connectionId: 'c', path: `/${'a'.repeat(4000)}` },
+    ]) {
+      expect(parseRef(value), JSON.stringify(value)).toBeUndefined();
+    }
+  });
+
+  it('keeps the bytes of a key whose text is empty', () => {
+    expect(parseRef({ kind: 'etcdKey', connectionId: 'c', key: { text: '', hex: '00' } })).toEqual({
+      kind: 'etcdKey',
+      connectionId: 'c',
+      key: { text: '', hex: '00' },
     });
   });
 });

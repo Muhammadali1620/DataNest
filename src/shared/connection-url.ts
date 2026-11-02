@@ -67,6 +67,11 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   // Kafka (V13.29): `kafka://user:pass@a:9092,b:9092?sasl=scram-sha-256`; `kafkas` is TLS.
   kafka: 'kafka',
   kafkas: 'kafka',
+  // ZooKeeper (V13.27): `zookeeper://user:pass@h1:2181,h2:2181/chroot?sessionTimeout=30`;
+  // `zookeepers` (or `?ssl=true`) is TLS.
+  zookeeper: 'zookeeper',
+  zookeepers: 'zookeeper',
+  zk: 'zookeeper',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
   redis: 'redis',
   rediss: 'redis',
@@ -177,8 +182,8 @@ export function suggestedName(input: ConnectionInput): string {
     const file = input.file ?? '';
     return file.split(/[\\/]/).pop() ?? file;
   }
-  // A Redis database is a number, which says less than the host.
-  if (input.driver === 'redis') {
+  // A Redis database is a number, and a ZooKeeper chroot a path: the host says more.
+  if (input.driver === 'redis' || input.driver === 'zookeeper') {
     return input.host ?? input.driver;
   }
   return input.database ?? input.host ?? input.driver;
@@ -540,6 +545,63 @@ function neo4jUrl(text: string): UrlResult {
   };
 }
 
+/**
+ * `zookeeper://user:password@host1:2181,host2:2181/chroot?sessionTimeout=30`. The servers
+ * stay one list in the host box (a lone one keeps its port apart), the path is the chroot,
+ * and the session timeout is in seconds. `zookeepers://` and `ssl=true` ask for TLS.
+ */
+function zookeeperUrl(text: string): UrlResult {
+  const match = /^([a-z][a-z0-9.-]*):\/\/([^/?#]*)([^?#]*)(?:\?([^#]*))?/iu.exec(text);
+  if (match === null) {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const [, scheme = '', authority = '', path = '', query = ''] = match;
+  const at = authority.lastIndexOf('@');
+  const credentials = at < 0 ? '' : authority.slice(0, at);
+  const servers = (at < 0 ? authority : authority.slice(at + 1))
+    .split(',')
+    .map((one) => one.trim())
+    .filter((one) => one !== '');
+  if (servers.length === 0) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const colon = credentials.indexOf(':');
+  const user = nonEmpty(decode(colon < 0 ? credentials : credentials.slice(0, colon)));
+  const password = colon < 0 ? undefined : decode(credentials.slice(colon + 1));
+  const params = new URLSearchParams(query);
+  let host = servers.join(',');
+  let port: number | undefined;
+  const single = servers.length === 1 ? /^(.+?):(\d+)$/u.exec(servers[0] ?? '') : null;
+  if (single?.[1] !== undefined && single[2] !== undefined && !single[1].includes(':')) {
+    host = single[1];
+    port = Number(single[2]);
+  }
+  const chroot = nonEmpty(decode(path).replace(/\/+$/u, ''));
+  const timeout = Number(params.get('sessionTimeout') ?? '');
+  const tls =
+    scheme.toLowerCase() === 'zookeepers' ||
+    ['1', 'true'].includes((params.get('ssl') ?? params.get('tls') ?? '').toLowerCase());
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'zookeeper',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
+    ...(chroot === undefined ? {} : { database: chroot }),
+    ...(tls ? { ssl: { mode: 'verify-full' as const } } : {}),
+    ...(Number.isInteger(timeout) && timeout >= 2 && timeout <= 600
+      ? { options: { sessionTimeout: timeout } }
+      : {}),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(password === undefined || password === '' ? {} : { password }),
+    },
+  };
+}
+
 /** Reads a connection URL. Unknown query parameters are ignored. */
 export function parseConnectionUrl(text: string): UrlResult {
   const trimmed = text.trim();
@@ -559,6 +621,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'neo4j') {
     return neo4jUrl(trimmed);
+  }
+  if (driver === 'zookeeper') {
+    return zookeeperUrl(trimmed.replace(/^jdbc:/iu, ''));
   }
   // Strip `jdbc:` and `+driver`, so the rest parses as one plain URL.
   const plain = trimmed

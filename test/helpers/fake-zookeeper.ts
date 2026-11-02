@@ -21,6 +21,7 @@ const OP = {
   getData: 4,
   setData: 5,
   getAcl: 6,
+  setAcl: 7,
   ping: 11,
   getChildren2: 12,
   auth: 100,
@@ -58,6 +59,8 @@ export interface FakeZookeeperOptions {
   readonly tls?: { readonly cert: Buffer; readonly key: Buffer };
   /** Never answers the connect request. */
   readonly mute?: boolean;
+  /** The version `srvr` reports; the default (absent) answers that the command is not allowed. */
+  readonly version?: string;
 }
 
 /** `user:password` → the id of the digest scheme, `user:base64(sha1(user:password))`. */
@@ -75,6 +78,8 @@ export class FakeZookeeper {
   /** Users that may sign in: name → password; empty: nobody is checked. */
   readonly users = new Map<string, string>();
   connects = 0;
+  /** Four-letter commands received. */
+  fourLetterWords = 0;
   closedSessions = 0;
   silent: boolean;
   /** False: pings go unanswered, as on a link that has died quietly. */
@@ -222,6 +227,15 @@ export class FakeZookeeper {
     socket.on('error', () => undefined);
     socket.on('data', (chunk: Buffer) => {
       received = Buffer.concat([received, chunk]);
+      if (!connected && received.subarray(0, 4).toString('latin1') === 'srvr') {
+        this.fourLetterWords += 1;
+        socket.end(
+          this.options.version === undefined
+            ? 'srvr is not executed because it is not in the whitelist.\n'
+            : `Zookeeper version: ${this.options.version}-1234, built on 2024-01-01 00:00 UTC\nLatency min/avg/max: 0/0/0\n`,
+        );
+        return;
+      }
       while (received.length >= 4) {
         const length = received.readInt32BE(0);
         if (received.length < 4 + length) {
@@ -371,6 +385,31 @@ export class FakeZookeeper {
           return;
         }
         reply(xid, 0, new JuteWriter().acl(node.acl).stat(this.statOf(path)));
+        return;
+      }
+      case OP.setAcl: {
+        const acl = reader.aclList();
+        const version = reader.int();
+        if (node === undefined) {
+          fail(ZK.NO_NODE);
+          return;
+        }
+        if (!this.allowed(node, PERM.admin, ids)) {
+          fail(ZK.NO_AUTH);
+          return;
+        }
+        if (acl.length === 0) {
+          fail(ZK.INVALID_ACL);
+          return;
+        }
+        if (version !== -1 && version !== node.aversion) {
+          fail(ZK.BAD_VERSION);
+          return;
+        }
+        this.zxid += 1n;
+        node.acl = acl;
+        node.aversion += 1;
+        reply(xid, 0, new JuteWriter().stat(this.statOf(path)));
         return;
       }
       case OP.setData: {

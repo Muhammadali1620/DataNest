@@ -78,6 +78,7 @@ export const optionsSchema: Schema<ConnectionOptions> = object({
   connectTimeout: optional(seconds(OPTION_LIMITS.connectTimeout)),
   queryTimeout: optional(seconds(OPTION_LIMITS.queryTimeout)),
   keepAlive: optional(seconds(OPTION_LIMITS.keepAlive)),
+  sessionTimeout: optional(seconds(OPTION_LIMITS.sessionTimeout)),
   initSql: optional(string({ maxLength: OPTION_LIMITS.initSql })),
   timeZone: optional(string({ maxLength: OPTION_LIMITS.timeZone })),
   charset: optional(string({ maxLength: OPTION_LIMITS.charset })),

@@ -14,6 +14,7 @@
         | 'connect-timeout-invalid'
         | 'query-timeout-invalid'
         | 'keep-alive-invalid'
+        | 'session-timeout-invalid'
         | 'time-zone-invalid'
         | 'charset-invalid'
         | 'init-sql-too-long',
@@ -75,6 +76,24 @@
         maxlength={4}
         aria-invalid={errorFor('keep-alive-invalid') !== undefined}
         aria-label={t('form.options.keepAlive')}
+        autocomplete="off"
+      />
+    </Field>
+  {/if}
+  {#if support.sessionTimeout === true}
+    <Field
+      label={t('form.options.sessionTimeout')}
+      error={errorFor('session-timeout-invalid')}
+      hint={t('form.options.sessionTimeoutHint')}
+    >
+      <input
+        class="control"
+        bind:value={fields.sessionTimeout}
+        inputmode="numeric"
+        maxlength={3}
+        placeholder="15"
+        aria-invalid={errorFor('session-timeout-invalid') !== undefined}
+        aria-label={t('form.options.sessionTimeout')}
         autocomplete="off"
       />
     </Field>

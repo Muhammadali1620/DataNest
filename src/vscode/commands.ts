@@ -106,6 +106,7 @@ import type { RedisKeyBrowser } from '../services/redis/key-browser';
 import type { EtcdKeyBrowser } from '../services/etcd/key-browser';
 import { EtcdKeyModel } from './panels/etcd-key-model';
 import { EtcdKeyPanel } from './panels/etcd-key-panel';
+import { etcdAccessHandler } from './etcd/etcd-access-commands';
 import { etcdCommandHandlers } from './etcd/etcd-commands';
 import { etcdCommandUi } from './etcd/etcd-ui';
 import type { ZookeeperNodeBrowser } from '../services/zookeeper/node-browser';
@@ -476,6 +477,15 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     tree: deps.tree,
     ui: etcdCommandUi(deps.store),
     openKey: openEtcdKey,
+    texts: {
+      noEtcd: vscode.l10n.t('There is no etcd connection yet'),
+      readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+    },
+  });
+  const etcdAccess = etcdAccessHandler({
+    store: deps.store,
+    session: etcdSession,
+    ui: etcdCommandUi(deps.store),
     texts: {
       noEtcd: vscode.l10n.t('There is no etcd connection yet'),
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
@@ -1234,6 +1244,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.etcdOpenKey]: etcdCommands.openKey,
     [COMMAND_IDS.etcdFindKey]: etcdCommands.findKey,
     [COMMAND_IDS.etcdNewKey]: etcdCommands.newKey,
+    [COMMAND_IDS.etcdManageAccess]: etcdAccess,
     [COMMAND_IDS.etcdDeleteKeys]: etcdCommands.deleteKeys,
     [COMMAND_IDS.zookeeperLoadMoreNodes]: zookeeperCommands.loadMoreNodes,
     [COMMAND_IDS.zookeeperOpenNode]: zookeeperCommands.openNode,

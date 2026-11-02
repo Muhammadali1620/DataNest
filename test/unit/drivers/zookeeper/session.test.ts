@@ -13,6 +13,7 @@ import {
   openZookeeperSession,
   openZookeeperSessionWith,
   serversOf,
+  SESSION_TIMEOUT_MS,
   zookeeperTarget,
 } from '../../../../src/drivers/zookeeper/session';
 import type { ZookeeperSession } from '../../../../src/drivers/zookeeper-driver';
@@ -121,7 +122,16 @@ describe('zookeeperTarget', () => {
       user: '',
       password: '',
       connectTimeoutMs: DEFAULT_CONNECT_TIMEOUT_SECONDS * 1000,
+      sessionTimeoutMs: SESSION_TIMEOUT_MS,
     });
+  });
+
+  it('asks for the session timeout of the connection, in milliseconds (V13.27)', () => {
+    const target = zookeeperTarget(
+      { id: 't', name: 't', driver: 'zookeeper', options: { sessionTimeout: 40 } },
+      undefined,
+    );
+    expect(target.sessionTimeoutMs).toBe(40_000);
   });
 
   it('trims the user and keeps the password as typed', () => {
@@ -156,6 +166,13 @@ describe('a session', () => {
     expect(session.server.sessionId).toBe((0x1000000).toString());
     expect(session.server.readOnly).toBe(false);
     expect(session.server.address).toBe(`127.0.0.1:${port}`);
+  });
+
+  it('asks the server for the session timeout of the connection (V13.27)', async () => {
+    const { port } = await serve();
+    expect((await open(port)).server.sessionTimeoutMs).toBe(SESSION_TIMEOUT_MS);
+    const session = await open(port, { options: { sessionTimeout: 7 } });
+    expect(session.server.sessionTimeoutMs).toBe(7000);
   });
 
   it('says when the server took it in read-only mode', async () => {
@@ -256,6 +273,75 @@ describe('requests', () => {
       { perms: 17, scheme: 'world', id: 'anyone' },
     ]);
     expect((await session.getAcl('/')).acl[0]).toMatchObject({ scheme: 'world', perms: 31 });
+  });
+
+  it('replace the ACL of a znode and count the change (V13.27)', async () => {
+    const { server, port } = await serve();
+    server.seed('/guarded', 'x');
+    const session = await open(port);
+    const acl = [
+      { perms: 1, scheme: 'world', id: 'anyone' },
+      { perms: 31, scheme: 'digest', id: 'u:h' },
+    ];
+    const stat = await session.setAcl('/guarded', acl, 0);
+    expect(stat.aversion).toBe(1);
+    expect((await session.getAcl('/guarded')).acl).toEqual(acl);
+    expect(server.nodes.get('/guarded')?.aversion).toBe(1);
+  });
+
+  it('refuse a change of ACL at a version that is gone, for a missing znode and for an empty ACL', async () => {
+    const { server, port } = await serve();
+    server.seed('/guarded', 'x');
+    const session = await open(port);
+    const open_ = [{ perms: 31, scheme: 'world', id: 'anyone' }];
+    expect(await failure(session.setAcl('/guarded', open_, 5))).toMatchObject({
+      code: 'constraint',
+      driverCode: -103,
+    });
+    expect(await failure(session.setAcl('/nope', open_, -1))).toMatchObject({
+      code: 'not-found',
+    });
+    expect(await failure(session.setAcl('/guarded', [], -1))).toMatchObject({
+      code: 'permission-denied',
+      driverCode: -114,
+    });
+    expect((await session.setAcl('/guarded', open_, -1)).aversion).toBe(1);
+  });
+
+  it('send the ACL under the chroot', async () => {
+    const { server, port } = await serve();
+    server.seed('/app/x', '');
+    const session = await open(port, { database: '/app' });
+    await session.setAcl('/x', [{ perms: 1, scheme: 'world', id: 'anyone' }], -1);
+    expect(server.nodes.get('/app/x')?.acl).toEqual([{ perms: 1, scheme: 'world', id: 'anyone' }]);
+  });
+
+  it('read the version of the server with srvr, once per session (V13.27)', async () => {
+    const { server, port } = await serve({ version: '3.9.3' });
+    const session = await open(port);
+    expect(await session.serverVersion()).toBe('3.9.3');
+    expect(await session.serverVersion()).toBe('3.9.3');
+    expect(server.fourLetterWords).toBe(1);
+  });
+
+  it('say nothing of the version when the server does not allow srvr', async () => {
+    const { port } = await serve();
+    expect(await (await open(port)).serverVersion()).toBeUndefined();
+  });
+
+  it('say nothing of the version over TLS, where the command is not sent', async () => {
+    const tlsServer = await serve({
+      tls: {
+        cert: readFileSync(join(TLS, 'server.crt')),
+        key: readFileSync(join(TLS, 'server.key')),
+      },
+      version: '3.9.3',
+    });
+    const secure = await open(tlsServer.port, {
+      ssl: { mode: 'require' },
+    });
+    expect(await secure.serverVersion()).toBeUndefined();
+    expect(tlsServer.server.fourLetterWords).toBe(0);
   });
 
   it('keep text of other alphabets, bytes and empty data', async () => {

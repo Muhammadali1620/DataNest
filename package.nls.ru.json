@@ -247,6 +247,7 @@
   "commands.etcd.loadMoreKeys.title": "Загрузить ещё ключи etcd",
   "commands.etcd.openKey.title": "Открыть ключ etcd",
   "commands.etcd.findKey.title": "Найти ключ etcd по началу имени…",
+  "commands.etcd.manageAccess.title": "Пользователи и роли etcd…",
   "commands.etcd.newKey.title": "Новый ключ etcd…",
   "commands.etcd.deleteKeys.title": "Удалить ключи etcd",
   "configuration.etcd.keysPerLoad.description": "Сколько ключей и папок дерево читает из папки etcd за один раз. Если в папке больше, показывается «Загрузить ещё ключи…».",

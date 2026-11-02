@@ -57,6 +57,19 @@ export class ManagedZookeeperSession implements ZookeeperSession {
     return await this.guard(() => this.inner.getAcl(path));
   }
 
+  async setAcl(
+    path: string,
+    acl: readonly ZookeeperAcl[],
+    version: number,
+  ): Promise<ZookeeperStat> {
+    return await this.guard(() => this.inner.setAcl(path, acl, version));
+  }
+
+  serverVersion(): Promise<string | undefined> {
+    // Best effort on a second socket: a failure here says nothing about the session.
+    return this.inner.serverVersion().catch(() => undefined);
+  }
+
   async create(path: string, data: Uint8Array, mode: ZookeeperCreateMode): Promise<string> {
     return await this.guard(() => this.inner.create(path, data, mode));
   }

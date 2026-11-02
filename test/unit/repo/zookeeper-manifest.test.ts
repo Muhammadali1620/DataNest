@@ -31,9 +31,11 @@ const palette = manifest.contributes.menus.commandPalette ?? [];
 const entriesOf = (command: string): MenuEntry[] =>
   context.filter((entry) => entry.command === command);
 
-/** The contexts a `when` names, as `viewItem == x` terms. */
+/** The contexts a `when` names, as `viewItem == x` terms (the starred forms of nodes, V13.27, left out). */
 const contextsOf = (when: string | undefined): string[] =>
-  [...(when ?? '').matchAll(/viewItem == ([\w.]+)/gu)].map((match) => match[1] ?? '');
+  [...(when ?? '').matchAll(/viewItem == ([\w.]+)/gu)]
+    .map((match) => match[1] ?? '')
+    .filter((name) => !/^datanest\.(zookeeperNode)\.starred$/u.test(name));
 
 const COMMANDS = [
   [COMMAND_IDS.zookeeperLoadMoreNodes, 'loadMoreNodes', '$(ellipsis)'],

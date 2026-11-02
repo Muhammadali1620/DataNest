@@ -6,6 +6,7 @@ import {
   deletePrefix,
   getEntry,
   grantLease,
+  keepAliveLease,
   leaseInfo,
   MAX_RANGE_LIMIT,
   putEntry,
@@ -317,5 +318,28 @@ describe('leases', () => {
   it('sends the lease id as the text it was given', async () => {
     await leaseInfo(etcd, '7000000000000000042');
     expect(etcd.bodies.at(-1)).toEqual({ ID: '7000000000000000042' });
+  });
+});
+
+describe('keepAliveLease (V13.27)', () => {
+  it('renews a lease and says the time it has now', async () => {
+    const etcd = new FakeEtcd();
+    const lease = await grantLease(etcd, 40);
+    etcd.setLeaseTtl(lease.id, 5);
+    expect(await keepAliveLease(etcd, lease.id)).toBe(40);
+    expect((await leaseInfo(etcd, lease.id))?.ttl).toBe(40);
+  });
+
+  it('answers 0 for a lease that is gone', async () => {
+    const etcd = new FakeEtcd();
+    const lease = await grantLease(etcd, 40);
+    etcd.expire(lease.id);
+    expect(await keepAliveLease(etcd, lease.id)).toBe(0);
+    expect(await keepAliveLease(etcd, '123')).toBe(0);
+  });
+
+  it('reads an answer that is not wrapped in a result as well', async () => {
+    const session = { call: () => Promise.resolve({ ID: '7', TTL: '12' }) };
+    expect(await keepAliveLease(session, '7')).toBe(12);
   });
 });

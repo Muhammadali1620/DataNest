@@ -143,6 +143,8 @@ export interface FormFields {
   connectTimeout: string;
   queryTimeout: string;
   keepAlive: string;
+  /** ZooKeeper (V13.27): the lifetime of the session, in seconds. */
+  sessionTimeout: string;
   timeZone: string;
   charset: string;
   initSql: string;
@@ -186,6 +188,7 @@ const SECOND_FIELDS = [
   ['connectTimeout', 'connect-timeout-invalid'],
   ['queryTimeout', 'query-timeout-invalid'],
   ['keepAlive', 'keep-alive-invalid'],
+  ['sessionTimeout', 'session-timeout-invalid'],
 ] as const satisfies readonly (readonly [
   keyof ConnectionOptions & keyof FormFields,
   OptionProblem,
@@ -219,6 +222,7 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     connectTimeout: secondsText(input.options?.connectTimeout),
     queryTimeout: secondsText(input.options?.queryTimeout),
     keepAlive: secondsText(input.options?.keepAlive),
+    sessionTimeout: secondsText(input.options?.sessionTimeout),
     timeZone: input.options?.timeZone ?? '',
     charset: input.options?.charset ?? '',
     initSql: input.options?.initSql ?? '',
@@ -426,6 +430,7 @@ export function toOptions(fields: FormFields): ConnectionOptions | undefined {
     connectTimeout: support.connectTimeout,
     queryTimeout: true,
     keepAlive: support.keepAlive,
+    sessionTimeout: support.sessionTimeout === true,
   };
   const options: Record<string, string | number> = {};
   for (const [field] of SECOND_FIELDS) {
@@ -731,6 +736,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'connect-timeout-invalid': 'form.options.error.connectTimeout',
   'query-timeout-invalid': 'form.options.error.queryTimeout',
   'keep-alive-invalid': 'form.options.error.keepAlive',
+  'session-timeout-invalid': 'form.options.error.sessionTimeout',
   'time-zone-invalid': 'form.options.error.timeZone',
   'charset-invalid': 'form.options.error.charset',
   'init-sql-too-long': 'form.options.error.initSql',

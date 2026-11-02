@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type {
+    ZnodeAclEntry,
     ZookeeperNodeProtocol,
     ZookeeperNodeState,
   } from '../../../../src/shared/protocols/zookeeper-node';
@@ -11,6 +12,7 @@
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import ValueEditor from '../redis-key/ValueEditor.svelte';
+  import AclEditor from './AclEditor.svelte';
   import { aclText, KIND_TONE, timeText } from './node-view';
 
   interface Props {
@@ -25,6 +27,8 @@
   let error = $state<string | undefined>(undefined);
   /** What the user typed in the value box; undefined while it is as the server has it. */
   let draft = $state<RedisValue | undefined>(undefined);
+  /** The ACL editor is open (V13.27). */
+  let editingAcl = $state(false);
   let childName = $state('');
   let childMode = $state<'persistent' | 'sequential' | 'container'>('persistent');
   /** Bumped when the server's value should replace what the box shows. */
@@ -45,6 +49,8 @@
   onMount(() => {
     const subscription = rpc.on('state', (next) => {
       nodeState = next;
+      // A fresh read closes the editor: a refused change shows the ACL as it is now.
+      editingAcl = false;
       // A refused save keeps the user's text in the box: only a fresh read replaces it.
       if (next.conflict !== true) {
         version += 1;
@@ -86,6 +92,14 @@
         ...(overwrite ? { overwrite: true } : {}),
       }),
     );
+  }
+
+  function saveAcl(acl: ZnodeAclEntry[]): void {
+    const state = nodeState;
+    if (state === undefined) {
+      return;
+    }
+    void run(() => rpc.request('saveAcl', { acl, aversion: state.aversion }));
   }
 
   function addChild(): void {
@@ -179,6 +193,13 @@
       </div>
     {/if}
 
+    {#if nodeState.aclConflict === true}
+      <div class="notice warning problem" role="alert" data-testid="acl-conflict">
+        <Icon name="warning" />
+        <span class="message">{t('zk.aclConflict', nodeState.aversion)}</span>
+      </div>
+    {/if}
+
     {#if !nodeState.exists}
       <div class="empty">
         <span class="empty-icon"><Icon name="circle-slash" size={24} /></span>
@@ -218,8 +239,32 @@
             {/if}
           </dl>
 
-          <h2><Icon name="shield" size={14} />{t('zk.acl')}</h2>
-          {#if nodeState.acl.length === 0}
+          <h2>
+            <Icon name="shield" size={14} />{t('zk.acl')}
+            {#if !nodeState.readOnly && !editingAcl && nodeState.acl.length > 0}
+              <IconButton
+                icon="edit"
+                label={t('zk.aclEdit')}
+                disabled={busy}
+                onclick={() => {
+                  editingAcl = true;
+                }}
+              />
+            {/if}
+          </h2>
+          {#if editingAcl}
+            {#key nodeState.aversion}
+              <AclEditor
+                acl={nodeState.acl}
+                {busy}
+                {t}
+                onsave={saveAcl}
+                oncancel={() => {
+                  editingAcl = false;
+                }}
+              />
+            {/key}
+          {:else if nodeState.acl.length === 0}
             <p class="hint" data-testid="acl-empty">{t('zk.aclEmpty')}</p>
           {:else}
             <ul class="acl" data-testid="acl">

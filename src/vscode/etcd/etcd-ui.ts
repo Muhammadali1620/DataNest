@@ -5,16 +5,18 @@
 import * as vscode from 'vscode';
 import type { ConnectionStore } from '../../services/connection-store';
 import { describeTarget } from '../../shared/connection';
+import type { AccessPickItem, EtcdAccessUi } from './etcd-access-commands';
 import type { EtcdCommandUi } from './etcd-commands';
 
-export function etcdCommandUi(store: Pick<ConnectionStore, 'get'>): EtcdCommandUi {
-  return {
+export function etcdCommandUi(store: Pick<ConnectionStore, 'get'>): EtcdAccessUi {
+  const ui: EtcdCommandUi = {
     input: async (options) =>
       await vscode.window.showInputBox({
         title: options.title,
         prompt: options.prompt,
         ...(options.value === undefined ? {} : { value: options.value }),
         ...(options.placeHolder === undefined ? {} : { placeHolder: options.placeHolder }),
+        ...(options.password === true ? { password: true } : {}),
         ...(options.validate === undefined
           ? {}
           : { validateInput: (value: string) => options.validate?.(value) }),
@@ -65,6 +67,29 @@ export function etcdCommandUi(store: Pick<ConnectionStore, 'get'>): EtcdCommandU
 
     info: (message) => {
       void vscode.window.showInformationMessage(message);
+    },
+  };
+  return {
+    ...ui,
+    pick: async <T>(options: {
+      readonly title: string;
+      readonly placeHolder?: string;
+      readonly items: readonly AccessPickItem<T>[];
+    }) => {
+      const chosen = await vscode.window.showQuickPick(
+        options.items.map((item) => ({
+          label: item.label,
+          ...(item.description === undefined ? {} : { description: item.description }),
+          ...(item.detail === undefined ? {} : { detail: item.detail }),
+          ...(item.icon === undefined ? {} : { iconPath: new vscode.ThemeIcon(item.icon) }),
+          value: item.value,
+        })),
+        {
+          title: options.title,
+          ...(options.placeHolder === undefined ? {} : { placeHolder: options.placeHolder }),
+        },
+      );
+      return chosen?.value;
     },
   };
 }

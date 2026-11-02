@@ -357,6 +357,8 @@ export interface ConnectionOptions {
   readonly queryTimeout?: number;
   /** Seconds of quiet after which an idle session sends `SELECT 1`; absent or 0: never. */
   readonly keepAlive?: number;
+  /** Seconds a ZooKeeper session may live without a ping (V13.27); the server may change it. */
+  readonly sessionTimeout?: number;
   /** Statements every new session runs first, e.g. `SET search_path = app`. */
   readonly initSql?: string;
   /** Session time zone: `UTC`, `+03:00`, `Europe/Berlin`. */
@@ -369,6 +371,7 @@ export const OPTION_LIMITS = {
   connectTimeout: { min: 1, max: 300 },
   queryTimeout: { min: 0, max: 86_400 },
   keepAlive: { min: 0, max: 3600 },
+  sessionTimeout: { min: 2, max: 600 },
   initSql: 20_000,
   timeZone: 64,
   charset: 32,
@@ -389,6 +392,8 @@ export interface OptionSupport {
   readonly queryTimeout: boolean;
   /** Statements (or Redis commands) every new session runs first. */
   readonly init: boolean;
+  /** The time a ZooKeeper session lives without a ping (V13.27); absent means no. */
+  readonly sessionTimeout?: boolean;
 }
 
 export function optionSupport(driver: DriverId): OptionSupport {
@@ -543,7 +548,6 @@ export function optionSupport(driver: DriverId): OptionSupport {
     case 'etcd':
     case 'kafka':
     case 'rabbitmq':
-    case 'zookeeper':
     case 'mongodb':
       return {
         connectTimeout: true,
@@ -553,6 +557,18 @@ export function optionSupport(driver: DriverId): OptionSupport {
         tls: true,
         queryTimeout: true,
         init: false,
+      };
+    // ZooKeeper also lets the client ask for the lifetime of its session (V13.27).
+    case 'zookeeper':
+      return {
+        connectTimeout: true,
+        keepAlive: true,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: false,
+        sessionTimeout: true,
       };
   }
 }
@@ -786,6 +802,7 @@ export type OptionProblem =
   | 'connect-timeout-invalid'
   | 'query-timeout-invalid'
   | 'keep-alive-invalid'
+  | 'session-timeout-invalid'
   | 'time-zone-invalid'
   | 'charset-invalid'
   | 'init-sql-too-long';
@@ -848,6 +865,9 @@ export function optionProblems(options: ConnectionOptions | undefined): OptionPr
   }
   if (!inRange(options.keepAlive, OPTION_LIMITS.keepAlive)) {
     problems.push('keep-alive-invalid');
+  }
+  if (!inRange(options.sessionTimeout, OPTION_LIMITS.sessionTimeout)) {
+    problems.push('session-timeout-invalid');
   }
   const zone = options.timeZone ?? '';
   // A zone becomes a quoted literal, so only control characters could hurt; the

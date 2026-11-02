@@ -1312,6 +1312,27 @@ describe('ConnectionStore session options (V4.9)', () => {
     expect(pg.options).toEqual({ timeZone: 'UTC' });
   });
 
+  it('keeps the session timeout of a ZooKeeper connection and no other (V13.27)', async () => {
+    const store = make();
+    const zk = await store.add({
+      name: 'Zk',
+      driver: 'zookeeper',
+      host: 'h',
+      options: { sessionTimeout: 20 },
+    });
+    expect(zk.options).toEqual({ sessionTimeout: 20 });
+    const etcd = await store.add({
+      name: 'Etcd',
+      driver: 'etcd',
+      host: 'h',
+      options: { sessionTimeout: 20 },
+    });
+    expect(etcd.options).toBeUndefined();
+    await expect(
+      make().add({ name: 'Zk', driver: 'zookeeper', host: 'h', options: { sessionTimeout: 1 } }),
+    ).rejects.toThrow('session-timeout-invalid');
+  });
+
   it('refuses options that are out of range', async () => {
     await expect(make().add({ ...mysqlInput, options: { connectTimeout: 0 } })).rejects.toThrow(
       'connect-timeout-invalid',

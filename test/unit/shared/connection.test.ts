@@ -296,6 +296,18 @@ describe('session options (V4.9)', () => {
     expect(optionProblems({ queryTimeout: -1 })).toEqual(['query-timeout-invalid']);
     expect(optionProblems({ queryTimeout: 1.5 })).toEqual(['query-timeout-invalid']);
     expect(optionProblems({ keepAlive: 3601 })).toEqual(['keep-alive-invalid']);
+    expect(optionProblems({ sessionTimeout: 1 })).toEqual(['session-timeout-invalid']);
+    expect(optionProblems({ sessionTimeout: 601 })).toEqual(['session-timeout-invalid']);
+    expect(optionProblems({ sessionTimeout: 2.5 })).toEqual(['session-timeout-invalid']);
+    expect(optionProblems({ sessionTimeout: 2 })).toEqual([]);
+    expect(optionProblems({ sessionTimeout: 600 })).toEqual([]);
+  });
+
+  it('offers the session timeout to ZooKeeper alone', () => {
+    expect(optionSupport('zookeeper').sessionTimeout).toBe(true);
+    for (const driver of ['etcd', 'kafka', 'redis', 'postgres'] as const) {
+      expect(optionSupport(driver).sessionTimeout, driver).toBeUndefined();
+    }
   });
 
   it('flags a time zone with control characters, a bad charset and long init SQL', () => {

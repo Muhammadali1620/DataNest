@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import {
   type ZookeeperNodeProtocol,
@@ -71,6 +71,7 @@ async function open(
   };
   host.handle('refresh', reply('refresh', {}));
   host.handle('save', reply('save', { saved: true }));
+  host.handle('saveAcl', reply('saveAcl', { saved: true }));
   host.handle('createChild', reply('createChild', { path: '/app/config/x' }));
   host.handle('openChild', reply('openChild', {}));
   host.handle('deleteNode', reply('deleteNode', { deleted: true }));
@@ -381,5 +382,124 @@ describe('ZooKeeper znode page: a new child', () => {
       expect(screen.getByTestId('error').textContent).toContain('already exists');
     });
     expect((name as HTMLInputElement).value).toBe('db');
+  });
+});
+
+describe('ZooKeeper znode page: the ACL editor (V13.27)', () => {
+  const editButton = (): HTMLElement => screen.getByRole('button', { name: 'Edit the ACL' });
+
+  it('is offered next to the ACL, and not on a read-only connection or when the ACL is unknown', async () => {
+    await open(state());
+    expect(screen.queryByRole('button', { name: 'Edit the ACL' })).not.toBeNull();
+    cleanup();
+    await open(state({ readOnly: true }));
+    expect(screen.queryByRole('button', { name: 'Edit the ACL' })).toBeNull();
+    cleanup();
+    await open(state({ acl: [] }));
+    expect(screen.queryByRole('button', { name: 'Edit the ACL' })).toBeNull();
+  });
+
+  it('opens on the ACL as it is, with the permissions ticked', async () => {
+    await open(
+      state({
+        acl: [
+          { perms: 17, scheme: 'digest', id: 'alice:hash' },
+          { perms: 1, scheme: 'world', id: 'anyone' },
+        ],
+      }),
+    );
+    await fireEvent.click(editButton());
+    const editor = within(screen.getByTestId('acl-editor'));
+    const ids = editor.getAllByLabelText<HTMLInputElement>('Id');
+    expect(ids.map((box) => box.value)).toEqual(['alice:hash', 'anyone']);
+    const reads = editor.getAllByLabelText<HTMLInputElement>('Read');
+    expect(reads.map((box) => box.checked)).toEqual([true, true]);
+    const admins = editor.getAllByLabelText<HTMLInputElement>('Administer (change the ACL)');
+    expect(admins.map((box) => box.checked)).toEqual([true, false]);
+  });
+
+  it('sends the edited entries with the ACL version it read', async () => {
+    const opened = await open(state());
+    await fireEvent.click(editButton());
+    const editor = within(screen.getByTestId('acl-editor'));
+    await fireEvent.click(editor.getByLabelText('Delete children'));
+    await fireEvent.click(editor.getByRole('button', { name: 'Add an entry' }));
+    const ids = editor.getAllByLabelText<HTMLInputElement>('Id');
+    await fireEvent.input(must(ids[1]), { target: { value: 'bob:pw' } });
+    await fireEvent.click(editor.getByRole('button', { name: 'Save the ACL' }));
+    await waitFor(() => {
+      expect(sent(opened, 'saveAcl')).toHaveLength(1);
+    });
+    expect(sent(opened, 'saveAcl')[0]).toEqual({
+      aversion: 1,
+      acl: [
+        { perms: 23, scheme: 'world', id: 'anyone' },
+        { perms: 1, scheme: 'digest', id: 'bob:pw' },
+      ],
+    });
+  });
+
+  it('keeps Save off while an entry is not valid, and gives a scheme with a fixed id its id', async () => {
+    await open(state());
+    await fireEvent.click(editButton());
+    const editor = within(screen.getByTestId('acl-editor'));
+    await fireEvent.click(editor.getByRole('button', { name: 'Add an entry' }));
+    const save = editor.getByRole('button', { name: 'Save the ACL' });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    const schemes = editor.getAllByLabelText<HTMLSelectElement>('Scheme');
+    await fireEvent.change(must(schemes[1]), { target: { value: 'auth' } });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    expect(editor.getAllByLabelText<HTMLInputElement>('Id')[1]?.disabled).toBe(true);
+    await fireEvent.change(must(schemes[1]), { target: { value: 'world' } });
+    expect(editor.getAllByLabelText<HTMLInputElement>('Id')[1]?.value).toBe('anyone');
+  });
+
+  it('cannot remove the last entry, and removes another one', async () => {
+    await open(state());
+    await fireEvent.click(editButton());
+    const editor = within(screen.getByTestId('acl-editor'));
+    expect(
+      editor.getByRole<HTMLButtonElement>('button', { name: 'Remove the entry' }).disabled,
+    ).toBe(true);
+    await fireEvent.click(editor.getByRole('button', { name: 'Add an entry' }));
+    await fireEvent.click(must(editor.getAllByRole('button', { name: 'Remove the entry' })[1]));
+    expect(editor.getAllByLabelText('Id')).toHaveLength(1);
+  });
+
+  it('closes on Cancel without sending anything, and when a fresh state arrives', async () => {
+    const opened = await open(state());
+    await fireEvent.click(editButton());
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('acl-editor')).toBeNull();
+    expect(sent(opened, 'saveAcl')).toHaveLength(0);
+    await fireEvent.click(editButton());
+    expect(screen.queryByTestId('acl-editor')).not.toBeNull();
+    opened.host.emit('state', state({ aversion: 2 }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('acl-editor')).toBeNull();
+    });
+  });
+
+  it('says the ACL changed meanwhile, and shows the one that is there now', async () => {
+    await open(
+      state({ aclConflict: true, aversion: 4, acl: [{ perms: 1, scheme: 'world', id: 'anyone' }] }),
+    );
+    expect(screen.getByTestId('acl-conflict').textContent).toContain('version 4');
+    expect(screen.getByTestId('acl').textContent).toContain('r----');
+  });
+
+  it('shows what the host refused', async () => {
+    await open(state(), 'en', { saveAcl: new Error('The ACL is invalid') });
+    await fireEvent.click(editButton());
+    await fireEvent.click(screen.getByRole('button', { name: 'Save the ACL' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toContain('The ACL is invalid');
+    });
+  });
+
+  it('speaks Russian', async () => {
+    await open(state(), 'ru');
+    await fireEvent.click(screen.getByRole('button', { name: 'Изменить ACL' }));
+    expect(screen.getByRole('button', { name: 'Сохранить ACL' })).toBeTruthy();
   });
 });

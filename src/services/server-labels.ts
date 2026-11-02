@@ -20,6 +20,7 @@ type Reader = Pick<
   | 'acquireEtcd'
   | 'acquireKafka'
   | 'acquireRabbit'
+  | 'acquireZookeeper'
 >;
 
 /** `15.19 (Debian 15.19-1.pgdg120+1)` → `15.19`; `10.11.6-MariaDB-1:…` → `10.11.6`. */
@@ -91,8 +92,9 @@ export async function readServerVersion(
     return shortVersion((await manager.acquireRabbit(owner, { connectionId })).server.version);
   }
   if (driver === 'zookeeper') {
-    // The server does not tell its version over the client protocol.
-    return undefined;
+    // Not part of the client protocol: asked with the `srvr` command, if the server allows it.
+    const version = await (await manager.acquireZookeeper(owner, { connectionId })).serverVersion();
+    return version === undefined ? undefined : shortVersion(version);
   }
   const session = await browseSession(manager, connectionId);
   const [row] = await namedRows(session, VERSION_SQL[driver]);

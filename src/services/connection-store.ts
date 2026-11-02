@@ -910,6 +910,9 @@ function normalizeOptions(
     ...(support.keepAlive && options.keepAlive !== undefined && options.keepAlive > 0
       ? { keepAlive: options.keepAlive }
       : {}),
+    ...(support.sessionTimeout === true && options.sessionTimeout !== undefined
+      ? { sessionTimeout: options.sessionTimeout }
+      : {}),
     ...(initSql === undefined ? {} : { initSql }),
     ...(timeZone === undefined ? {} : { timeZone }),
     ...(charset === undefined ? {} : { charset }),

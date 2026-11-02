@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import { redisValueOf } from '../../../../src/shared/redis-value';
 import {
+  aclProblemText,
   nameProblemText,
   ZookeeperNodeModel,
 } from '../../../../src/vscode/panels/zookeeper-node-model';
 import { FakeZookeeperSession, MemoryTree } from '../../../helpers/fake-zookeeper-driver';
+import { must } from '../../../helpers/must';
 
 let tree: MemoryTree;
 let session: FakeZookeeperSession;
@@ -222,5 +225,107 @@ describe('nameProblemText', () => {
       expect(nameProblemText(problem)).not.toBe('');
     }
     expect(nameProblemText(undefined)).toBe('');
+  });
+});
+
+describe('saveAcl (V13.27)', () => {
+  const world = { perms: 31, scheme: 'world', id: 'anyone' } as const;
+
+  it('replaces the ACL and reads the znode again', async () => {
+    const one = model('/app');
+    const first = await one.refresh();
+    const result = await one.saveAcl(
+      [{ perms: 25, scheme: 'ip', id: '10.0.0.0/8' }, world],
+      first.aversion,
+    );
+    expect(result.saved).toBe(true);
+    expect(result.state.acl).toEqual([{ perms: 25, scheme: 'ip', id: '10.0.0.0/8' }, world]);
+    expect(result.state.aversion).toBe(1);
+    expect(result.state.aclConflict).toBeUndefined();
+  });
+
+  it('hashes a digest typed with a password and keeps one that is a hash', async () => {
+    const one = model('/app');
+    await one.refresh();
+    const hash = createHash('sha1').update('alice:secret').digest('base64');
+    const done = await one.saveAcl([{ perms: 31, scheme: 'digest', id: 'alice:secret' }], 0);
+    expect(done.state.acl).toEqual([{ perms: 31, scheme: 'digest', id: `alice:${hash}` }]);
+    const kept = await one.saveAcl([{ perms: 1, scheme: 'digest', id: `alice:${hash}` }], 1);
+    expect(kept.state.acl).toEqual([{ perms: 1, scheme: 'digest', id: `alice:${hash}` }]);
+  });
+
+  it('refuses an ACL that changed after the page read it, and shows the new one', async () => {
+    const one = model('/app');
+    await one.refresh();
+    await session.setAcl('/app', [{ perms: 1, scheme: 'world', id: 'anyone' }], -1);
+    const result = await one.saveAcl([world], 0);
+    expect(result.saved).toBe(false);
+    expect(result.state.aclConflict).toBe(true);
+    expect(result.state.acl).toEqual([{ perms: 1, scheme: 'world', id: 'anyone' }]);
+    expect(result.state.aversion).toBe(1);
+    // The next read clears the notice, and a save at the version now there goes through.
+    expect((await one.refresh()).aclConflict).toBeUndefined();
+    expect((await one.saveAcl([world], 1)).saved).toBe(true);
+  });
+
+  it('refuses an empty ACL, a bad entry and a read-only connection before it asks the server', async () => {
+    const one = model('/app');
+    await one.refresh();
+    await expect(one.saveAcl([], 0)).rejects.toMatchObject({ code: 'syntax' });
+    for (const entry of [
+      { perms: 0, scheme: 'world', id: 'anyone' },
+      { perms: 31, scheme: 'world', id: 'bob' },
+      { perms: 31, scheme: 'auth', id: 'x' },
+      { perms: 31, scheme: 'digest', id: 'nocolon' },
+      { perms: 31, scheme: 'digest', id: 'user:' },
+      { perms: 31, scheme: 'ip', id: ' ' },
+      { perms: 31, scheme: 'kerberos', id: 'x' },
+    ]) {
+      await expect(one.saveAcl([entry], 0), JSON.stringify(entry)).rejects.toBeInstanceOf(DbError);
+    }
+    expect(tree.nodes.get('/app')?.aversion ?? 0).toBe(0);
+    const locked = model('/app', true);
+    await locked.refresh();
+    await expect(locked.saveAcl([world], 0)).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('will not write back the digest id the server hides from users without the admin permission', async () => {
+    const node = must(tree.nodes.get('/app'));
+    node.acl = [
+      { perms: 31, scheme: 'digest', id: 'alice:x' },
+      { perms: 1, scheme: 'world', id: 'anyone' },
+    ];
+    const one = model('/app');
+    await one.refresh();
+    await expect(
+      one.saveAcl([{ perms: 1, scheme: 'digest', id: 'alice:x' }], 0),
+    ).rejects.toMatchObject({ code: 'syntax' });
+    expect(tree.nodes.get('/app')?.aversion ?? 0).toBe(0);
+    // Dropping the entry is fine, and so is the password "x" for a user that is new.
+    expect((await one.saveAcl([world], 0)).saved).toBe(true);
+    await one.refresh();
+    expect((await one.saveAcl([{ perms: 31, scheme: 'digest', id: 'bob:x' }], 1)).saved).toBe(true);
+  });
+
+  it('passes on an error that is not a version conflict', async () => {
+    const one = model('/app');
+    await one.refresh();
+    tree.nodes.delete('/app/a');
+    tree.nodes.delete('/app/b');
+    tree.nodes.delete('/app');
+    await expect(one.saveAcl([world], 0)).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('has words for every problem', () => {
+    for (const problem of [
+      'scheme',
+      'perms',
+      'world-id',
+      'auth-id',
+      'digest-id',
+      'id-empty',
+    ] as const) {
+      expect(aclProblemText(problem, { perms: 1, scheme: 'ip', id: '' })).not.toBe('');
+    }
   });
 });

@@ -526,14 +526,15 @@ services:
 
   # Apache ZooKeeper (V13.24), group `zookeeper`: one server in standalone mode, the client
   # port open to everyone (the tests sign in with a digest user when they need to). The
-  # four-letter `ruok` is allowed for the health check, which talks to the port without any
-  # tool, as the image has none. The data lives in tmpfs, so every start is empty.
+  # four-letters `ruok` (the health check, which talks to the port without any tool, as the
+  # image has none) and `srvr` (the version of the server, V13.27) are allowed. The data
+  # lives in tmpfs, so every start is empty.
   zookeeper:
     image: zookeeper:3.9
     container_name: datanest-zookeeper
     profiles: [zookeeper]
     environment:
-      ZOO_4LW_COMMANDS_WHITELIST: ruok
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr
       JVMFLAGS: -Xmx256m -Xms64m
     ports:
       - 127.0.0.1:7181:2181

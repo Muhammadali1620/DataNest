@@ -764,6 +764,12 @@
         "icon": "$(search)"
       },
       {
+        "command": "datanest.etcd.manageAccess",
+        "title": "%commands.etcd.manageAccess.title%",
+        "category": "DataNest",
+        "icon": "$(organization)"
+      },
+      {
         "command": "datanest.etcd.newKey",
         "title": "%commands.etcd.newKey.title%",
         "category": "DataNest",
@@ -1803,7 +1809,7 @@
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.starred || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.starred || viewItem == datanest.connection.connected || viewItem == datanest.connection.connected.starred || viewItem == datanest.projectConnection.connected || viewItem == datanest.projectConnection.connected.starred || viewItem == datanest.redisConnection || viewItem == datanest.redisConnection.starred || viewItem == datanest.mongoConnection || viewItem == datanest.mongoConnection.starred || viewItem == datanest.elasticConnection || viewItem == datanest.elasticConnection.starred || viewItem == datanest.projectRedisConnection || viewItem == datanest.projectRedisConnection.starred || viewItem == datanest.projectMongoConnection || viewItem == datanest.projectMongoConnection.starred || viewItem == datanest.projectElasticConnection || viewItem == datanest.projectElasticConnection.starred || viewItem == datanest.redisConnection.connected || viewItem == datanest.redisConnection.connected.starred || viewItem == datanest.mongoConnection.connected || viewItem == datanest.mongoConnection.connected.starred || viewItem == datanest.elasticConnection.connected || viewItem == datanest.elasticConnection.connected.starred || viewItem == datanest.projectRedisConnection.connected || viewItem == datanest.projectRedisConnection.connected.starred || viewItem == datanest.projectMongoConnection.connected || viewItem == datanest.projectMongoConnection.connected.starred || viewItem == datanest.projectElasticConnection.connected || viewItem == datanest.projectElasticConnection.connected.starred || viewItem == datanest.etcdConnection || viewItem == datanest.zookeeperConnection || viewItem == datanest.kafkaConnection || viewItem == datanest.rabbitConnection || viewItem == datanest.etcdConnection.starred || viewItem == datanest.zookeeperConnection.starred || viewItem == datanest.kafkaConnection.starred || viewItem == datanest.rabbitConnection.starred || viewItem == datanest.projectEtcdConnection || viewItem == datanest.projectZookeeperConnection || viewItem == datanest.projectKafkaConnection || viewItem == datanest.projectRabbitConnection || viewItem == datanest.projectEtcdConnection.starred || viewItem == datanest.projectZookeeperConnection.starred || viewItem == datanest.projectKafkaConnection.starred || viewItem == datanest.projectRabbitConnection.starred || viewItem == datanest.etcdConnection.connected || viewItem == datanest.zookeeperConnection.connected || viewItem == datanest.kafkaConnection.connected || viewItem == datanest.rabbitConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.zookeeperConnection.connected.starred || viewItem == datanest.kafkaConnection.connected.starred || viewItem == datanest.rabbitConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectZookeeperConnection.connected || viewItem == datanest.projectKafkaConnection.connected || viewItem == datanest.projectRabbitConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred || viewItem == datanest.projectZookeeperConnection.connected.starred || viewItem == datanest.projectKafkaConnection.connected.starred || viewItem == datanest.projectRabbitConnection.connected.starred || viewItem == datanest.etcdFolder || viewItem == datanest.zookeeperNode || viewItem == datanest.kafkaTopics || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred || viewItem == datanest.kafkaGroups || viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred)",
+          "when": "view == datanest.connections && (viewItem == datanest.connection || viewItem == datanest.connection.starred || viewItem == datanest.projectConnection || viewItem == datanest.projectConnection.starred || viewItem == datanest.connection.connected || viewItem == datanest.connection.connected.starred || viewItem == datanest.projectConnection.connected || viewItem == datanest.projectConnection.connected.starred || viewItem == datanest.redisConnection || viewItem == datanest.redisConnection.starred || viewItem == datanest.mongoConnection || viewItem == datanest.mongoConnection.starred || viewItem == datanest.elasticConnection || viewItem == datanest.elasticConnection.starred || viewItem == datanest.projectRedisConnection || viewItem == datanest.projectRedisConnection.starred || viewItem == datanest.projectMongoConnection || viewItem == datanest.projectMongoConnection.starred || viewItem == datanest.projectElasticConnection || viewItem == datanest.projectElasticConnection.starred || viewItem == datanest.redisConnection.connected || viewItem == datanest.redisConnection.connected.starred || viewItem == datanest.mongoConnection.connected || viewItem == datanest.mongoConnection.connected.starred || viewItem == datanest.elasticConnection.connected || viewItem == datanest.elasticConnection.connected.starred || viewItem == datanest.projectRedisConnection.connected || viewItem == datanest.projectRedisConnection.connected.starred || viewItem == datanest.projectMongoConnection.connected || viewItem == datanest.projectMongoConnection.connected.starred || viewItem == datanest.projectElasticConnection.connected || viewItem == datanest.projectElasticConnection.connected.starred || viewItem == datanest.etcdConnection || viewItem == datanest.zookeeperConnection || viewItem == datanest.kafkaConnection || viewItem == datanest.rabbitConnection || viewItem == datanest.etcdConnection.starred || viewItem == datanest.zookeeperConnection.starred || viewItem == datanest.kafkaConnection.starred || viewItem == datanest.rabbitConnection.starred || viewItem == datanest.projectEtcdConnection || viewItem == datanest.projectZookeeperConnection || viewItem == datanest.projectKafkaConnection || viewItem == datanest.projectRabbitConnection || viewItem == datanest.projectEtcdConnection.starred || viewItem == datanest.projectZookeeperConnection.starred || viewItem == datanest.projectKafkaConnection.starred || viewItem == datanest.projectRabbitConnection.starred || viewItem == datanest.etcdConnection.connected || viewItem == datanest.zookeeperConnection.connected || viewItem == datanest.kafkaConnection.connected || viewItem == datanest.rabbitConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.zookeeperConnection.connected.starred || viewItem == datanest.kafkaConnection.connected.starred || viewItem == datanest.rabbitConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectZookeeperConnection.connected || viewItem == datanest.projectKafkaConnection.connected || viewItem == datanest.projectRabbitConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred || viewItem == datanest.projectZookeeperConnection.connected.starred || viewItem == datanest.projectKafkaConnection.connected.starred || viewItem == datanest.projectRabbitConnection.connected.starred || viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred || viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred || viewItem == datanest.kafkaTopics || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred || viewItem == datanest.kafkaGroups || viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred)",
           "group": "1_state@2"
         },
         {
@@ -1823,12 +1829,12 @@
         },
         {
           "command": "datanest.tree.copyName",
-          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.database.starred || viewItem == datanest.schema || viewItem == datanest.schema.starred || viewItem == datanest.table || viewItem == datanest.table.starred || viewItem == datanest.view || viewItem == datanest.view.starred || viewItem == datanest.column || viewItem == datanest.column.movable || viewItem == datanest.savedQuery || viewItem == datanest.account || viewItem == datanest.role || viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.sequence || viewItem == datanest.event || viewItem == datanest.index || viewItem == datanest.foreignKey || viewItem == datanest.redisFolder || viewItem == datanest.redisKey || viewItem == datanest.mongoDatabase || viewItem == datanest.mongoDatabase.starred || viewItem == datanest.mongoCollection || viewItem == datanest.mongoCollection.starred || viewItem == datanest.mongoView || viewItem == datanest.mongoView.starred || viewItem == datanest.mongoIndex || viewItem == datanest.mongoIdIndex || viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred || viewItem == datanest.elasticField || viewItem == datanest.etcdKey || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred || viewItem == datanest.rabbitVhost || viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange || viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred || viewItem == datanest.etcdFolder || viewItem == datanest.zookeeperNode)",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.database.starred || viewItem == datanest.schema || viewItem == datanest.schema.starred || viewItem == datanest.table || viewItem == datanest.table.starred || viewItem == datanest.view || viewItem == datanest.view.starred || viewItem == datanest.column || viewItem == datanest.column.movable || viewItem == datanest.savedQuery || viewItem == datanest.account || viewItem == datanest.role || viewItem == datanest.function || viewItem == datanest.procedure || viewItem == datanest.trigger || viewItem == datanest.sequence || viewItem == datanest.event || viewItem == datanest.index || viewItem == datanest.foreignKey || viewItem == datanest.redisFolder || viewItem == datanest.redisKey || viewItem == datanest.mongoDatabase || viewItem == datanest.mongoDatabase.starred || viewItem == datanest.mongoCollection || viewItem == datanest.mongoCollection.starred || viewItem == datanest.mongoView || viewItem == datanest.mongoView.starred || viewItem == datanest.mongoIndex || viewItem == datanest.mongoIdIndex || viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred || viewItem == datanest.elasticField || viewItem == datanest.etcdKey || viewItem == datanest.etcdKey.starred || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred || viewItem == datanest.rabbitVhost || viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange || viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred || viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred || viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred)",
           "group": "5_copy@1"
         },
         {
           "command": "datanest.tree.refresh",
-          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.database.starred || viewItem == datanest.schema || viewItem == datanest.schema.starred || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.table.starred || viewItem == datanest.view || viewItem == datanest.view.starred || viewItem == datanest.column || viewItem == datanest.column.movable || viewItem == datanest.security || viewItem == datanest.securityGroup || viewItem == datanest.queryFolder || viewItem == datanest.folder || viewItem == datanest.redisDatabase || viewItem == datanest.redisDatabase.starred || viewItem == datanest.redisFolder || viewItem == datanest.mongoDatabase || viewItem == datanest.mongoDatabase.starred || viewItem == datanest.mongoCollection || viewItem == datanest.mongoCollection.starred || viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred || viewItem == datanest.etcdFolder || viewItem == datanest.zookeeperNode || viewItem == datanest.kafkaTopics || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred || viewItem == datanest.rabbitVhost || viewItem == datanest.rabbitQueues || viewItem == datanest.rabbitExchanges || viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange || viewItem == datanest.kafkaGroups || viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred)",
+          "when": "view == datanest.connections && (viewItem == datanest.database || viewItem == datanest.database.starred || viewItem == datanest.schema || viewItem == datanest.schema.starred || viewItem == datanest.group || viewItem == datanest.group.tables || viewItem == datanest.group.views || viewItem == datanest.table || viewItem == datanest.table.starred || viewItem == datanest.view || viewItem == datanest.view.starred || viewItem == datanest.column || viewItem == datanest.column.movable || viewItem == datanest.security || viewItem == datanest.securityGroup || viewItem == datanest.queryFolder || viewItem == datanest.folder || viewItem == datanest.redisDatabase || viewItem == datanest.redisDatabase.starred || viewItem == datanest.redisFolder || viewItem == datanest.mongoDatabase || viewItem == datanest.mongoDatabase.starred || viewItem == datanest.mongoCollection || viewItem == datanest.mongoCollection.starred || viewItem == datanest.elasticIndex || viewItem == datanest.elasticIndex.starred || viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred || viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred || viewItem == datanest.kafkaTopics || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred || viewItem == datanest.rabbitVhost || viewItem == datanest.rabbitQueues || viewItem == datanest.rabbitExchanges || viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange || viewItem == datanest.kafkaGroups || viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred)",
           "group": "1_state@1"
         },
         {
@@ -2038,27 +2044,32 @@
         },
         {
           "command": "datanest.etcd.findKey",
-          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder)",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred)",
           "group": "inline@0"
         },
         {
           "command": "datanest.etcd.findKey",
-          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred || viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
           "group": "1_keys@1"
         },
         {
+          "command": "datanest.etcd.manageAccess",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
+          "group": "1_keys@9"
+        },
+        {
           "command": "datanest.etcd.newKey",
-          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder)",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred)",
           "group": "inline@2"
         },
         {
           "command": "datanest.etcd.newKey",
-          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred || viewItem == datanest.etcdConnection.connected || viewItem == datanest.etcdConnection.connected.starred || viewItem == datanest.projectEtcdConnection.connected || viewItem == datanest.projectEtcdConnection.connected.starred)",
           "group": "2_edit@1"
         },
         {
           "command": "datanest.etcd.openKey",
-          "when": "view == datanest.connections && (viewItem == datanest.etcdKey)",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdKey || viewItem == datanest.etcdKey.starred)",
           "group": "0_open@1"
         },
         {
@@ -2068,32 +2079,32 @@
         },
         {
           "command": "datanest.etcd.deleteKeys",
-          "when": "view == datanest.connections && (viewItem == datanest.etcdKey || viewItem == datanest.etcdFolder)",
+          "when": "view == datanest.connections && (viewItem == datanest.etcdKey || viewItem == datanest.etcdKey.starred || viewItem == datanest.etcdFolder || viewItem == datanest.etcdFolder.starred)",
           "group": "8_destroy@1"
         },
         {
           "command": "datanest.zookeeper.goToNode",
-          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode)",
+          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred)",
           "group": "inline@0"
         },
         {
           "command": "datanest.zookeeper.goToNode",
-          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperConnection.connected || viewItem == datanest.zookeeperConnection.connected.starred || viewItem == datanest.projectZookeeperConnection.connected || viewItem == datanest.projectZookeeperConnection.connected.starred)",
+          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred || viewItem == datanest.zookeeperConnection.connected || viewItem == datanest.zookeeperConnection.connected.starred || viewItem == datanest.projectZookeeperConnection.connected || viewItem == datanest.projectZookeeperConnection.connected.starred)",
           "group": "1_keys@1"
         },
         {
           "command": "datanest.zookeeper.newNode",
-          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode)",
+          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred)",
           "group": "inline@2"
         },
         {
           "command": "datanest.zookeeper.newNode",
-          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperConnection.connected || viewItem == datanest.zookeeperConnection.connected.starred || viewItem == datanest.projectZookeeperConnection.connected || viewItem == datanest.projectZookeeperConnection.connected.starred)",
+          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred || viewItem == datanest.zookeeperConnection.connected || viewItem == datanest.zookeeperConnection.connected.starred || viewItem == datanest.projectZookeeperConnection.connected || viewItem == datanest.projectZookeeperConnection.connected.starred)",
           "group": "2_edit@1"
         },
         {
           "command": "datanest.zookeeper.openNode",
-          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode)",
+          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred)",
           "group": "0_open@1"
         },
         {
@@ -2103,7 +2114,7 @@
         },
         {
           "command": "datanest.zookeeper.deleteNodes",
-          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode)",
+          "when": "view == datanest.connections && (viewItem == datanest.zookeeperNode || viewItem == datanest.zookeeperNode.starred)",
           "group": "8_destroy@1"
         },
         {
@@ -2298,7 +2309,7 @@
         },
         {
           "command": "datanest.favorites.add",
-          "when": "view == datanest.connections && viewItem =~ /^(datanest\\.connection|datanest\\.connection\\.connected|datanest\\.connection\\.disabled|datanest\\.projectConnection|datanest\\.projectConnection\\.connected|datanest\\.redisConnection|datanest\\.redisConnection\\.connected|datanest\\.projectRedisConnection|datanest\\.projectRedisConnection\\.connected|datanest\\.mongoConnection|datanest\\.mongoConnection\\.connected|datanest\\.projectMongoConnection|datanest\\.projectMongoConnection\\.connected|datanest\\.elasticConnection|datanest\\.elasticConnection\\.connected|datanest\\.projectElasticConnection|datanest\\.projectElasticConnection\\.connected|datanest\\.kafkaConnection|datanest\\.kafkaConnection\\.connected|datanest\\.projectKafkaConnection|datanest\\.projectKafkaConnection\\.connected|datanest\\.database|datanest\\.schema|datanest\\.table|datanest\\.view|datanest\\.redisDatabase|datanest\\.mongoDatabase|datanest\\.mongoCollection|datanest\\.mongoView|datanest\\.elasticIndex|datanest\\.kafkaTopic|datanest\\.kafkaGroup)$/",
+          "when": "view == datanest.connections && viewItem =~ /^(datanest\\.connection|datanest\\.connection\\.connected|datanest\\.connection\\.disabled|datanest\\.projectConnection|datanest\\.projectConnection\\.connected|datanest\\.redisConnection|datanest\\.redisConnection\\.connected|datanest\\.projectRedisConnection|datanest\\.projectRedisConnection\\.connected|datanest\\.mongoConnection|datanest\\.mongoConnection\\.connected|datanest\\.projectMongoConnection|datanest\\.projectMongoConnection\\.connected|datanest\\.elasticConnection|datanest\\.elasticConnection\\.connected|datanest\\.projectElasticConnection|datanest\\.projectElasticConnection\\.connected|datanest\\.kafkaConnection|datanest\\.kafkaConnection\\.connected|datanest\\.projectKafkaConnection|datanest\\.projectKafkaConnection\\.connected|datanest\\.database|datanest\\.schema|datanest\\.table|datanest\\.view|datanest\\.redisDatabase|datanest\\.mongoDatabase|datanest\\.mongoCollection|datanest\\.mongoView|datanest\\.elasticIndex|datanest\\.kafkaTopic|datanest\\.kafkaGroup|datanest\\.etcdConnection|datanest\\.etcdConnection\\.connected|datanest\\.projectEtcdConnection|datanest\\.projectEtcdConnection\\.connected|datanest\\.zookeeperConnection|datanest\\.zookeeperConnection\\.connected|datanest\\.projectZookeeperConnection|datanest\\.projectZookeeperConnection\\.connected|datanest\\.etcdFolder|datanest\\.etcdKey|datanest\\.zookeeperNode)$/",
           "group": "inline@9"
         },
         {
@@ -2308,7 +2319,7 @@
         },
         {
           "command": "datanest.favorites.add",
-          "when": "view == datanest.connections && viewItem =~ /^(datanest\\.connection|datanest\\.connection\\.connected|datanest\\.connection\\.disabled|datanest\\.projectConnection|datanest\\.projectConnection\\.connected|datanest\\.redisConnection|datanest\\.redisConnection\\.connected|datanest\\.projectRedisConnection|datanest\\.projectRedisConnection\\.connected|datanest\\.mongoConnection|datanest\\.mongoConnection\\.connected|datanest\\.projectMongoConnection|datanest\\.projectMongoConnection\\.connected|datanest\\.elasticConnection|datanest\\.elasticConnection\\.connected|datanest\\.projectElasticConnection|datanest\\.projectElasticConnection\\.connected|datanest\\.kafkaConnection|datanest\\.kafkaConnection\\.connected|datanest\\.projectKafkaConnection|datanest\\.projectKafkaConnection\\.connected|datanest\\.database|datanest\\.schema|datanest\\.table|datanest\\.view|datanest\\.redisDatabase|datanest\\.mongoDatabase|datanest\\.mongoCollection|datanest\\.mongoView|datanest\\.elasticIndex|datanest\\.kafkaTopic|datanest\\.kafkaGroup)$/",
+          "when": "view == datanest.connections && viewItem =~ /^(datanest\\.connection|datanest\\.connection\\.connected|datanest\\.connection\\.disabled|datanest\\.projectConnection|datanest\\.projectConnection\\.connected|datanest\\.redisConnection|datanest\\.redisConnection\\.connected|datanest\\.projectRedisConnection|datanest\\.projectRedisConnection\\.connected|datanest\\.mongoConnection|datanest\\.mongoConnection\\.connected|datanest\\.projectMongoConnection|datanest\\.projectMongoConnection\\.connected|datanest\\.elasticConnection|datanest\\.elasticConnection\\.connected|datanest\\.projectElasticConnection|datanest\\.projectElasticConnection\\.connected|datanest\\.kafkaConnection|datanest\\.kafkaConnection\\.connected|datanest\\.projectKafkaConnection|datanest\\.projectKafkaConnection\\.connected|datanest\\.database|datanest\\.schema|datanest\\.table|datanest\\.view|datanest\\.redisDatabase|datanest\\.mongoDatabase|datanest\\.mongoCollection|datanest\\.mongoView|datanest\\.elasticIndex|datanest\\.kafkaTopic|datanest\\.kafkaGroup|datanest\\.etcdConnection|datanest\\.etcdConnection\\.connected|datanest\\.projectEtcdConnection|datanest\\.projectEtcdConnection\\.connected|datanest\\.zookeeperConnection|datanest\\.zookeeperConnection\\.connected|datanest\\.projectZookeeperConnection|datanest\\.projectZookeeperConnection\\.connected|datanest\\.etcdFolder|datanest\\.etcdKey|datanest\\.zookeeperNode)$/",
           "group": "0_favorite@1"
         },
         {

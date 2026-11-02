@@ -127,6 +127,7 @@ function managerWith(sql: (statement: string) => ReturnType<typeof records>, dia
     acquireEtcd: vi.fn(),
     acquireKafka: vi.fn(),
     acquireRabbit: vi.fn(),
+    acquireZookeeper: vi.fn(),
   };
   return { manager: manager as never, acquire, executed };
 }
@@ -206,6 +207,27 @@ describe('readServerVersion', () => {
     typed.acquireRabbit.mockResolvedValue({ server: { version: '3.13.7' } });
     expect(await readServerVersion(manager, 'c1', 'rabbitmq')).toBe('3.13.7');
     expect(typed.acquireRabbit).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
+  });
+});
+
+describe('the version of a ZooKeeper server (V13.27)', () => {
+  const sessionSaying = (version: string | undefined) => ({
+    serverVersion: vi.fn().mockResolvedValue(version),
+  });
+
+  it('is read with the srvr question of the session and shortened', async () => {
+    const { manager } = managerWith(() => records([]));
+    const typed = manager as unknown as { acquireZookeeper: ReturnType<typeof vi.fn> };
+    typed.acquireZookeeper.mockResolvedValue(sessionSaying('3.9.3-c26634f'));
+    expect(await readServerVersion(manager, 'c1', 'zookeeper')).toBe('3.9.3');
+    expect(typed.acquireZookeeper).toHaveBeenCalledWith('tree:c1', { connectionId: 'c1' });
+  });
+
+  it('is left out when the server does not say', async () => {
+    const { manager } = managerWith(() => records([]));
+    const typed = manager as unknown as { acquireZookeeper: ReturnType<typeof vi.fn> };
+    typed.acquireZookeeper.mockResolvedValue(sessionSaying(undefined));
+    expect(await readServerVersion(manager, 'c1', 'zookeeper')).toBeUndefined();
   });
 });
 

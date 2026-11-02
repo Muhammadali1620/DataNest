@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   etcdKeyProtocol,
@@ -62,6 +62,7 @@ async function open(
   host.handle('refresh', reply('refresh', {}));
   host.handle('save', reply('save', { saved: true }));
   host.handle('attachLease', reply('attachLease', {}));
+  host.handle('keepAlive', reply('keepAlive', {}));
   host.handle('detachLease', reply('detachLease', {}));
   host.handle('revokeLease', reply('revokeLease', { revoked: true }));
   host.handle('deleteKey', reply('deleteKey', { deleted: true }));
@@ -352,5 +353,45 @@ describe('etcd key page: leases', () => {
     await open(state({ readOnly: true, lease: { id: '5', ttl: 300, grantedTtl: 300 } }));
     expect(screen.queryByRole('button', { name: 'Detach' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull();
+  });
+});
+
+describe('etcd key page: keeping the lease alive (V13.27)', () => {
+  const lease = { id: '7', ttl: 90, grantedTtl: 90 };
+
+  it('asks the host to start renewing, and to stop once it does', async () => {
+    const opened = await open(state({ lease }));
+    const button = screen.getByRole('button', { name: 'Keep alive' });
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(button);
+    await waitFor(() => {
+      expect(sent(opened, 'keepAlive')).toEqual([{ on: true }]);
+    });
+    opened.host.emit('state', state({ lease, keepingAlive: true }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Keep alive' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep alive' }));
+    await waitFor(() => {
+      expect(sent(opened, 'keepAlive')).toEqual([{ on: true }, { on: false }]);
+    });
+  });
+
+  it('is not offered without a lease, for an ended lease, or on a read-only connection', async () => {
+    await open(state());
+    expect(screen.queryByRole('button', { name: 'Keep alive' })).toBeNull();
+    cleanup();
+    await open(state({ lease: { id: '7', ttl: -1, grantedTtl: 0 } }));
+    expect(screen.queryByRole('button', { name: 'Keep alive' })).toBeNull();
+    cleanup();
+    await open(state({ lease, readOnly: true }));
+    expect(screen.queryByRole('button', { name: 'Keep alive' })).toBeNull();
+  });
+
+  it('speaks Russian', async () => {
+    await open(state({ lease }), 'ru');
+    expect(screen.getByRole('button', { name: 'Продлевать' })).toBeTruthy();
   });
 });

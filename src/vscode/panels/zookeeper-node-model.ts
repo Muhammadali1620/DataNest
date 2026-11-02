@@ -3,6 +3,7 @@
 // again — the server is the source of truth, and other clients change znodes too. Every
 // save checks the version the page read, so it never overwrites a change it has not seen.
 
+import { createHash } from 'node:crypto';
 import { DbError } from '../../core/errors';
 import { msg } from '../../core/user-message';
 import {
@@ -12,7 +13,7 @@ import {
   type ZookeeperCaller,
 } from '../../services/zookeeper/zk-ops';
 import { MAX_STRING_BYTES } from '../../shared/protocols/redis-key';
-import type { ZookeeperNodeState } from '../../shared/protocols/zookeeper-node';
+import type { ZnodeAclEntry, ZookeeperNodeState } from '../../shared/protocols/zookeeper-node';
 import { redisValueBytes, type RedisValue, redisValueOf } from '../../shared/redis-value';
 import {
   joinPath,
@@ -22,6 +23,7 @@ import {
   ZK_NODE_EXISTS,
 } from '../../shared/zk-path';
 import type { ZookeeperCreateMode } from '../../drivers/zookeeper-driver';
+import { aclProblem, isDigestHash } from '../../shared/zk-acl';
 
 export interface ZookeeperNodeModelDeps {
   readonly path: string;
@@ -52,6 +54,7 @@ const EMPTY_STAT = {
 export class ZookeeperNodeModel {
   private details: ZnodeDetails | undefined;
   private conflict = false;
+  private aclConflict = false;
 
   constructor(private readonly deps: ZookeeperNodeModelDeps) {}
 
@@ -88,6 +91,7 @@ export class ZookeeperNodeModel {
       children: [...(details?.children ?? [])],
       moreChildren: details?.moreChildren ?? false,
       ...(this.conflict ? { conflict: true } : {}),
+      ...(this.aclConflict ? { aclConflict: true } : {}),
     };
   }
 
@@ -95,6 +99,7 @@ export class ZookeeperNodeModel {
   async refresh(): Promise<ZookeeperNodeState> {
     this.details = await readNode(await this.deps.session(), this.deps.path);
     this.conflict = false;
+    this.aclConflict = false;
     return this.state();
   }
 
@@ -138,6 +143,59 @@ export class ZookeeperNodeModel {
     return { saved: true, state: await this.refresh() };
   }
 
+  /**
+   * Replaces the ACL (V13.27). `aversion` is the version of the ACL the page read: an ACL
+   * that changed since is refused (`saved: false`, the new ACL is read). A digest entry
+   * typed `user:password` is stored as `user:hash`, the form the server keeps.
+   */
+  async saveAcl(
+    acl: readonly ZnodeAclEntry[],
+    aversion: number,
+  ): Promise<{ readonly saved: boolean; readonly state: ZookeeperNodeState }> {
+    this.requireWritable();
+    if (acl.length === 0) {
+      throw new DbError('syntax', msg('An ACL needs at least one entry'));
+    }
+    // A user without the admin permission is shown `user:x` for every digest entry: the
+    // server hides the hash. Saving that back would set the password "x", so it is refused.
+    const hidden = new Set(
+      (this.details?.acl ?? [])
+        .filter((entry) => entry.scheme === 'digest' && /^[^:]+:x$/u.test(entry.id))
+        .map((entry) => entry.id),
+    );
+    for (const entry of acl) {
+      if (entry.scheme === 'digest' && hidden.has(entry.id)) {
+        throw new DbError(
+          'syntax',
+          msg(
+            'The server hides the password hash of "{0}" from users without the admin permission: type user:password again to change it, or remove the entry',
+            entry.id,
+          ),
+        );
+      }
+    }
+    const entries = acl.map(hashedDigest);
+    for (const entry of entries) {
+      const problem = aclProblem(entry);
+      if (problem !== undefined) {
+        throw new DbError('syntax', aclProblemText(problem, entry));
+      }
+    }
+    const session = await this.deps.session();
+    try {
+      await session.setAcl(this.deps.path, entries, aversion);
+    } catch (error) {
+      if (isCode(error, ZK_BAD_VERSION)) {
+        this.details = await readNode(session, this.deps.path);
+        this.conflict = false;
+        this.aclConflict = true;
+        return { saved: false, state: this.state() };
+      }
+      throw error;
+    }
+    return { saved: true, state: await this.refresh() };
+  }
+
   /** Creates a child with empty data; returns its path (a sequential one has its number). */
   async createChild(name: string, mode: ZookeeperCreateMode): Promise<string> {
     this.requireWritable();
@@ -165,6 +223,45 @@ export class ZookeeperNodeModel {
         msg('The connection is read-only: nothing may change'),
       );
     }
+  }
+}
+
+/** A digest entry typed with a plain password gets the hash the server stores. */
+function hashedDigest(entry: ZnodeAclEntry): ZnodeAclEntry {
+  if (entry.scheme !== 'digest') {
+    return entry;
+  }
+  const colon = entry.id.indexOf(':');
+  if (colon <= 0 || colon === entry.id.length - 1) {
+    return entry;
+  }
+  const user = entry.id.slice(0, colon);
+  const password = entry.id.slice(colon + 1);
+  if (isDigestHash(password)) {
+    return entry;
+  }
+  const hash = createHash('sha1').update(`${user}:${password}`).digest('base64');
+  return { ...entry, id: `${user}:${hash}` };
+}
+
+/** The words for an ACL entry the server would refuse. */
+export function aclProblemText(
+  problem: NonNullable<ReturnType<typeof aclProblem>>,
+  entry: ZnodeAclEntry,
+): string {
+  switch (problem) {
+    case 'scheme':
+      return msg('"{0}" is not an ACL scheme the page can write', entry.scheme);
+    case 'perms':
+      return msg('Every ACL entry needs at least one permission');
+    case 'world-id':
+      return msg('The world scheme has one id: anyone');
+    case 'auth-id':
+      return msg('The auth scheme takes no id: it stands for whoever is signed in');
+    case 'digest-id':
+      return msg('A digest id is user:password (or user:hash)');
+    case 'id-empty':
+      return msg('The {0} scheme needs an id', entry.scheme);
   }
 }
 

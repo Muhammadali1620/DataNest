@@ -11,6 +11,7 @@ import {
   type ZookeeperNodeState,
 } from '../../shared/protocols/zookeeper-node';
 import { RpcPeer } from '../../shared/rpc';
+import { aclLocksOut } from '../../shared/zk-acl';
 import { joinPath, nameOf } from '../../shared/zk-path';
 import type { ZookeeperNodeModel } from './zookeeper-node-model';
 import { createWebviewAppPanel, webviewTransport } from './webview-panel';
@@ -108,6 +109,21 @@ export class ZookeeperNodePanel implements vscode.Disposable {
       }
       return { saved: result.saved };
     });
+    this.rpc.handle('saveAcl', async ({ acl, aversion }) => {
+      if (this.deps.policy.readOnly) {
+        // The model refuses with the reason; asking first would be pointless.
+        await model.saveAcl(acl, aversion);
+      }
+      if (aclLocksOut(acl) && !(await this.confirmLockout())) {
+        return { saved: false };
+      }
+      if (!(await this.allowed(vscode.l10n.t('Change')))) {
+        return { saved: false };
+      }
+      const result = await model.saveAcl(acl, aversion);
+      this.push(result.state);
+      return { saved: result.saved };
+    });
     this.rpc.handle('createChild', async ({ name, mode }) => {
       if (!(await this.allowed(vscode.l10n.t('Create')))) {
         return { path: joinPath(model.currentPath, name) };
@@ -187,6 +203,23 @@ export class ZookeeperNodePanel implements vscode.Disposable {
       action,
     );
     return answer === action;
+  }
+
+  /** An ACL without the admin bit cannot be changed again by anyone but a super user. */
+  private async confirmLockout(): Promise<boolean> {
+    const keep = vscode.l10n.t('Save anyway');
+    const answer = await vscode.window.showWarningMessage(
+      vscode.l10n.t('No entry of this ACL gives the admin permission'),
+      {
+        modal: true,
+        detail: vscode.l10n.t(
+          'Once it is saved, nobody but a ZooKeeper super user can change the ACL of "{0}" again.',
+          this.deps.model.currentPath,
+        ),
+      },
+      keep,
+    );
+    return answer === keep;
   }
 
   private async deleteNode(): Promise<boolean> {

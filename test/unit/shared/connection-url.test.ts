@@ -562,3 +562,67 @@ describe('kafka:// URLs (V13.29)', () => {
     expect(input('kafka://u:100%@h')?.password).toBe('100%');
   });
 });
+
+describe('zookeeper:// URLs (V13.27)', () => {
+  it('reads a list of servers, the user, the password and the chroot', () => {
+    const value = ok(
+      parseConnectionUrl('zookeeper://alice:p%40ss@zk1:2181,zk2:2182/app/db?sessionTimeout=30'),
+    );
+    expect(value.input).toMatchObject({
+      driver: 'zookeeper',
+      host: 'zk1:2181,zk2:2182',
+      user: 'alice',
+      database: '/app/db',
+      options: { sessionTimeout: 30 },
+      name: 'zk1:2181,zk2:2182',
+    });
+    expect(value.input.port).toBeUndefined();
+    expect(value.password).toBe('p@ss');
+  });
+
+  it('keeps the port of a lone server apart, and has no chroot without a path', () => {
+    const value = ok(parseConnectionUrl('zookeeper://zk.local:2182'));
+    expect(value.input).toMatchObject({ host: 'zk.local', port: 2182 });
+    expect(value.input.database).toBeUndefined();
+    expect(value.input.user).toBeUndefined();
+    expect(value.password).toBeUndefined();
+    expect(ok(parseConnectionUrl('zookeeper://zk.local/')).input.database).toBeUndefined();
+  });
+
+  it('takes a server without a port and an IPv6 address as they are', () => {
+    expect(ok(parseConnectionUrl('zookeeper://zk.local')).input).toMatchObject({
+      host: 'zk.local',
+    });
+    expect(ok(parseConnectionUrl('zookeeper://[::1]:2181')).input.host).toBe('[::1]:2181');
+  });
+
+  it('answers to its short and TLS schemes', () => {
+    expect(urlDriver('zk://h')).toBe('zookeeper');
+    expect(urlDriver('zookeepers://h')).toBe('zookeeper');
+    expect(ok(parseConnectionUrl('zookeepers://h')).input.ssl).toEqual({ mode: 'verify-full' });
+    expect(ok(parseConnectionUrl('zookeeper://h?ssl=true')).input.ssl).toEqual({
+      mode: 'verify-full',
+    });
+    expect(ok(parseConnectionUrl('zookeeper://h?ssl=0')).input.ssl).toBeUndefined();
+  });
+
+  it('ignores a session timeout that is not a whole number of seconds in range', () => {
+    for (const value of ['1', '601', 'x', '2.5', '']) {
+      expect(
+        ok(parseConnectionUrl(`zookeeper://h?sessionTimeout=${value}`)).input.options,
+        value,
+      ).toBeUndefined();
+    }
+  });
+
+  it('wants a server', () => {
+    expect(parseConnectionUrl('zookeeper://')).toEqual({ ok: false, problem: 'no-host' });
+    expect(parseConnectionUrl('zookeeper://u:p@/app')).toEqual({ ok: false, problem: 'no-host' });
+  });
+
+  it('also reads a user without a password, and a wrongly escaped path', () => {
+    const value = ok(parseConnectionUrl('zookeeper://bob@h/x%zz'));
+    expect(value.input).toMatchObject({ user: 'bob', database: '/x%zz' });
+    expect(value.password).toBeUndefined();
+  });
+});

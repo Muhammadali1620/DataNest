@@ -247,6 +247,7 @@
   "commands.etcd.loadMoreKeys.title": "Load More etcd Keys",
   "commands.etcd.openKey.title": "Open etcd Key",
   "commands.etcd.findKey.title": "Find etcd Key by Prefix…",
+  "commands.etcd.manageAccess.title": "etcd Users and Roles…",
   "commands.etcd.newKey.title": "New etcd Key…",
   "commands.etcd.deleteKeys.title": "Delete etcd Keys",
   "configuration.etcd.keysPerLoad.description": "How many keys and folders the tree reads from an etcd folder at a time. A folder with more children shows \"Load more keys…\".",

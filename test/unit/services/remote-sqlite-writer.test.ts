@@ -226,6 +226,18 @@ describe.skipIf(!HAS_PYTHON)('RemoteSqliteWriter with a real SQLite', () => {
       expect(rowsOf('SELECT name FROM t')).toEqual([{ name: 'x' }]);
     });
 
+    it('reads its own open transaction, which nobody else can see', async () => {
+      const writer = await open();
+      await writer.run('BEGIN');
+      await writer.run("INSERT INTO t (id, name) VALUES (1, 'x'), (2, 'y')");
+      const read = await writer.run('SELECT name FROM t ORDER BY id');
+      expect(read.rows).toEqual([['x'], ['y']]);
+      expect(read.columns).toEqual([{ name: 'name' }]);
+      expect(read.inTransaction).toBe(true);
+      expect(rowsOf('SELECT name FROM t')).toEqual([]);
+      await writer.run('ROLLBACK');
+    });
+
     it('takes everything back on ROLLBACK', async () => {
       const writer = await open();
       await writer.run('BEGIN');

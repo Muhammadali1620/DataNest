@@ -88,13 +88,14 @@ class FakeExecs implements ExecOpener {
         listeners.push(listener);
       },
       write: (data) => {
-        const request = JSON.parse(data) as Record<string, unknown>;
-        this.requests.push(request);
         if (this.dieWith !== undefined) {
+          // Dies whatever it is sent: the Python helper and the sqlite3 program alike.
           say(this.dieWith.stderr, true);
           finish({ reason: 'exit', code: this.dieWith.code });
           return;
         }
+        const request = JSON.parse(data) as Record<string, unknown>;
+        this.requests.push(request);
         if (request.op === 'exec') {
           const reply = this.answer?.(String(request.sql)) ?? { changes: 1, tx: false };
           say(`${JSON.stringify({ id: request.id, ok: true, ...reply })}\n`);

@@ -6,8 +6,8 @@
 // wrote in the meantime is overwritten.
 //
 // The helper keeps one connection to the file for the life of the session, so a transaction
-// spans statements. Inside one, reads still come from the copy, which does not show the
-// changes of the open transaction until it ends.
+// spans statements. While one is open, reads go to the server too (V13.36): the copy does not
+// hold the changes of the transaction, the connection of the helper does.
 
 import { DbError } from '../core/errors';
 import { msg } from '../core/user-message';
@@ -22,7 +22,7 @@ import type {
   TransactionState,
 } from '../drivers/driver';
 import type { SnapshotLease } from './remote-snapshots';
-import type { RemoteSqliteWriter } from './remote-sqlite-writer';
+import type { SqliteWriter } from './remote-sqlite-writer';
 
 export interface RemoteSqliteDeps {
   /** Opens the SQLite driver's session over a copy of the file. */
@@ -34,7 +34,7 @@ export interface RemoteSqliteDeps {
   /** Declares the copy out of date: the file on the server changed. */
   invalidate(): void;
   /** Starts the helper on the server and opens the file for writing there. */
-  openWriter(): Promise<RemoteSqliteWriter>;
+  openWriter(): Promise<SqliteWriter>;
 }
 
 /** True for a statement that must run on the server: it changes the file or the transaction. */
@@ -44,14 +44,21 @@ export function runsOnServer(sql: string): boolean {
   );
 }
 
+/** The most rows one statement brings back from the server (the helper's own limit). */
+export const SERVER_ROW_CAP = 5000;
+
+function cutNotice(): string {
+  return msg('At most {0} rows are brought back from the server', SERVER_ROW_CAP);
+}
+
 export class RemoteWritableSession implements Session {
   readonly metadata: MetadataReader;
   private local: Session;
   private lease: SnapshotLease;
   /** The generation of the copy `local` was opened on. */
   private generation: number;
-  private writer: RemoteSqliteWriter | undefined;
-  private opening: Promise<RemoteSqliteWriter> | undefined;
+  private writer: SqliteWriter | undefined;
+  private opening: Promise<SqliteWriter> | undefined;
   private renewing: Promise<void> | undefined;
   private closed = false;
 
@@ -98,15 +105,16 @@ export class RemoteWritableSession implements Session {
     if (this.closed) {
       throw new DbError('internal', msg('The session is closed'));
     }
-    if (runsOnServer(sql)) {
-      yield* this.runOnServer(sql);
+    // A read inside an open transaction must see the changes of that transaction.
+    if (runsOnServer(sql) || (this.writer?.alive === true && this.writer.inTransaction)) {
+      yield* this.runOnServer(sql, options);
       return;
     }
     await this.renewCopy();
     yield* this.local.execute(sql, options);
   }
 
-  private async *runOnServer(sql: string): AsyncGenerator<ExecuteEvent> {
+  private async *runOnServer(sql: string, options: ExecuteOptions): AsyncGenerator<ExecuteEvent> {
     const writer = await this.helper();
     const control = transactionControl(sql, 'sqlite');
     const wasOpen = writer.inTransaction;
@@ -136,8 +144,14 @@ export class RemoteWritableSession implements Session {
     }
     if (outcome.columns !== undefined) {
       yield { kind: 'columns', columns: outcome.columns };
-      if (outcome.rows !== undefined && outcome.rows.length > 0) {
-        yield { kind: 'rows', rows: outcome.rows };
+      const limit = options.rowLimit ?? Number.POSITIVE_INFINITY;
+      const rows = outcome.rows ?? [];
+      if (rows.length > 0) {
+        yield { kind: 'rows', rows: rows.length > limit ? rows.slice(0, limit) : rows };
+      }
+      if (rows.length >= SERVER_ROW_CAP) {
+        yield { kind: 'done', notice: cutNotice() };
+        return;
       }
     }
     yield outcome.affectedRows === undefined
@@ -146,7 +160,7 @@ export class RemoteWritableSession implements Session {
   }
 
   /** The helper of this session, started at the first change. */
-  private async helper(): Promise<RemoteSqliteWriter> {
+  private async helper(): Promise<SqliteWriter> {
     if (this.writer?.alive === true) {
       return this.writer;
     }

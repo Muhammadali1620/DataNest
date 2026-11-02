@@ -9,11 +9,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import type { RemoteFileSpec } from '../../../../src/services/remote-snapshots';
+import { CLI_COMMAND, openRemoteWriter } from '../../../../src/services/remote-sqlite-cli';
 import { RemoteSqliteWriter } from '../../../../src/services/remote-sqlite-writer';
 import type { ExecChannel, ExecOpener } from '../../../../src/services/shell-types';
 import { openExecChannel } from '../../../../src/services/ssh/shell-session';
 import { RecordingLogger } from '../../../helpers/fakes';
-import { HAS_PYTHON, runThroughShell } from '../../../helpers/python-exec';
+import { HAS_PYTHON, HAS_SQLITE_CLI, runThroughShell } from '../../../helpers/python-exec';
 import { startSshServer, type TestSshServer } from '../../../helpers/ssh-server';
 
 const TRUST = () => Promise.resolve(true);
@@ -219,6 +220,41 @@ describe.skipIf(!HAS_PYTHON || process.platform === 'win32')(
       expect(error).toMatchObject({ code: 'unsupported' });
       expect((error as DbError).message).toMatch(/needs Python 3/);
     });
+
+    it.skipIf(!HAS_SQLITE_CLI)(
+      'falls back to the sqlite3 program when there is no Python 3, with a constant command line',
+      async () => {
+        server = await startSshServer({
+          users,
+          exec: (command, channel) => {
+            runThroughShell(command.replace('python3', 'python3-that-is-not-installed'), channel);
+          },
+        });
+        const writer = await openRemoteWriter(opener, specFor(server), file, { logger });
+        try {
+          const outcome = await writer.run("INSERT INTO t (name) VALUES ('привет 😀 it''s')");
+          expect(outcome).toEqual({ affectedRows: 1, inTransaction: false });
+          await writer.run('BEGIN');
+          await writer.run("INSERT INTO t (name) VALUES ('in a transaction')");
+          expect(writer.inTransaction).toBe(true);
+          expect((await writer.run('SELECT count(*) AS n FROM t')).rows).toEqual([[2]]);
+          await writer.run('COMMIT');
+        } finally {
+          await writer.close();
+        }
+        expect(server.execs).toHaveLength(2);
+        expect(server.execs[1]).toBe(CLI_COMMAND);
+        expect(server.execs[1]).not.toContain(file);
+        const db = new DatabaseSync(file, { readOnly: true });
+        expect(
+          db
+            .prepare('SELECT name FROM t ORDER BY id')
+            .all()
+            .map((row) => row.name),
+        ).toEqual(["привет 😀 it's", 'in a transaction']);
+        db.close();
+      },
+    );
 
     it('stops a running statement by dropping the link, and the file stays whole', async () => {
       server = await startSshServer({ users, exec: runThroughShell });

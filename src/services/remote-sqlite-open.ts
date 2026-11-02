@@ -8,7 +8,7 @@ import { msg } from '../core/user-message';
 import type { Session } from '../drivers/driver';
 import type { RemoteFileSpec, SnapshotLease, SnapshotProvider } from './remote-snapshots';
 import { RemoteWritableSession } from './remote-sqlite-session';
-import { RemoteSqliteWriter } from './remote-sqlite-writer';
+import { openRemoteWriter } from './remote-sqlite-cli';
 import type { ExecOpener } from './shell-types';
 
 export interface WritableFileArgs {
@@ -48,7 +48,7 @@ export function writableFileSession(args: WritableFileArgs): Session {
             new DbError('unsupported', msg('Changing files on a server is not available')),
           );
         }
-        return RemoteSqliteWriter.open(args.execs, args.spec, args.remotePath, {
+        return openRemoteWriter(args.execs, args.spec, args.remotePath, {
           init: args.init,
           logger: args.logger,
         });
@@ -65,6 +65,6 @@ export async function checkRemoteWritable(
   remotePath: string,
   logger: Logger,
 ): Promise<void> {
-  const writer = await RemoteSqliteWriter.open(execs, spec, remotePath, { logger });
+  const writer = await openRemoteWriter(execs, spec, remotePath, { logger });
   await writer.close();
 }

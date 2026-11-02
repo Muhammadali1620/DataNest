@@ -1973,5 +1973,13 @@
   "Compare \"{0}\" with a file of a server": "Сравнить «{0}» с файлом сервера",
   "Pick another file: this is the one being compared": "Выберите другой файл: этот и сравнивается",
   "\"{0}\" is not a file on that server": "«{0}» — не файл на том сервере",
-  "{0} ({1}) ↔ {2} ({3})": "{0} ({1}) ↔ {2} ({3})"
+  "{0} ({1}) ↔ {2} ({3})": "{0} ({1}) ↔ {2} ({3})",
+  "The statement is not complete (an open quote or comment): it was not sent": "Выражение не закончено (открытая кавычка или комментарий): оно не отправлено",
+  "Send one statement at a time: the sqlite3 program on the server takes one": "Отправляйте по одному выражению: программа sqlite3 на сервере принимает одно",
+  "A line that starts with a dot or a hash cannot be sent through the sqlite3 program: it would be taken for a command of the program. Move it off the start of the line": "Строку, начинающуюся с точки или решётки, нельзя отправить через программу sqlite3: она сочтёт её своей командой. Уберите её с начала строки",
+  "The statement is empty": "Выражение пустое",
+  "The sqlite3 program was not found on the server": "Программа sqlite3 на сервере не найдена",
+  "The sqlite3 program on the server stopped (exit code {0}): {1}": "Программа sqlite3 на сервере остановилась (код выхода {0}): {1}",
+  "Changing the file on the server needs Python 3 (its sqlite3 module) or the sqlite3 program there, and neither was found": "Чтобы менять файл на сервере, нужен Python 3 (его модуль sqlite3) или программа sqlite3, а на сервере нет ни того ни другого",
+  "At most {0} rows are brought back from the server": "С сервера приходит не больше {0} строк"
 }

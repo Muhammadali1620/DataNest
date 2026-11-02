@@ -6,6 +6,7 @@
 
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import type { ServerChannel } from 'ssh2';
+import { CLI_SCRIPT } from '../../src/services/remote-sqlite-cli';
 import { helperProgram } from '../../src/services/remote-sqlite-script';
 import type { RemoteFileSpec } from '../../src/services/remote-snapshots';
 import type { ExecChannel, ExecEnd, ExecOpener } from '../../src/services/shell-types';
@@ -14,6 +15,18 @@ import type { ExecChannel, ExecEnd, ExecOpener } from '../../src/services/shell-
 export const HAS_PYTHON: boolean = (() => {
   try {
     return spawnSync('python3', ['--version'], { timeout: 10_000 }).status === 0;
+  } catch {
+    return false;
+  }
+})();
+
+/** True when `sh` and `sqlite3` run here: the shell program of SQLite, as a server would have it. */
+export const HAS_SQLITE_CLI: boolean = (() => {
+  try {
+    return (
+      spawnSync('sh', ['-c', 'sqlite3 -version'], { timeout: 10_000 }).status === 0 &&
+      spawnSync('sh', ['-c', 'exit 0']).status === 0
+    );
   } catch {
     return false;
   }
@@ -73,6 +86,34 @@ export class LocalPythonOpener implements ExecOpener {
   }
 
   /** Kills whatever is still running. */
+  dispose(): void {
+    for (const child of this.children) {
+      child.kill('SIGKILL');
+    }
+  }
+}
+
+/**
+ * Starts the sqlite3 program the way the extension's command does, as a child of the test.
+ * `exec` in the script makes the program take the shell's place, so killing the child ends it.
+ * Asked for Python, it answers like a server that has none.
+ */
+export class LocalCliOpener implements ExecOpener {
+  readonly children: ChildProcess[] = [];
+  readonly commands: string[] = [];
+
+  openExec(_spec: RemoteFileSpec, command: string): Promise<ExecChannel> {
+    this.commands.push(command);
+    if (command.includes('python3')) {
+      const child = spawn('sh', ['-c', 'echo "sh: python3: not found" >&2; exit 127']);
+      this.children.push(child);
+      return Promise.resolve(channelOf(child));
+    }
+    const child = spawn('sh', ['-c', CLI_SCRIPT]);
+    this.children.push(child);
+    return Promise.resolve(channelOf(child));
+  }
+
   dispose(): void {
     for (const child of this.children) {
       child.kill('SIGKILL');

@@ -126,13 +126,18 @@ its `-wal` log, so an application that has the file open is not overwritten; at 
 change waits a few seconds for it and then says the database is in use.
 
 - The server needs **`python3`** (its built-in `sqlite3` module does the work; nothing is
-  installed) and a POSIX shell. The user you log in as must be allowed to write to the file
-  **and to the folder it lies in** (SQLite creates a journal beside it). **Test** checks both
-  and says what is missing.
+  installed) and a POSIX shell. **Without Python 3 the `sqlite3` program is used** if the server
+  has it; its answers are less exact (the names of the columns of an empty result are not
+  known, a BLOB returned by `RETURNING` comes back as text, a whole number beyond 2^53 loses its
+  last digits), only one statement at a time is taken, and a line that starts with a dot or a
+  hash is refused, because the program would take it for a command of its own. The user you log
+  in as must be allowed to write to the file **and to the folder it lies in** (SQLite creates a
+  journal beside it). **Test** checks both and says what is missing.
 - Statements, the path of the file and every value travel on standard input as plain
   ASCII text, never in the command line, so nothing you type is read as shell syntax.
-- A transaction spans statements, as for a local file. Reads inside an open transaction still
-  come from the copy, which does not show its changes until it ends.
+- A transaction spans statements, as for a local file. **While one is open, reads go to the
+  server too**, so they show its changes (at most 5000 rows come back that way; the tree still
+  reads the copy).
 - After a change the copy is out of date; the next read, or the next time the tree opens, makes
   a new one (several changes in a row cost one download). With a big file, run many changes in
   one go rather than reading between them.

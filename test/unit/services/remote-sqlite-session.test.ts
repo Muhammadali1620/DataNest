@@ -10,9 +10,10 @@ import type { SnapshotLease } from '../../../src/services/remote-snapshots';
 import {
   RemoteWritableSession,
   runsOnServer,
+  SERVER_ROW_CAP,
   type RemoteSqliteDeps,
 } from '../../../src/services/remote-sqlite-session';
-import type { RemoteSqliteWriter, WriteOutcome } from '../../../src/services/remote-sqlite-writer';
+import type { SqliteWriter, WriteOutcome } from '../../../src/services/remote-sqlite-writer';
 
 async function collect(events: AsyncIterable<ExecuteEvent>): Promise<ExecuteEvent[]> {
   const all: ExecuteEvent[] = [];
@@ -147,7 +148,7 @@ function rig(): Rig {
       }
       const writer = new FakeWriter();
       writers.push(writer);
-      return Promise.resolve(writer as unknown as RemoteSqliteWriter);
+      return Promise.resolve(writer as unknown as SqliteWriter);
     },
   };
   const first = new FakeLocal('/copy-0/data.db');
@@ -431,6 +432,76 @@ describe('RemoteWritableSession', () => {
       expect(r.session.transactionState()).toBe('open');
       await collect(r.session.execute('COMMIT'));
       expect(r.session.transactionState()).toBe('idle');
+    });
+
+    it('reads on the server while a transaction is open, so its changes are seen', async () => {
+      await collect(r.session.execute('BEGIN'));
+      const writer = writerOf(r);
+      writer.next = () =>
+        Promise.resolve({ columns: [{ name: 'n' }], rows: [[3]], inTransaction: true });
+      const events = await collect(r.session.execute('SELECT count(*) AS n FROM t'));
+      expect(events).toEqual([
+        { kind: 'columns', columns: [{ name: 'n' }] },
+        { kind: 'rows', rows: [[3]] },
+        { kind: 'done' },
+      ]);
+      expect(writer.ran).toEqual(['BEGIN', 'SELECT count(*) AS n FROM t']);
+      expect(r.locals[0]?.executed).toEqual([]);
+      // Reading changed nothing on the server: the copy stays good.
+      expect(r.invalidated).toBe(0);
+    });
+
+    it('goes back to the copy once the transaction has ended', async () => {
+      await collect(r.session.execute('BEGIN'));
+      await collect(r.session.execute('COMMIT'));
+      await collect(r.session.execute('SELECT 1'));
+      expect(writerOf(r).ran).toEqual(['BEGIN', 'COMMIT']);
+      expect(r.locals.at(-1)?.executed).toEqual(['SELECT 1']);
+    });
+
+    it('goes back to the copy when the helper is gone, even if it had a transaction', async () => {
+      await collect(r.session.execute('BEGIN'));
+      writerOf(r).alive = false;
+      await collect(r.session.execute('SELECT 1'));
+      expect(r.locals.at(-1)?.executed).toEqual(['SELECT 1']);
+    });
+
+    it('keeps to the row limit of the request for a read on the server', async () => {
+      await collect(r.session.execute('BEGIN'));
+      writerOf(r).next = () =>
+        Promise.resolve({
+          columns: [{ name: 'n' }],
+          rows: [[1], [2], [3], [4]],
+          inTransaction: true,
+        });
+      const events = await collect(r.session.execute('SELECT n FROM t', { rowLimit: 2 }));
+      expect(events[1]).toEqual({ kind: 'rows', rows: [[1], [2]] });
+    });
+
+    it('says when the server may have cut a read short', async () => {
+      await collect(r.session.execute('BEGIN'));
+      const rows = Array.from({ length: SERVER_ROW_CAP }, (_unused, index) => [index]);
+      writerOf(r).next = () =>
+        Promise.resolve({ columns: [{ name: 'n' }], rows, inTransaction: true });
+      const events = await collect(r.session.execute('SELECT n FROM t'));
+      expect(events.at(-1)).toEqual({
+        kind: 'done',
+        notice: `At most ${SERVER_ROW_CAP} rows are brought back from the server`,
+      });
+      writerOf(r).next = () =>
+        Promise.resolve({
+          columns: [{ name: 'n' }],
+          rows: rows.slice(0, SERVER_ROW_CAP - 1),
+          inTransaction: true,
+        });
+      expect((await collect(r.session.execute('SELECT n FROM t'))).at(-1)).toEqual({
+        kind: 'done',
+      });
+    });
+
+    it('does not start a helper to read when there was no transaction', async () => {
+      await collect(r.session.execute('SELECT 1'));
+      expect(r.writers).toHaveLength(0);
     });
   });
 

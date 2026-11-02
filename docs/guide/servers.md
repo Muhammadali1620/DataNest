@@ -56,6 +56,8 @@ opens.
   servers it asks first.
 - **Compare with a Local File…** opens the usual side-by-side diff of a file of this machine
   against the file on the server (text files within the editor size limit).
+- **Compare with a File of a Server…** does the same for two files on servers: pick the other
+  server (it may be the same one) and the path; the diff shows each file under its server's name.
 - Transfers are streams: memory stays small for any size. A notification shows the progress
   and **Cancel** stops the transfer; a half-written file is removed.
 - Something that is already there is replaced only after you confirm.
@@ -88,10 +90,10 @@ opens.
 - **Change Permissions…** takes octal digits (`644`, `0755`).
 - **Change Permissions Inside…** (folders) gives every file and every folder below its own
   mode, e.g. `644` and `755`; leave a box empty to keep that kind as it is. It asks first.
-- **Change Owner…** takes numeric ids as `user:group` (`1000:1000`, or only `1000`, or only
-  `:1000`); for a folder you choose whether everything inside changes too. The server decides
-  who may do it — usually only root. Links are never followed by these commands.
-
-## Not here yet
-
-Comparing two files of two servers, and user and group *names* (SFTP knows only numbers).
+- **Change Owner…** takes `user:group` by **name or by number** (`deploy:www`, `1000:1000`,
+  `deploy`, `:www`); for a folder you choose whether everything inside changes too. The names
+  are the server's own: they are read once per connection from `/etc/passwd` and `/etc/group`
+  as ordinary files (nothing is run there), shown in the tooltip of a file, and a name the
+  server does not have is refused with a word. Where those files cannot be read, numbers still
+  work. The server decides who may change an owner — usually only root. Links are never
+  followed by these commands.

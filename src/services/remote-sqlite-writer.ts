@@ -29,6 +29,17 @@ export interface WriteOutcome {
   readonly inTransaction: boolean;
 }
 
+/** What a session needs of whatever changes the file on the server (Python helper or sqlite3). */
+export interface SqliteWriter {
+  readonly alive: boolean;
+  /** A transaction is open, as far as the writer knows after its last statement. */
+  readonly inTransaction: boolean;
+  run(sql: string): Promise<WriteOutcome>;
+  close(): Promise<void>;
+  /** Drops the link at once: the server undoes what is not committed. */
+  abort(): void;
+}
+
 export interface WriterOptions {
   readonly busyTimeoutMs?: number;
   /** Run once after opening: the connection's own settings, e.g. `PRAGMA foreign_keys = ON`. */
@@ -36,7 +47,7 @@ export interface WriterOptions {
   readonly logger: Logger;
 }
 
-interface Answer {
+export interface Answer {
   readonly id?: number;
   readonly ok: boolean;
   readonly message?: string;
@@ -71,7 +82,7 @@ const BY_PRIMARY: Readonly<Record<number, DbErrorCode>> = {
   26: 'connection-failed',
 };
 
-function classify(answer: Answer): DbErrorCode {
+export function classify(answer: Answer): DbErrorCode {
   const message = (answer.message ?? '').toLowerCase();
   if (message.includes('database is locked') || message.includes('database table is locked')) {
     return 'busy';
@@ -101,7 +112,7 @@ function classify(answer: Answer): DbErrorCode {
 }
 
 /** An error the helper reported, as the app's own error; the reason is spelled out. */
-function helperError(answer: Answer, busyMs: number): DbError {
+export function helperError(answer: Answer, busyMs: number): DbError {
   const code = classify(answer);
   const text = answer.message ?? 'unknown error';
   if (code === 'busy') {
@@ -148,12 +159,27 @@ export function cellOf(value: unknown): CellValue {
   return { kind: 'json', text: JSON.stringify(value) };
 }
 
+/** SQLite says the same for a file that is not there and one that may not be opened. */
+export function openFailure(error: unknown): unknown {
+  if (error instanceof DbError && error.code === 'permission-denied') {
+    return new DbError(
+      'permission-denied',
+      msg(
+        'The file could not be opened for changes on the server: it may not exist, or this user may not write to it and its folder ({0})',
+        error.message,
+      ),
+      { cause: error },
+    );
+  }
+  return error;
+}
+
 interface Pending {
   readonly resolve: (answer: Answer) => void;
   readonly reject: (error: DbError) => void;
 }
 
-export class RemoteSqliteWriter {
+export class RemoteSqliteWriter implements SqliteWriter {
   private buffer = '';
   private errors = '';
   private nextId = 1;
@@ -208,18 +234,7 @@ export class RemoteSqliteWriter {
       return writer;
     } catch (error) {
       writer.channel.close();
-      if (error instanceof DbError && error.code === 'permission-denied') {
-        // SQLite says the same for a file that is not there and one that may not be opened.
-        throw new DbError(
-          'permission-denied',
-          msg(
-            'The file could not be opened for changes on the server: it may not exist, or this user may not write to it and its folder ({0})',
-            error.message,
-          ),
-          { cause: error },
-        );
-      }
-      throw error;
+      throw openFailure(error);
     }
   }
 

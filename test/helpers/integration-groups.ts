@@ -7,6 +7,7 @@ import { createConnection } from 'node:net';
 import { testDatabase, testSshServer } from './databases';
 import { TEST_ELASTIC } from './elastic-servers';
 import { TEST_ETCD } from './etcd-servers';
+import { TEST_ZOOKEEPER } from './zookeeper-servers';
 import { TEST_INFLUXDB } from './influxdb-servers';
 import { TEST_CASSANDRA } from './cassandra-servers';
 import { TEST_LOKI } from './loki-servers';
@@ -139,6 +140,11 @@ const DEFINITIONS = {
     always: false,
     folders: ['rabbitmq'],
     endpoints: () => [{ name: 'rabbitmq', host: TEST_RABBITMQ.host, port: TEST_RABBITMQ.port }],
+  },
+  zookeeper: {
+    always: false,
+    folders: ['zookeeper'],
+    endpoints: () => [{ name: 'zookeeper', host: TEST_ZOOKEEPER.host, port: TEST_ZOOKEEPER.port }],
   },
   etcd: {
     always: false,

@@ -15,6 +15,7 @@ import type { ElasticDriver, ElasticDriverModule } from './elastic-driver';
 import type { EtcdDriver, EtcdDriverModule } from './etcd-driver';
 import type { KafkaDriver, KafkaDriverModule } from './kafka-driver';
 import type { RabbitDriver, RabbitDriverModule } from './rabbitmq-driver';
+import type { ZookeeperDriver, ZookeeperDriverModule } from './zookeeper-driver';
 import type { MongoDriver, MongoDriverModule } from './mongo-driver';
 import type { PluginDrivers } from './plugin/plugin-drivers';
 import type { RedisDriver, RedisDriverModule } from './redis-driver';
@@ -30,6 +31,7 @@ export type DriverLoader = (
   | EtcdDriverModule
   | KafkaDriverModule
   | RabbitDriverModule
+  | ZookeeperDriverModule
 >;
 
 /**
@@ -43,7 +45,14 @@ export function createBundleDriverLoader(bundlePath: string): DriverLoader {
 
 /** A SQL driver, the Redis one (D81) or the MongoDB one (D88), as the bundle exports it. */
 type AnyDriver =
-  Driver | RedisDriver | MongoDriver | ElasticDriver | EtcdDriver | KafkaDriver | RabbitDriver;
+  | Driver
+  | RedisDriver
+  | MongoDriver
+  | ElasticDriver
+  | EtcdDriver
+  | KafkaDriver
+  | RabbitDriver
+  | ZookeeperDriver;
 
 export class DriverRegistry {
   private readonly loader: DriverLoader;
@@ -141,6 +150,15 @@ export class DriverRegistry {
     return driver;
   }
 
+  /** Loads the ZooKeeper driver on first use (V13.24). */
+  async getZookeeper(): Promise<ZookeeperDriver> {
+    const driver = await this.loadOnce('zookeeper');
+    if (isSqlDriverShaped(driver) || driver.id !== 'zookeeper') {
+      throw new DbError('internal', msg('Driver "zookeeper" is broken: unexpected module shape'));
+    }
+    return driver;
+  }
+
   private async loadOnce(id: DriverId): Promise<AnyDriver> {
     let promise = this.loading.get(id);
     if (!promise) {
@@ -168,7 +186,8 @@ export class DriverRegistry {
       | ElasticDriverModule
       | EtcdDriverModule
       | KafkaDriverModule
-      | RabbitDriverModule;
+      | RabbitDriverModule
+      | ZookeeperDriverModule;
     try {
       module = await this.loader(id);
     } catch (error) {
@@ -204,6 +223,13 @@ function isSqlDriverShaped(value: unknown): value is Driver {
 function isFamilyDriverShaped(
   value: unknown,
   id: DriverId,
-): value is RedisDriver | MongoDriver | ElasticDriver | EtcdDriver | KafkaDriver | RabbitDriver {
+): value is
+  | RedisDriver
+  | MongoDriver
+  | ElasticDriver
+  | EtcdDriver
+  | KafkaDriver
+  | RabbitDriver
+  | ZookeeperDriver {
   return isObject(value) && value.id === id && typeof value.openSession === 'function';
 }

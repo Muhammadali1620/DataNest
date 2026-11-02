@@ -40,6 +40,8 @@ export function compareStartOf(target: TreeNode): CompareStart | undefined {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'zookeeperNode':
+    case 'zookeeperMore':
     case 'kafkaTopics':
     case 'kafkaTopic':
     case 'kafkaPartition':

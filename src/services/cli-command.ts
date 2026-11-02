@@ -58,6 +58,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   kafka: [],
   // Reached over the management HTTP API; `rabbitmqadmin` takes other options.
   rabbitmq: [],
+  // Reached with its own binary protocol; `zkCli.sh` is a script of the server's package.
+  zookeeper: [],
 };
 
 /** The program's path, looked up like a shell would; undefined when it is not installed. */
@@ -239,6 +241,7 @@ export function cliCommand(
     case 'etcd':
     case 'kafka':
     case 'rabbitmq':
+    case 'zookeeper':
       return undefined;
   }
 }

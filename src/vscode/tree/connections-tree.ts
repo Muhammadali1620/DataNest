@@ -28,6 +28,7 @@ import { redisTypeIcon } from './redis-type-icon';
 import { tagsOf } from './connection-look';
 import { elasticFieldItem, elasticIndexItem } from './elastic-items';
 import { etcdFolderItem, etcdKeyItem, etcdMoreItem } from './etcd-items';
+import { zookeeperMoreItem, zookeeperNodeItem } from './zookeeper-items';
 import {
   kafkaGroupItem,
   kafkaGroupsItem,
@@ -42,6 +43,7 @@ import {
   rabbitVhostItem,
 } from './rabbitmq-items';
 import type { EtcdKeyBrowser } from '../../services/etcd/key-browser';
+import type { ZookeeperNodeBrowser } from '../../services/zookeeper/node-browser';
 import { mongoCollectionItem, mongoDatabaseItem, mongoIndexItem } from './mongo-items';
 import {
   columnKind,
@@ -91,6 +93,8 @@ export interface ConnectionsTreeDeps {
   readonly redisKeys?: RedisKeyBrowser;
   /** The folders of etcd connections as read so far (V13.19). */
   readonly etcdKeys?: EtcdKeyBrowser;
+  /** The znodes of ZooKeeper connections as read so far (V13.24). */
+  readonly zookeeperNodes?: ZookeeperNodeBrowser;
   /** `datanest.redis.keySeparator`. */
   readonly redisKeySeparator?: () => string;
   readonly manager: ConnectionManager;
@@ -154,6 +158,7 @@ export class ConnectionsTreeProvider
       cache: deps.cache,
       ...(deps.redisKeys === undefined ? {} : { redisKeys: deps.redisKeys }),
       ...(deps.etcdKeys === undefined ? {} : { etcdKeys: deps.etcdKeys }),
+      ...(deps.zookeeperNodes === undefined ? {} : { zookeeperNodes: deps.zookeeperNodes }),
       kafka: {
         showInternalTopics: () =>
           vscode.workspace
@@ -208,6 +213,7 @@ export class ConnectionsTreeProvider
         noCollections: vscode.l10n.t('No collections'),
         noIndices: vscode.l10n.t('No indices'),
         noEtcdKeys: vscode.l10n.t('No keys'),
+        noZookeeperNodes: vscode.l10n.t('No znodes'),
         noFields: vscode.l10n.t('No fields in the mapping'),
         noKeys: (pattern) =>
           pattern === undefined
@@ -263,6 +269,7 @@ export class ConnectionsTreeProvider
         if (status === 'disconnected' || status === 'error') {
           deps.redisKeys?.reset(connectionId);
           deps.etcdKeys?.reset(connectionId);
+          deps.zookeeperNodes?.reset(connectionId);
         }
         // Status decorations live on connection items, which sit at the root.
         this.refresh();
@@ -644,6 +651,10 @@ export class ConnectionsTreeProvider
         return etcdKeyItem(node);
       case 'etcdMore':
         return etcdMoreItem(node);
+      case 'zookeeperNode':
+        return zookeeperNodeItem(node);
+      case 'zookeeperMore':
+        return zookeeperMoreItem(node);
       case 'kafkaTopics':
         return kafkaTopicsItem(node);
       case 'kafkaTopic':

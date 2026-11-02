@@ -79,6 +79,7 @@ describe('the Russian dictionary', () => {
     'form.driver.neo4j',
     'form.driver.cassandra',
     'form.driver.etcd',
+    'form.driver.zookeeper',
     'form.driver.influxdb',
     'form.driver.loki',
     'form.preset.auroraMysql',

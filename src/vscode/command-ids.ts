@@ -210,6 +210,15 @@ export const COMMAND_IDS = {
   etcdNewKey: 'datanest.etcd.newKey',
   /** Deletes the clicked key, every selected one, or all the keys of a folder. */
   etcdDeleteKeys: 'datanest.etcd.deleteKeys',
+  /** Brings the next page of children of a ZooKeeper znode into the tree (V13.24). */
+  zookeeperLoadMoreNodes: 'datanest.zookeeper.loadMoreNodes',
+  /** Opens the page of a znode: its data, stat, ACL and children. */
+  zookeeperOpenNode: 'datanest.zookeeper.openNode',
+  /** Opens a znode by its whole path. */
+  zookeeperGoToNode: 'datanest.zookeeper.goToNode',
+  zookeeperNewNode: 'datanest.zookeeper.newNode',
+  /** Deletes the clicked znode, or every selected one, with everything below. */
+  zookeeperDeleteNodes: 'datanest.zookeeper.deleteNodes',
   /** Opens the page of a Kafka topic: its partitions, messages and a form to send one. */
   kafkaOpenTopic: 'datanest.kafka.openTopic',
   kafkaNewTopic: 'datanest.kafka.newTopic',
@@ -352,6 +361,8 @@ export const CONFIG_KEYS = {
   formatDenseOperators: 'format.denseOperators',
   /** How many etcd keys the tree reads at a time (V13.19). */
   etcdKeysPerLoad: 'etcd.keysPerLoad',
+  /** How many znodes the tree reads at a time (V13.24). */
+  zookeeperChildrenPerLoad: 'zookeeper.childrenPerLoad',
   /** Whether the tree lists Kafka's own topics, such as `__consumer_offsets` (V13.23). */
   kafkaShowInternalTopics: 'kafka.showInternalTopics',
   /** What splits Redis key names into folders (V7.2). */

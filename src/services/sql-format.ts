@@ -66,6 +66,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'etcd':
     case 'kafka':
     case 'rabbitmq':
+    case 'zookeeper':
     case undefined:
       return 'sql';
   }

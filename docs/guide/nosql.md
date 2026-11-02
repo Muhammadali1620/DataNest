@@ -1,4 +1,4 @@
-# Redis, MongoDB, Elasticsearch and etcd
+# Redis, MongoDB, Elasticsearch, etcd and ZooKeeper
 
 These connections live in the same tree, with the same folders, SSH, TLS, production and
 read-only marks, but each speaks its own language and has pages of its own. SQL commands
@@ -120,6 +120,37 @@ token is renewed by itself); leave both empty when it has none.
 
 Not here (yet): watching a key for changes, and etcd's own user, role and cluster
 administration.
+
+## Apache ZooKeeper
+
+DataNest speaks ZooKeeper's own client protocol, in a small client of its own (no library is
+installed); TLS (the secure client port), SSH tunnels and proxies work as for the other
+connections. The host box takes one server or a list separated by commas (`a:2181,b:2181`;
+the first that answers is used). Give a user and password to sign in with the `digest`
+scheme (znodes that are created then get the creator's ACL); leave both empty when the
+znodes are open to everyone. **Chroot** makes a znode such as `/app` the root of the tree.
+
+- **Znodes** form a tree, and every znode holds data and may have children besides. A znode
+  is read when you open it, a page at a time (`datanest.zookeeper.childrenPerLoad`);
+  **Load More Znodes** brings the next page. The number next to a znode is how many children
+  it has. Colour tells what a znode is: a clock for an ephemeral one (it ends with its
+  session), a box for a container, a list for a sequential one (its name ends in a counter).
+- **Go to ZooKeeper Znode…** opens a znode by its whole path (ZooKeeper cannot search).
+- **Open ZooKeeper Znode** shows a znode on a page of its own: the data as text, JSON or
+  hex, its stat (the transaction ids as `0x…`, times, versions, the owner session of an
+  ephemeral node), its ACL as `world:anyone rwcda`, and its children, which open on a click.
+  **Save** is a compare-and-set on the version the page read: when somebody changed the
+  znode meanwhile, nothing is overwritten; the page says so, keeps your text and offers to
+  load the server's data or to overwrite it on purpose. A znode whose ACL does not allow you
+  to read its data says so instead of showing it.
+- **New ZooKeeper Znode…** makes a child with empty data (persistent, sequential or
+  container) and opens its page; a name that is taken is refused.
+  **Delete ZooKeeper Znodes** deletes the clicked znode or the selected ones with everything
+  below them, after saying how many znodes that is.
+- A read-only connection offers no change, and a production one asks before every one.
+
+Not here (yet): watching a znode for changes, ephemeral znodes (they would end with
+DataNest's own session), editing an ACL, and the server's four-letter commands.
 
 ## Apache Kafka
 

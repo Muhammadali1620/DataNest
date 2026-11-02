@@ -16,6 +16,7 @@ export const DRIVER_IDS = [
   'etcd',
   'kafka',
   'rabbitmq',
+  'zookeeper',
   'libsql',
   'influxdb',
   'neo4j',
@@ -35,11 +36,12 @@ export function isDriverId(value: unknown): value is DriverId {
  * SQL editor; Redis has commands and keys, MongoDB collections of documents (D88), each
  * with a UI of its own; Elasticsearch speaks HTTP and JSON (D91); etcd is a tree of keys
  * with leases (V13.19); Kafka is a list of topics with partitions and consumer groups
- * (V13.23); RabbitMQ is virtual hosts with queues and exchanges (V13.26). Connections, folders, secrets, SSH and the connection form are the
- * same for all.
+ * (V13.23); RabbitMQ is virtual hosts with queues and exchanges (V13.26); ZooKeeper is a
+ * tree of znodes that hold data and children alike (V13.24). Connections, folders,
+ * secrets, SSH and the connection form are the same for all.
  */
 export type DriverFamily =
-  'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka' | 'rabbitmq';
+  'sql' | 'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka' | 'rabbitmq' | 'zookeeper';
 
 export function driverFamily(driver: DriverId): DriverFamily {
   return driver === 'redis' ||
@@ -47,14 +49,15 @@ export function driverFamily(driver: DriverId): DriverFamily {
     driver === 'elasticsearch' ||
     driver === 'etcd' ||
     driver === 'kafka' ||
-    driver === 'rabbitmq'
+    driver === 'rabbitmq' ||
+    driver === 'zookeeper'
     ? driver
     : 'sql';
 }
 
 export type SqlDriverId = Exclude<
   DriverId,
-  'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka' | 'rabbitmq'
+  'redis' | 'mongodb' | 'elasticsearch' | 'etcd' | 'kafka' | 'rabbitmq' | 'zookeeper'
 >;
 
 export function isSqlDriver(driver: DriverId): driver is SqlDriverId {
@@ -102,6 +105,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   kafka: 9092,
   // The management plugin's HTTP API; AMQP (5672) is not spoken.
   rabbitmq: 15672,
+  // A server's client port; several servers go in the host box, separated by commas.
+  zookeeper: 2181,
   // sqld's own HTTP port; Turso and other hosted servers answer on 443 with TLS.
   libsql: 8080,
   // The HTTP API of InfluxDB 2.x; HTTPS is served on the same port.
@@ -538,6 +543,7 @@ export function optionSupport(driver: DriverId): OptionSupport {
     case 'etcd':
     case 'kafka':
     case 'rabbitmq':
+    case 'zookeeper':
     case 'mongodb':
       return {
         connectTimeout: true,
@@ -597,6 +603,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     case 'etcd':
     case 'kafka':
     case 'rabbitmq':
+    case 'zookeeper':
       return { databases: false, schemas: false };
     // Buckets are the databases; the system ones are hidden with the other system objects.
     case 'influxdb':

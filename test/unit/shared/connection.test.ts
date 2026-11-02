@@ -476,6 +476,7 @@ describe('Redis connections (V7.1)', () => {
         'etcd',
         'kafka',
         'rabbitmq',
+        'zookeeper',
       ].sort(),
     ).toEqual([...DRIVER_IDS].sort());
     expect(isFileDriver('redis')).toBe(false);
@@ -929,5 +930,42 @@ describe('etcd connections (V13.19)', () => {
   it('describes its target as host and port', () => {
     expect(describeTarget(etcd)).toBe('h:2379');
     expect(describeTarget({ ...etcd, user: 'root', port: 4001 })).toBe('root@h:4001');
+  });
+});
+
+describe('ZooKeeper connections (V13.24)', () => {
+  const zookeeper = { name: 'Ensemble', driver: 'zookeeper', host: 'h' } as const;
+
+  it('is a driver of its own family, apart from SQL', () => {
+    expect(isDriverId('zookeeper')).toBe(true);
+    expect(driverFamily('zookeeper')).toBe('zookeeper');
+    expect(isSqlDriver('zookeeper')).toBe(false);
+    expect(SQL_DRIVER_IDS).not.toContain('zookeeper');
+    expect(isFileDriver('zookeeper')).toBe(false);
+  });
+
+  it('listens on the client port, 2181, unless told otherwise', () => {
+    expect(DEFAULT_PORTS.zookeeper).toBe(2181);
+    expect(effectivePort(zookeeper)).toBe(2181);
+    expect(effectivePort({ ...zookeeper, port: 12_181 })).toBe(12_181);
+  });
+
+  it('has timeouts and TLS to set, and nothing to run on connect', () => {
+    expect(optionSupport('zookeeper')).toMatchObject({
+      connectTimeout: true,
+      tls: true,
+      init: false,
+      timeZone: false,
+      charset: false,
+    });
+  });
+
+  it('has no databases or schemas to filter', () => {
+    expect(filterSupport('zookeeper')).toEqual({ databases: false, schemas: false });
+  });
+
+  it('describes its target as host and port, the user in front', () => {
+    expect(describeTarget(zookeeper)).toBe('h:2181');
+    expect(describeTarget({ ...zookeeper, user: 'alice', port: 2182 })).toBe('alice@h:2182');
   });
 });

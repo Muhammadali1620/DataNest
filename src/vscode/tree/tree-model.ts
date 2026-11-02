@@ -46,6 +46,8 @@ import {
 import { normalizeTableFilter, tableFilter } from './table-filter';
 import { msg } from '../../core/user-message';
 import { type EtcdKeyBrowser, ROOT } from '../../services/etcd/key-browser';
+import type { ZookeeperNodeBrowser } from '../../services/zookeeper/node-browser';
+import { nameOf, parentPath, ROOT_PATH } from '../../shared/zk-path';
 import {
   kafkaConnectionChildren,
   kafkaGroupChildren,
@@ -91,6 +93,8 @@ export interface TreeTexts {
   readonly noCollections?: string;
   /** An etcd cluster or folder without keys (V13.19). */
   readonly noEtcdKeys?: string;
+  /** A ZooKeeper chroot without znodes (V13.24); a znode without children shows nothing. */
+  readonly noZookeeperNodes?: string;
   /** An Elasticsearch cluster without indices, an index without fields (V7.8). */
   readonly noIndices?: string;
   readonly noFields?: string;
@@ -130,6 +134,8 @@ export interface TreeModelDeps {
   readonly redisKeys?: RedisKeyBrowser;
   /** The folders of etcd connections as read so far (V13.19). */
   readonly etcdKeys?: EtcdKeyBrowser;
+  /** The znodes of ZooKeeper connections as read so far (V13.24). */
+  readonly zookeeperNodes?: ZookeeperNodeBrowser;
   /** What the Kafka folders need besides the manager (V13.23); without it they are empty. */
   readonly kafka?: Omit<KafkaTreeDeps, 'manager'>;
   /** What the RabbitMQ folders need besides the manager (V13.26); without it they are empty. */
@@ -326,6 +332,8 @@ export class TreeModel {
         return elasticSubfields(node);
       case 'etcdFolder':
         return await this.etcdChildren(node.connectionId, node.prefix);
+      case 'zookeeperNode':
+        return await this.zookeeperChildren(node.connectionId, node.path);
       case 'kafkaTopics':
         return await this.withKafka((deps) => kafkaTopicChildren(deps, node));
       case 'kafkaTopic':
@@ -351,6 +359,7 @@ export class TreeModel {
       case 'redisMore':
       case 'etcdKey':
       case 'etcdMore':
+      case 'zookeeperMore':
       case 'mongoIndex':
       case 'message':
         return [];
@@ -407,6 +416,12 @@ export class TreeModel {
           node.connectionId,
           parentPrefix(node.kind === 'etcdFolder' ? node.prefix : node.key),
         );
+      case 'zookeeperNode':
+        return node.path === ROOT_PATH
+          ? { kind: 'connection', connectionId: node.connectionId }
+          : this.zookeeperNodeAt(node.connectionId, parentPath(node.path));
+      case 'zookeeperMore':
+        return this.zookeeperNodeAt(node.connectionId, node.path);
       case 'redisDatabase':
         return { kind: 'connection', connectionId: node.connectionId };
       case 'kafkaTopics':
@@ -518,6 +533,48 @@ export class TreeModel {
     return nodes;
   }
 
+  /** The znode at a path; the connection for the top (V13.24). */
+  private zookeeperNodeAt(connectionId: string, path: string): TreeNode {
+    if (path === ROOT_PATH) {
+      return { kind: 'connection', connectionId };
+    }
+    return { kind: 'zookeeperNode', connectionId, path, name: nameOf(path) };
+  }
+
+  /** The children of a znode, then "load more" while it has pages left (V13.24). */
+  private async zookeeperChildren(connectionId: string, path: string): Promise<TreeNode[]> {
+    const browser = this.deps.zookeeperNodes;
+    if (browser === undefined) {
+      return [];
+    }
+    const listing = await browser.children(connectionId, path);
+    const nodes: TreeNode[] = listing.entries.map((entry): TreeNode => ({
+      kind: 'zookeeperNode',
+      connectionId,
+      path: entry.path,
+      name: entry.name,
+      numChildren: entry.numChildren,
+      znodeKind: entry.kind,
+      ...(entry.denied === true ? { denied: true } : {}),
+    }));
+    if (listing.more) {
+      nodes.push({
+        kind: 'zookeeperMore',
+        connectionId,
+        path,
+        loaded: nodes.length,
+        total: listing.total,
+      });
+    } else if (
+      nodes.length === 0 &&
+      path === ROOT_PATH &&
+      this.deps.texts.noZookeeperNodes !== undefined
+    ) {
+      nodes.push({ kind: 'message', text: this.deps.texts.noZookeeperNodes, connectionId });
+    }
+    return nodes;
+  }
+
   /** "12 keys", for the description of a Redis database. */
   redisKeysText(count: number): string {
     return this.deps.texts.redisKeys?.(count) ?? String(count);
@@ -536,6 +593,9 @@ export class TreeModel {
     }
     if (this.driverIdOf(connectionId) === 'etcd') {
       return await this.etcdChildren(connectionId, ROOT);
+    }
+    if (this.driverIdOf(connectionId) === 'zookeeper') {
+      return await this.zookeeperChildren(connectionId, ROOT_PATH);
     }
     if (this.driverIdOf(connectionId) === 'kafka') {
       // Connect now, so a wrong address shows as the connection's error and not as an empty list.

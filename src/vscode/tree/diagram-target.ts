@@ -80,6 +80,8 @@ export function diagramStartOf(
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'zookeeperNode':
+    case 'zookeeperMore':
     case 'kafkaTopics':
     case 'kafkaTopic':
     case 'kafkaPartition':

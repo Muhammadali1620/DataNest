@@ -90,6 +90,10 @@ export async function readServerVersion(
   if (driver === 'rabbitmq') {
     return shortVersion((await manager.acquireRabbit(owner, { connectionId })).server.version);
   }
+  if (driver === 'zookeeper') {
+    // The server does not tell its version over the client protocol.
+    return undefined;
+  }
   const session = await browseSession(manager, connectionId);
   const [row] = await namedRows(session, VERSION_SQL[driver]);
   const text = row === undefined ? undefined : textOf(row, 'version');
@@ -155,6 +159,7 @@ WHERE active AND database = ${dialect.literal(database)}`;
     case 'etcd':
     case 'kafka':
     case 'rabbitmq':
+    case 'zookeeper':
       return undefined;
   }
 }

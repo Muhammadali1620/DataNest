@@ -372,6 +372,8 @@ export function targetType(
       throw new DbError('unsupported', msg('Tables cannot be copied to Kafka'));
     case 'rabbitmq':
       throw new DbError('unsupported', msg('Tables cannot be copied to RabbitMQ'));
+    case 'zookeeper':
+      throw new DbError('unsupported', msg('Tables cannot be copied to ZooKeeper'));
   }
 }
 

@@ -47,6 +47,7 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'elastic-result': 'search',
   'er-diagram': 'type-hierarchy',
   'etcd-key': 'key',
+  'zookeeper-node': 'list-tree',
   'kafka-topic': 'comment-discussion',
   'rabbitmq-object': 'mail',
   manager: 'dashboard',

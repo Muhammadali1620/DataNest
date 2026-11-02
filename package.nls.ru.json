@@ -258,5 +258,11 @@
   "commands.rabbitmq.newQueue.title": "Новая очередь…",
   "commands.rabbitmq.newExchange.title": "Новый обменник…",
   "commands.rabbitmq.purgeQueue.title": "Убрать все сообщения",
-  "commands.rabbitmq.deleteObject.title": "Удалить"
+  "commands.rabbitmq.deleteObject.title": "Удалить",
+  "commands.zookeeper.loadMoreNodes.title": "Загрузить ещё znode ZooKeeper",
+  "commands.zookeeper.openNode.title": "Открыть znode ZooKeeper",
+  "commands.zookeeper.goToNode.title": "Перейти к znode ZooKeeper…",
+  "commands.zookeeper.newNode.title": "Новый znode ZooKeeper…",
+  "commands.zookeeper.deleteNodes.title": "Удалить znode ZooKeeper",
+  "configuration.zookeeper.childrenPerLoad.description": "Сколько потомков дерево читает у znode ZooKeeper за раз. Если потомков больше, внизу появляется «Загрузить ещё znode…»."
 }

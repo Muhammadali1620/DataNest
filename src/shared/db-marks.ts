@@ -73,6 +73,13 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<circle cx="7.500" cy="12" r="4.500" fill="none" stroke="currentColor" stroke-width="3"/><rect x="11" y="10.500" width="11" height="3"/><rect x="16" y="13" width="2.500" height="4.500"/><rect x="20" y="13" width="2" height="3.500"/>',
   },
+  // An indented list of names: the paths ZooKeeper keeps its znodes under (V13.24); the
+  // vendor's logo is not ours to use.
+  zookeeper: {
+    hex: '#be185d',
+    ink: WHITE,
+    body: '<rect x="3" y="3.500" width="10" height="3.500" rx="1"/><rect x="8" y="10.250" width="10" height="3.500" rx="1"/><rect x="8" y="17" width="13" height="3.500" rx="1"/><path d="M5.500 7v11.250h2.500M5.500 12h2.500" fill="none" stroke="currentColor" stroke-width="1.800"/>',
+  },
   // One source feeding two readers: the shape of a topic with its consumers (V13.23); the
   // vendor's logo is not ours to use.
   kafka: {

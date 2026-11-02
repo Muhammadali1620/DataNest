@@ -17,6 +17,7 @@ import type { ElasticFieldInfo, ElasticIndexInfo } from '../../services/elastics
 import type { MongoIndexInfo } from '../../services/mongodb/catalog';
 import type { DriverFamily } from '../../shared/connection';
 import { type RedisKeyRef, redisKeyId } from '../../shared/redis-key';
+import type { ZnodeKind } from '../../shared/zk-path';
 
 /** The view id the tree is registered under; `package.json` must declare the same. */
 export const CONNECTIONS_VIEW_ID = 'datanest.connections';
@@ -79,6 +80,15 @@ export const TREE_CONTEXT = {
   etcdKey: 'datanest.etcdKey',
   /** "Load more" at the end of a folder whose next page has not been read. */
   etcdMore: 'datanest.etcdMore',
+  /** ZooKeeper connections (V13.24) share the connection menus but none of the SQL ones. */
+  zookeeperConnection: 'datanest.zookeeperConnection',
+  zookeeperConnectionConnected: 'datanest.zookeeperConnection.connected',
+  projectZookeeperConnection: 'datanest.projectZookeeperConnection',
+  projectZookeeperConnectionConnected: 'datanest.projectZookeeperConnection.connected',
+  /** A znode: it holds data and may hold children. */
+  zookeeperNode: 'datanest.zookeeperNode',
+  /** "Load more" at the end of a znode whose next page of children has not been read. */
+  zookeeperMore: 'datanest.zookeeperMore',
   /** Kafka connections (V13.23) share the connection menus but none of the SQL ones. */
   kafkaConnection: 'datanest.kafkaConnection',
   kafkaConnectionConnected: 'datanest.kafkaConnection.connected',
@@ -416,6 +426,34 @@ export interface EtcdMoreNode {
   readonly loaded: number;
 }
 
+/** A znode of a ZooKeeper connection (V13.24): data, and children besides. */
+export interface ZookeeperNodeNode {
+  readonly kind: 'zookeeperNode';
+  readonly connectionId: string;
+  /** The whole path; `/` for the top (the chroot of the connection). */
+  readonly path: string;
+  /** Its own name, shown in the tree. */
+  readonly name: string;
+  /** Children it has, when the server was asked. */
+  readonly numChildren?: number;
+  /** Lives and dies with a session, or has a time to live (a container reads as plain). */
+  readonly znodeKind?: ZnodeKind;
+  /** The ACL lets this user read nothing of it. */
+  readonly denied?: boolean;
+}
+
+/** The leaf after the children of a znode whose next page has not been read. */
+export interface ZookeeperMoreNode {
+  readonly kind: 'zookeeperMore';
+  readonly connectionId: string;
+  /** The znode that has more children. */
+  readonly path: string;
+  /** Children shown so far. */
+  readonly loaded: number;
+  /** All its children. */
+  readonly total: number;
+}
+
 /** The "Topics" folder of a Kafka connection (V13.23). */
 export interface KafkaTopicsNode {
   readonly kind: 'kafkaTopics';
@@ -534,6 +572,8 @@ export type TreeNode =
   | EtcdFolderNode
   | EtcdKeyNode
   | EtcdMoreNode
+  | ZookeeperNodeNode
+  | ZookeeperMoreNode
   | KafkaTopicsNode
   | KafkaTopicNode
   | KafkaPartitionNode
@@ -585,6 +625,8 @@ export function scopeOf(node: TreeNode): ObjectScope {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'zookeeperNode':
+    case 'zookeeperMore':
     case 'kafkaTopics':
     case 'kafkaTopic':
     case 'kafkaPartition':
@@ -714,6 +756,10 @@ export function nodeId(node: TreeNode): string {
       return join(['etcdKey', node.connectionId, redisKeyId(node.key)]);
     case 'etcdMore':
       return join(['etcdMore', node.connectionId, redisKeyId(node.prefix)]);
+    case 'zookeeperNode':
+      return join(['zookeeperNode', node.connectionId, node.path]);
+    case 'zookeeperMore':
+      return join(['zookeeperMore', node.connectionId, node.path]);
     case 'kafkaTopics':
       return join(['kafkaTopics', node.connectionId]);
     case 'kafkaTopic':
@@ -791,6 +837,8 @@ export function isTreeNode(value: unknown): value is TreeNode {
     kind === 'etcdFolder' ||
     kind === 'etcdKey' ||
     kind === 'etcdMore' ||
+    kind === 'zookeeperNode' ||
+    kind === 'zookeeperMore' ||
     kind === 'kafkaTopics' ||
     kind === 'kafkaTopic' ||
     kind === 'kafkaPartition' ||
@@ -845,6 +893,8 @@ export function nameOf(node: TreeNode): string | undefined {
       return node.key.text;
     case 'etcdFolder':
       return node.prefix.text;
+    case 'zookeeperNode':
+      return node.path;
     case 'kafkaTopic':
       return node.topic;
     case 'kafkaGroup':
@@ -865,6 +915,7 @@ export function nameOf(node: TreeNode): string | undefined {
     case 'redisDatabase':
     case 'redisMore':
     case 'etcdMore':
+    case 'zookeeperMore':
     case 'kafkaTopics':
     case 'kafkaPartition':
     case 'kafkaGroups':
@@ -926,6 +977,8 @@ export function objectRefOf(node: TreeNode): ObjectRef | undefined {
     case 'etcdFolder':
     case 'etcdKey':
     case 'etcdMore':
+    case 'zookeeperNode':
+    case 'zookeeperMore':
     case 'kafkaTopics':
     case 'kafkaTopic':
     case 'kafkaPartition':
@@ -955,6 +1008,15 @@ export function connectionContext(options: {
       : connected
         ? TREE_CONTEXT.rabbitConnectionConnected
         : TREE_CONTEXT.rabbitConnection;
+  }
+  if (family === 'zookeeper') {
+    return project
+      ? connected
+        ? TREE_CONTEXT.projectZookeeperConnectionConnected
+        : TREE_CONTEXT.projectZookeeperConnection
+      : connected
+        ? TREE_CONTEXT.zookeeperConnectionConnected
+        : TREE_CONTEXT.zookeeperConnection;
   }
   if (family === 'kafka') {
     return project

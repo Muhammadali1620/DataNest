@@ -108,6 +108,11 @@ import { EtcdKeyModel } from './panels/etcd-key-model';
 import { EtcdKeyPanel } from './panels/etcd-key-panel';
 import { etcdCommandHandlers } from './etcd/etcd-commands';
 import { etcdCommandUi } from './etcd/etcd-ui';
+import type { ZookeeperNodeBrowser } from '../services/zookeeper/node-browser';
+import { ZookeeperNodeModel } from './panels/zookeeper-node-model';
+import { ZookeeperNodePanel } from './panels/zookeeper-node-panel';
+import { zookeeperCommandHandlers } from './zookeeper/zookeeper-commands';
+import { zookeeperCommandUi } from './zookeeper/zookeeper-ui';
 import { KafkaTopicModel } from './panels/kafka-topic-model';
 import { KafkaTopicPanel } from './panels/kafka-topic-panel';
 import { kafkaCommandHandlers } from './kafka/kafka-commands';
@@ -203,6 +208,8 @@ export interface CommandDeps {
   readonly redisKeys: RedisKeyBrowser;
   /** The folders of etcd connections as read so far (V13.19). */
   readonly etcdKeys: EtcdKeyBrowser;
+  /** The znodes of ZooKeeper connections as read so far (V13.24). */
+  readonly zookeeperNodes: ZookeeperNodeBrowser;
   /** The Connections view, to reveal a key found by a search. */
   readonly treeView: vscode.TreeView<TreeElement>;
   /** The starred nodes (V13.2). */
@@ -474,6 +481,47 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
     },
   });
+  /** The tree's session of a ZooKeeper connection. */
+  const zookeeperSession = async (connectionId: string) =>
+    await deps.manager.acquireZookeeper(ConnectionManager.treeOwner(connectionId), {
+      connectionId,
+    });
+  const openZookeeperNode = (connectionId: string, path: string): Promise<void> => {
+    const config = deps.store.get(connectionId);
+    ZookeeperNodePanel.show({
+      extensionUri: deps.extensionUri,
+      logger: deps.logger,
+      connectionId,
+      policy: policyOf(config),
+      model: new ZookeeperNodeModel({
+        path,
+        connectionName: config?.name ?? '',
+        readOnly: config?.readOnly === true,
+        session: async () => await zookeeperSession(connectionId),
+      }),
+      onChanged: (change) => {
+        // A znode that appeared or went changes its parent's listing: read it again.
+        deps.zookeeperNodes.reset(change.connectionId);
+        deps.tree.refresh();
+      },
+      openNode: (other) => {
+        void openZookeeperNode(connectionId, other);
+      },
+    });
+    return Promise.resolve();
+  };
+  const zookeeperCommands = zookeeperCommandHandlers({
+    store: deps.store,
+    browser: deps.zookeeperNodes,
+    session: zookeeperSession,
+    tree: deps.tree,
+    ui: zookeeperCommandUi(deps.store),
+    openNode: openZookeeperNode,
+    texts: {
+      noZookeeper: vscode.l10n.t('There is no ZooKeeper connection yet'),
+      readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+    },
+  });
   /** The tree's session of a Kafka connection. */
   const kafkaSession = async (connectionId: string) =>
     await deps.manager.acquireKafka(ConnectionManager.treeOwner(connectionId), { connectionId });
@@ -719,6 +767,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         deps.cache.invalidate(connectionId);
         deps.redisKeys.reset(connectionId);
         deps.etcdKeys.reset(connectionId);
+        deps.zookeeperNodes.reset(connectionId);
       },
     },
     openTable: deps.openTable,
@@ -1186,6 +1235,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.etcdFindKey]: etcdCommands.findKey,
     [COMMAND_IDS.etcdNewKey]: etcdCommands.newKey,
     [COMMAND_IDS.etcdDeleteKeys]: etcdCommands.deleteKeys,
+    [COMMAND_IDS.zookeeperLoadMoreNodes]: zookeeperCommands.loadMoreNodes,
+    [COMMAND_IDS.zookeeperOpenNode]: zookeeperCommands.openNode,
+    [COMMAND_IDS.zookeeperGoToNode]: zookeeperCommands.goToNode,
+    [COMMAND_IDS.zookeeperNewNode]: zookeeperCommands.newNode,
+    [COMMAND_IDS.zookeeperDeleteNodes]: zookeeperCommands.deleteNodes,
     [COMMAND_IDS.kafkaOpenTopic]: kafkaCommands.openTopic,
     [COMMAND_IDS.kafkaNewTopic]: kafkaCommands.newTopic,
     [COMMAND_IDS.kafkaDeleteTopic]: kafkaCommands.deleteTopic,
@@ -1264,6 +1318,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         ResultsPanel.disposeAll();
         RedisKeyPanel.disposeAll();
         EtcdKeyPanel.disposeAll();
+        ZookeeperNodePanel.disposeAll();
         RedisConsolePanel.disposeAll();
         RedisInfoPanel.disposeAll();
         MongoDocumentsPanel.disposeAll();

@@ -132,6 +132,11 @@ describe('connections view', () => {
       'datanest.etcd.findKey',
       'datanest.etcd.newKey',
       'datanest.etcd.deleteKeys',
+      'datanest.zookeeper.loadMoreNodes',
+      'datanest.zookeeper.openNode',
+      'datanest.zookeeper.goToNode',
+      'datanest.zookeeper.newNode',
+      'datanest.zookeeper.deleteNodes',
       'datanest.kafka.openTopic',
       'datanest.kafka.newTopic',
       'datanest.kafka.deleteTopic',
@@ -184,6 +189,17 @@ describe('connections view', () => {
       'datanest.etcd.loadMoreKeys',
       'datanest.etcd.openKey',
       'datanest.etcd.deleteKeys',
+    ]) {
+      await vscode.commands.executeCommand(id);
+    }
+  });
+
+  it('ZooKeeper znode commands without a node do nothing', async () => {
+    // They belong to tree items; from elsewhere there is no znode to act on.
+    for (const id of [
+      'datanest.zookeeper.loadMoreNodes',
+      'datanest.zookeeper.openNode',
+      'datanest.zookeeper.deleteNodes',
     ]) {
       await vscode.commands.executeCommand(id);
     }

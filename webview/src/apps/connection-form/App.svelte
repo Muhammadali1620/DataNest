@@ -94,6 +94,7 @@
     etcd: 'form.driver.etcd',
     kafka: 'form.driver.kafka',
     rabbitmq: 'form.driver.rabbitmq',
+    zookeeper: 'form.driver.zookeeper',
     influxdb: 'form.driver.influxdb',
     loki: 'form.driver.loki',
     plugin: 'form.driver.plugin',
@@ -121,6 +122,7 @@
   const isEtcd = $derived(fields?.driver === 'etcd');
   const isKafka = $derived(fields?.driver === 'kafka');
   const isRabbit = $derived(fields?.driver === 'rabbitmq');
+  const isZookeeper = $derived(fields?.driver === 'zookeeper');
   const isInflux = $derived(fields?.driver === 'influxdb');
   const isLoki = $derived(fields?.driver === 'loki');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
@@ -443,6 +445,8 @@
                     ? t('form.loki.hostHint')
                   : isRabbit
                     ? t('form.rabbit.hostHint')
+                  : isZookeeper
+                    ? t('form.zookeeper.hostHint')
                   : isNeo4j
                     ? t('form.neo4j.hostHint')
                   : isCassandra
@@ -608,6 +612,8 @@
                     ? t('form.kafka.userHint')
                   : isRabbit
                     ? t('form.rabbit.userHint')
+                  : isZookeeper
+                    ? t('form.zookeeper.userHint')
                   : isEtcd
                     ? t('form.etcd.userHint')
                     : isInflux
@@ -721,6 +727,8 @@
                       ? t('form.cassandra.keyspace')
                     : isRabbit
                       ? t('form.rabbit.vhost')
+                      : isZookeeper
+                        ? t('form.zookeeper.chroot')
                       : t('form.database')}
               hint={isRedis
                 ? t('form.redis.databaseHint')
@@ -734,6 +742,8 @@
                       ? t('form.cassandra.keyspaceHint')
                       : isRabbit
                         ? t('form.rabbit.vhostHint')
+                      : isZookeeper
+                        ? t('form.zookeeper.chrootHint')
                         : t('form.databaseHint')}
               error={isRedis
                 ? (errorFor('redis-database-invalid') ?? errorFor('redis-cluster-database'))
@@ -744,7 +754,7 @@
                 bind:value={fields.database}
                 maxlength={CONNECTION_LIMITS.field}
                 inputmode={isRedis ? 'numeric' : undefined}
-                placeholder={isRedis ? '0' : undefined}
+                placeholder={isRedis ? '0' : isZookeeper ? '/app' : undefined}
                 aria-label={isRedis
                   ? t('form.redis.database')
                   : isInflux
@@ -755,6 +765,8 @@
                         ? t('form.cassandra.keyspace')
                       : isRabbit
                         ? t('form.rabbit.vhost')
+                        : isZookeeper
+                          ? t('form.zookeeper.chroot')
                         : t('form.database')}
                 autocomplete="off"
               />

@@ -9,6 +9,10 @@ import { lookFromSettings, type ResultsLook } from '../shared/results-look';
 import type { TreeSettings } from './tree/tree-model';
 import type { KeyBrowserSettings } from '../services/redis/key-browser';
 import { DEFAULT_KEYS_PER_LOAD, type EtcdBrowserSettings } from '../services/etcd/key-browser';
+import {
+  DEFAULT_CHILDREN_PER_LOAD,
+  type ZookeeperBrowserSettings,
+} from '../services/zookeeper/node-browser';
 
 /**
  * Reads DataNest settings on every call, so a change in the editor takes effect
@@ -58,6 +62,18 @@ export function createEtcdKeySettings(): EtcdBrowserSettings {
         .getConfiguration(CONFIG_SECTION)
         .get<number>(CONFIG_KEYS.etcdKeysPerLoad, DEFAULT_KEYS_PER_LOAD);
       return Number.isInteger(value) && value > 0 ? value : DEFAULT_KEYS_PER_LOAD;
+    },
+  };
+}
+
+/** `datanest.zookeeper.childrenPerLoad`: how many children one page of a znode brings (V13.24). */
+export function createZookeeperSettings(): ZookeeperBrowserSettings {
+  return {
+    childrenPerLoad: () => {
+      const value = vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<number>(CONFIG_KEYS.zookeeperChildrenPerLoad, DEFAULT_CHILDREN_PER_LOAD);
+      return Number.isInteger(value) && value > 0 ? value : DEFAULT_CHILDREN_PER_LOAD;
     },
   };
 }

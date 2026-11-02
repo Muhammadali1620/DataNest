@@ -524,6 +524,30 @@ services:
       <<: *healthcheck
       test: ['CMD', '/usr/local/bin/etcdctl', 'endpoint', 'health']
 
+  # Apache ZooKeeper (V13.24), group `zookeeper`: one server in standalone mode, the client
+  # port open to everyone (the tests sign in with a digest user when they need to). The
+  # four-letter `ruok` is allowed for the health check, which talks to the port without any
+  # tool, as the image has none. The data lives in tmpfs, so every start is empty.
+  zookeeper:
+    image: zookeeper:3.9
+    container_name: datanest-zookeeper
+    profiles: [zookeeper]
+    environment:
+      ZOO_4LW_COMMANDS_WHITELIST: ruok
+      JVMFLAGS: -Xmx256m -Xms64m
+    ports:
+      - 127.0.0.1:7181:2181
+    tmpfs:
+      - /data
+      - /datalog
+    healthcheck:
+      <<: *healthcheck
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/2181; printf ruok >&3; head -c 4 <&3 | grep -q imok'
+
   # InfluxDB 2.x (V13.20), group `influxdb`: one organization and one bucket with a known
   # admin token (test-only constants, see test/helpers/influxdb-servers.ts). The data lives
   # in tmpfs, so every start is empty; the tests write their own points.

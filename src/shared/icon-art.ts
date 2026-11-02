@@ -40,6 +40,7 @@ export const PANEL_TILES: Readonly<Record<string, PanelTile>> = {
   'etcd-key': { glyph: 'key', tone: 'blue' },
   'kafka-topic': { glyph: 'comment-discussion', tone: 'amber' },
   'rabbitmq-object': { glyph: 'mail', tone: 'orange' },
+  'zookeeper-node': { glyph: 'list-tree', tone: 'green' },
   manager: { glyph: 'dashboard', tone: 'teal' },
   'mongo-documents': { glyph: 'json', tone: 'green' },
   ping: { glyph: 'debug-disconnect', tone: 'teal' },

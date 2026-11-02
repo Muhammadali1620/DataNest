@@ -258,5 +258,11 @@
   "commands.rabbitmq.newQueue.title": "New Queue…",
   "commands.rabbitmq.newExchange.title": "New Exchange…",
   "commands.rabbitmq.purgeQueue.title": "Remove All Messages",
-  "commands.rabbitmq.deleteObject.title": "Delete"
+  "commands.rabbitmq.deleteObject.title": "Delete",
+  "commands.zookeeper.loadMoreNodes.title": "Load More ZooKeeper Znodes",
+  "commands.zookeeper.openNode.title": "Open ZooKeeper Znode",
+  "commands.zookeeper.goToNode.title": "Go to ZooKeeper Znode…",
+  "commands.zookeeper.newNode.title": "New ZooKeeper Znode…",
+  "commands.zookeeper.deleteNodes.title": "Delete ZooKeeper Znodes",
+  "configuration.zookeeper.childrenPerLoad.description": "How many children the tree reads from a ZooKeeper znode at a time. A znode with more children shows \"Load more znodes…\"."
 }

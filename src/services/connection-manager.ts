@@ -25,6 +25,7 @@ import type { Driver, Session, TransactionState } from '../drivers/driver';
 import type { ElasticDriver, ElasticSession } from '../drivers/elastic-driver';
 import type { EtcdDriver, EtcdSession } from '../drivers/etcd-driver';
 import type { KafkaDriver, KafkaSession } from '../drivers/kafka-driver';
+import type { ZookeeperDriver, ZookeeperSession } from '../drivers/zookeeper-driver';
 import type { RabbitDriver, RabbitSession } from '../drivers/rabbitmq-driver';
 import type { MongoDriver, MongoSession } from '../drivers/mongo-driver';
 import type { RedisDriver, RedisSession } from '../drivers/redis-driver';
@@ -33,6 +34,7 @@ import { ManagedSession } from './managed-session';
 import { ManagedElasticSession } from './elasticsearch/managed-elastic-session';
 import { ManagedEtcdSession } from './etcd/managed-etcd-session';
 import { ManagedKafkaSession } from './kafka/managed-kafka-session';
+import { ManagedZookeeperSession } from './zookeeper/managed-zookeeper-session';
 import { ManagedRabbitSession } from './rabbitmq/managed-rabbit-session';
 import { ManagedMongoSession } from './mongodb/managed-mongo-session';
 import { ManagedRedisSession } from './redis/managed-redis-session';
@@ -79,6 +81,8 @@ export interface DriverProvider {
   getEtcd?(): Promise<EtcdDriver>;
   /** Needed only by Kafka connections (V13.23). */
   getKafka?(): Promise<KafkaDriver>;
+  /** Needed only by ZooKeeper connections (V13.24). */
+  getZookeeper?(): Promise<ZookeeperDriver>;
   /** Needed only by RabbitMQ connections (V13.26). */
   getRabbit?(): Promise<RabbitDriver>;
 }
@@ -125,6 +129,11 @@ type Holder =
     }
   | { readonly family: 'etcd'; readonly target: SessionTarget; readonly session: EtcdSession }
   | { readonly family: 'kafka'; readonly target: SessionTarget; readonly session: KafkaSession }
+  | {
+      readonly family: 'zookeeper';
+      readonly target: SessionTarget;
+      readonly session: ZookeeperSession;
+    }
   | {
       readonly family: 'rabbitmq';
       readonly target: SessionTarget;
@@ -267,6 +276,12 @@ export class ConnectionManager implements Disposable {
     return held?.family === 'kafka' ? held.session : undefined;
   }
 
+  /** The live ZooKeeper session of an owner, or undefined when it holds none. */
+  zookeeperSessionOf(owner: string): ZookeeperSession | undefined {
+    const held = this.holders.get(owner);
+    return held?.family === 'zookeeper' ? held.session : undefined;
+  }
+
   /** The live RabbitMQ session of an owner, or undefined when it holds none. */
   rabbitSessionOf(owner: string): RabbitSession | undefined {
     const held = this.holders.get(owner);
@@ -333,6 +348,15 @@ export class ConnectionManager implements Disposable {
     const held = await this.acquireHolder(owner, target, 'kafka');
     if (held.family !== 'kafka') {
       throw new DbError('internal', msg('Expected a Kafka session'));
+    }
+    return held.session;
+  }
+
+  /** Like `acquire`, for a ZooKeeper connection (V13.24). */
+  async acquireZookeeper(owner: string, target: SessionTarget): Promise<ZookeeperSession> {
+    const held = await this.acquireHolder(owner, target, 'zookeeper');
+    if (held.family !== 'zookeeper') {
+      throw new DbError('internal', msg('Expected a ZooKeeper session'));
     }
     return held.session;
   }
@@ -414,6 +438,10 @@ export class ConnectionManager implements Disposable {
       await this.acquireKafka(ConnectionManager.treeOwner(connectionId), { connectionId });
       return;
     }
+    if (this.familyOf(connectionId) === 'zookeeper') {
+      await this.acquireZookeeper(ConnectionManager.treeOwner(connectionId), { connectionId });
+      return;
+    }
     if (this.familyOf(connectionId) === 'rabbitmq') {
       await this.acquireRabbit(ConnectionManager.treeOwner(connectionId), { connectionId });
       return;
@@ -491,6 +519,10 @@ export class ConnectionManager implements Disposable {
     }
     if (input.driver === 'kafka') {
       await this.testKafka(input, password, ssh, proxyPassword);
+      return;
+    }
+    if (input.driver === 'zookeeper') {
+      await this.testZookeeper(input, password, ssh, proxyPassword);
       return;
     }
     if (input.driver === 'rabbitmq') {
@@ -618,6 +650,16 @@ export class ConnectionManager implements Disposable {
     await this.testSession(input, password, ssh, proxyPassword, await this.etcdDriver());
   }
 
+  private async testZookeeper(
+    input: ConnectionInput,
+    password: string | undefined,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
+  ): Promise<void> {
+    // Opening a session reaches the servers: that proves the link works.
+    await this.testSession(input, password, ssh, proxyPassword, await this.zookeeperDriver());
+  }
+
   private async testKafka(
     input: ConnectionInput,
     password: string | undefined,
@@ -695,7 +737,9 @@ export class ConnectionManager implements Disposable {
                   ? await this.openKafka(owner, target, config)
                   : config.driver === 'rabbitmq'
                     ? await this.openRabbit(owner, target, config)
-                    : await this.openSql(owner, target, config, config.driver);
+                    : config.driver === 'zookeeper'
+                      ? await this.openZookeeper(owner, target, config)
+                      : await this.openSql(owner, target, config, config.driver);
       this.holders.set(owner, holder);
       this.setState(connectionId, { status: 'connected' });
       this.logger.info(`Connected "${config.name}" for ${owner}`);
@@ -950,6 +994,33 @@ export class ConnectionManager implements Disposable {
     return { family: 'rabbitmq', target, session };
   }
 
+  private async openZookeeper(
+    owner: string,
+    target: SessionTarget,
+    config: ConnectionConfig,
+  ): Promise<Holder> {
+    const driver = await this.zookeeperDriver();
+    const password = await this.store.getPassword(config.id);
+    const lease = await this.leaseTunnel(config);
+    let opened: ZookeeperSession;
+    try {
+      opened = await driver.openSession(resolve(config, target, password, lease));
+    } catch (error) {
+      await lease?.release();
+      throw lease?.forwardError() ?? error;
+    }
+    await this.closeIfDisposed(opened, lease);
+    const session = new ManagedZookeeperSession(opened, {
+      onLinkLost: (error) => {
+        this.forget(owner, error);
+      },
+      onClosed: async () => {
+        await lease?.release();
+      },
+    });
+    return { family: 'zookeeper', target, session };
+  }
+
   /** A connect that finished after dispose() must not leave a live link behind. */
   private async closeIfDisposed(
     opened: { close(): Promise<void> },
@@ -974,6 +1045,13 @@ export class ConnectionManager implements Disposable {
       throw new DbError('unsupported', msg('Elasticsearch is not available'));
     }
     return await this.drivers.getElastic();
+  }
+
+  private async zookeeperDriver(): Promise<ZookeeperDriver> {
+    if (this.drivers.getZookeeper === undefined) {
+      throw new DbError('unsupported', msg('ZooKeeper is not available'));
+    }
+    return await this.drivers.getZookeeper();
   }
 
   private async rabbitDriver(): Promise<RabbitDriver> {
@@ -1160,6 +1238,8 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
         return msg('"{0}" is a Kafka connection: it has topics, not SQL tables', config.name);
       case 'rabbitmq':
         return msg('"{0}" is a RabbitMQ connection: it has queues, not SQL tables', config.name);
+      case 'zookeeper':
+        return msg('"{0}" is a ZooKeeper connection: it has znodes, not SQL tables', config.name);
       case 'sql':
         return msg('"{0}" is a SQL connection', config.name);
     }
@@ -1177,6 +1257,8 @@ function familyMismatch(config: ConnectionConfig, wanted: DriverFamily): string 
       return msg('"{0}" is not a Kafka connection', config.name);
     case 'rabbitmq':
       return msg('"{0}" is not a RabbitMQ connection', config.name);
+    case 'zookeeper':
+      return msg('"{0}" is not a ZooKeeper connection', config.name);
   }
 }
 

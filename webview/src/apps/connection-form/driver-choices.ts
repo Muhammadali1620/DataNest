@@ -35,6 +35,7 @@ const DRIVER_MARKS: Readonly<Record<DriverId, readonly [string, Tone]>> = {
   etcd: ['Et', 'blue'],
   kafka: ['Kf', 'orange'],
   rabbitmq: ['Rq', 'red'],
+  zookeeper: ['Zk', 'red'],
   influxdb: ['In', 'purple'],
   loki: ['Lk', 'orange'],
   // Never offered as a card: connections of this kind are made outside the form.

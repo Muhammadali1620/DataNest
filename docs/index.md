@@ -18,7 +18,7 @@ no telemetry.
 5. [Database structure](guide/structure.md) — the tree, DDL, the table designer, objects.
 6. [Import, export and transfer](guide/data-transfer.md) — dumps, SQL files, CSV and JSON,
    test data, copying tables between connections.
-7. [Redis, MongoDB, Elasticsearch and etcd](guide/nosql.md)
+7. [Redis, MongoDB, Elasticsearch, etcd and ZooKeeper](guide/nosql.md)
 8. [Tools](guide/tools.md) — ER diagram, query plans, schema and data comparison, server
    monitor, users and privileges.
 9. [Manager](guide/manager.md) — log, dashboard, processes, dump and structure sync of a connection.

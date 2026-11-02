@@ -687,6 +687,31 @@ describe('Elasticsearch connections (V7.8)', () => {
     expect(filterSupport('elasticsearch')).toEqual({ databases: false, schemas: false });
   });
 
+  it('accepts the address of a Kafka schema registry and refuses one that is not http(s)', () => {
+    const kafka = { name: 'K', driver: 'kafka' as const, host: 'b:9092' };
+    expect(
+      connectionProblems({ ...kafka, kafka: { sasl: 'none', registry: 'http://r:8081/x' } }),
+    ).toEqual([]);
+    expect(
+      connectionProblems({ ...kafka, kafka: { sasl: 'none', registry: 'https://r' } }),
+    ).toEqual([]);
+    expect(connectionProblems({ ...kafka, kafka: { sasl: 'none' } })).toEqual([]);
+    for (const registry of ['r:8081', 'ftp://r', 'http://', 'not a url']) {
+      expect(connectionProblems({ ...kafka, kafka: { sasl: 'none', registry } })).toEqual([
+        'kafka-registry-invalid',
+      ]);
+    }
+    // Another driver has none.
+    expect(
+      connectionProblems({
+        name: 'x',
+        driver: 'mysql',
+        host: 'h',
+        kafka: { sasl: 'none', registry: 'bad' },
+      }),
+    ).toEqual([]);
+  });
+
   it('accepts a path prefix like /es and refuses one that is not a path', () => {
     expect(
       connectionProblems({ ...base, elastic: { auth: 'basic', pathPrefix: '/es/v1' } }),

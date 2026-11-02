@@ -62,6 +62,13 @@ describe('Kafka connections (V13.23)', () => {
     expect(parsed.kafka).toEqual({ sasl: 'plain' });
   });
 
+  it('read a schema registry from a saved connection', () => {
+    expect(kafkaSchema.parse({ sasl: 'none', registry: 'http://r:8081' })).toEqual({
+      sasl: 'none',
+      registry: 'http://r:8081',
+    });
+  });
+
   it('have a mark of their own in every state', () => {
     const files = (['on', 'off', 'error'] as const).map((state) => dbMarkFile('kafka', state));
     expect(new Set(files).size).toBe(3);
@@ -91,6 +98,14 @@ describe('the topic page protocol', () => {
     read: true,
     notice: 'hello',
   };
+
+  it('accepts a message that was decoded with a registry schema', () => {
+    const decoded = { ...message, schema: { id: 4, format: 'PROTOBUF' } };
+    expect(kafkaMessageSchema.parse(decoded)).toEqual(decoded);
+    expect(() =>
+      kafkaMessageSchema.parse({ ...message, schema: { id: 4, format: 'XML' } }),
+    ).toThrow();
+  });
 
   it('accepts a full state, a tombstone and a missing notice', () => {
     expect(kafkaTopicStateSchema.parse(state)).toEqual(state);

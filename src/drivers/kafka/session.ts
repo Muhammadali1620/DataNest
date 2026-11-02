@@ -17,7 +17,14 @@ import {
 } from '../../shared/connection';
 import { identityCheck, sniName, tlsFailure, tlsMaterial, type TlsMaterial } from '../common/tls';
 import type {
+  KafkaAcl,
+  KafkaAclOperation,
+  KafkaAclPattern,
+  KafkaAclResource,
+  KafkaBrokerInfo,
   KafkaCommitted,
+  KafkaConfigEntry,
+  KafkaConfigTarget,
   KafkaGroupInfo,
   KafkaHeader,
   KafkaLag,
@@ -34,6 +41,65 @@ import type {
   KafkaWatchRequest,
 } from '../kafka-driver';
 import { kafkaFailure } from './errors';
+import { basicAuth, globalRegistryFetch, type RegistryFetch, SchemaRegistry } from './registry';
+
+const ACL_ANY = 1;
+const ACL_ALLOW = 3;
+const ACL_DENY = 2;
+const ACL_RESOURCES: Readonly<Record<KafkaAclResource, number>> = {
+  topic: 2,
+  group: 3,
+  cluster: 4,
+  transactionalId: 5,
+};
+const ACL_PATTERNS: Readonly<Record<KafkaAclPattern, number>> = { literal: 3, prefixed: 4 };
+const ACL_OPERATIONS: Readonly<Record<KafkaAclOperation, number>> = {
+  all: 2,
+  read: 3,
+  write: 4,
+  create: 5,
+  delete: 6,
+  alter: 7,
+  describe: 8,
+  clusterAction: 9,
+  describeConfigs: 10,
+  alterConfigs: 11,
+  idempotentWrite: 12,
+};
+const CONFIG_SHOW_TRIES = 20;
+const CONFIG_SHOW_WAIT_MS = 250;
+const CONFIG_TOPIC = 1;
+const CONFIG_DYNAMIC = 2;
+const CONFIG_SOURCES: Readonly<Record<number, string>> = {
+  1: 'topic',
+  2: 'dynamic broker',
+  3: 'dynamic cluster default',
+  4: 'static',
+  5: 'default',
+  6: 'dynamic logger',
+};
+
+function nameOf<K extends string>(table: Readonly<Record<K, number>>, code: number): K | undefined {
+  return (Object.keys(table) as K[]).find((key) => table[key] === code);
+}
+
+function aclEntryOf(acl: KafkaAcl): KafkaAclEntry {
+  return {
+    resourceType: ACL_RESOURCES[acl.resource],
+    resourceName: acl.name,
+    resourcePatternType: ACL_PATTERNS[acl.pattern],
+    principal: acl.principal,
+    host: acl.host,
+    operation: ACL_OPERATIONS[acl.operation],
+    permissionType: acl.permission === 'allow' ? ACL_ALLOW : ACL_DENY,
+  };
+}
+
+function configResource(target: KafkaConfigTarget): { type: number; name: string } {
+  return target.kind === 'topic'
+    ? { type: 2, name: target.name }
+    : { type: 4, name: String(target.id) };
+}
 
 /** The name every read-only peek group starts with; the group list leaves these out. */
 export const PEEK_GROUP_PREFIX = 'datanest-peek-';
@@ -42,6 +108,23 @@ export const PEEK_GROUP_PREFIX = 'datanest-peek-';
 export const DEFAULT_READ_TIMEOUT_MS = 20_000;
 
 /** The slice of kafkajs' admin client the session uses. */
+/** An ACL as kafkajs wants it: its parts are numbers (`ACL_*` below). */
+export interface KafkaAclEntry {
+  resourceType: number;
+  resourceName: string;
+  resourcePatternType: number;
+  principal: string;
+  host: string;
+  operation: number;
+  permissionType: number;
+}
+
+export type KafkaAclFilter = Omit<KafkaAclEntry, 'principal' | 'host' | 'resourceName'> & {
+  principal?: string;
+  host?: string;
+  resourceName?: string;
+};
+
 export interface KafkaAdminLike {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -67,7 +150,46 @@ export interface KafkaAdminLike {
     groupId: string;
     topics?: string[];
   }): Promise<{ topic: string; partitions: { partition: number; offset: string }[] }[]>;
-  describeCluster(): Promise<{ brokers: unknown[]; controller: number | null; clusterId: string }>;
+  describeCluster(): Promise<{
+    brokers: { nodeId: number; host: string; port: number }[];
+    controller: number | null;
+    clusterId: string;
+  }>;
+  describeAcls(filter: KafkaAclFilter): Promise<{
+    errorCode: number;
+    errorMessage?: string;
+    resources: {
+      resourceType: number;
+      resourceName: string;
+      resourcePatternType: number;
+      acls: { principal: string; host: string; operation: number; permissionType: number }[];
+    }[];
+  }>;
+  createAcls(options: { acl: KafkaAclEntry[] }): Promise<boolean>;
+  deleteAcls(options: { filters: KafkaAclFilter[] }): Promise<{
+    filterResponses: { errorCode: number; errorMessage?: string; matchingAcls: unknown[] }[];
+  }>;
+  describeConfigs(options: {
+    resources: { type: number; name: string }[];
+    includeSynonyms: boolean;
+  }): Promise<{
+    resources: {
+      resourceName: string;
+      errorCode: number;
+      errorMessage: string;
+      configEntries: {
+        configName: string;
+        configValue: string | null;
+        configSource: number;
+        isSensitive: boolean;
+        readOnly: boolean;
+      }[];
+    }[];
+  }>;
+  alterConfigs(options: {
+    validateOnly: boolean;
+    resources: { type: number; name: string; configEntries: { name: string; value: string }[] }[];
+  }): Promise<unknown>;
   createTopics(options: {
     topics: { topic: string; numPartitions: number; replicationFactor: number }[];
     waitForLeaders?: boolean;
@@ -269,7 +391,27 @@ class ClientSession implements KafkaSession {
   constructor(
     private readonly client: KafkaClientLike,
     private admin: KafkaAdminLike,
+    private readonly registry?: SchemaRegistry,
   ) {}
+
+  /** Shows a message written with a registry schema decoded; any other stays as it is. */
+  private async decoded(message: KafkaMessage): Promise<KafkaMessage> {
+    if (this.registry === undefined) {
+      return message;
+    }
+    const value = message.value === null ? undefined : await this.registry.decode(message.value);
+    const key = message.key === null ? undefined : await this.registry.decode(message.key);
+    if (value === undefined && key === undefined) {
+      return message;
+    }
+    const shown = value ?? key;
+    return {
+      ...message,
+      key: key === undefined ? message.key : key.bytes,
+      value: value === undefined ? message.value : value.bytes,
+      ...(shown === undefined ? {} : { schema: { id: shown.id, format: shown.format } }),
+    };
+  }
 
   async open(): Promise<void> {
     await this.admin.connect();
@@ -364,15 +506,15 @@ class ClientSession implements KafkaSession {
         await consumer.subscribe({ topic: request.topic, fromBeginning: true });
         await consumer.run({
           autoCommit: false,
-          eachMessage: ({ partition, message }) => {
+          eachMessage: async ({ partition, message }) => {
             if (partition !== request.partition) {
-              return Promise.resolve();
+              return;
             }
             const offset = BigInt(message.offset);
             if (offset < start || messages.length >= request.count) {
-              return Promise.resolve();
+              return;
             }
-            messages.push(messageOf(partition, message));
+            messages.push(await this.decoded(messageOf(partition, message)));
             bytes += (message.key?.length ?? 0) + (message.value?.length ?? 0);
             if (
               messages.length >= request.count ||
@@ -381,7 +523,6 @@ class ClientSession implements KafkaSession {
             ) {
               finish();
             }
-            return Promise.resolve();
           },
         });
         consumer.seek({
@@ -428,6 +569,7 @@ class ClientSession implements KafkaSession {
     const finished = new Promise<void>((resolve) => {
       finish = resolve;
     });
+    const stopped = (): boolean => request.signal.aborted;
     const onAbort = (): void => {
       finish();
     };
@@ -441,15 +583,17 @@ class ClientSession implements KafkaSession {
         await consumer.subscribe({ topic: request.topic, fromBeginning: true });
         await consumer.run({
           autoCommit: false,
-          eachMessage: ({ partition, message }) => {
+          eachMessage: async ({ partition, message }) => {
             if (
               partition === request.partition &&
               !request.signal.aborted &&
               BigInt(message.offset) >= start
             ) {
-              onMessages([messageOf(partition, message)]);
+              const shown = await this.decoded(messageOf(partition, message));
+              if (!stopped()) {
+                onMessages([shown]);
+              }
             }
-            return Promise.resolve();
           },
         });
         consumer.seek({
@@ -635,6 +779,144 @@ class ClientSession implements KafkaSession {
     await this.freshAdmin();
   }
 
+  async listBrokers(): Promise<readonly KafkaBrokerInfo[]> {
+    const cluster = await this.run(() => this.admin.describeCluster());
+    return cluster.brokers
+      .map((one) => ({ id: one.nodeId, host: one.host, port: one.port }))
+      .sort((a, b) => a.id - b.id);
+  }
+
+  async listAcls(): Promise<readonly KafkaAcl[]> {
+    const response = await this.run(() =>
+      this.admin.describeAcls({
+        resourceType: ACL_ANY,
+        resourcePatternType: ACL_ANY,
+        operation: ACL_ANY,
+        permissionType: ACL_ANY,
+      }),
+    );
+    const found: KafkaAcl[] = [];
+    for (const resource of response.resources) {
+      const kind = nameOf(ACL_RESOURCES, resource.resourceType);
+      const pattern = nameOf(ACL_PATTERNS, resource.resourcePatternType);
+      if (kind === undefined || pattern === undefined) {
+        continue;
+      }
+      for (const acl of resource.acls) {
+        const operation = nameOf(ACL_OPERATIONS, acl.operation);
+        const permission = acl.permissionType === ACL_ALLOW ? 'allow' : 'deny';
+        if (operation !== undefined) {
+          found.push({
+            resource: kind,
+            name: resource.resourceName,
+            pattern,
+            principal: acl.principal,
+            host: acl.host,
+            operation,
+            permission,
+          });
+        }
+      }
+    }
+    return found.sort((a, b) =>
+      `${a.resource}/${a.name}/${a.principal}/${a.operation}`.localeCompare(
+        `${b.resource}/${b.name}/${b.principal}/${b.operation}`,
+      ),
+    );
+  }
+
+  async createAcl(acl: KafkaAcl): Promise<void> {
+    await this.run(() => this.admin.createAcls({ acl: [aclEntryOf(acl)] }));
+  }
+
+  async deleteAcl(acl: KafkaAcl): Promise<number> {
+    const response = await this.run(() => this.admin.deleteAcls({ filters: [aclEntryOf(acl)] }));
+    const first = response.filterResponses[0];
+    if (first !== undefined && first.errorCode !== 0) {
+      throw new DbError(
+        'internal',
+        first.errorMessage ?? msg('The cluster did not remove the rule'),
+      );
+    }
+    return first?.matchingAcls.length ?? 0;
+  }
+
+  async describeConfig(target: KafkaConfigTarget): Promise<readonly KafkaConfigEntry[]> {
+    const resource = configResource(target);
+    const response = await this.run(() =>
+      this.admin.describeConfigs({ resources: [resource], includeSynonyms: false }),
+    );
+    const first = response.resources[0];
+    if (first?.errorCode !== 0) {
+      const said = first?.errorMessage ?? '';
+      throw new DbError(
+        first?.errorCode === 3 ? 'not-found' : 'internal',
+        said === '' ? msg('The cluster did not tell its settings') : said,
+      );
+    }
+    return first.configEntries
+      .map((entry) => ({
+        name: entry.configName,
+        value: entry.isSensitive ? '' : (entry.configValue ?? ''),
+        overridden: entry.configSource === CONFIG_TOPIC || entry.configSource === CONFIG_DYNAMIC,
+        sensitive: entry.isSensitive,
+        readOnly: entry.readOnly,
+        source: CONFIG_SOURCES[entry.configSource] ?? 'unknown',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async setConfig(target: KafkaConfigTarget, name: string, value: string | null): Promise<void> {
+    const current = await this.describeConfig(target);
+    const entry = current.find((one) => one.name === name);
+    if (entry === undefined) {
+      throw new DbError('not-found', msg('The setting "{0}" does not exist here', name));
+    }
+    if (entry.readOnly) {
+      throw new DbError('permission-denied', msg('The setting "{0}" cannot be changed', name));
+    }
+    // The call replaces all that is set on the resource, so what is set now is sent back.
+    const kept = current.filter((one) => one.overridden && one.name !== name);
+    if (kept.some((one) => one.sensitive) || (entry.sensitive && entry.overridden)) {
+      throw new DbError(
+        'unsupported',
+        msg(
+          'This resource has a secret setting the cluster never tells, so changing settings here would lose it',
+        ),
+      );
+    }
+    const entries = kept.map((one) => ({ name: one.name, value: one.value }));
+    if (value !== null) {
+      entries.push({ name, value });
+    }
+    const resource = configResource(target);
+    await this.run(() =>
+      this.admin.alterConfigs({
+        validateOnly: false,
+        resources: [{ ...resource, configEntries: entries }],
+      }),
+    );
+    await this.untilConfigShows(target, name, value);
+  }
+
+  /**
+   * A broker applies a changed setting a moment after it has answered, so a read right
+   * away can still show the old value; this waits (a few seconds at most) until it shows.
+   */
+  private async untilConfigShows(
+    target: KafkaConfigTarget,
+    name: string,
+    value: string | null,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < CONFIG_SHOW_TRIES; attempt += 1) {
+      const entry = (await this.describeConfig(target)).find((one) => one.name === name);
+      if (entry !== undefined && (value === null ? !entry.overridden : entry.value === value)) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, CONFIG_SHOW_WAIT_MS));
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     const producer = this.producer ?? (await this.producerOpening?.catch(() => undefined));
@@ -702,6 +984,7 @@ class ClientSession implements KafkaSession {
 export async function openKafkaSession(
   config: ResolvedConnectionConfig,
   factory: KafkaClientFactory = kafkajsFactory,
+  registryFetch: RegistryFetch = globalRegistryFetch,
 ): Promise<KafkaSession> {
   const tls = await tlsMaterial(config);
   let client: KafkaClientLike;
@@ -710,7 +993,17 @@ export async function openKafkaSession(
   } catch (error) {
     throw kafkaFailure(error);
   }
-  const session = new ClientSession(client, client.admin());
+  const registryUrl = config.kafka?.registry?.trim() ?? '';
+  const user = config.user?.trim() ?? '';
+  const registry =
+    registryUrl === ''
+      ? undefined
+      : new SchemaRegistry(
+          registryUrl,
+          registryFetch,
+          user === '' ? undefined : basicAuth(user, config.password ?? ''),
+        );
+  const session = new ClientSession(client, client.admin(), registry);
   try {
     await session.open();
   } catch (error) {

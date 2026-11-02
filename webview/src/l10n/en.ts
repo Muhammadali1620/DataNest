@@ -241,6 +241,9 @@ export const en = {
   'kafka.readHint': 'Reading does not move what any consumer group has read: nothing is committed.',
   'kafka.messagesTitle': 'Messages',
   'kafka.tombstoneBadge': 'tombstone',
+  'kafka.schemaTitle': 'Decoded with registry schema {0}',
+  'kafka.schemaNote':
+    'Decoded from {0} with registry schema {1}; the bytes on the topic are not changed.',
   'kafka.messageTitle': 'Partition {0}, offset {1}',
   'kafka.tombstoneNote': 'This message has no value: it marks the key as deleted.',
   'kafka.headerName': 'Header',
@@ -386,6 +389,10 @@ export const en = {
   'form.kafka.sasl.plain': 'PLAIN',
   'form.kafka.sasl.scram256': 'SCRAM-SHA-256',
   'form.kafka.sasl.scram512': 'SCRAM-SHA-512',
+  'form.kafka.registry': 'Schema registry',
+  'form.kafka.registryHint':
+    'Optional. The address of a Confluent-compatible registry; messages written with an Avro, Protobuf or JSON schema then show decoded. The user and password above, if set, sign in to it too',
+  'form.kafka.error.registry': 'Write the address as http://host:port or https://host:port',
   'redis.view': 'View',
   'redis.mode.text': 'Text',
   'redis.mode.json': 'JSON',

@@ -41,6 +41,10 @@ export const kafkaMessageSchema = object({
   /** Null for a tombstone. */
   value: nullable(redisValueSchema),
   headers: array(kafkaHeaderSchema, { maxLength: 200 }),
+  /** Set when the key or value was written with a registry schema and shows decoded (V13.34). */
+  schema: optional(
+    object({ id: number({ integer: true, min: 0 }), format: literal('AVRO', 'PROTOBUF', 'JSON') }),
+  ),
 });
 
 export const kafkaTopicStateSchema = object({

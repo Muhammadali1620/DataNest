@@ -174,6 +174,8 @@ export interface FormFields {
   elasticPrefix: string;
   /** Kafka (V13.23): how the brokers want a user to sign in. */
   kafkaSasl: KafkaSaslMechanism;
+  /** The address of a schema registry (V13.34); empty: none. */
+  kafkaRegistry: string;
   /** A Unix socket instead of host and port (V10.2.5); MySQL, PostgreSQL, Redis. */
   socket: string;
   /** Connect through a proxy (V10.2.5); its fields are kept while it is off. */
@@ -240,6 +242,7 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     elasticAuth: input.elastic?.auth ?? 'basic',
     elasticPrefix: input.elastic?.pathPrefix ?? '',
     kafkaSasl: input.kafka?.sasl ?? 'none',
+    kafkaRegistry: input.kafka?.registry ?? '',
     socket: input.socket ?? '',
     useProxy: input.proxy !== undefined,
     proxyKind: input.proxy?.kind ?? 'socks5',
@@ -265,11 +268,16 @@ export function toProxy(fields: FormFields): ProxySettings | undefined {
   };
 }
 
-/** The Kafka settings to send; none when the brokers ask for no SASL. */
+/** The Kafka settings to send; none when the brokers ask for no SASL and no registry is set. */
 export function toKafka(fields: FormFields): KafkaSettings | undefined {
-  return fields.driver === 'kafka' && fields.kafkaSasl !== 'none'
-    ? { sasl: fields.kafkaSasl }
-    : undefined;
+  if (fields.driver !== 'kafka') {
+    return undefined;
+  }
+  const registry = fields.kafkaRegistry.trim();
+  if (fields.kafkaSasl === 'none' && registry === '') {
+    return undefined;
+  }
+  return { sasl: fields.kafkaSasl, ...(registry === '' ? {} : { registry }) };
 }
 
 /** The Elasticsearch settings to send; none for a user and password at the root. */
@@ -757,6 +765,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'mongo-name-invalid': 'form.mongo.error.name',
   'mongo-ssh-topology': 'form.mongo.error.ssh',
   'elastic-prefix-invalid': 'form.elastic.error.prefix',
+  'kafka-registry-invalid': 'form.kafka.error.registry',
   'socket-unsupported': 'form.socket.error.unsupported',
   'socket-with-tunnel': 'form.socket.error.tunnel',
   'proxy-host-empty': 'form.error.hostEmpty',
@@ -798,6 +807,7 @@ export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void 
   fields.elasticAuth = input.elastic?.auth ?? 'basic';
   fields.elasticPrefix = input.elastic?.pathPrefix ?? '';
   fields.kafkaSasl = input.kafka?.sasl ?? 'none';
+  fields.kafkaRegistry = input.kafka?.registry ?? '';
   if (password !== undefined) {
     fields.password = password;
     fields.passwordTouched = true;

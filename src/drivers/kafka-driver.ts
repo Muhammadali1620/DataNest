@@ -49,6 +49,11 @@ export interface KafkaMessage {
   /** Null for a tombstone. */
   readonly value: Uint8Array | null;
   readonly headers: readonly KafkaHeader[];
+  /**
+   * Set when `key` or `value` was written with a registry schema and shows decoded (V13.34):
+   * the schema's id and format.
+   */
+  readonly schema?: { readonly id: number; readonly format: 'AVRO' | 'PROTOBUF' | 'JSON' };
 }
 
 export interface KafkaReadRequest {
@@ -121,6 +126,68 @@ export interface KafkaProduced {
   readonly offset: string;
 }
 
+/** What an ACL applies to (V13.34). */
+export const KAFKA_ACL_RESOURCES = ['topic', 'group', 'cluster', 'transactionalId'] as const;
+export type KafkaAclResource = (typeof KAFKA_ACL_RESOURCES)[number];
+
+/** `literal`: the name itself; `prefixed`: every name that starts with it. */
+export const KAFKA_ACL_PATTERNS = ['literal', 'prefixed'] as const;
+export type KafkaAclPattern = (typeof KAFKA_ACL_PATTERNS)[number];
+
+export const KAFKA_ACL_OPERATIONS = [
+  'all',
+  'read',
+  'write',
+  'create',
+  'delete',
+  'alter',
+  'describe',
+  'clusterAction',
+  'describeConfigs',
+  'alterConfigs',
+  'idempotentWrite',
+] as const;
+export type KafkaAclOperation = (typeof KAFKA_ACL_OPERATIONS)[number];
+
+/** One access rule of the cluster: who may (or may not) do what to which resource. */
+export interface KafkaAcl {
+  readonly resource: KafkaAclResource;
+  /** `kafka-cluster` for the cluster. */
+  readonly name: string;
+  readonly pattern: KafkaAclPattern;
+  /** `User:alice`; `User:*` stands for everybody. */
+  readonly principal: string;
+  /** `*` for any address. */
+  readonly host: string;
+  readonly operation: KafkaAclOperation;
+  readonly permission: 'allow' | 'deny';
+}
+
+/** What a setting belongs to: a topic, or a broker (by its id). */
+export type KafkaConfigTarget =
+  | { readonly kind: 'topic'; readonly name: string }
+  | { readonly kind: 'broker'; readonly id: number };
+
+/** One setting of a topic or a broker (V13.34). */
+export interface KafkaConfigEntry {
+  readonly name: string;
+  /** Empty for a sensitive setting: the broker never tells it. */
+  readonly value: string;
+  /** Set on the topic or the broker itself, not inherited and not the default. */
+  readonly overridden: boolean;
+  readonly sensitive: boolean;
+  readonly readOnly: boolean;
+  /** Where the value comes from, in words (`topic`, `dynamic broker`, `static`, `default`). */
+  readonly source: string;
+}
+
+/** One broker of the cluster. */
+export interface KafkaBrokerInfo {
+  readonly id: number;
+  readonly host: string;
+  readonly port: number;
+}
+
 /** One live connection to the brokers. */
 export interface KafkaSession {
   readonly server: KafkaServerInfo;
@@ -159,6 +226,21 @@ export interface KafkaSession {
   produce(request: KafkaProduceRequest): Promise<KafkaProduced>;
   createTopic(name: string, partitions: number, replication: number): Promise<void>;
   deleteTopic(name: string): Promise<void>;
+  /** The brokers of the cluster. */
+  listBrokers(): Promise<readonly KafkaBrokerInfo[]>;
+  /** The access rules of the cluster; an error says so when no authorizer is on. */
+  listAcls(): Promise<readonly KafkaAcl[]>;
+  createAcl(acl: KafkaAcl): Promise<void>;
+  /** Removes the rules that match `acl` exactly; returns how many there were. */
+  deleteAcl(acl: KafkaAcl): Promise<number>;
+  /** All settings of a topic or a broker, overridden ones marked. */
+  describeConfig(target: KafkaConfigTarget): Promise<readonly KafkaConfigEntry[]>;
+  /**
+   * Sets one setting, or takes its override away when `value` is null. The older call that
+   * kafkajs offers replaces everything set on the resource, so the session sends the
+   * overrides that exist now along with the change; nothing else is lost.
+   */
+  setConfig(target: KafkaConfigTarget, name: string, value: string | null): Promise<void>;
   close(): Promise<void>;
 }
 

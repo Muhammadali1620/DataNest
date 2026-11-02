@@ -20,6 +20,12 @@ function inner(overrides: Partial<KafkaSession>): KafkaSession {
     produce: unused,
     createTopic: unused,
     deleteTopic: unused,
+    listBrokers: unused,
+    listAcls: unused,
+    createAcl: unused,
+    deleteAcl: unused,
+    describeConfig: unused,
+    setConfig: unused,
     close: () => Promise.resolve(),
     ...overrides,
   };

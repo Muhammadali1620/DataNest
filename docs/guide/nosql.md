@@ -205,8 +205,30 @@ when the listener is encrypted.
   then advertises its own address, which the tunnel does not cover. Use brokers that
   advertise addresses you can reach.
 
-Not here (yet): a live view of new messages, Avro/Protobuf decoding through a schema
-registry, committing offsets for a group, ACLs and the cluster's configuration.
+- **Schema registry.** Put the address of a Confluent-compatible registry (Confluent's own,
+  Apicurio, Redpanda, …; e.g. `http://localhost:8081`, or `…/apis/ccompat/v7` for Apicurio)
+  in the **Schema registry** box of the connection. A message written with a schema starts
+  with a zero byte and the schema's id; DataNest asks the registry for the schema and shows
+  an **Avro**, **Protobuf** or **JSON Schema** message as JSON, with a badge that names the
+  format and the id. A message the registry cannot explain (no zero byte, an unknown id, the
+  registry is down) shows as the bytes it is. The bytes on the topic never change. The
+  connection's user and password, if set, sign in to the registry with Basic. Protobuf is
+  read by the `.proto` text the registry keeps; a field whose type lives in an imported file
+  shows by its number.
+- **Access rules (ACLs).** **Access Rules of Kafka…** on a connected connection lists who may
+  (or may not) do what, and offers **New rule…**: who (`User:alice`, `User:*`), what it
+  applies to (topic, group, cluster, transactional id; one name or every name that starts
+  with it), the operation, allow or deny, and the address. A pick on a rule removes it.
+  Every change asks first and takes effect at once. A cluster with no authorizer says so.
+- **Settings.** **Settings of Kafka Topic or Broker…** (on a topic, or on a connected
+  connection for its brokers) lists every setting with its value and where it comes from;
+  the ones set on the topic or broker itself come first. Pick one to change its value or
+  to take the override away. The cluster's own call replaces everything set on the
+  resource, so DataNest sends back the overrides that exist along with the change; a
+  resource that holds a secret setting (which a cluster never tells) is not changed here.
+
+Not here (yet): GSSAPI (Kerberos) and OAuth sign-in, and signing in to a registry apart
+from the connection's own user and password.
 
 ## RabbitMQ
 

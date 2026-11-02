@@ -210,6 +210,41 @@ describe('Kafka topic page: reading', () => {
     expect(rows[1]?.textContent).toContain('tombstone');
   });
 
+  it('marks a message that was decoded with a registry schema, in both languages (V13.34)', async () => {
+    const decoded = message('6', {
+      value: { text: '{"id":1}' },
+      schema: { id: 12, format: 'AVRO' },
+    });
+    await open(state({ read: true, messages: [decoded, message('7')] }));
+    const rows = within(screen.getByTestId('messages')).getAllByRole('row').slice(1);
+    expect(rows[0]?.textContent).toContain('AVRO');
+    expect(rows[0]?.querySelector('[title="Decoded with registry schema 12"]')).not.toBeNull();
+    expect(rows[1]?.textContent).not.toContain('AVRO');
+    await fireEvent.click(must(rows[0]));
+    await waitFor(() => {
+      expect(screen.getByTestId('schema-note').textContent).toContain('registry schema 12');
+    });
+    await fireEvent.click(must(rows[1]));
+    await waitFor(() => {
+      expect(screen.queryByTestId('schema-note')).toBeNull();
+    });
+  });
+
+  it('says in Russian which schema decoded a message (V13.34)', async () => {
+    await open(
+      state({
+        read: true,
+        messages: [message('6', { schema: { id: 3, format: 'PROTOBUF' } })],
+      }),
+      'ru',
+    );
+    const row = within(screen.getByTestId('messages')).getAllByRole('row')[1];
+    await fireEvent.click(must(row));
+    await waitFor(() => {
+      expect(screen.getByTestId('schema-note').textContent).toContain('схемой реестра 3');
+    });
+  });
+
   it('shows what the read did not bring', async () => {
     await open(state({ read: true, notice: 'The partition holds no messages' }));
     expect(screen.getByTestId('notice').textContent).toContain('holds no messages');

@@ -75,6 +75,7 @@ export function viewOf(message: KafkaMessage): KafkaMessageView {
       name: header.name,
       value: redisValueOf(header.value, MAX_SHOWN_BYTES, header.value.length),
     })),
+    ...(message.schema === undefined ? {} : { schema: message.schema }),
   };
 }
 

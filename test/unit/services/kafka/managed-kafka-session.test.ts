@@ -17,12 +17,75 @@ function inner(overrides: Partial<KafkaSession> = {}): KafkaSession {
     produce: () => Promise.resolve({ partition: 0, offset: '1' }),
     createTopic: () => Promise.resolve(),
     deleteTopic: () => Promise.resolve(),
+    listBrokers: () => Promise.resolve([]),
+    listAcls: () => Promise.resolve([]),
+    createAcl: () => Promise.resolve(),
+    deleteAcl: () => Promise.resolve(0),
+    describeConfig: () => Promise.resolve([]),
+    setConfig: () => Promise.resolve(),
     close: () => Promise.resolve(),
     ...overrides,
   };
 }
 
 describe('ManagedKafkaSession', () => {
+  it('passes the brokers, the access rules and the settings through (V13.34)', async () => {
+    const calls: string[] = [];
+    const managed = new ManagedKafkaSession(
+      inner({
+        listBrokers: () => {
+          calls.push('brokers');
+          return Promise.resolve([{ id: 1, host: 'b', port: 9092 }]);
+        },
+        listAcls: () => {
+          calls.push('acls');
+          return Promise.resolve([]);
+        },
+        createAcl: (acl) => {
+          calls.push(`create ${acl.principal}`);
+          return Promise.resolve();
+        },
+        deleteAcl: (acl) => {
+          calls.push(`delete ${acl.principal}`);
+          return Promise.resolve(2);
+        },
+        describeConfig: (target) => {
+          calls.push(`describe ${target.kind}`);
+          return Promise.resolve([]);
+        },
+        setConfig: (target, name, value) => {
+          calls.push(`set ${target.kind} ${name} ${String(value)}`);
+          return Promise.resolve();
+        },
+      }),
+      { onLinkLost: () => undefined },
+    );
+    expect(await managed.listBrokers()).toHaveLength(1);
+    await managed.listAcls();
+    const acl = {
+      resource: 'topic',
+      name: 't',
+      pattern: 'literal',
+      principal: 'User:a',
+      host: '*',
+      operation: 'read',
+      permission: 'allow',
+    } as const;
+    await managed.createAcl(acl);
+    expect(await managed.deleteAcl(acl)).toBe(2);
+    await managed.describeConfig({ kind: 'topic', name: 't' });
+    await managed.setConfig({ kind: 'broker', id: 1 }, 'x', null);
+    expect(calls).toEqual([
+      'brokers',
+      'acls',
+      'create User:a',
+      'delete User:a',
+      'describe topic',
+      'set broker x null',
+    ]);
+    await managed.close();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });

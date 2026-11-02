@@ -5,7 +5,11 @@
 
 import { toDbError } from '../../core/errors';
 import type {
+  KafkaAcl,
+  KafkaBrokerInfo,
   KafkaCommitted,
+  KafkaConfigEntry,
+  KafkaConfigTarget,
   KafkaGroupInfo,
   KafkaLag,
   KafkaMessage,
@@ -97,6 +101,30 @@ export class ManagedKafkaSession implements KafkaSession {
 
   deleteTopic(name: string): Promise<void> {
     return this.call(() => this.inner.deleteTopic(name));
+  }
+
+  listBrokers(): Promise<readonly KafkaBrokerInfo[]> {
+    return this.call(() => this.inner.listBrokers());
+  }
+
+  listAcls(): Promise<readonly KafkaAcl[]> {
+    return this.call(() => this.inner.listAcls());
+  }
+
+  createAcl(acl: KafkaAcl): Promise<void> {
+    return this.call(() => this.inner.createAcl(acl));
+  }
+
+  deleteAcl(acl: KafkaAcl): Promise<number> {
+    return this.call(() => this.inner.deleteAcl(acl));
+  }
+
+  describeConfig(target: KafkaConfigTarget): Promise<readonly KafkaConfigEntry[]> {
+    return this.call(() => this.inner.describeConfig(target));
+  }
+
+  setConfig(target: KafkaConfigTarget, name: string, value: string | null): Promise<void> {
+    return this.call(() => this.inner.setConfig(target, name, value));
   }
 
   async close(): Promise<void> {

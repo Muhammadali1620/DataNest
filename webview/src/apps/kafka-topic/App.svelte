@@ -387,6 +387,7 @@
                     <td class="mono clip">{message.key === null ? '—' : cellText(message.key, 60)}</td>
                     <td class="mono clip">
                       {#if message.value === null}<span class="badge outline">{t('kafka.tombstoneBadge')}</span>{:else}{cellText(message.value, 160)}{/if}
+                      {#if message.schema !== undefined}<span class="badge outline" title={t('kafka.schemaTitle', message.schema.id)}>{message.schema.format}</span>{/if}
                       {#if message.headers.length > 0}<span class="badge outline" title={t('kafka.headers')}>{message.headers.length}</span>{/if}
                     </td>
                   </tr>
@@ -399,6 +400,9 @@
           {#key chosen.offset}
             <section class="block detail" data-testid="detail">
               <h2 class="section"><Icon name="eye" tone="blue" />{t('kafka.messageTitle', chosen.partition, chosen.offset)}</h2>
+              {#if chosen.schema !== undefined}
+                <p class="notice info problem" data-testid="schema-note"><Icon name="info" /><span>{t('kafka.schemaNote', chosen.schema.format, chosen.schema.id)}</span></p>
+              {/if}
               {#if chosen.key !== null}
                 <ValueEditor value={chosen.key} label={t('kafka.key')} {t} readonly rows={2} onchange={() => undefined} />
               {/if}

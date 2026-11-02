@@ -129,6 +129,7 @@ export const elasticSchema: Schema<ElasticSettings> = object({
 
 export const kafkaSchema: Schema<KafkaSettings> = object({
   sasl: literal(...KAFKA_SASL_MECHANISMS),
+  registry: optional(string({ maxLength: CONNECTION_LIMITS.field })),
 });
 
 export const proxySchema: Schema<ProxySettings> = object({

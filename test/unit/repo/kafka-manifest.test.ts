@@ -37,6 +37,8 @@ const KAFKA_COMMANDS = [
   [COMMAND_IDS.kafkaOpenTopic, 'openTopic', '$(go-to-file)'],
   [COMMAND_IDS.kafkaNewTopic, 'newTopic', '$(add)'],
   [COMMAND_IDS.kafkaDeleteTopic, 'deleteTopic', '$(trash)'],
+  [COMMAND_IDS.kafkaManageAcls, 'manageAcls', '$(shield)'],
+  [COMMAND_IDS.kafkaManageSettings, 'manageSettings', '$(settings-gear)'],
 ] as const;
 
 const KAFKA_CONNECTIONS: readonly string[] = [
@@ -60,7 +62,12 @@ describe('Kafka commands', () => {
   );
 
   it('keeps the ones that need a clicked node out of the palette', () => {
-    for (const id of [COMMAND_IDS.kafkaOpenTopic, COMMAND_IDS.kafkaDeleteTopic]) {
+    for (const id of [
+      COMMAND_IDS.kafkaOpenTopic,
+      COMMAND_IDS.kafkaDeleteTopic,
+      COMMAND_IDS.kafkaManageAcls,
+      COMMAND_IDS.kafkaManageSettings,
+    ]) {
       expect(palette.find((entry) => entry.command === id)?.when).toBe('false');
     }
     expect(palette.find((entry) => entry.command === COMMAND_IDS.kafkaNewTopic)).toBeUndefined();
@@ -89,6 +96,29 @@ describe('Kafka menus', () => {
     expect(entriesOf(COMMAND_IDS.kafkaDeleteTopic).map((entry) => contextsOf(entry.when))).toEqual([
       [TREE_CONTEXT.kafkaTopic, `${TREE_CONTEXT.kafkaTopic}.starred`],
     ]);
+  });
+
+  it('opens the access rules from a connected Kafka connection only (V13.34)', () => {
+    const named = entriesOf(COMMAND_IDS.kafkaManageAcls).flatMap((entry) => contextsOf(entry.when));
+    expect(named.sort()).toEqual(
+      [
+        TREE_CONTEXT.kafkaConnectionConnected,
+        `${TREE_CONTEXT.kafkaConnectionConnected}.starred`,
+        TREE_CONTEXT.projectKafkaConnectionConnected,
+        `${TREE_CONTEXT.projectKafkaConnectionConnected}.starred`,
+      ].sort(),
+    );
+  });
+
+  it('opens the settings from a connected connection (its brokers) and from a topic (V13.34)', () => {
+    const named = entriesOf(COMMAND_IDS.kafkaManageSettings).flatMap((entry) =>
+      contextsOf(entry.when),
+    );
+    expect(named).toContain(TREE_CONTEXT.kafkaConnectionConnected);
+    expect(named).toContain(TREE_CONTEXT.kafkaTopic);
+    expect(named).toContain(`${TREE_CONTEXT.kafkaTopic}.starred`);
+    expect(named).not.toContain(TREE_CONTEXT.kafkaConnection);
+    expect(named).not.toContain(TREE_CONTEXT.kafkaGroup);
   });
 
   it('resets the offsets of a group from its item only, starred or not', () => {

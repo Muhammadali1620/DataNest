@@ -1651,6 +1651,38 @@ describe('ConnectionStore Elasticsearch (V7.8)', () => {
     });
     expect(sql.elastic).toBeUndefined();
   });
+
+  it('keeps a Kafka schema registry, trimmed, even with no sign-in, and drops the defaults (V13.34)', async () => {
+    const one = store();
+    const withRegistry = await one.add({
+      name: 'R',
+      driver: 'kafka',
+      host: 'b:9092',
+      kafka: { sasl: 'none', registry: ' http://r:8081 ' },
+    });
+    expect(withRegistry.kafka).toEqual({ sasl: 'none', registry: 'http://r:8081' });
+    const both = await one.add({
+      name: 'B',
+      driver: 'kafka',
+      host: 'b:9092',
+      kafka: { sasl: 'plain', registry: 'https://r' },
+    });
+    expect(both.kafka).toEqual({ sasl: 'plain', registry: 'https://r' });
+    const nothing = await one.add({
+      name: 'N',
+      driver: 'kafka',
+      host: 'b:9092',
+      kafka: { sasl: 'none', registry: '  ' },
+    });
+    expect(nothing.kafka).toBeUndefined();
+    const other = await one.add({
+      name: 'O',
+      driver: 'mysql',
+      host: 'h',
+      kafka: { sasl: 'none', registry: 'http://r' },
+    });
+    expect(other.kafka).toBeUndefined();
+  });
 });
 
 describe('ConnectionStore: sockets and proxies (V10.2.5)', () => {

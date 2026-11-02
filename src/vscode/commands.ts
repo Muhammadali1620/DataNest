@@ -116,6 +116,7 @@ import { zookeeperCommandHandlers } from './zookeeper/zookeeper-commands';
 import { zookeeperCommandUi } from './zookeeper/zookeeper-ui';
 import { KafkaTopicModel } from './panels/kafka-topic-model';
 import { KafkaTopicPanel } from './panels/kafka-topic-panel';
+import { kafkaAdminHandlers } from './kafka/kafka-admin-commands';
 import { kafkaCommandHandlers } from './kafka/kafka-commands';
 import { kafkaCommandUi } from './kafka/kafka-ui';
 import { RabbitObjectModel } from './panels/rabbitmq-object-model';
@@ -560,7 +561,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     });
     return Promise.resolve();
   };
-  const kafkaCommands = kafkaCommandHandlers({
+  const kafkaDeps = {
     store: deps.store,
     session: kafkaSession,
     tree: deps.tree,
@@ -570,7 +571,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       noKafka: vscode.l10n.t('There is no Kafka connection yet'),
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
     },
-  });
+  };
+  const kafkaCommands = kafkaCommandHandlers(kafkaDeps);
+  const kafkaAdmin = kafkaAdminHandlers(kafkaDeps);
   /** The tree's session of a RabbitMQ connection. */
   const rabbitSession = async (connectionId: string) =>
     await deps.manager.acquireRabbit(ConnectionManager.treeOwner(connectionId), { connectionId });
@@ -1299,6 +1302,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.kafkaNewTopic]: kafkaCommands.newTopic,
     [COMMAND_IDS.kafkaDeleteTopic]: kafkaCommands.deleteTopic,
     [COMMAND_IDS.kafkaResetOffsets]: kafkaCommands.resetOffsets,
+    [COMMAND_IDS.kafkaManageAcls]: kafkaAdmin.manageAcls,
+    [COMMAND_IDS.kafkaManageSettings]: kafkaAdmin.manageSettings,
     [COMMAND_IDS.lokiSetRange]: lokiCommands.setRange,
     [COMMAND_IDS.lokiFollow]: lokiCommands.follow,
     [COMMAND_IDS.rabbitOpenObject]: rabbitCommands.openObject,

@@ -998,9 +998,16 @@ function normalizeElastic(elastic: ElasticSettings | undefined): ElasticSettings
   return { auth: elastic.auth, ...(prefix === '' ? {} : { pathPrefix: prefix }) };
 }
 
-/** No SASL is the default and is not stored. */
+/** No SASL and no registry is the default and is not stored. */
 function normalizeKafka(kafka: KafkaSettings | undefined): KafkaSettings | undefined {
-  return kafka === undefined || kafka.sasl === 'none' ? undefined : { sasl: kafka.sasl };
+  if (kafka === undefined) {
+    return undefined;
+  }
+  const registry = kafka.registry?.trim() ?? '';
+  if (kafka.sasl === 'none' && registry === '') {
+    return undefined;
+  }
+  return { sasl: kafka.sasl, ...(registry === '' ? {} : { registry }) };
 }
 
 /** True for a Redis connection that finds its master through Sentinels. */

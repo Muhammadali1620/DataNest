@@ -266,6 +266,12 @@ export type KafkaSaslMechanism = (typeof KAFKA_SASL_MECHANISMS)[number];
 
 export interface KafkaSettings {
   readonly sasl: KafkaSaslMechanism;
+  /**
+   * A schema registry (V13.34): the address of its Confluent-compatible API, e.g.
+   * `http://host:8081`. Messages written with a schema show decoded. The connection's user and
+   * password, when given, sign in to it with Basic.
+   */
+  readonly registry?: string;
 }
 
 /** How DataNest proves who it is to an SSH server. */
@@ -763,6 +769,8 @@ export type ConnectionProblem =
   | RedisProblem
   | MongoProblem
   | 'elastic-prefix-invalid'
+  /** The schema registry of a Kafka connection is not an http(s) address (V13.34). */
+  | 'kafka-registry-invalid'
   /** A Unix socket for a driver that has none (V10.2.5). */
   | 'socket-unsupported'
   /** A socket is on this machine: no tunnel or proxy leads to it. */
@@ -1048,8 +1056,21 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     if (prefix !== '' && !/^\/[A-Za-z0-9._~/-]*$/.test(prefix)) {
       problems.push('elastic-prefix-invalid');
     }
+    const registry = input.driver === 'kafka' ? (input.kafka?.registry ?? '') : '';
+    if (registry !== '' && !isHttpAddress(registry)) {
+      problems.push('kafka-registry-invalid');
+    }
   }
   return problems;
+}
+
+function isHttpAddress(text: string): boolean {
+  try {
+    const url = new URL(text);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname !== '';
+  } catch {
+    return false;
+  }
 }
 
 /** A short "user@host:port" or file path for tooltips and pickers. Never contains secrets. */

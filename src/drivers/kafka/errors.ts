@@ -24,6 +24,7 @@ function protocolKind(type: string): DbErrorCode | undefined {
       return type === 'INVALID_TOPIC_EXCEPTION' ? 'syntax' : 'not-found';
     case 'TOPIC_ALREADY_EXISTS':
       return 'constraint';
+    case 'SECURITY_DISABLED':
     case 'TOPIC_AUTHORIZATION_FAILED':
     case 'GROUP_AUTHORIZATION_FAILED':
     case 'CLUSTER_AUTHORIZATION_FAILED':

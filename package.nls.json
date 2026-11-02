@@ -259,6 +259,8 @@
   "commands.kafka.newTopic.title": "New Kafka Topic…",
   "commands.kafka.deleteTopic.title": "Delete Kafka Topic",
   "commands.kafka.resetOffsets.title": "Reset Offsets of Kafka Group…",
+  "commands.kafka.manageAcls.title": "Access Rules of Kafka…",
+  "commands.kafka.manageSettings.title": "Settings of Kafka Topic or Broker…",
   "configuration.kafka.showInternalTopics.description": "List Kafka's own topics (`__consumer_offsets`, `_schemas`, …) in the tree.",
   "commands.loki.setRange.title": "Set Loki Time Window…",
   "commands.loki.follow.title": "Follow Loki Query Live…",

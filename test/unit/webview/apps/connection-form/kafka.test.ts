@@ -180,19 +180,66 @@ describe('connection form: Kafka (V13.23)', () => {
     expect(screen.queryByTestId('kafka-proxy-note')).toBeNull();
   });
 
+  it('asks for a schema registry, shows the saved one and saves what is typed', async () => {
+    const { host } = await withState(
+      kafka({
+        input: {
+          name: 'Events',
+          driver: 'kafka',
+          host: 'b',
+          kafka: { sasl: 'none', registry: 'http://r:8081' },
+        },
+      }),
+    );
+    expect(field('Schema registry').value).toBe('http://r:8081');
+    const drafts: ConnectionDraft[] = [];
+    host.handle('save', (draft) => {
+      drafts.push(draft);
+      return { connectionId: 'c1' };
+    });
+    await fireEvent.input(field('Schema registry'), { target: { value: 'https://reg.example' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(drafts).toHaveLength(1);
+    });
+    expect(drafts[0]?.input).toMatchObject({
+      kafka: { sasl: 'none', registry: 'https://reg.example' },
+    });
+  });
+
+  it('has no registry field for another driver', async () => {
+    await withState(kafka({ input: { name: 'x', driver: 'mysql', host: 'h' } }));
+    expect(screen.queryByLabelText('Schema registry')).toBeNull();
+  });
+
   it('speaks Russian when asked', async () => {
     await withState(kafka(), 'ru');
+    expect(screen.getByLabelText('Реестр схем')).toBeTruthy();
     expect(screen.getByLabelText('Вход (SASL)')).toBeTruthy();
     expect(screen.getByText(/Начальные брокеры/u)).toBeTruthy();
   });
 });
 
 describe('toKafka', () => {
-  const fields = (driver: string, sasl: string) =>
-    ({ driver, kafkaSasl: sasl }) as unknown as Parameters<typeof toKafka>[0];
+  const fields = (driver: string, sasl: string, registry = '') =>
+    ({ driver, kafkaSasl: sasl, kafkaRegistry: registry }) as unknown as Parameters<
+      typeof toKafka
+    >[0];
 
   it('sends the mechanism of a Kafka connection that uses one', () => {
     expect(toKafka(fields('kafka', 'plain'))).toEqual({ sasl: 'plain' });
+  });
+
+  it('sends the registry, trimmed, with or without a sign-in', () => {
+    expect(toKafka(fields('kafka', 'none', '  http://r:8081 '))).toEqual({
+      sasl: 'none',
+      registry: 'http://r:8081',
+    });
+    expect(toKafka(fields('kafka', 'plain', 'http://r'))).toEqual({
+      sasl: 'plain',
+      registry: 'http://r',
+    });
+    expect(toKafka(fields('mysql', 'none', 'http://r'))).toBeUndefined();
   });
 
   it('sends nothing for no sign-in, or for another driver', () => {

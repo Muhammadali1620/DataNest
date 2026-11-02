@@ -464,6 +464,10 @@
             "sasl": {
               "enum": ["none", "plain", "scram-sha-256", "scram-sha-512"],
               "description": "The SASL mechanism the brokers ask for."
+            },
+            "registry": {
+              "type": "string",
+              "description": "The address of a Confluent-compatible schema registry (http or https); messages written with a schema show decoded."
             }
           }
         },

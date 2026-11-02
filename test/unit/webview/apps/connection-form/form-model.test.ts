@@ -36,6 +36,7 @@ import {
 import { serverPreset } from '../../../../../src/shared/server-presets';
 import { parseConnectionUrl } from '../../../../../src/shared/connection-url';
 import { en } from '../../../../../webview/src/l10n/en';
+import { ru } from '../../../../../webview/src/l10n/ru';
 
 function fields(overrides: Partial<FormFields> = {}): FormFields {
   return {
@@ -84,6 +85,7 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     elasticAuth: 'basic',
     elasticPrefix: '',
     kafkaSasl: 'none',
+    kafkaRegistry: '',
     socket: '',
     useProxy: false,
     proxyKind: 'socks5',
@@ -157,6 +159,7 @@ describe('fieldsFrom', () => {
       elasticAuth: 'basic',
       elasticPrefix: '',
       kafkaSasl: 'none',
+      kafkaRegistry: '',
       socket: '',
       useProxy: false,
       proxyKind: 'socks5',
@@ -1277,6 +1280,41 @@ describe('MongoDB fields (V7.5)', () => {
     }
     applyUrl(state, plain.value);
     expect(state).toMatchObject({ driver: 'postgres', mongoMode: 'direct', authSource: '' });
+  });
+});
+
+describe('Kafka registry field (V13.34)', () => {
+  const kafka = (overrides: Partial<FormFields> = {}): FormFields =>
+    fields({ driver: 'kafka', host: 'b:9092', ...overrides });
+
+  it('blocks an address that is not http(s), with a message in both languages', () => {
+    expect(problemsOf(kafka({ kafkaRegistry: 'registry:8081' }))).toContain(
+      'kafka-registry-invalid',
+    );
+    expect(problemsOf(kafka({ kafkaRegistry: 'http://registry:8081' }))).not.toContain(
+      'kafka-registry-invalid',
+    );
+    expect(problemsOf(kafka())).not.toContain('kafka-registry-invalid');
+    expect(en[PROBLEM_MESSAGES['kafka-registry-invalid']]).toBeTruthy();
+    expect(ru[PROBLEM_MESSAGES['kafka-registry-invalid']]).toBeTruthy();
+  });
+
+  it('puts the saved registry into the fields and sends it back', () => {
+    const state = fieldsFrom({
+      input: {
+        name: 'K',
+        driver: 'kafka',
+        host: 'b',
+        kafka: { sasl: 'none', registry: 'http://r' },
+      },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect(state.kafkaRegistry).toBe('http://r');
+    expect(toInput({ ...state, name: 'K' })).toMatchObject({
+      kafka: { sasl: 'none', registry: 'http://r' },
+    });
   });
 });
 

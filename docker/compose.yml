@@ -475,6 +475,10 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      # ACLs (V13.34): the authorizer is on, and the plain listener's anonymous user is a super
+      # user, so nothing else in the tests is held back; they make rules for other users.
+      KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      KAFKA_SUPER_USERS: User:ANONYMOUS
       KAFKA_HEAP_OPTS: -Xmx512m -Xms256m
     ports:
       - 127.0.0.1:7092:9092
@@ -487,6 +491,17 @@ services:
           'CMD-SHELL',
           '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1',
         ]
+
+  # A schema registry for Kafka (V13.34), group `kafka`: Apicurio in memory, whose
+  # Confluent-compatible API lives at /apis/ccompat/v7. It needs no broker (its schemas stay in
+  # memory, so every start is empty); the tests register schemas and write messages that carry
+  # their ids. The image has no tool for a health check, so the tests wait for /health/ready.
+  schema-registry:
+    image: apicurio/apicurio-registry-mem:2.6.8.Final
+    container_name: datanest-schema-registry
+    profiles: [kafka]
+    ports:
+      - 127.0.0.1:7081:8080
 
   # RabbitMQ (V13.26), group `rabbitmq`: one node with the management plugin, whose HTTP API
   # is all the extension speaks. AMQP is published too (V13.28), for the test helper that opens a

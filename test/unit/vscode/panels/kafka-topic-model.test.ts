@@ -239,5 +239,19 @@ describe('viewOf', () => {
     expect(view.key).toBeNull();
     expect(view.value).toMatchObject({ truncated: true, size: MAX_SHOWN_BYTES + 10 });
     expect(view.headers[0]?.value.hex).toBe('ff00');
+    expect(view).not.toHaveProperty('schema');
+  });
+
+  it('says which registry schema a message was decoded with (V13.34)', () => {
+    const view = viewOf({
+      partition: 0,
+      offset: '1',
+      timestamp: '5',
+      key: null,
+      value: Buffer.from('{"a":1}'),
+      headers: [],
+      schema: { id: 4, format: 'AVRO' },
+    });
+    expect(view.schema).toEqual({ id: 4, format: 'AVRO' });
   });
 });

@@ -836,6 +836,18 @@
         "icon": "$(debug-restart)"
       },
       {
+        "command": "datanest.kafka.manageAcls",
+        "title": "%commands.kafka.manageAcls.title%",
+        "category": "DataNest",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "datanest.kafka.manageSettings",
+        "title": "%commands.kafka.manageSettings.title%",
+        "category": "DataNest",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "datanest.loki.setRange",
         "title": "%commands.loki.setRange.title%",
         "category": "DataNest",
@@ -1658,6 +1670,14 @@
         },
         {
           "command": "datanest.kafka.resetOffsets",
+          "when": "false"
+        },
+        {
+          "command": "datanest.kafka.manageAcls",
+          "when": "false"
+        },
+        {
+          "command": "datanest.kafka.manageSettings",
           "when": "false"
         },
         {
@@ -2560,6 +2580,16 @@
           "command": "datanest.kafka.resetOffsets",
           "when": "view == datanest.connections && (viewItem == datanest.kafkaGroup || viewItem == datanest.kafkaGroup.starred)",
           "group": "2_edit@1"
+        },
+        {
+          "command": "datanest.kafka.manageAcls",
+          "when": "view == datanest.connections && (viewItem == datanest.kafkaConnection.connected || viewItem == datanest.kafkaConnection.connected.starred || viewItem == datanest.projectKafkaConnection.connected || viewItem == datanest.projectKafkaConnection.connected.starred)",
+          "group": "2_edit@8"
+        },
+        {
+          "command": "datanest.kafka.manageSettings",
+          "when": "view == datanest.connections && (viewItem == datanest.kafkaConnection.connected || viewItem == datanest.kafkaConnection.connected.starred || viewItem == datanest.projectKafkaConnection.connected || viewItem == datanest.projectKafkaConnection.connected.starred || viewItem == datanest.kafkaTopic || viewItem == datanest.kafkaTopic.starred)",
+          "group": "2_edit@9"
         },
         {
           "command": "datanest.rabbitmq.openObject",

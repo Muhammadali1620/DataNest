@@ -227,6 +227,8 @@ export const COMMAND_IDS = {
   kafkaDeleteTopic: 'datanest.kafka.deleteTopic',
   /** Moves the committed offsets of a consumer group (V13.29). */
   kafkaResetOffsets: 'datanest.kafka.resetOffsets',
+  kafkaManageAcls: 'datanest.kafka.manageAcls',
+  kafkaManageSettings: 'datanest.kafka.manageSettings',
   /** Opens the page of a RabbitMQ queue or exchange: its figures, bindings and messages. */
   rabbitOpenObject: 'datanest.rabbitmq.openObject',
   rabbitNewQueue: 'datanest.rabbitmq.newQueue',

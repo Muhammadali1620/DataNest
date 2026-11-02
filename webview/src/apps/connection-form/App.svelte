@@ -574,6 +574,20 @@
                   <option value="scram-sha-512">{t('form.kafka.sasl.scram512')}</option>
                 </select>
               </Field>
+              <Field
+                label={t('form.kafka.registry')}
+                hint={t('form.kafka.registryHint')}
+                error={errorFor('kafka-registry-invalid')}
+              >
+                <input
+                  class="control"
+                  type="text"
+                  bind:value={fields.kafkaRegistry}
+                  placeholder="http://localhost:8081"
+                  aria-label={t('form.kafka.registry')}
+                  aria-invalid={errorFor('kafka-registry-invalid') !== undefined}
+                />
+              </Field>
             {/if}
             {#if isElastic}
               <div class="pair">

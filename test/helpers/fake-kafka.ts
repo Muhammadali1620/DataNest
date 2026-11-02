@@ -7,6 +7,7 @@ import { openKafkaSession } from '../../src/drivers/kafka/session';
 import type { KafkaDriver, KafkaSession } from '../../src/drivers/kafka-driver';
 import type { ResolvedConnectionConfig } from '../../src/shared/connection';
 import type {
+  KafkaAclEntry,
   KafkaAdminLike,
   KafkaClientFactory,
   KafkaClientLike,
@@ -33,6 +34,23 @@ interface FakePartition {
 }
 
 /** Error shaped like the ones kafkajs throws. */
+/** Does a stored rule fit a filter? 1 means "any" in the numbers of kafkajs. */
+function aclMatches(rule: KafkaAclEntry, filter: Partial<KafkaAclEntry>): boolean {
+  const same = (have: number, want: number | undefined): boolean =>
+    want === undefined || want === 1 || have === want;
+  const text = (have: string, want: string | undefined): boolean =>
+    want === undefined || have === want;
+  return (
+    same(rule.resourceType, filter.resourceType) &&
+    same(rule.resourcePatternType, filter.resourcePatternType) &&
+    same(rule.operation, filter.operation) &&
+    same(rule.permissionType, filter.permissionType) &&
+    text(rule.resourceName, filter.resourceName) &&
+    text(rule.principal, filter.principal) &&
+    text(rule.host, filter.host)
+  );
+}
+
 export function kafkaJsError(name: string, message: string, extra: object = {}): Error {
   return Object.assign(new Error(message), { name, ...extra });
 }
@@ -55,6 +73,20 @@ export class FakeKafka {
   }[] = [];
   /** Makes the next admin call of this name throw. */
   readonly failures = new Map<string, Error>();
+  /** The access rules (kafkajs' numbers); empty at the start. */
+  readonly acls: KafkaAclEntry[] = [];
+  /** True: the cluster has no authorizer, and every ACL call says so. */
+  securityDisabled = false;
+  /**
+   * `topic:<name>` or `broker:<id>` → the settings that are set there (overrides), by name.
+   * Everything else answers with a default.
+   */
+  readonly overrides = new Map<string, Map<string, string>>();
+  /** What alterConfigs was asked to set, in order. */
+  readonly alterCalls: { key: string; entries: { name: string; value: string }[] }[] = [];
+  /** A setting nobody may change, and one that is secret. */
+  readonly readOnlyConfigs = new Set(['unclean.leader.election.enable']);
+  readonly secretConfigs = new Set(['ssl.keystore.password']);
   adminConnected = 0;
   adminDisconnected = 0;
   producerDisconnected = 0;
@@ -83,7 +115,7 @@ export class FakeKafka {
     topic: string,
     partition: number,
     value: string | Buffer | null,
-    options: { key?: string | null; at?: number; headers?: FakeRecord['headers'] } = {},
+    options: { key?: string | Buffer | null; at?: number; headers?: FakeRecord['headers'] } = {},
   ): number {
     const parts = this.topics.get(topic);
     const target = parts?.[partition];
@@ -149,6 +181,18 @@ export class FakeKafka {
         return consumer;
       },
     };
+  }
+
+  private needSecurity(): void {
+    if (this.securityDisabled) {
+      throw kafkaJsError(
+        'KafkaJSProtocolError',
+        'There is no authorizer configured on the broker',
+        {
+          type: 'SECURITY_DISABLED',
+        },
+      );
+    }
   }
 
   private fail(name: string): void {
@@ -264,10 +308,118 @@ export class FakeKafka {
         }
         return Promise.resolve();
       },
+      describeAcls: (filter) => {
+        this.fail('describeAcls');
+        this.needSecurity();
+        const found = this.acls.filter((one) => aclMatches(one, filter));
+        const groups = new Map<string, KafkaAclEntry[]>();
+        for (const one of found) {
+          const key = `${one.resourceType}/${one.resourceName}/${one.resourcePatternType}`;
+          groups.set(key, [...(groups.get(key) ?? []), one]);
+        }
+        return Promise.resolve({
+          errorCode: 0,
+          resources: [...groups.values()].map((list) => ({
+            resourceType: list[0]?.resourceType ?? 0,
+            resourceName: list[0]?.resourceName ?? '',
+            resourcePatternType: list[0]?.resourcePatternType ?? 0,
+            acls: list.map(({ principal, host, operation, permissionType }) => ({
+              principal,
+              host,
+              operation,
+              permissionType,
+            })),
+          })),
+        });
+      },
+      createAcls: ({ acl }) => {
+        this.fail('createAcls');
+        this.needSecurity();
+        for (const one of acl) {
+          if (!this.acls.some((have) => aclMatches(have, one) && aclMatches(one, have))) {
+            this.acls.push({ ...one });
+          }
+        }
+        return Promise.resolve(true);
+      },
+      deleteAcls: ({ filters }) => {
+        this.fail('deleteAcls');
+        this.needSecurity();
+        return Promise.resolve({
+          filterResponses: filters.map((filter) => {
+            const gone = this.acls.filter((one) => aclMatches(one, filter));
+            for (const one of gone) {
+              this.acls.splice(this.acls.indexOf(one), 1);
+            }
+            return { errorCode: 0, matchingAcls: gone };
+          }),
+        });
+      },
+      describeConfigs: ({ resources }) => {
+        this.fail('describeConfigs');
+        return Promise.resolve({
+          resources: resources.map((resource) => {
+            const topic = resource.type === 2;
+            if (topic && !this.topics.has(resource.name)) {
+              return {
+                resourceName: resource.name,
+                errorCode: 3,
+                errorMessage: 'This server does not host this topic-partition',
+                configEntries: [],
+              };
+            }
+            const set = this.overrides.get(`${topic ? 'topic' : 'broker'}:${resource.name}`);
+            const names = topic
+              ? [
+                  ['retention.ms', '604800000'],
+                  ['cleanup.policy', 'delete'],
+                  ['max.message.bytes', '1048588'],
+                ]
+              : [
+                  ['log.retention.hours', '168'],
+                  ['num.io.threads', '8'],
+                  ['unclean.leader.election.enable', 'false'],
+                  ['ssl.keystore.password', ''],
+                ];
+            return {
+              resourceName: resource.name,
+              errorCode: 0,
+              errorMessage: '',
+              configEntries: names.map(([name, fallback]) => {
+                const own = set?.get(name ?? '');
+                return {
+                  configName: name ?? '',
+                  configValue: this.secretConfigs.has(name ?? '') ? null : (own ?? fallback ?? ''),
+                  configSource: own !== undefined ? (topic ? 1 : 2) : topic ? 5 : 4,
+                  isSensitive: this.secretConfigs.has(name ?? ''),
+                  readOnly: this.readOnlyConfigs.has(name ?? ''),
+                };
+              }),
+            };
+          }),
+        });
+      },
+      alterConfigs: ({ resources }) => {
+        this.fail('alterConfigs');
+        for (const resource of resources) {
+          const key = `${resource.type === 2 ? 'topic' : 'broker'}:${resource.name}`;
+          this.alterCalls.push({ key, entries: resource.configEntries });
+          // Like the older call of a real cluster: what is not sent is reset.
+          this.overrides.set(
+            key,
+            new Map(resource.configEntries.map((entry) => [entry.name, entry.value])),
+          );
+        }
+        return Promise.resolve({});
+      },
       describeCluster: () => {
         this.fail('describeCluster');
         return Promise.resolve({
-          brokers: Array.from({ length: this.brokers }, (_, i) => ({ nodeId: i + 1 })),
+          brokers: Array.from({ length: this.brokers }, (_, i) => ({
+            nodeId: i + 1,
+            host: `broker${i + 1}`,
+            port: 9092,
+          })),
           controller: 1,
           clusterId: this.clusterId,
         });

@@ -16,6 +16,7 @@ import {
   policyOf,
   queueOf,
   rabbitTarget,
+  tagsOf,
 } from '../../../../src/drivers/rabbitmq/session';
 import type { ResolvedConnectionConfig } from '../../../../src/shared/connection';
 import { FakeRabbitServer } from '../../../helpers/fake-rabbitmq';
@@ -628,6 +629,29 @@ describe('what the session makes of the broker’s JSON', () => {
     });
   });
 
+  it('reads the delivery and acknowledgement rates when the broker has them (V13.32)', () => {
+    const queue = queueOf({
+      name: 'q',
+      message_stats: {
+        publish_details: { rate: 4.5 },
+        deliver_get_details: { rate: 3 },
+        ack_details: { rate: 2.5 },
+      },
+    });
+    expect(queue).toMatchObject({ incomingRate: 4.5, deliverRate: 3, ackRate: 2.5 });
+    const idle = queueOf({ name: 'q', message_stats: { publish_details: { rate: 'fast' } } });
+    expect(idle.incomingRate).toBeUndefined();
+    expect('deliverRate' in idle).toBe(false);
+    expect('ackRate' in idle).toBe(false);
+  });
+
+  it('reads the tags of a user as a list or as the text older brokers send', () => {
+    expect(tagsOf(['a', 3, 'b'])).toEqual(['a', 'b']);
+    expect(tagsOf('management, policymaker,,')).toEqual(['management', 'policymaker']);
+    expect(tagsOf(undefined)).toEqual([]);
+    expect(tagsOf(null)).toEqual([]);
+  });
+
   it('reads an exchange and a binding with missing fields as empty ones', () => {
     expect(exchangeOf({ name: 'x', type: 'topic' }, 'v')).toMatchObject({
       vhost: 'v',
@@ -900,6 +924,81 @@ describe('RabbitMQ administration over HTTP (V13.28)', () => {
     expect(server.broker.users.map((u) => u.name)).toContain('new user');
     await session.deleteUser('new user');
     expect(server.broker.users.map((u) => u.name)).toEqual(['guest']);
+  });
+
+  it('changes the tags of a user and keeps the password (V13.32)', async () => {
+    const { server, port } = await start();
+    server.broker.users.push({ name: 'ann', tags: ['monitoring'], password: 'secret' });
+    const session = await openRabbitSession(config(port));
+    await session.updateUser('ann', { tags: ['management', 'policymaker'] });
+    // The broker forgets the password of a PUT without one, so the stored hash goes back.
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/users/ann',
+      body: {
+        password_hash: 'h:secret',
+        hashing_algorithm: 'fake_hash',
+        tags: 'management,policymaker',
+      },
+    });
+    const ann = server.broker.users.find((u) => u.name === 'ann');
+    expect(ann).toMatchObject({ tags: ['management', 'policymaker'], password: 'secret' });
+  });
+
+  it('changes the password of a user and keeps the tags', async () => {
+    const { server, port } = await start();
+    server.broker.users.push({ name: 'ann', tags: ['monitoring', 'management'], password: 'old' });
+    const session = await openRabbitSession(config(port));
+    await session.updateUser('ann', { password: 'new' });
+    expect(server.requests.at(-1)).toMatchObject({
+      body: { password: 'new', tags: 'monitoring,management' },
+    });
+    expect(server.broker.users.find((u) => u.name === 'ann')).toMatchObject({
+      password: 'new',
+      tags: ['monitoring', 'management'],
+    });
+  });
+
+  it('changes the password and the tags together, and clears the tags with an empty list', async () => {
+    const { server, port } = await start();
+    server.broker.users.push({ name: 'ann', tags: ['monitoring'], password: 'old' });
+    const session = await openRabbitSession(config(port));
+    await session.updateUser('ann', { password: 'new', tags: ['administrator'] });
+    expect(server.broker.users.find((u) => u.name === 'ann')).toMatchObject({
+      password: 'new',
+      tags: ['administrator'],
+    });
+    await session.updateUser('ann', { tags: [] });
+    expect(server.broker.users.find((u) => u.name === 'ann')).toMatchObject({
+      password: 'new',
+      tags: [],
+    });
+  });
+
+  it('refuses to change a user the broker does not know', async () => {
+    const { port } = await start();
+    const session = await openRabbitSession(config(port));
+    expect((await failure(session.updateUser('ghost', { tags: [] }))).code).toBe('not-found');
+  });
+
+  it('makes and deletes a virtual host, quoting its name in the path (V13.32)', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    await session.createVhost('app/one');
+    expect(server.requests.at(-1)).toMatchObject({ method: 'PUT', path: '/api/vhosts/app%2Fone' });
+    expect(server.broker.vhosts.has('app/one')).toBe(true);
+    // Making one that exists is not an error: the broker answers 204.
+    await session.createVhost('app/one');
+    expect((await session.listVhosts()).map((vhost) => vhost.name)).toContain('app/one');
+    server.broker.addQueue({ vhost: 'app/one', name: 'inside' });
+    await session.deleteVhost('app/one');
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'DELETE',
+      path: '/api/vhosts/app%2Fone',
+    });
+    expect(server.broker.vhosts.has('app/one')).toBe(false);
+    expect(server.broker.queues.some((queue) => queue.vhost === 'app/one')).toBe(false);
+    expect((await failure(session.deleteVhost('app/one'))).code).toBe('not-found');
   });
 
   it('reports a user without the administrator tag as refused', async () => {

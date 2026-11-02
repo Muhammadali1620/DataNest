@@ -114,6 +114,13 @@ describe('Loki editor commands', () => {
     expect(r.picks[0]?.choices).toContain('10m');
   });
 
+  it('offers a live view with no time limit', async () => {
+    const r = rig({ pick: 'forever' });
+    await lokiCommandHandlers(r.deps).follow();
+    expect(r.text).toBe('# tail: forever\n{app="shop"}');
+    expect(r.picks[0]?.choices).toContain('forever');
+  });
+
   it('refuses an editor that is not connected to Loki', async () => {
     for (const driver of ['postgres', null] as const) {
       const r = rig({ driver, pick: '1h' });

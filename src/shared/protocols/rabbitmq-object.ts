@@ -105,6 +105,20 @@ export const rabbitAdminSchema = object({
   policiesError: optional(string({ maxLength: 10_000 })),
 });
 
+/** One reading of a queue for the live graphs: the counts and the broker's rates per second. */
+export const rabbitSampleSchema = object({
+  /** Milliseconds since 1970 when the reading was taken. */
+  at: number({ integer: true, min: 0 }),
+  ready: number({ integer: true, min: 0 }),
+  unacked: number({ integer: true, min: 0 }),
+  publish: number({ min: 0 }),
+  deliver: number({ min: 0 }),
+  ack: number({ min: 0 }),
+});
+
+/** The most readings the page keeps for its graphs. */
+export const MAX_RABBIT_SAMPLES = 120;
+
 export const rabbitMessageSchema = object({
   payload: redisValueSchema,
   payloadBytes: number({ integer: true, min: 0 }),
@@ -140,6 +154,13 @@ export const rabbitObjectStateSchema = object({
   consumersList: array(rabbitConsumerSchema, { maxLength: 200 }),
   /** Connections, users and policies (virtual host pages only). */
   admin: optional(rabbitAdminSchema),
+  /** The live graphs of a queue: on while the host reads the queue every few seconds. */
+  live: optional(
+    object({
+      on: boolean(),
+      samples: array(rabbitSampleSchema, { maxLength: MAX_RABBIT_SAMPLES }),
+    }),
+  ),
   /** What the last peek asked for, so the page shows it again. */
   count: number({ integer: true, min: 1, max: MAX_RABBIT_PEEK }),
   messages: array(rabbitMessageSchema, { maxLength: MAX_RABBIT_PEEK }),
@@ -209,6 +230,15 @@ export const rabbitObjectProtocol = defineProtocol({
         }),
         result: object({ done: boolean() }),
       },
+      /** Changes a user's password, tags or both; what is left out stays as it is. */
+      updateUser: {
+        params: object({
+          name: string({ minLength: 1, maxLength: 1000 }),
+          password: optional(string({ minLength: 1, maxLength: 10_000 })),
+          tags: optional(array(string({ maxLength: 100 }), { maxLength: 50 })),
+        }),
+        result: object({ done: boolean() }),
+      },
       deleteUser: {
         params: object({ name: string({ minLength: 1, maxLength: 1000 }) }),
         result: object({ done: boolean() }),
@@ -241,6 +271,8 @@ export const rabbitObjectProtocol = defineProtocol({
         params: object({ name: string({ minLength: 1, maxLength: 1000 }) }),
         result: object({ done: boolean() }),
       },
+      /** Starts or stops the live graphs of a queue. */
+      setLive: { params: object({ on: boolean() }), result: object({}) },
       /** Puts text on the clipboard (the host does it; a page may not). */
       copyText: { params: object({ text: string({ maxLength: 2_100_000 }) }), result: object({}) },
     },
@@ -261,6 +293,7 @@ export const rabbitObjectProtocol = defineProtocol({
 export type RabbitObjectProtocol = typeof rabbitObjectProtocol;
 
 export type RabbitObjectState = Infer<typeof rabbitObjectStateSchema>;
+export type RabbitSampleView = Infer<typeof rabbitSampleSchema>;
 export type RabbitMessageView = Infer<typeof rabbitMessageSchema>;
 export type RabbitBindingView = Infer<typeof rabbitBindingSchema>;
 export type RabbitFactView = Infer<typeof rabbitFactSchema>;

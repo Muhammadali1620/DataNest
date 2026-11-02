@@ -8,6 +8,7 @@ import {
   QUEUE_TYPES,
   rabbitCommandHandlers,
   type RabbitCommandUi,
+  vhostNameProblem,
 } from '../../../../src/vscode/rabbitmq/rabbitmq-commands';
 import { FakeRabbitSession } from '../../../helpers/fake-rabbitmq';
 
@@ -397,5 +398,119 @@ describe('RabbitMQ commands (V13.26)', () => {
       await handlers.deleteObject(queueNode());
       expect(confirms[0]?.detail).toBe('"Local MQ" is a production connection.');
     });
+  });
+
+  describe('virtual hosts (V13.32)', () => {
+    const vhostNode = (vhost = 'app'): TreeNode => ({
+      kind: 'rabbitVhost',
+      connectionId: 'r1',
+      vhost,
+    });
+    const connectionNode: TreeNode = { kind: 'connection', connectionId: 'r1' };
+
+    it('makes one from the connection, refreshes the tree and says so', async () => {
+      const { handlers, session, refreshed, infos, asked } = setup({ inputs: [' app/one '] });
+      await handlers.newVhost(connectionNode);
+      expect(asked).toEqual(['The name of the virtual host']);
+      expect(session.broker.vhosts.has('app/one')).toBe(true);
+      expect(refreshed).toEqual([connectionNode]);
+      expect(infos).toEqual(['Created the virtual host "app/one"']);
+    });
+
+    it('can be started from the node of a virtual host too', async () => {
+      const { handlers, session } = setup({ inputs: ['second'] });
+      await handlers.newVhost(vhostNode('/'));
+      expect(session.broker.vhosts.has('second')).toBe(true);
+    });
+
+    it('stops when the user backs out, and refuses a name that exists', async () => {
+      const out = setup({ inputs: [undefined] });
+      await out.handlers.newVhost(connectionNode);
+      expect(out.session.calls).not.toContain('createVhost');
+      const twice = setup({ inputs: ['/'] });
+      await expect(twice.handlers.newVhost(connectionNode)).rejects.toMatchObject({
+        code: 'constraint',
+      });
+      expect(twice.session.calls).not.toContain('createVhost');
+    });
+
+    it('checks the name while it is typed', async () => {
+      const { handlers } = setup({ inputs: ['  '] });
+      await expect(handlers.newVhost(connectionNode)).rejects.toThrow(
+        'A virtual host needs a name',
+      );
+    });
+
+    it('asks first on a production connection, and honours a no', async () => {
+      const yes = setup({ connections: [broker({ production: true })], inputs: ['prod'] });
+      await yes.handlers.newVhost(connectionNode);
+      expect(yes.confirms[0]?.message).toContain('production connection "Local MQ"');
+      expect(yes.session.broker.vhosts.has('prod')).toBe(true);
+      const no = setup({
+        connections: [broker({ production: true })],
+        inputs: ['prod'],
+        confirm: false,
+      });
+      await no.handlers.newVhost(connectionNode);
+      expect(no.session.broker.vhosts.has('prod')).toBe(false);
+    });
+
+    it('is refused on a read-only connection, and on one limited to a virtual host', async () => {
+      const ro = setup({ connections: [broker({ readOnly: true })] });
+      await expect(ro.handlers.newVhost(connectionNode)).rejects.toMatchObject({
+        code: 'permission-denied',
+      });
+      const limited = setup({ connections: [broker({ database: 'only' })], inputs: ['x'] });
+      await expect(limited.handlers.newVhost(connectionNode)).rejects.toMatchObject({
+        code: 'unsupported',
+      });
+      expect(limited.session.calls).not.toContain('createVhost');
+    });
+
+    it('deletes one after the question, and refreshes the tree', async () => {
+      const { handlers, session, confirms, refreshed } = setup({ vhosts: ['app'] });
+      await handlers.deleteVhost(vhostNode('app'));
+      expect(confirms[0]?.message).toBe('Delete the virtual host "app"?');
+      expect(confirms[0]?.detail).toBe(
+        'Every queue, exchange, binding and message in it is lost for good.',
+      );
+      expect(session.broker.vhosts.has('app')).toBe(false);
+      expect(refreshed).toEqual([connectionNode]);
+    });
+
+    it('warns about the default virtual host and the production connection', async () => {
+      const { handlers, confirms } = setup({ connections: [broker({ production: true })] });
+      await handlers.deleteVhost(vhostNode('/'));
+      expect(confirms[0]?.detail).toBe(
+        '"Local MQ" is a production connection. Every queue, exchange, binding and message in it is lost for good. This is the default virtual host of the broker.',
+      );
+    });
+
+    it('keeps everything on a no, on read-only and for another node', async () => {
+      const no = setup({ vhosts: ['app'], confirm: false });
+      await no.handlers.deleteVhost(vhostNode('app'));
+      expect(no.session.broker.vhosts.has('app')).toBe(true);
+      const ro = setup({ connections: [broker({ readOnly: true })], vhosts: ['app'] });
+      await expect(ro.handlers.deleteVhost(vhostNode('app'))).rejects.toMatchObject({
+        code: 'permission-denied',
+      });
+      const other = setup();
+      await other.handlers.deleteVhost(queuesFolder);
+      await other.handlers.deleteVhost('r1');
+      expect(other.session.calls).toEqual([]);
+    });
+  });
+});
+
+describe('vhostNameProblem', () => {
+  it('takes what RabbitMQ takes, even a slash', () => {
+    expect(vhostNameProblem('/')).toBeUndefined();
+    expect(vhostNameProblem('app/one')).toBeUndefined();
+    expect(vhostNameProblem('amq.something')).toBeUndefined();
+  });
+
+  it('refuses an empty name and a long one', () => {
+    expect(vhostNameProblem('')).toBe('A virtual host needs a name');
+    expect(vhostNameProblem('x'.repeat(MAX_NAME + 1))).toContain('at most 255 bytes');
   });
 });

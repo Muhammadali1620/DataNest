@@ -11,7 +11,7 @@ import type { DocumentBindings } from '../editor/document-bindings';
 
 /** Windows the picker offers; the last choice of the picker is a time typed by hand. */
 export const RANGE_CHOICES = ['5m', '15m', '1h', '6h', '24h', '7d', '30d'] as const;
-export const TAIL_CHOICES = ['30s', '1m', '5m', '10m'] as const;
+export const TAIL_CHOICES = ['30s', '1m', '5m', '10m', 'forever'] as const;
 
 /** The open query: where it lives and how to rewrite its text. */
 export interface LokiEditor {

@@ -5,6 +5,7 @@ import {
   type RabbitMessageView,
   type RabbitObjectProtocol,
   type RabbitObjectState,
+  type RabbitSampleView,
 } from '../../../../../src/shared/protocols/rabbitmq-object';
 import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/rabbitmq-object/App.svelte';
@@ -97,11 +98,13 @@ async function open(
   host.handle('purge', reply('purge', { purged: true }));
   host.handle('deleteObject', reply('deleteObject', { deleted: true }));
   host.handle('copyText', reply('copyText', {}));
+  host.handle('setLive', reply('setLive', {}));
   for (const method of [
     'addBinding',
     'removeBinding',
     'closeConnection',
     'createUser',
+    'updateUser',
     'deleteUser',
     'setPermission',
     'clearPermission',
@@ -747,5 +750,178 @@ describe('RabbitMQ page: a virtual host', () => {
     await open(vhostState(), 'ru');
     expect(within(screen.getByTestId('users')).getByText('Пользователи и права')).toBeTruthy();
     expect(within(screen.getByTestId('policies')).getByText('Политики')).toBeTruthy();
+  });
+});
+
+describe('RabbitMQ page: changing a user (V13.32)', () => {
+  const editButtons = (): HTMLElement[] =>
+    within(screen.getByTestId('users')).getAllByRole('button', {
+      name: 'Change password or tags',
+    });
+
+  it('opens a form with the tags of the user and no password', async () => {
+    await open(vhostState());
+    await fireEvent.click(must(editButtons()[2]));
+    const form = within(screen.getByTestId('edit-user'));
+    expect(form.getByLabelText<HTMLInputElement>('Tags').value).toBe('monitoring');
+    expect(form.getByLabelText<HTMLInputElement>('New password').value).toBe('');
+    expect(screen.getByText('Change the user idle')).toBeTruthy();
+  });
+
+  it('sends only the password when the tags are as they were', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(must(editButtons()[2]));
+    const form = within(screen.getByTestId('edit-user'));
+    await fireEvent.input(form.getByLabelText('New password'), { target: { value: 'fresh' } });
+    await fireEvent.click(form.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(sent(opened, 'updateUser')).toEqual([{ name: 'idle', password: 'fresh' }]);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('edit-user')).toBeNull();
+    });
+  });
+
+  it('sends only the tags when no password is typed, and can empty them', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(must(editButtons()[2]));
+    const form = within(screen.getByTestId('edit-user'));
+    await fireEvent.input(form.getByLabelText('Tags'), {
+      target: { value: 'management, policymaker' },
+    });
+    await fireEvent.click(form.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(sent(opened, 'updateUser')).toEqual([
+        { name: 'idle', tags: ['management', 'policymaker'] },
+      ]);
+    });
+    await fireEvent.click(must(editButtons()[2]));
+    await fireEvent.input(within(screen.getByTestId('edit-user')).getByLabelText('Tags'), {
+      target: { value: '' },
+    });
+    await fireEvent.click(
+      within(screen.getByTestId('edit-user')).getByRole('button', { name: 'Save' }),
+    );
+    await waitFor(() => {
+      expect(sent(opened, 'updateUser')).toContainEqual({ name: 'idle', tags: [] });
+    });
+  });
+
+  it('closes on Cancel and keeps the form when the broker refuses', async () => {
+    const opened = await open(vhostState(), 'en', {
+      updateUser: new Error('refused by the broker'),
+    });
+    await fireEvent.click(must(editButtons()[0]));
+    await fireEvent.input(within(screen.getByTestId('edit-user')).getByLabelText('New password'), {
+      target: { value: 'x' },
+    });
+    await fireEvent.click(
+      within(screen.getByTestId('edit-user')).getByRole('button', { name: 'Save' }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toContain('refused by the broker');
+    });
+    expect(sent(opened, 'updateUser')).toHaveLength(1);
+    expect(screen.queryByTestId('edit-user')).not.toBeNull();
+    await fireEvent.click(
+      within(screen.getByTestId('edit-user')).getByRole('button', { name: 'Cancel' }),
+    );
+    expect(screen.queryByTestId('edit-user')).toBeNull();
+  });
+
+  it('offers no way to change a user on a read-only connection', async () => {
+    await open({ ...vhostState(), readOnly: true });
+    expect(
+      within(screen.getByTestId('users')).queryAllByRole('button', {
+        name: 'Change password or tags',
+      }),
+    ).toEqual([]);
+  });
+
+  it('speaks Russian', async () => {
+    await open(vhostState(), 'ru');
+    expect(
+      within(screen.getByTestId('users')).getAllByRole('button', {
+        name: 'Сменить пароль или метки',
+      }),
+    ).toHaveLength(3);
+  });
+});
+
+describe('RabbitMQ page: live graphs (V13.32)', () => {
+  const sample = (index: number, over: Partial<RabbitSampleView> = {}): RabbitSampleView => ({
+    at: Date.parse('2026-11-02T10:00:00Z') + index * 4000,
+    ready: 10 + index,
+    unacked: index,
+    publish: 2.5,
+    deliver: 2,
+    ack: 1.5,
+    ...over,
+  });
+
+  it('shows a hint and a Start button before anything is read', async () => {
+    await open(state());
+    const live = within(screen.getByTestId('live'));
+    expect(live.getByRole('button', { name: 'Start' }).getAttribute('aria-pressed')).toBe('false');
+    expect(live.getByText(/Start to read the queue every few seconds/u)).toBeTruthy();
+    expect(live.queryAllByTestId('chart')).toEqual([]);
+  });
+
+  it('asks the host to start, then draws two graphs of what comes back', async () => {
+    const opened = await open(state());
+    await fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => {
+      expect(sent(opened, 'setLive')).toEqual([{ on: true }]);
+    });
+    opened.host.emit(
+      'state',
+      state({ live: { on: true, samples: [sample(0), sample(1), sample(2)] } }),
+    );
+    await waitFor(() => {
+      expect(screen.getAllByTestId('chart')).toHaveLength(2);
+    });
+    const live = within(screen.getByTestId('live'));
+    expect(live.getByRole('button', { name: 'Stop' }).getAttribute('aria-pressed')).toBe('true');
+    expect(live.getAllByText('Messages in the queue').length).toBeGreaterThan(0);
+    expect(live.getAllByText('Messages per second').length).toBeGreaterThan(0);
+    for (const name of ['Ready', 'Unacknowledged', 'Published', 'Delivered', 'Acknowledged']) {
+      expect(live.getAllByText(name).length).toBeGreaterThan(0);
+    }
+    expect(live.getByText(/Reading the queue every few seconds/u)).toBeTruthy();
+  });
+
+  it('asks the host to stop, and keeps the graphs of what was read', async () => {
+    const opened = await open(state({ live: { on: true, samples: [sample(0), sample(1)] } }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => {
+      expect(sent(opened, 'setLive')).toEqual([{ on: false }]);
+    });
+    opened.host.emit('state', state({ live: { on: false, samples: [sample(0), sample(1)] } }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Start' })).toBeTruthy();
+    });
+    expect(screen.getAllByTestId('chart')).toHaveLength(2);
+    expect(screen.getByText(/Stopped\. What was read stays here/u)).toBeTruthy();
+  });
+
+  it('shows the error when the host cannot start', async () => {
+    await open(state(), 'en', { setLive: new Error('no statistics') });
+    await fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toContain('no statistics');
+    });
+  });
+
+  it('has no graphs on an exchange', async () => {
+    await open(state({ kind: 'exchange', name: 'events' }));
+    expect(screen.queryByTestId('live')).toBeNull();
+  });
+
+  it('speaks Russian', async () => {
+    await open(state({ live: { on: true, samples: [sample(0)] } }), 'ru');
+    const live = within(screen.getByTestId('live'));
+    expect(live.getByText('Графики в реальном времени')).toBeTruthy();
+    expect(live.getByRole('button', { name: 'Остановить' })).toBeTruthy();
+    expect(live.getAllByText('Сообщений в секунду').length).toBeGreaterThan(0);
   });
 });

@@ -1,0 +1,34 @@
+# Grafana Loki over TLS (V13.32), group `loki`: the same single process as `loki`, but its HTTP
+# server (and so the tail WebSocket too) speaks TLS with the test certificate of docker/tls.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  http_tls_config:
+    cert_file: /etc/datanest-tls/server.crt
+    key_file: /etc/datanest-tls/server.key
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+analytics:
+  reporting_enabled: false

@@ -56,6 +56,9 @@ export interface RabbitQueueInfo {
   readonly arguments: Readonly<Record<string, unknown>>;
   /** Messages per second published to the queue, when the broker says. */
   readonly incomingRate: number | undefined;
+  /** Messages per second delivered to consumers and acknowledged, when the broker says (V13.32). */
+  readonly deliverRate?: number | undefined;
+  readonly ackRate?: number | undefined;
   readonly node: string;
   /** Who consumes the queue; only a single queue's record has it, so a listing leaves it empty. */
   readonly consumerDetails: readonly RabbitConsumerInfo[];
@@ -201,6 +204,10 @@ export interface RabbitExchangeDeclaration {
 export interface RabbitSession {
   readonly server: RabbitServerInfo;
   listVhosts(): Promise<readonly RabbitVhostInfo[]>;
+  /** Makes a virtual host; one that exists is left as it is. */
+  createVhost(name: string): Promise<void>;
+  /** Deletes a virtual host with every queue, exchange and message in it. */
+  deleteVhost(name: string): Promise<void>;
   listQueues(vhost: string): Promise<RabbitPage<RabbitQueueInfo>>;
   listExchanges(vhost: string): Promise<RabbitPage<RabbitExchangeInfo>>;
   getQueue(vhost: string, name: string): Promise<RabbitQueueInfo>;
@@ -238,6 +245,11 @@ export interface RabbitSession {
     readonly password: string;
     readonly tags: readonly string[];
   }): Promise<void>;
+  /** Changes the password, the tags or both of a user; what is left out stays as it is. */
+  updateUser(
+    name: string,
+    change: { readonly password?: string; readonly tags?: readonly string[] },
+  ): Promise<void>;
   deleteUser(name: string): Promise<void>;
   /** The permissions of a virtual host. Needs the administrator tag. */
   listPermissions(vhost: string): Promise<readonly RabbitPermissionInfo[]>;

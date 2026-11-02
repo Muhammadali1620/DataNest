@@ -54,6 +54,9 @@ function inner(overrides: Partial<RabbitSession> = {}): RabbitSession {
     closeConnection: () => Promise.resolve(),
     listUsers: () => Promise.resolve([{ name: 'u', tags: [] }]),
     createUser: () => Promise.resolve(),
+    updateUser: () => Promise.resolve(),
+    createVhost: () => Promise.resolve(),
+    deleteVhost: () => Promise.resolve(),
     deleteUser: () => Promise.resolve(),
     listPermissions: () => Promise.resolve([]),
     setPermission: () => Promise.resolve(),
@@ -93,6 +96,9 @@ describe('ManagedRabbitSession', () => {
         unbind: note('unbind'),
         closeConnection: note('closeConnection'),
         createUser: note('createUser'),
+        updateUser: note('updateUser'),
+        createVhost: note('createVhost'),
+        deleteVhost: note('deleteVhost'),
         deleteUser: note('deleteUser'),
         setPermission: note('setPermission'),
         clearPermission: note('clearPermission'),
@@ -145,7 +151,10 @@ describe('ManagedRabbitSession', () => {
     await managed.closeConnection('c');
     expect(await managed.listUsers()).toEqual([{ name: 'u', tags: [] }]);
     await managed.createUser({ name: 'n', password: 'p', tags: [] });
+    await managed.updateUser('n', { password: 'q', tags: ['management'] });
     await managed.deleteUser('n');
+    await managed.createVhost('v');
+    await managed.deleteVhost('v');
     expect(await managed.listPermissions('/')).toEqual([]);
     const permission = { user: 'u', configure: '.*', write: '.*', read: '.*' };
     await managed.setPermission('/', permission);
@@ -171,7 +180,10 @@ describe('ManagedRabbitSession', () => {
       `unbind "/" ${JSON.stringify(binding)}`,
       'closeConnection "c"',
       'createUser {"name":"n","password":"p","tags":[]}',
+      'updateUser "n" {"password":"q","tags":["management"]}',
       'deleteUser "n"',
+      'createVhost "v"',
+      'deleteVhost "v"',
       `setPermission "/" ${JSON.stringify(permission)}`,
       'clearPermission "/" "u"',
       `setPolicy ${JSON.stringify(policy)}`,

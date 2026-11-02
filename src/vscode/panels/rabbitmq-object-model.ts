@@ -25,6 +25,8 @@ import {
   type RabbitMessageView,
   type RabbitObjectKind,
   type RabbitObjectState,
+  type RabbitSampleView,
+  MAX_RABBIT_SAMPLES,
 } from '../../shared/protocols/rabbitmq-object';
 import { redisValueBytes, type RedisValue, redisValueOf } from '../../shared/redis-value';
 
@@ -36,6 +38,9 @@ export const MAX_PEEK_BYTES = 8 * 1024 * 1024;
 
 /** Bindings the page lists; more are counted. */
 export const MAX_BINDINGS = 500;
+
+/** Milliseconds between two readings of the live graphs; the broker's own figures refresh about every 5 s. */
+export const LIVE_INTERVAL_MS = 4000;
 
 export interface RabbitObjectModelDeps {
   readonly kind: RabbitObjectKind;
@@ -183,6 +188,9 @@ export class RabbitObjectModel {
   private count = DEFAULT_RABBIT_PEEK;
   private peeked = false;
   private notice: string | undefined;
+  private samples: RabbitSampleView[] = [];
+  private liveTimer: ReturnType<typeof setInterval> | undefined;
+  private sampling = false;
 
   constructor(private readonly deps: RabbitObjectModelDeps) {
     this.current = this.empty();
@@ -208,6 +216,82 @@ export class RabbitObjectModel {
       messages: this.messages,
       peeked: this.peeked,
       ...(this.notice === undefined ? {} : { notice: this.notice }),
+      ...(this.liveTimer === undefined && this.samples.length === 0
+        ? {}
+        : { live: { on: this.liveTimer !== undefined, samples: this.samples } }),
+    };
+  }
+
+  /** True while the live graphs read the queue every few seconds. */
+  get live(): boolean {
+    return this.liveTimer !== undefined;
+  }
+
+  /**
+   * Starts the live graphs of a queue: one reading now and one every `intervalMs`, each handed
+   * on through `onState`. A reading that fails stops the graphs and goes to `onError`. The
+   * readings stay for the page after a stop, and a new start begins a new graph.
+   */
+  async startLive(
+    onState: (state: RabbitObjectState) => void,
+    onError: (error: unknown) => void,
+    intervalMs = LIVE_INTERVAL_MS,
+  ): Promise<void> {
+    if (this.deps.kind !== 'queue') {
+      throw new DbError('unsupported', msg('Only a queue has live graphs'));
+    }
+    this.stopLive();
+    this.samples = [];
+    const tick = async (): Promise<void> => {
+      if (this.sampling) {
+        return;
+      }
+      this.sampling = true;
+      try {
+        await this.sample();
+        onState(this.state());
+      } catch (error) {
+        this.stopLive();
+        onError(error);
+      } finally {
+        this.sampling = false;
+      }
+    };
+    this.liveTimer = setInterval(() => {
+      void tick();
+    }, intervalMs);
+    await tick();
+  }
+
+  /** Stops the live graphs; what they read stays on the page. */
+  stopLive(): void {
+    if (this.liveTimer !== undefined) {
+      clearInterval(this.liveTimer);
+      this.liveTimer = undefined;
+    }
+  }
+
+  /** Reads the queue once for the graphs: the counts and the rates of the broker's statistics. */
+  async sample(): Promise<void> {
+    const queue = await (await this.deps.session()).getQueue(this.deps.vhost, this.deps.name);
+    this.samples = [
+      ...this.samples,
+      {
+        at: Date.now(),
+        ready: queue.ready,
+        unacked: queue.unacked,
+        publish: queue.incomingRate ?? 0,
+        deliver: queue.deliverRate ?? 0,
+        ack: queue.ackRate ?? 0,
+      },
+    ].slice(-MAX_RABBIT_SAMPLES);
+    this.current = {
+      ...this.current,
+      state: queue.state,
+      ready: queue.ready,
+      unacked: queue.unacked,
+      total: queue.total,
+      consumers: queue.consumers,
     };
   }
 
@@ -447,6 +531,34 @@ export class RabbitObjectModel {
     }
     const clean = tags.map((tag) => tag.trim()).filter((tag) => tag !== '');
     await (await this.deps.session()).createUser({ name: name.trim(), password, tags: clean });
+    await this.refresh();
+    return this.state();
+  }
+
+  /**
+   * Changes a user's password, tags or both. The broker forgets the password when a PUT leaves
+   * it out, so the session sends the stored hash back with new tags (D162).
+   */
+  async updateUser(
+    name: string,
+    change: {
+      readonly password?: string | undefined;
+      readonly tags?: readonly string[] | undefined;
+    },
+  ): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    const password = change.password === '' ? undefined : change.password;
+    const tags = change.tags?.map((tag) => tag.trim()).filter((tag) => tag !== '');
+    if (password === undefined && tags === undefined) {
+      throw new DbError('syntax', msg('Give a new password or new tags'));
+    }
+    await (
+      await this.deps.session()
+    ).updateUser(name, {
+      ...(password === undefined ? {} : { password }),
+      ...(tags === undefined ? {} : { tags }),
+    });
     await this.refresh();
     return this.state();
   }

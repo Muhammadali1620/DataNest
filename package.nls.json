@@ -266,6 +266,8 @@
   "commands.rabbitmq.newExchange.title": "New Exchange…",
   "commands.rabbitmq.purgeQueue.title": "Remove All Messages",
   "commands.rabbitmq.deleteObject.title": "Delete",
+  "commands.rabbitmq.newVhost.title": "New Virtual Host…",
+  "commands.rabbitmq.deleteVhost.title": "Delete Virtual Host",
   "commands.zookeeper.loadMoreNodes.title": "Load More ZooKeeper Znodes",
   "commands.zookeeper.openNode.title": "Open ZooKeeper Znode",
   "commands.zookeeper.goToNode.title": "Go to ZooKeeper Znode…",

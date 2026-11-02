@@ -9,7 +9,7 @@ import {
 import { tlsFailure, tlsMaterial } from '../common/tls';
 import type { ExecuteEvent, ExecuteOptions, Session } from '../driver';
 import { LokiApi } from './api';
-import { type Directives, parseStatement } from './directives';
+import { type Directives, isEndlessTail, parseStatement } from './directives';
 import { toLokiError } from './errors';
 import { agentFor, type LokiTarget, targetUrl } from './http';
 import { LokiMetadata } from './metadata';
@@ -236,7 +236,8 @@ class LokiSession implements Session {
     options: ExecuteOptions,
     signal: AbortSignal,
   ): AsyncGenerator<ExecuteEvent> {
-    const duration = parseDuration(directives.tail ?? '') ?? 0;
+    const endless = isEndlessTail(directives.tail);
+    const duration = endless ? 0 : (parseDuration(directives.tail ?? '') ?? 0);
     const asked = directives.limit ?? this.defaults.limit ?? DEFAULT_LIMIT;
     const wanted = Math.min(options.rowLimit ?? Number.POSITIVE_INFINITY, asked);
     // The view starts now unless the statement names a window: then it starts with its lines.
@@ -250,7 +251,7 @@ class LokiSession implements Session {
       stop.abort();
     };
     signal.addEventListener('abort', onAbort, { once: true });
-    const timer = setTimeout(onAbort, duration);
+    const timer = endless ? undefined : setTimeout(onAbort, duration);
     let total = 0;
     let dropped = 0;
     let reason: 'time' | 'limit' | 'closed' | 'stopped' = 'closed';
@@ -282,7 +283,9 @@ class LokiSession implements Session {
         reason = signal.aborted ? 'stopped' : 'time';
       }
     } finally {
-      clearTimeout(timer);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
       signal.removeEventListener('abort', onAbort);
       stop.abort();
     }

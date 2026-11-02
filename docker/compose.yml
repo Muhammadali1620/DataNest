@@ -641,6 +641,31 @@ services:
       retries: 30
       start_period: 15s
 
+  # The same Loki over TLS (V13.32), group `loki`: HTTPS on 7101 with the test certificate of
+  # docker/tls (it covers localhost and 127.0.0.1). Its HTTP server speaks TLS for the tail
+  # WebSocket as well, so the live view is tried over `wss` against the real thing.
+  loki-tls:
+    image: grafana/loki:3.3.2
+    container_name: datanest-loki-tls
+    profiles: [loki]
+    command: ['-config.file=/etc/datanest-loki/tls.yaml', '-target=all']
+    ports:
+      - 127.0.0.1:7101:3100
+    volumes:
+      - ./loki:/etc/datanest-loki:ro
+      - ./tls:/etc/datanest-tls:ro
+    tmpfs:
+      - /loki:mode=1777
+    healthcheck:
+      <<: *healthcheck
+      # The image's wget cannot do the handshake, so this only sees the port open; the test
+      # waits for /ready over HTTPS itself (the ingester needs about 15 seconds).
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3100']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

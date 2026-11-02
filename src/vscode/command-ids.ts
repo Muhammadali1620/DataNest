@@ -233,6 +233,8 @@ export const COMMAND_IDS = {
   rabbitNewExchange: 'datanest.rabbitmq.newExchange',
   rabbitPurgeQueue: 'datanest.rabbitmq.purgeQueue',
   rabbitDeleteObject: 'datanest.rabbitmq.deleteObject',
+  rabbitNewVhost: 'datanest.rabbitmq.newVhost',
+  rabbitDeleteVhost: 'datanest.rabbitmq.deleteVhost',
   /** Writes the `# range:` / `# tail:` line of the open Grafana Loki query (V13.27). */
   lokiSetRange: 'datanest.loki.setRange',
   lokiFollow: 'datanest.loki.follow',

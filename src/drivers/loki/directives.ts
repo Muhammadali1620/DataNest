@@ -8,6 +8,7 @@
 //   # limit: 500         lines to read (the grid's row limit wins when it is smaller)
 //
 //   # tail: 30s         follow the query live for this long: new lines arrive as they are logged
+//   # tail: forever     follow it with no time limit: until the row limit, Cancel or the server
 //
 // A statement that holds only such comments does not run: it sets the session's defaults.
 
@@ -23,7 +24,7 @@ export interface Directives {
   readonly step?: string;
   readonly direction?: 'forward' | 'backward';
   readonly limit?: number;
-  /** How long a live view lasts: `30s`, `5m`. */
+  /** How long a live view lasts: `30s`, `5m`, or `forever` for no time limit (D162). */
   readonly tail?: string;
 }
 
@@ -36,8 +37,16 @@ export interface ParsedStatement {
 const KEYS = ['range', 'start', 'end', 'step', 'direction', 'limit', 'tail'] as const;
 const SYNTAX = syntaxOf('loki');
 
-/** The longest a live view may last: ten minutes. */
+/** The longest a timed live view may last: ten minutes. */
 export const MAX_TAIL_MS = 600_000;
+
+/** The words that ask for a live view without a time limit. */
+export const TAIL_FOREVER = ['forever', 'on'] as const;
+
+/** True when the `# tail:` value asks for a live view that has no time limit. */
+export function isEndlessTail(value: string | undefined): boolean {
+  return value !== undefined && (TAIL_FOREVER as readonly string[]).includes(value.toLowerCase());
+}
 
 export function parseStatement(sql: string): ParsedStatement {
   const found: Record<string, string> = {};
@@ -97,14 +106,21 @@ function validated(found: Readonly<Record<string, string>>): Directives {
     result.direction = direction;
   }
   if (found.tail !== undefined) {
-    const ms = parseDuration(found.tail);
-    if (ms === undefined || ms > MAX_TAIL_MS) {
-      throw new DbError(
-        'syntax',
-        msg('"{0}" is not a time to follow for: write it like 30s or 5m, at most 10m', found.tail),
-      );
+    if (isEndlessTail(found.tail)) {
+      result.tail = 'forever';
+    } else {
+      const ms = parseDuration(found.tail);
+      if (ms === undefined || ms > MAX_TAIL_MS) {
+        throw new DbError(
+          'syntax',
+          msg(
+            '"{0}" is not a time to follow for: write it like 30s or 5m (at most 10m), or forever',
+            found.tail,
+          ),
+        );
+      }
+      result.tail = found.tail;
     }
-    result.tail = found.tail;
   }
   if (found.limit !== undefined) {
     const limit = Number(found.limit);

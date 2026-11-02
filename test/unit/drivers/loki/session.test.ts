@@ -530,6 +530,39 @@ describe('a live view', () => {
     expect(doneOf(events).notice).toMatch(/dropped 1 lines/u);
   });
 
+  it('has no time limit with "forever" and ends at the row limit', async () => {
+    server.tailScript = {
+      messages: [batch(1, 'one'), batch(2, 'two'), batch(3, 'three')],
+      intervalMs: 5,
+    };
+    const session = await open();
+    const events = await collect(session, '# tail: forever\n# limit: 2\n{app="shop"}');
+    expect(rowsOf(events).map((row) => row[3])).toEqual(['one', 'two']);
+    expect(doneOf(events).notice).toMatch(/stopped at 2 lines/u);
+  });
+
+  it('keeps following with "forever" until it is cancelled', async () => {
+    server.tailScript = { messages: [batch(1, 'one')] };
+    const session = await open();
+    const events: ExecuteEvent[] = [];
+    for await (const event of session.execute('# tail: forever\n{app="shop"}')) {
+      events.push(event);
+      if (event.kind === 'rows') {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        await session.cancel();
+      }
+    }
+    expect(rowsOf(events).map((row) => row[3])).toEqual(['one']);
+    expect(doneOf(events).notice).toMatch(/stopped: 1 lines/u);
+  });
+
+  it('tells when the server closed a view with no time limit', async () => {
+    server.tailScript = { messages: [batch(1, 'one')], close: true };
+    const session = await open();
+    const events = await collect(session, '# tail: on\n{app="shop"}');
+    expect(doneOf(events).notice).toMatch(/server closed the live view: 1 lines/u);
+  });
+
   it('keeps what it read when it is cancelled', async () => {
     server.tailScript = { messages: [batch(1, 'one')] };
     const session = await open();

@@ -48,6 +48,8 @@ export interface FakeQueue {
   policy?: string | null;
   arguments?: Record<string, unknown>;
   unacked?: number;
+  /** Rates per second the queue's `message_stats` carries (V13.32); publish defaults to 1.5. */
+  rates?: { publish?: number; deliver?: number; ack?: number };
   /** The `consumer_details` the queue's own record carries, as the API words them. */
   consumerDetails?: Record<string, unknown>[];
   messages: FakeMessage[];
@@ -111,6 +113,21 @@ export class FakeBroker {
     { vhost: '/', name: 'amq.topic', type: 'topic', durable: true },
   ];
   readonly bindings: FakeBinding[] = [];
+  /** Removes a virtual host with what is in it; false when there was none. */
+  deleteVhost(name: string): boolean {
+    if (!this.vhosts.delete(name)) {
+      return false;
+    }
+    for (const list of [this.queues, this.exchanges, this.bindings, this.permissions]) {
+      for (let index = list.length - 1; index >= 0; index -= 1) {
+        if ((list[index] as { vhost: string }).vhost === name) {
+          list.splice(index, 1);
+        }
+      }
+    }
+    return true;
+  }
+
   /** Pretends a queue holds more than it lists in a page. */
   extraTotal = 0;
   readonly connections: FakeConnection[] = [];
@@ -215,7 +232,13 @@ function queueJson(queue: FakeQueue): Record<string, unknown> {
     arguments: queue.arguments ?? {},
     ...(queue.type === undefined ? {} : { type: queue.type }),
     node: 'rabbit@fake',
-    message_stats: { publish_details: { rate: 1.5 } },
+    message_stats: {
+      publish_details: { rate: queue.rates?.publish ?? 1.5 },
+      ...(queue.rates?.deliver === undefined
+        ? {}
+        : { deliver_get_details: { rate: queue.rates.deliver } }),
+      ...(queue.rates?.ack === undefined ? {} : { ack_details: { rate: queue.rates.ack } }),
+    },
     ...(queue.consumerDetails === undefined ? {} : { consumer_details: queue.consumerDetails }),
   };
 }
@@ -383,6 +406,20 @@ export class FakeRabbitServer {
       );
       return;
     }
+    if (kind === 'vhosts' && vhost !== undefined && method === 'PUT') {
+      const existed = broker.vhosts.has(vhost);
+      broker.vhosts.add(vhost);
+      answer(existed ? 204 : 201);
+      return;
+    }
+    if (kind === 'vhosts' && vhost !== undefined && method === 'DELETE') {
+      if (broker.deleteVhost(vhost)) {
+        answer(204);
+      } else {
+        answer(404, { error: 'Object Not Found', reason: 'Not Found' });
+      }
+      return;
+    }
     if (kind === 'vhosts') {
       if (vhost === undefined) {
         answer(
@@ -485,15 +522,44 @@ export class FakeRabbitServer {
           200,
           broker.users.map((u) => ({ name: u.name, tags: u.tags, password_hash: 'xx' })),
         );
-      } else if (first !== undefined && method === 'PUT') {
-        const request = body as { password: string; tags: string };
-        const tags = request.tags.split(',').filter((tag) => tag !== '');
+      } else if (first !== undefined && method === 'GET') {
         const known = broker.users.find((u) => u.name === first);
         if (known === undefined) {
-          broker.users.push({ name: first, tags, password: request.password });
+          missing();
+        } else {
+          answer(200, {
+            name: known.name,
+            tags: known.tags,
+            password_hash: known.password === undefined ? '' : `h:${known.password}`,
+            hashing_algorithm: 'fake_hash',
+          });
+        }
+      } else if (first !== undefined && method === 'PUT') {
+        const request = body as {
+          password?: string;
+          password_hash?: string;
+          hashing_algorithm?: string;
+          tags: string;
+        };
+        const tags = request.tags.split(',').filter((tag) => tag !== '');
+        // As the real broker does (checked against 3.13): a PUT with neither a password nor a
+        // hash leaves the user without a password.
+        const password =
+          request.password ??
+          (request.password_hash?.startsWith('h:') === true
+            ? request.password_hash.slice(2)
+            : undefined);
+        const known = broker.users.find((u) => u.name === first);
+        if (known === undefined) {
+          broker.users.push({ name: first, tags, ...(password === undefined ? {} : { password }) });
           answer(201);
         } else {
           known.tags = tags;
+          if (password === undefined) {
+            delete known.password;
+          } else {
+            known.password = password;
+          }
           answer(204);
         }
       } else if (first !== undefined && method === 'DELETE') {
@@ -850,6 +916,20 @@ export class FakeRabbitSession implements RabbitSession {
     return Promise.resolve([...this.broker.vhosts].map((name) => ({ name, messages: 0 })));
   }
 
+  createVhost(name: string): Promise<void> {
+    this.note('createVhost');
+    this.broker.vhosts.add(name);
+    return Promise.resolve();
+  }
+
+  deleteVhost(name: string): Promise<void> {
+    this.note('deleteVhost');
+    if (!this.broker.deleteVhost(name)) {
+      return Promise.reject(new DbError('not-found', 'Not Found'));
+    }
+    return Promise.resolve();
+  }
+
   listQueues(vhost: string): Promise<RabbitPage<RabbitQueueInfo>> {
     this.note('listQueues');
     const items = this.broker.queues.filter((q) => q.vhost === vhost).map(queueInfo);
@@ -1068,6 +1148,24 @@ export class FakeRabbitSession implements RabbitSession {
     return Promise.resolve();
   }
 
+  updateUser(
+    name: string,
+    change: { readonly password?: string; readonly tags?: readonly string[] },
+  ): Promise<void> {
+    this.note('updateUser');
+    const user = this.broker.users.find((u) => u.name === name);
+    if (user === undefined) {
+      return Promise.reject(new DbError('not-found', 'Not Found'));
+    }
+    if (change.tags !== undefined) {
+      user.tags = [...change.tags];
+    }
+    if (change.password !== undefined) {
+      user.password = change.password;
+    }
+    return Promise.resolve();
+  }
+
   deleteUser(name: string): Promise<void> {
     this.note('deleteUser');
     const index = this.broker.users.findIndex((u) => u.name === name);
@@ -1159,7 +1257,9 @@ function queueInfo(queue: FakeQueue): RabbitQueueInfo {
     memory: 12_345,
     policy: queue.policy ?? '',
     arguments: queue.arguments ?? {},
-    incomingRate: 1.5,
+    incomingRate: queue.rates?.publish ?? 1.5,
+    ...(queue.rates?.deliver === undefined ? {} : { deliverRate: queue.rates.deliver }),
+    ...(queue.rates?.ack === undefined ? {} : { ackRate: queue.rates.ack }),
     node: 'rabbit@fake',
     consumerDetails: (queue.consumerDetails ?? []).map(consumerOf),
   };

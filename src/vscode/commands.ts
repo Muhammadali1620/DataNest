@@ -1305,6 +1305,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.rabbitNewExchange]: rabbitCommands.newExchange,
     [COMMAND_IDS.rabbitPurgeQueue]: rabbitCommands.purgeQueue,
     [COMMAND_IDS.rabbitDeleteObject]: rabbitCommands.deleteObject,
+    [COMMAND_IDS.rabbitNewVhost]: rabbitCommands.newVhost,
+    [COMMAND_IDS.rabbitDeleteVhost]: rabbitCommands.deleteVhost,
     [COMMAND_IDS.redisNewKey]: redisKeyCommands.newKey,
     [COMMAND_IDS.redisRenameKey]: redisKeyCommands.renameKey,
     [COMMAND_IDS.redisOpenConsole]: redisKeyCommands.openConsole,

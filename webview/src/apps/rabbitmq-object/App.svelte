@@ -10,6 +10,7 @@
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
+  import LineChart, { type ChartSeries } from '../../components/LineChart.svelte';
   import type { Translate } from '../../lib/i18n';
   import ValueEditor from '../redis-key/ValueEditor.svelte';
   import AdminView from './AdminView.svelte';
@@ -128,6 +129,40 @@
     );
   }
 
+  /** The theme's chart colours, with a fallback for a theme that has none. */
+  const COLORS = {
+    ready: 'var(--vscode-charts-blue, #3794ff)',
+    unacked: 'var(--vscode-charts-orange, #d18616)',
+    publish: 'var(--vscode-charts-purple, #b180d7)',
+    deliver: 'var(--vscode-charts-green, #89d185)',
+    ack: 'var(--vscode-charts-yellow, #cca700)',
+  } as const;
+
+  /** The graphs keep ten minutes of readings, one every few seconds. */
+  const LIVE_WINDOW_MS = 600_000;
+
+  const samples = $derived(object?.live?.samples ?? []);
+  const live = $derived(object?.live?.on === true);
+  const countSeries = $derived<ChartSeries[]>([
+    { key: 'ready', label: t('rabbit.ready'), color: COLORS.ready, values: samples.map((one) => one.ready) },
+    { key: 'unacked', label: t('rabbit.unacked'), color: COLORS.unacked, values: samples.map((one) => one.unacked) },
+  ]);
+  const rateSeries = $derived<ChartSeries[]>([
+    { key: 'publish', label: t('rabbit.live.publish'), color: COLORS.publish, values: samples.map((one) => one.publish) },
+    { key: 'deliver', label: t('rabbit.live.deliver'), color: COLORS.deliver, values: samples.map((one) => one.deliver) },
+    { key: 'ack', label: t('rabbit.live.ack'), color: COLORS.ack, values: samples.map((one) => one.ack) },
+  ]);
+  const times = $derived(samples.map((one) => one.at));
+
+  /** Counts and rates as whole numbers when large, with one decimal when small. */
+  function figure(value: number): string {
+    return value >= 10 ? Math.round(value).toLocaleString() : Number(value.toFixed(1)).toString();
+  }
+
+  function toggleLive(): void {
+    void run(() => rpc.request('setLive', { on: !live }));
+  }
+
   function show(index: number): void {
     selected = index;
   }
@@ -241,6 +276,44 @@
             <span class="bar-ready" style="width: {sharePercent(object.ready, object.total)}%"></span>
             <span class="bar-unacked" style="width: {sharePercent(object.unacked, object.total)}%"></span>
           </span>
+        </section>
+      {/if}
+
+      {#if isQueue}
+        <section class="block" aria-label={t('rabbit.live.title')} data-testid="live">
+          <div class="heading">
+            <h2 class="section"><Icon name="graph-line" tone="purple" />{t('rabbit.live.title')}</h2>
+            <button type="button" class="button" aria-pressed={live} disabled={busy} onclick={toggleLive}
+              ><Icon name={live ? 'debug-stop' : 'debug-start'} />{live ? t('rabbit.live.stop') : t('rabbit.live.start')}</button
+            >
+          </div>
+          {#if samples.length === 0}
+            <p class="hint">{t('rabbit.live.hint')}</p>
+          {:else}
+            <div class="charts">
+              <LineChart
+                title={t('rabbit.live.counts')}
+                icon="mail"
+                {times}
+                series={countSeries}
+                format={figure}
+                {t}
+                windowMs={LIVE_WINDOW_MS}
+                height={170}
+              />
+              <LineChart
+                title={t('rabbit.live.rates')}
+                icon="pulse"
+                {times}
+                series={rateSeries}
+                format={figure}
+                {t}
+                windowMs={LIVE_WINDOW_MS}
+                height={170}
+              />
+            </div>
+            <p class="hint">{live ? t('rabbit.live.running') : t('rabbit.live.stopped')}</p>
+          {/if}
         </section>
       {/if}
 
@@ -619,6 +692,20 @@
     align-items: center;
     margin: 0 0 var(--dn-gap);
     font-size: 13px;
+  }
+
+  .heading {
+    display: flex;
+    gap: var(--dn-gap-m);
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* The two graphs of the live view, side by side while there is room. */
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: var(--dn-gap);
   }
 
   /* The four figures of a queue, each in its own colour. */

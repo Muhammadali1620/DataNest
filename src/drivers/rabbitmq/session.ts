@@ -121,6 +121,20 @@ function policyName(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+/** The tags of a user: a list, or the comma-separated text older brokers send. */
+export function tagsOf(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((tag): tag is string => typeof tag === 'string');
+  }
+  if (typeof raw === 'string') {
+    return raw
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter((tag) => tag !== '');
+  }
+  return [];
+}
+
 export function consumerOf(raw: unknown): RabbitConsumerInfo {
   const consumer = asObject(raw);
   const channel = asObject(consumer.channel_details);
@@ -141,6 +155,8 @@ export function queueOf(raw: unknown, vhostFallback = ''): RabbitQueueInfo {
   const args = asObject(queue.arguments);
   const stats = asObject(queue.message_stats);
   const rate = asObject(stats.publish_details).rate;
+  const deliverRate = asObject(stats.deliver_get_details).rate;
+  const ackRate = asObject(stats.ack_details).rate;
   const declaredType = text(queue.type) || text(args['x-queue-type']);
   return {
     vhost: text(queue.vhost) || vhostFallback,
@@ -158,6 +174,8 @@ export function queueOf(raw: unknown, vhostFallback = ''): RabbitQueueInfo {
     policy: policyName(queue.policy),
     arguments: args,
     incomingRate: typeof rate === 'number' ? rate : undefined,
+    ...(typeof deliverRate === 'number' ? { deliverRate } : {}),
+    ...(typeof ackRate === 'number' ? { ackRate } : {}),
     node: text(queue.node),
     consumerDetails: (Array.isArray(queue.consumer_details) ? queue.consumer_details : []).map(
       consumerOf,
@@ -323,6 +341,14 @@ class ManagementSession implements RabbitSession {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  async createVhost(name: string): Promise<void> {
+    await this.call('PUT', `vhosts/${enc(name)}`);
+  }
+
+  async deleteVhost(name: string): Promise<void> {
+    await this.call('DELETE', `vhosts/${enc(name)}`);
+  }
+
   async listQueues(vhost: string): Promise<RabbitPage<RabbitQueueInfo>> {
     const raw = await this.call(
       'GET',
@@ -469,14 +495,7 @@ class ManagementSession implements RabbitSession {
       .map((item) => asObject(item))
       .map((user) => ({
         name: text(user.name),
-        tags: Array.isArray(user.tags)
-          ? user.tags.filter((tag): tag is string => typeof tag === 'string')
-          : typeof user.tags === 'string'
-            ? user.tags
-                .split(',')
-                .map((tag) => tag.trim())
-                .filter((tag) => tag !== '')
-            : [],
+        tags: tagsOf(user.tags),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -489,6 +508,32 @@ class ManagementSession implements RabbitSession {
     await this.call('PUT', `users/${enc(user.name)}`, {
       password: user.password,
       tags: user.tags.join(','),
+    });
+  }
+
+  /**
+   * Changes the password, the tags or both of an existing user. The broker's PUT without a
+   * password wipes it (checked against 3.13: the old password stops working), so a change of
+   * tags alone sends back the stored hash and its algorithm, and a change of the password
+   * alone sends the tags the user has now.
+   */
+  async updateUser(
+    name: string,
+    change: { readonly password?: string; readonly tags?: readonly string[] },
+  ): Promise<void> {
+    const current = asObject(await this.call('GET', `users/${enc(name)}`));
+    const tags = change.tags ?? tagsOf(current.tags);
+    if (change.password !== undefined) {
+      await this.call('PUT', `users/${enc(name)}`, {
+        password: change.password,
+        tags: tags.join(','),
+      });
+      return;
+    }
+    await this.call('PUT', `users/${enc(name)}`, {
+      password_hash: text(current.password_hash),
+      hashing_algorithm: text(current.hashing_algorithm),
+      tags: tags.join(','),
     });
   }
 

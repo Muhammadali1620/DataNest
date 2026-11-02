@@ -57,6 +57,14 @@ export class ManagedRabbitSession implements RabbitSession {
     return this.call(() => this.inner.listVhosts());
   }
 
+  createVhost(name: string): Promise<void> {
+    return this.call(() => this.inner.createVhost(name));
+  }
+
+  deleteVhost(name: string): Promise<void> {
+    return this.call(() => this.inner.deleteVhost(name));
+  }
+
   listQueues(vhost: string): Promise<RabbitPage<RabbitQueueInfo>> {
     return this.call(() => this.inner.listQueues(vhost));
   }
@@ -134,6 +142,13 @@ export class ManagedRabbitSession implements RabbitSession {
     readonly tags: readonly string[];
   }): Promise<void> {
     return this.call(() => this.inner.createUser(user));
+  }
+
+  updateUser(
+    name: string,
+    change: { readonly password?: string; readonly tags?: readonly string[] },
+  ): Promise<void> {
+    return this.call(() => this.inner.updateUser(name, change));
   }
 
   deleteUser(name: string): Promise<void> {

@@ -54,7 +54,24 @@ export interface RabbitCommandDeps {
 }
 
 export type RabbitCommandName =
-  'openObject' | 'newQueue' | 'newExchange' | 'purgeQueue' | 'deleteObject';
+  | 'openObject'
+  | 'newQueue'
+  | 'newExchange'
+  | 'purgeQueue'
+  | 'deleteObject'
+  | 'newVhost'
+  | 'deleteVhost';
+
+/** What is wrong with a virtual host name, or undefined when RabbitMQ takes it. */
+export function vhostNameProblem(name: string): string | undefined {
+  if (name === '') {
+    return msg('A virtual host needs a name');
+  }
+  if (Buffer.byteLength(name, 'utf8') > MAX_NAME) {
+    return msg('A name has at most {0} bytes', MAX_NAME);
+  }
+  return undefined;
+}
 
 /** What is wrong with a queue or exchange name, or undefined when RabbitMQ takes it. */
 export function objectNameProblem(name: string, what: 'queue' | 'exchange'): string | undefined {
@@ -248,6 +265,80 @@ export function rabbitCommandHandlers(
       });
       deps.tree.refresh(folderNode(connectionId, vhost, 'exchanges'));
       deps.ui.info(msg('Created the exchange "{0}"', name.trim()));
+      return undefined;
+    },
+
+    newVhost: async (target?: CommandTarget) => {
+      const connectionId = await connectionOf(target);
+      if (connectionId === undefined) {
+        return undefined;
+      }
+      requireWritable(connectionId);
+      const config = deps.store.get(connectionId);
+      if (config?.database !== undefined && config.database !== '') {
+        throw new DbError(
+          'unsupported',
+          msg(
+            'This connection shows only the virtual host "{0}": clear it to make others',
+            config.database,
+          ),
+        );
+      }
+      const name = await deps.ui.input({
+        title: msg('New Virtual Host'),
+        prompt: msg('The name of the virtual host'),
+        validate: (value) => vhostNameProblem(value.trim()),
+      });
+      if (name === undefined) {
+        return undefined;
+      }
+      if (
+        !(await confirmProduction(
+          connectionId,
+          msg(
+            'Create the virtual host "{0}" on the production connection "{1}"?',
+            name.trim(),
+            policyOf(config).name,
+          ),
+          msg('Create'),
+        ))
+      ) {
+        return undefined;
+      }
+      const session = await deps.session(connectionId);
+      const known = (await session.listVhosts()).some((vhost) => vhost.name === name.trim());
+      if (known) {
+        throw new DbError('constraint', msg('The virtual host "{0}" exists already', name.trim()));
+      }
+      await session.createVhost(name.trim());
+      deps.tree.refresh({ kind: 'connection', connectionId });
+      deps.ui.info(msg('Created the virtual host "{0}"', name.trim()));
+      return undefined;
+    },
+
+    deleteVhost: async (target?: CommandTarget) => {
+      if (!isTreeNode(target) || target.kind !== 'rabbitVhost') {
+        return undefined;
+      }
+      requireWritable(target.connectionId);
+      const policy = policyOf(deps.store.get(target.connectionId));
+      const taken = await deps.ui.confirm(
+        msg('Delete the virtual host "{0}"?', target.vhost),
+        [
+          policy.production ? msg('"{0}" is a production connection.', policy.name) : undefined,
+          msg('Every queue, exchange, binding and message in it is lost for good.'),
+          target.vhost === '/' ? msg('This is the default virtual host of the broker.') : undefined,
+        ]
+          .filter((line) => line !== undefined)
+          .join(' '),
+        msg('Delete'),
+      );
+      if (!taken) {
+        return undefined;
+      }
+      const session = await deps.session(target.connectionId);
+      await session.deleteVhost(target.vhost);
+      deps.tree.refresh({ kind: 'connection', connectionId: target.connectionId });
       return undefined;
     },
 

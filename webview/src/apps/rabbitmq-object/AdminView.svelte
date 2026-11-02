@@ -36,6 +36,12 @@
   let newPassword = $state('');
   let newTags = $state('');
 
+  // The form that changes the password or the tags of a user.
+  let editUser = $state('');
+  let editOriginalTags = $state('');
+  let editTags = $state('');
+  let editPassword = $state('');
+
   // The form that saves a policy.
   let editingPolicy = $state(false);
   let policyName = $state('');
@@ -49,6 +55,29 @@
     configure = user.permission?.configure ?? '.*';
     write = user.permission?.write ?? '.*';
     read = user.permission?.read ?? '.*';
+  }
+
+  function startEditUser(user: RabbitUserView): void {
+    editUser = user.name;
+    editOriginalTags = user.tags.join(', ');
+    editTags = editOriginalTags;
+    editPassword = '';
+  }
+
+  function saveUser(): void {
+    const tags = editTags.trim() === editOriginalTags.trim() ? undefined : parseTags(editTags);
+    void run(
+      () =>
+        rpc.request('updateUser', {
+          name: editUser,
+          ...(editPassword === '' ? {} : { password: editPassword }),
+          ...(tags === undefined ? {} : { tags }),
+        }),
+      () => {
+        editUser = '';
+        editPassword = '';
+      },
+    );
   }
 
   function grant(): void {
@@ -218,6 +247,15 @@
             <td class="actions-cell">
               {#if !readOnly}
                 <IconButton
+                  icon="edit"
+                  tone="green"
+                  label={t('rabbit.admin.editUser')}
+                  disabled={busy}
+                  onclick={() => {
+                    startEditUser(user);
+                  }}
+                />
+                <IconButton
                   icon="key"
                   tone="blue"
                   label={t('rabbit.admin.editAccess')}
@@ -248,6 +286,27 @@
         {/each}
       </tbody>
     </table>
+    {#if editUser !== '' && !readOnly}
+      <div class="form" data-testid="edit-user">
+        <span class="who"><Icon name="edit" tone="green" />{t('rabbit.admin.editOf', editUser)}</span>
+        <label class="field">
+          <span>{t('rabbit.admin.newPassword')}</span>
+          <input class="control" type="password" bind:value={editPassword} aria-label={t('rabbit.admin.newPassword')} placeholder={t('rabbit.admin.keepPassword')} autocomplete="new-password" />
+        </label>
+        <label class="field grow">
+          <span>{t('rabbit.admin.tags')}</span>
+          <input class="control mono" bind:value={editTags} placeholder="management, policymaker" aria-label={t('rabbit.admin.tags')} autocomplete="off" spellcheck="false" />
+        </label>
+        <button type="button" class="button" disabled={busy} onclick={saveUser}><Icon name="check" />{t('rabbit.admin.saveUser')}</button>
+        <button
+          type="button"
+          class="button secondary"
+          onclick={() => {
+            editUser = '';
+          }}>{t('rabbit.admin.cancel')}</button
+        >
+      </div>
+    {/if}
     {#if grantUser !== '' && !readOnly}
       <div class="form" data-testid="grant">
         <span class="who"><Icon name="key" tone="blue" />{t('rabbit.admin.accessOf', grantUser)}</span>

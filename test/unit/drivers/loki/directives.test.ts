@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
-import { parseStatement } from '../../../../src/drivers/loki/directives';
+import { isEndlessTail, parseStatement } from '../../../../src/drivers/loki/directives';
 
 describe('parseStatement', () => {
   it('finds a query and no directives in a plain statement', () => {
@@ -26,6 +26,14 @@ describe('parseStatement', () => {
   it('reads how long to follow a query', () => {
     expect(parseStatement('# tail: 30s\n{a="b"}').directives).toEqual({ tail: '30s' });
     expect(parseStatement('# tail: 10m\n{a="b"}').directives).toEqual({ tail: '10m' });
+  });
+
+  it('reads a live view with no time limit', () => {
+    expect(parseStatement('# tail: forever\n{a="b"}').directives).toEqual({ tail: 'forever' });
+    expect(parseStatement('# tail: ON\n{a="b"}').directives).toEqual({ tail: 'forever' });
+    expect(isEndlessTail('Forever')).toBe(true);
+    expect(isEndlessTail('30s')).toBe(false);
+    expect(isEndlessTail(undefined)).toBe(false);
   });
 
   it('reads a start and an end of its own', () => {

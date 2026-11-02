@@ -265,6 +265,8 @@
   "commands.rabbitmq.newQueue.title": "Новая очередь…",
   "commands.rabbitmq.newExchange.title": "Новый обменник…",
   "commands.rabbitmq.purgeQueue.title": "Убрать все сообщения",
+  "commands.rabbitmq.newVhost.title": "Новый виртуальный хост…",
+  "commands.rabbitmq.deleteVhost.title": "Удалить виртуальный хост",
   "commands.rabbitmq.deleteObject.title": "Удалить",
   "commands.zookeeper.loadMoreNodes.title": "Загрузить ещё znode ZooKeeper",
   "commands.zookeeper.openNode.title": "Открыть znode ZooKeeper",

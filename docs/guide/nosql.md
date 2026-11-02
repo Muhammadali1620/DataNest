@@ -222,7 +222,16 @@ tree shows only that virtual host, which is what a user who may see just one nee
   never the one DataNest signs in as) and its **policies** (create, edit, delete). Users and
   permissions need the `administrator` tag; without it that part says so and the others still show.
   The broker refreshes its list of connections every few seconds, so a connection just opened
-  may take that long to appear.
+  may take that long to appear. The pencil of a user changes its **password** (empty keeps the
+  old one) or its **tags**; changing only the tags keeps the password.
+- **New Virtual Host…** (on a connection or a virtual host) makes one, and **Delete Virtual Host**
+  removes it with every queue, exchange, binding and message in it after a question. A connection
+  that is limited to one virtual host cannot make others.
+- **Live graphs** on a queue's page: **Start** reads the queue every few seconds and draws two
+  graphs, the ready and unacknowledged messages and the rates per second of publishing,
+  delivery and acknowledgement. The rates are the broker's own, which it refreshes about every
+  5 seconds, so they move in steps. **Stop** keeps what was read until the next start; closing
+  the page stops it.
 - **Look at the first messages** shows up to 100 messages of a queue with their payload (text,
   JSON or hex), routing key, size and properties. **Nothing is taken from the queue:** each
   message is fetched with `ack_requeue_true`, which puts it back at once. The broker marks

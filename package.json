@@ -878,6 +878,18 @@
         "icon": "$(trash)"
       },
       {
+        "command": "datanest.rabbitmq.newVhost",
+        "title": "%commands.rabbitmq.newVhost.title%",
+        "category": "DataNest",
+        "icon": "$(add)"
+      },
+      {
+        "command": "datanest.rabbitmq.deleteVhost",
+        "title": "%commands.rabbitmq.deleteVhost.title%",
+        "category": "DataNest",
+        "icon": "$(trash)"
+      },
+      {
         "command": "datanest.redis.openConsole",
         "title": "%commands.redis.openConsole.title%",
         "category": "DataNest",
@@ -2568,6 +2580,16 @@
           "command": "datanest.rabbitmq.deleteObject",
           "when": "view == datanest.connections && (viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange)",
           "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.rabbitmq.newVhost",
+          "when": "view == datanest.connections && (viewItem == datanest.rabbitVhost || viewItem == datanest.rabbitConnection.connected || viewItem == datanest.rabbitConnection.connected.starred || viewItem == datanest.projectRabbitConnection.connected || viewItem == datanest.projectRabbitConnection.connected.starred)",
+          "group": "2_edit@3"
+        },
+        {
+          "command": "datanest.rabbitmq.deleteVhost",
+          "when": "view == datanest.connections && (viewItem == datanest.rabbitVhost)",
+          "group": "8_destroy@2"
         }
       ],
       "editor/title": [

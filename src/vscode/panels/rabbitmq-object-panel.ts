@@ -159,6 +159,19 @@ export class RabbitObjectPanel implements vscode.Disposable {
         async () => model.createUser(name, password, tags),
       ),
     );
+    this.rpc.handle('updateUser', async ({ name, password, tags }) =>
+      this.change(
+        password === undefined
+          ? vscode.l10n.t('Change the tags of the user "{0}"?', name)
+          : vscode.l10n.t('Change the password of the user "{0}"?', name),
+        vscode.l10n.t('Change'),
+        password !== undefined,
+        async () => model.updateUser(name, { password, tags }),
+        password === undefined
+          ? undefined
+          : vscode.l10n.t('Clients that use the old password cannot sign in any more.'),
+      ),
+    );
     this.rpc.handle('deleteUser', async ({ name }) =>
       this.change(
         vscode.l10n.t('Delete the user "{0}"?', name),
@@ -200,6 +213,26 @@ export class RabbitObjectPanel implements vscode.Disposable {
         async () => model.deletePolicy(name),
       ),
     );
+    this.rpc.handle('setLive', async ({ on }) => {
+      if (!on) {
+        model.stopLive();
+        this.push(model.state());
+        return {};
+      }
+      await model.startLive(
+        (state) => {
+          this.push(state);
+        },
+        (error) => {
+          this.log.warn('Reading the queue for the graphs failed', error);
+          this.push(model.state());
+          void vscode.window.showErrorMessage(
+            vscode.l10n.t('DataNest: {0}', error instanceof Error ? error.message : String(error)),
+          );
+        },
+      );
+      return {};
+    });
     this.rpc.handle('copyText', async ({ text }) => {
       await vscode.env.clipboard.writeText(text);
       return {};
@@ -222,6 +255,7 @@ export class RabbitObjectPanel implements vscode.Disposable {
       return;
     }
     this.disposed = true;
+    this.deps.model.stopLive();
     for (const abort of this.aborts) {
       abort.abort();
     }

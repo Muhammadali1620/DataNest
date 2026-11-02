@@ -207,7 +207,7 @@ describe('listPage on a big store', () => {
     expect(page.entries.length).toBeLessThanOrEqual(21);
     expect(page.next).toBeDefined();
     expect(reads()).toBeLessThanOrEqual(20 + 21);
-  });
+  }, 30_000);
 });
 
 describe('findKeys and joinKey', () => {

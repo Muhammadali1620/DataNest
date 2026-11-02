@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- etcd: watch every key under a folder from the tree, "etcd Cluster and Snapshot…" (members, alarms, and the whole store saved to a file with its checksum checked). RabbitMQ: a cluster page with nodes and how much of their memory, file descriptors, sockets and processes they use, limits of connections and queues for a virtual host, and policies made from fields.
 - Kafka: show Avro, Protobuf and JSON Schema messages decoded through a schema registry (a Confluent-compatible one, set in the connection), manage the cluster's access rules (ACLs), and look at and change the settings of a topic or a broker.
 - Servers: compare a file with a file of another server, and give or read owners and groups by name (taken from the server's own passwd and group files). SQLite files on a server can be changed through the sqlite3 program when Python 3 is missing, and reads inside an open transaction now show its changes.
 - SQLite files on a server can be changed without sending the file back: tick "Allow changes" in the SSH settings of a SQLite connection, and statements that change the file run on the server through Python 3 there (its own SQLite takes the locks); the copy you browse is made again after a change.

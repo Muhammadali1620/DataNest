@@ -1,12 +1,15 @@
-// What the RabbitMQ queue and exchange page (V13.26) shows and does, free of `vscode`: it
-// reads the figures and bindings of one queue or exchange, peeks at the first messages of
-// a queue and publishes a message. A peek never takes a message from its queue: the
+// What the RabbitMQ queue, exchange and virtual host page (V13.26, V13.28) shows and does, free
+// of `vscode`: it reads the figures, bindings and consumers of one queue or exchange, makes and
+// removes bindings, peeks at the first messages of a queue and publishes a message; for a
+// virtual host it lists connections, users with their permissions and policies and changes them. A peek never takes a message from its queue: the
 // session fetches and puts back (D156), and a queue it does not know is an error, not an
 // empty list.
 
 import { DbError } from '../../core/errors';
 import { msg } from '../../core/user-message';
 import type {
+  RabbitBinding,
+  RabbitBindingRequest,
   RabbitExchangeInfo,
   RabbitMessage,
   RabbitQueueInfo,
@@ -16,6 +19,8 @@ import { formatSize } from '../../shared/byte-size';
 import {
   DEFAULT_RABBIT_PEEK,
   MAX_RABBIT_PEEK,
+  type RabbitAdminView,
+  type RabbitBindingDirection,
   type RabbitFactView,
   type RabbitMessageView,
   type RabbitObjectKind,
@@ -41,6 +46,62 @@ export interface RabbitObjectModelDeps {
   readonly readOnly: boolean;
   /** The session of the object's connection. */
   readonly session: () => Promise<RabbitSession>;
+}
+
+/** The default exchange has no name; the API and the page also call it this. */
+const DEFAULT_EXCHANGE_NAMES = new Set(['', 'amq.default']);
+
+/** What a policy may apply to, as the broker words it. */
+const POLICY_TARGETS = ['all', 'queues', 'classic_queues', 'quorum_queues', 'streams', 'exchanges'];
+
+export interface RabbitBindingParams {
+  readonly direction: RabbitBindingDirection;
+  /** The other end: a queue or an exchange, by name. */
+  readonly peer: string;
+  readonly routingKey: string;
+  /** A JSON object, or empty for none. */
+  readonly arguments: string;
+}
+
+export interface RabbitPolicyParams {
+  readonly name: string;
+  readonly pattern: string;
+  readonly applyTo: string;
+  readonly priority: number;
+  /** A JSON object. */
+  readonly definition: string;
+}
+
+/** `2026-11-02 10:15:00 UTC`; empty when the broker did not say. */
+function timeText(ms: number | undefined): string {
+  return ms === undefined ? '' : `${new Date(ms).toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+}
+
+/** Reads a JSON object typed by a person; empty text is an empty object. */
+export function parseJsonObject(text: string, what: string): Record<string, unknown> {
+  if (text.trim() === '') {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new DbError('syntax', msg('{0} is not valid JSON', what));
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new DbError('syntax', msg('{0} must be a JSON object', what));
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/** What is wrong with a pattern of names (a regular expression), or undefined. */
+function patternProblem(pattern: string): string | undefined {
+  try {
+    new RegExp(pattern, 'u');
+    return undefined;
+  } catch {
+    return msg('"{0}" is not a valid regular expression', pattern);
+  }
 }
 
 export interface RabbitPublishParams {
@@ -117,6 +178,7 @@ function exchangeFacts(exchange: RabbitExchangeInfo): RabbitFactView[] {
 
 export class RabbitObjectModel {
   private current: Omit<RabbitObjectState, 'messages' | 'peeked' | 'count' | 'notice'>;
+  private bindingList: readonly RabbitBinding[] = [];
   private messages: RabbitMessageView[] = [];
   private count = DEFAULT_RABBIT_PEEK;
   private peeked = false;
@@ -153,6 +215,10 @@ export class RabbitObjectModel {
   async refresh(): Promise<RabbitObjectState> {
     const session = await this.deps.session();
     const { kind, vhost, name } = this.deps;
+    if (kind === 'vhost') {
+      this.current = await this.readVhost(session);
+      return this.state();
+    }
     const bindings = await session.listBindings(
       vhost,
       kind === 'queue' ? { queue: name } : { exchange: name },
@@ -171,6 +237,16 @@ export class RabbitObjectModel {
         arguments: factsOf(queue.arguments),
         bindings: this.bindingViews(bindings),
         bindingsCut: bindings.length > MAX_BINDINGS,
+        consumersList: queue.consumerDetails.map((consumer) => ({
+          tag: consumer.tag,
+          connection: consumer.connectionName,
+          channel: consumer.channel,
+          user: consumer.user,
+          prefetch: consumer.prefetch,
+          ackRequired: consumer.ackRequired,
+          exclusive: consumer.exclusive,
+          active: consumer.active,
+        })),
       };
     } else {
       const exchange = await session.getExchange(vhost, name);
@@ -183,6 +259,278 @@ export class RabbitObjectModel {
         bindingsCut: bindings.length > MAX_BINDINGS,
       };
     }
+    this.bindingList = bindings.slice(0, MAX_BINDINGS);
+    return this.state();
+  }
+
+  /** The figures of a virtual host page: each part is read alone, so one refusal hides only itself. */
+  private async readVhost(
+    session: RabbitSession,
+  ): Promise<Omit<RabbitObjectState, 'messages' | 'peeked' | 'count' | 'notice'>> {
+    const { vhost } = this.deps;
+    const failed = (error: unknown): string =>
+      error instanceof Error ? error.message : String(error);
+    const admin: { -readonly [K in keyof RabbitAdminView]: RabbitAdminView[K] } = {
+      me: session.server.user,
+      connections: [],
+      connectionsTotal: 0,
+      users: [],
+      policies: [],
+    };
+    try {
+      const page = await session.listConnections(vhost);
+      admin.connections = page.items.map((connection) => ({
+        name: connection.name,
+        user: connection.user,
+        state: connection.state,
+        protocol: connection.protocol,
+        peer: connection.peer,
+        channels: connection.channels,
+        connectedAt: timeText(connection.connectedAt),
+        clientName: connection.clientName,
+        product: connection.product,
+        received: formatSize(connection.receivedBytes),
+        sent: formatSize(connection.sentBytes),
+      }));
+      admin.connectionsTotal = page.total;
+    } catch (error) {
+      admin.connectionsError = failed(error);
+    }
+    try {
+      const users = await session.listUsers();
+      const permissions = new Map(
+        (await session.listPermissions(vhost)).map((permission) => [permission.user, permission]),
+      );
+      admin.users = users.map((user) => {
+        const permission = permissions.get(user.name);
+        return {
+          name: user.name,
+          tags: [...user.tags],
+          ...(permission === undefined
+            ? {}
+            : {
+                permission: {
+                  configure: permission.configure,
+                  write: permission.write,
+                  read: permission.read,
+                },
+              }),
+        };
+      });
+    } catch (error) {
+      admin.usersError = failed(error);
+    }
+    try {
+      admin.policies = (await session.listPolicies(vhost)).map((policy) => ({
+        name: policy.name,
+        pattern: policy.pattern,
+        applyTo: policy.applyTo,
+        priority: policy.priority,
+        definition: jsonText(policy.definition),
+      }));
+    } catch (error) {
+      admin.policiesError = failed(error);
+    }
+    this.bindingList = [];
+    return {
+      ...this.empty(),
+      facts: [
+        { key: msg('Virtual host'), value: vhost },
+        { key: msg('Signed in as'), value: session.server.user },
+        { key: msg('Broker version'), value: session.server.version },
+      ],
+      admin,
+    };
+  }
+
+  /**
+   * Binds this queue or exchange to another. A queue is only ever the end of a binding; the
+   * default exchange cannot be bound at all (the broker routes to a queue by its name).
+   */
+  async addBinding(params: RabbitBindingParams): Promise<RabbitObjectState> {
+    this.requireWritable();
+    const { kind, vhost, name } = this.deps;
+    const peer = params.peer.trim();
+    if (kind === 'vhost') {
+      throw new DbError('unsupported', msg('A virtual host has no bindings of its own'));
+    }
+    if (peer === '' || DEFAULT_EXCHANGE_NAMES.has(peer)) {
+      throw new DbError('syntax', msg('Name the exchange or queue to bind to'));
+    }
+    if (kind === 'queue' && params.direction !== 'fromExchange') {
+      throw new DbError('unsupported', msg('A queue can only receive from an exchange'));
+    }
+    if (DEFAULT_EXCHANGE_NAMES.has(name) && params.direction !== 'fromExchange') {
+      throw new DbError('unsupported', msg('The default exchange cannot be bound'));
+    }
+    const args = parseJsonObject(params.arguments, msg('The arguments'));
+    const request: RabbitBindingRequest =
+      params.direction === 'fromExchange'
+        ? {
+            source: peer,
+            destination: name,
+            destinationType: kind === 'queue' ? 'queue' : 'exchange',
+            routingKey: params.routingKey,
+            arguments: args,
+          }
+        : {
+            source: name,
+            destination: peer,
+            destinationType: params.direction === 'toQueue' ? 'queue' : 'exchange',
+            routingKey: params.routingKey,
+            arguments: args,
+          };
+    await (await this.deps.session()).bind(vhost, request);
+    await this.refresh();
+    return this.state();
+  }
+
+  /** The binding listed at `index`, for the question before it goes. */
+  bindingAt(index: number): RabbitBinding | undefined {
+    return this.bindingList[index];
+  }
+
+  async removeBinding(index: number): Promise<RabbitObjectState> {
+    this.requireWritable();
+    const binding = this.bindingList[index];
+    if (binding === undefined) {
+      throw new DbError('not-found', msg('The binding is no longer listed: read the page again'));
+    }
+    if (binding.source === '') {
+      throw new DbError(
+        'unsupported',
+        msg('The binding of the default exchange belongs to the queue and cannot be removed'),
+      );
+    }
+    await (await this.deps.session()).unbind(this.deps.vhost, binding);
+    await this.refresh();
+    return this.state();
+  }
+
+  async closeConnection(name: string): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    await (await this.deps.session()).closeConnection(name);
+    await this.refresh();
+    // The broker refreshes its list of connections every few seconds, so a connection it has
+    // just closed may still be listed; it is gone, and the page says so.
+    const admin = this.current.admin;
+    if (admin !== undefined) {
+      const connections = admin.connections.filter((connection) => connection.name !== name);
+      this.current = {
+        ...this.current,
+        admin: {
+          ...admin,
+          connections,
+          connectionsTotal: Math.max(
+            0,
+            admin.connectionsTotal - (admin.connections.length - connections.length),
+          ),
+        },
+      };
+    }
+    return this.state();
+  }
+
+  async createUser(
+    name: string,
+    password: string,
+    tags: readonly string[],
+  ): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    if (name.trim() === '') {
+      throw new DbError('syntax', msg('A user needs a name'));
+    }
+    if (password === '') {
+      throw new DbError('syntax', msg('A user needs a password'));
+    }
+    const clean = tags.map((tag) => tag.trim()).filter((tag) => tag !== '');
+    await (await this.deps.session()).createUser({ name: name.trim(), password, tags: clean });
+    await this.refresh();
+    return this.state();
+  }
+
+  async deleteUser(name: string): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    const session = await this.deps.session();
+    if (name === session.server.user) {
+      throw new DbError(
+        'unsupported',
+        msg('The user this connection signs in as cannot be deleted'),
+      );
+    }
+    await session.deleteUser(name);
+    await this.refresh();
+    return this.state();
+  }
+
+  async setPermission(
+    user: string,
+    permission: { readonly configure: string; readonly write: string; readonly read: string },
+  ): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    for (const pattern of [permission.configure, permission.write, permission.read]) {
+      const problem = patternProblem(pattern);
+      if (problem !== undefined) {
+        throw new DbError('syntax', problem);
+      }
+    }
+    await (await this.deps.session()).setPermission(this.deps.vhost, { user, ...permission });
+    await this.refresh();
+    return this.state();
+  }
+
+  async clearPermission(user: string): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    await (await this.deps.session()).clearPermission(this.deps.vhost, user);
+    await this.refresh();
+    return this.state();
+  }
+
+  async setPolicy(params: RabbitPolicyParams): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    const name = params.name.trim();
+    if (name === '') {
+      throw new DbError('syntax', msg('A policy needs a name'));
+    }
+    if (params.pattern === '') {
+      throw new DbError('syntax', msg('A policy needs a pattern of the names it applies to'));
+    }
+    const problem = patternProblem(params.pattern);
+    if (problem !== undefined) {
+      throw new DbError('syntax', problem);
+    }
+    if (!POLICY_TARGETS.includes(params.applyTo)) {
+      throw new DbError('syntax', msg('A policy applies to queues, exchanges or all'));
+    }
+    const definition = parseJsonObject(params.definition, msg('The definition'));
+    if (Object.keys(definition).length === 0) {
+      throw new DbError('syntax', msg('A policy needs a definition, such as {"max-length": 1000}'));
+    }
+    await (
+      await this.deps.session()
+    ).setPolicy({
+      vhost: this.deps.vhost,
+      name,
+      pattern: params.pattern,
+      applyTo: params.applyTo,
+      priority: params.priority,
+      definition,
+    });
+    await this.refresh();
+    return this.state();
+  }
+
+  async deletePolicy(name: string): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    await (await this.deps.session()).deletePolicy(this.deps.vhost, name);
+    await this.refresh();
     return this.state();
   }
 
@@ -224,6 +572,9 @@ export class RabbitObjectModel {
     readonly routed: boolean;
   }> {
     this.requireWritable();
+    if (this.deps.kind === 'vhost') {
+      throw new DbError('unsupported', msg('Messages are published from a queue or an exchange'));
+    }
     const session = await this.deps.session();
     const payload = redisValueBytes(params.payload);
     if (payload === undefined) {
@@ -269,6 +620,9 @@ export class RabbitObjectModel {
 
   async deleteObject(): Promise<void> {
     this.requireWritable();
+    if (this.deps.kind === 'vhost') {
+      throw new DbError('unsupported', msg('A virtual host is not deleted from here'));
+    }
     const session = await this.deps.session();
     if (this.deps.kind === 'queue') {
       await session.deleteQueue(this.deps.vhost, this.deps.name);
@@ -315,7 +669,14 @@ export class RabbitObjectModel {
       arguments: [],
       bindings: [],
       bindingsCut: false,
+      consumersList: [],
     };
+  }
+
+  private requireVhostPage(): void {
+    if (this.deps.kind !== 'vhost') {
+      throw new DbError('unsupported', msg('This belongs on the page of a virtual host'));
+    }
   }
 
   private requireWritable(): void {

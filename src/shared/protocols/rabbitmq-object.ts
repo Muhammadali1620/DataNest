@@ -1,6 +1,7 @@
-// The RabbitMQ queue and exchange page (V13.26): one panel per queue or exchange shows its
-// figures, arguments and bindings, peeks at the first messages of a queue and publishes a
-// message. A peek puts every message back (D156). The host runs every command and asks
+// The RabbitMQ queue, exchange and virtual host page (V13.26, V13.28): one panel per queue or
+// exchange shows its figures, arguments, bindings and consumers, peeks at the first messages
+// of a queue and publishes a message; the page of a virtual host lists its connections, users
+// with their permissions and policies. A peek puts every message back (D156). The host runs every command and asks
 // before writing to production; a read-only connection is refused there.
 
 import { defineProtocol } from '../rpc';
@@ -8,7 +9,7 @@ import { array, boolean, literal, number, object, optional, string } from '../sc
 import type { Infer } from '../schema';
 import { redisValueSchema } from './redis-key';
 
-export const RABBIT_OBJECT_KINDS = ['queue', 'exchange'] as const;
+export const RABBIT_OBJECT_KINDS = ['queue', 'exchange', 'vhost'] as const;
 export type RabbitObjectKind = (typeof RABBIT_OBJECT_KINDS)[number];
 
 /** The most messages one peek brings. */
@@ -27,6 +28,81 @@ export const rabbitBindingSchema = object({
   destinationType: literal('queue', 'exchange'),
   routingKey: string({ maxLength: 100_000 }),
   arguments: string({ maxLength: 100_000 }),
+});
+
+/** Where a new binding goes, seen from the page that makes it. */
+export const RABBIT_BINDING_DIRECTIONS = ['toQueue', 'toExchange', 'fromExchange'] as const;
+export type RabbitBindingDirection = (typeof RABBIT_BINDING_DIRECTIONS)[number];
+
+/** What a policy applies to. */
+export const RABBIT_POLICY_TARGETS = [
+  'all',
+  'queues',
+  'classic_queues',
+  'quorum_queues',
+  'streams',
+  'exchanges',
+] as const;
+
+export const rabbitConsumerSchema = object({
+  tag: string({ maxLength: 1000 }),
+  connection: string({ maxLength: 1000 }),
+  channel: string({ maxLength: 1000 }),
+  user: string({ maxLength: 1000 }),
+  prefetch: number({ integer: true, min: 0 }),
+  ackRequired: boolean(),
+  exclusive: boolean(),
+  active: boolean(),
+});
+
+export const rabbitConnectionSchema = object({
+  name: string({ maxLength: 1000 }),
+  user: string({ maxLength: 1000 }),
+  state: string({ maxLength: 100 }),
+  protocol: string({ maxLength: 100 }),
+  peer: string({ maxLength: 1000 }),
+  channels: number({ integer: true, min: 0 }),
+  /** When it connected, as text in the user's locale; empty when unknown. */
+  connectedAt: string({ maxLength: 100 }),
+  clientName: string({ maxLength: 1000 }),
+  product: string({ maxLength: 1000 }),
+  received: string({ maxLength: 100 }),
+  sent: string({ maxLength: 100 }),
+});
+
+/** A user, with what the user may do in this page's virtual host (absent: nothing). */
+export const rabbitUserSchema = object({
+  name: string({ maxLength: 1000 }),
+  tags: array(string({ maxLength: 100 }), { maxLength: 50 }),
+  permission: optional(
+    object({
+      configure: string({ maxLength: 10_000 }),
+      write: string({ maxLength: 10_000 }),
+      read: string({ maxLength: 10_000 }),
+    }),
+  ),
+});
+
+export const rabbitPolicySchema = object({
+  name: string({ maxLength: 1000 }),
+  pattern: string({ maxLength: 10_000 }),
+  applyTo: string({ maxLength: 100 }),
+  priority: number({ integer: true }),
+  /** The definition as indented JSON. */
+  definition: string({ maxLength: 1_000_000 }),
+});
+
+export const rabbitAdminSchema = object({
+  /** The user the page is signed in as; it may not delete itself. */
+  me: string({ maxLength: 1000 }),
+  connections: array(rabbitConnectionSchema, { maxLength: 500 }),
+  /** How many connections there are; more than listed when the broker has many. */
+  connectionsTotal: number({ integer: true, min: 0 }),
+  connectionsError: optional(string({ maxLength: 10_000 })),
+  users: array(rabbitUserSchema, { maxLength: 1000 }),
+  usersError: optional(string({ maxLength: 10_000 })),
+  policies: array(rabbitPolicySchema, { maxLength: 500 }),
+  policiesError: optional(string({ maxLength: 10_000 })),
 });
 
 export const rabbitMessageSchema = object({
@@ -60,6 +136,10 @@ export const rabbitObjectStateSchema = object({
   bindings: array(rabbitBindingSchema, { maxLength: 500 }),
   /** True when more bindings exist than the page lists. */
   bindingsCut: boolean(),
+  /** Who consumes the queue (queues only). */
+  consumersList: array(rabbitConsumerSchema, { maxLength: 200 }),
+  /** Connections, users and policies (virtual host pages only). */
+  admin: optional(rabbitAdminSchema),
   /** What the last peek asked for, so the page shows it again. */
   count: number({ integer: true, min: 1, max: MAX_RABBIT_PEEK }),
   messages: array(rabbitMessageSchema, { maxLength: MAX_RABBIT_PEEK }),
@@ -100,6 +180,67 @@ export const rabbitObjectProtocol = defineProtocol({
       purge: { params: object({}), result: object({ purged: boolean() }) },
       /** Deletes the queue or exchange after the user agrees. */
       deleteObject: { params: object({}), result: object({ deleted: boolean() }) },
+      /** Binds this queue or exchange to another (`direction` says which way) after the user agrees. */
+      addBinding: {
+        params: object({
+          direction: literal(...RABBIT_BINDING_DIRECTIONS),
+          peer: string({ minLength: 1, maxLength: 1000 }),
+          routingKey: string({ maxLength: 100_000 }),
+          /** Arguments as a JSON object; empty for none. */
+          arguments: string({ maxLength: 100_000 }),
+        }),
+        result: object({ done: boolean() }),
+      },
+      /** Removes the binding listed at `index` after the user agrees. */
+      removeBinding: {
+        params: object({ index: number({ integer: true, min: 0 }) }),
+        result: object({ done: boolean() }),
+      },
+      /** Closes a connection after the user agrees (virtual host pages). */
+      closeConnection: {
+        params: object({ name: string({ minLength: 1, maxLength: 1000 }) }),
+        result: object({ done: boolean() }),
+      },
+      createUser: {
+        params: object({
+          name: string({ minLength: 1, maxLength: 1000 }),
+          password: string({ maxLength: 10_000 }),
+          tags: array(string({ maxLength: 100 }), { maxLength: 50 }),
+        }),
+        result: object({ done: boolean() }),
+      },
+      deleteUser: {
+        params: object({ name: string({ minLength: 1, maxLength: 1000 }) }),
+        result: object({ done: boolean() }),
+      },
+      setPermission: {
+        params: object({
+          user: string({ minLength: 1, maxLength: 1000 }),
+          configure: string({ maxLength: 10_000 }),
+          write: string({ maxLength: 10_000 }),
+          read: string({ maxLength: 10_000 }),
+        }),
+        result: object({ done: boolean() }),
+      },
+      clearPermission: {
+        params: object({ user: string({ minLength: 1, maxLength: 1000 }) }),
+        result: object({ done: boolean() }),
+      },
+      setPolicy: {
+        params: object({
+          name: string({ minLength: 1, maxLength: 1000 }),
+          pattern: string({ maxLength: 10_000 }),
+          applyTo: literal(...RABBIT_POLICY_TARGETS),
+          priority: number({ integer: true, min: -1_000_000, max: 1_000_000 }),
+          /** A JSON object. */
+          definition: string({ maxLength: 1_000_000 }),
+        }),
+        result: object({ done: boolean() }),
+      },
+      deletePolicy: {
+        params: object({ name: string({ minLength: 1, maxLength: 1000 }) }),
+        result: object({ done: boolean() }),
+      },
       /** Puts text on the clipboard (the host does it; a page may not). */
       copyText: { params: object({ text: string({ maxLength: 2_100_000 }) }), result: object({}) },
     },
@@ -123,3 +264,8 @@ export type RabbitObjectState = Infer<typeof rabbitObjectStateSchema>;
 export type RabbitMessageView = Infer<typeof rabbitMessageSchema>;
 export type RabbitBindingView = Infer<typeof rabbitBindingSchema>;
 export type RabbitFactView = Infer<typeof rabbitFactSchema>;
+export type RabbitConsumerView = Infer<typeof rabbitConsumerSchema>;
+export type RabbitConnectionView = Infer<typeof rabbitConnectionSchema>;
+export type RabbitUserView = Infer<typeof rabbitUserSchema>;
+export type RabbitPolicyView = Infer<typeof rabbitPolicySchema>;
+export type RabbitAdminView = Infer<typeof rabbitAdminSchema>;

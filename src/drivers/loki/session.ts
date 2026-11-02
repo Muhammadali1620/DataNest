@@ -14,8 +14,9 @@ import { toLokiError } from './errors';
 import { agentFor, type LokiTarget, targetUrl } from './http';
 import { LokiMetadata } from './metadata';
 import { translateTableQuery } from './table-query';
-import { nowNs, resolveWindow } from './time';
-import { readAnswer, sampleValue } from './values';
+import { tailMessages } from './tail';
+import { nowNs, parseDuration, resolveWindow } from './time';
+import { LOG_COLUMNS, readAnswer, readTailMessage, sampleValue } from './values';
 
 /** Rows travel from the driver in batches of this size. */
 export const ROW_BATCH_SIZE = 200;
@@ -157,8 +158,15 @@ class LokiSession implements Session {
       yield { kind: 'done', notice: this.setDefaults(parsed.directives) };
       return;
     }
-    const table = translateTableQuery(sql);
+    const table = translateTableQuery(withoutComments(sql));
     const directives = parsed.directives;
+    if (directives.tail !== undefined) {
+      if (table?.kind === 'count') {
+        throw new DbError('unsupported', msg('A live view needs a log query, not a count'));
+      }
+      yield* this.follow(table?.selector ?? withoutComments(sql), directives, options, signal);
+      return;
+    }
     const range = directives.range ?? this.defaults.range;
     const window = resolveWindow({ ...directives, range }, this.defaults.range);
     if (table?.kind === 'count') {
@@ -215,6 +223,82 @@ class LokiSession implements Session {
             }
           : {}),
     };
+  }
+
+  /**
+   * The live view (`# tail: 30s`): lines arrive over Loki's tail endpoint and go to the grid as
+   * they come. It ends when the time is up, the row limit is reached, the server closes the
+   * stream or the statement is cancelled; whatever was read stays (D158).
+   */
+  private async *follow(
+    selector: string,
+    directives: Directives,
+    options: ExecuteOptions,
+    signal: AbortSignal,
+  ): AsyncGenerator<ExecuteEvent> {
+    const duration = parseDuration(directives.tail ?? '') ?? 0;
+    const asked = directives.limit ?? this.defaults.limit ?? DEFAULT_LIMIT;
+    const wanted = Math.min(options.rowLimit ?? Number.POSITIVE_INFINITY, asked);
+    // The view starts now unless the statement names a window: then it starts with its lines.
+    const startNs =
+      directives.range !== undefined || directives.start !== undefined
+        ? resolveWindow(directives, this.defaults.range).startNs
+        : nowNs(new Date());
+    yield { kind: 'columns', columns: LOG_COLUMNS };
+    const stop = new AbortController();
+    const onAbort = (): void => {
+      stop.abort();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    const timer = setTimeout(onAbort, duration);
+    let total = 0;
+    let dropped = 0;
+    let reason: 'time' | 'limit' | 'closed' | 'stopped' = 'closed';
+    try {
+      for await (const text of tailMessages(
+        this.api.target,
+        this.agent,
+        {
+          query: selector,
+          start: startNs.toString(),
+          delay_for: '0',
+          limit: String(Math.min(wanted, SERVER_LINE_LIMIT)),
+        },
+        stop.signal,
+      )) {
+        const batch = readTailMessage(text);
+        dropped += batch.dropped;
+        const rows = batch.rows.slice(0, wanted - total);
+        for (let index = 0; index < rows.length; index += ROW_BATCH_SIZE) {
+          yield { kind: 'rows', rows: rows.slice(index, index + ROW_BATCH_SIZE) };
+        }
+        total += rows.length;
+        if (total >= wanted) {
+          reason = 'limit';
+          break;
+        }
+      }
+      if (reason === 'closed' && stop.signal.aborted) {
+        reason = signal.aborted ? 'stopped' : 'time';
+      }
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      stop.abort();
+    }
+    const notes: string[] = [
+      reason === 'limit'
+        ? msg('The live view stopped at {0} lines, the row limit', String(wanted))
+        : reason === 'time'
+          ? msg('The live view ended after {0}: {1} lines', directives.tail ?? '', String(total))
+          : reason === 'stopped'
+            ? msg('The live view was stopped: {0} lines', String(total))
+            : msg('The server closed the live view: {0} lines', String(total)),
+    ];
+    if (dropped > 0) {
+      notes.push(msg('Loki dropped {0} lines that came too fast', String(dropped)));
+    }
+    yield { kind: 'done', notice: notes.join('. ') };
   }
 
   /** How many lines a label's streams hold in the window: one metric query. */

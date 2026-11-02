@@ -94,6 +94,7 @@ describe('the queue and exchange page protocol', () => {
       },
     ],
     bindingsCut: false,
+    consumersList: [],
     count: DEFAULT_RABBIT_PEEK,
     messages: [message],
     peeked: true,
@@ -110,8 +111,126 @@ describe('the queue and exchange page protocol', () => {
   it('refuses a count a peek may not bring, an unknown kind and a negative figure', () => {
     expect(() => rabbitObjectStateSchema.parse({ ...state, count: 0 })).toThrow();
     expect(() => rabbitObjectStateSchema.parse({ ...state, count: MAX_RABBIT_PEEK + 1 })).toThrow();
-    expect(() => rabbitObjectStateSchema.parse({ ...state, kind: 'vhost' })).toThrow();
+    expect(() => rabbitObjectStateSchema.parse({ ...state, kind: 'database' })).toThrow();
     expect(() => rabbitObjectStateSchema.parse({ ...state, ready: -1 })).toThrow();
+  });
+
+  it('accepts the page of a virtual host with its connections, users and policies', () => {
+    const vhost = {
+      ...state,
+      kind: 'vhost',
+      name: '/',
+      admin: {
+        me: 'admin',
+        connections: [
+          {
+            name: 'c1',
+            user: 'app',
+            state: 'running',
+            protocol: 'AMQP 0-9-1',
+            peer: '10.0.0.5:4000',
+            channels: 1,
+            connectedAt: '',
+            clientName: '',
+            product: '',
+            received: '1 KB',
+            sent: '2 KB',
+          },
+        ],
+        connectionsTotal: 1,
+        users: [
+          {
+            name: 'admin',
+            tags: ['administrator'],
+            permission: { configure: '', write: '', read: '' },
+          },
+          { name: 'idle', tags: [] },
+        ],
+        usersError: 'x',
+        policies: [{ name: 'p', pattern: '.*', applyTo: 'all', priority: -1, definition: '{}' }],
+      },
+    };
+    expect(rabbitObjectStateSchema.parse(vhost)).toEqual(vhost);
+    expect(() =>
+      rabbitObjectStateSchema.parse({
+        ...vhost,
+        admin: { ...vhost.admin, policies: [{ name: 'p' }] },
+      }),
+    ).toThrow();
+    expect(() => rabbitObjectStateSchema.parse({ ...state, consumersList: undefined })).toThrow();
+    const { consumersList } = {
+      consumersList: [
+        {
+          tag: 't',
+          connection: 'c',
+          channel: 'ch',
+          user: 'u',
+          prefetch: 0,
+          ackRequired: false,
+          exclusive: false,
+          active: true,
+        },
+      ],
+    };
+    expect(rabbitObjectStateSchema.parse({ ...state, consumersList }).consumersList).toEqual(
+      consumersList,
+    );
+  });
+
+  it('checks what the administration pages ask for', () => {
+    const r = rabbitObjectProtocol.host.requests;
+    expect(
+      r.addBinding.params.parse({ direction: 'toQueue', peer: 'q', routingKey: '', arguments: '' })
+        .direction,
+    ).toBe('toQueue');
+    expect(() =>
+      r.addBinding.params.parse({
+        direction: 'sideways',
+        peer: 'q',
+        routingKey: '',
+        arguments: '',
+      }),
+    ).toThrow();
+    expect(() =>
+      r.addBinding.params.parse({ direction: 'toQueue', peer: '', routingKey: '', arguments: '' }),
+    ).toThrow();
+    expect(r.removeBinding.params.parse({ index: 0 })).toEqual({ index: 0 });
+    expect(() => r.removeBinding.params.parse({ index: -1 })).toThrow();
+    expect(() => r.closeConnection.params.parse({ name: '' })).toThrow();
+    expect(r.createUser.params.parse({ name: 'a', password: '', tags: ['x'] }).tags).toEqual(['x']);
+    expect(() => r.deleteUser.params.parse({})).toThrow();
+    expect(
+      r.setPermission.params.parse({ user: 'a', configure: '', write: '', read: '' }).user,
+    ).toBe('a');
+    expect(() => r.clearPermission.params.parse({ user: '' })).toThrow();
+    expect(
+      r.setPolicy.params.parse({
+        name: 'p',
+        pattern: '.*',
+        applyTo: 'quorum_queues',
+        priority: 3,
+        definition: '{}',
+      }).applyTo,
+    ).toBe('quorum_queues');
+    expect(() =>
+      r.setPolicy.params.parse({
+        name: 'p',
+        pattern: '',
+        applyTo: 'bindings',
+        priority: 0,
+        definition: '{}',
+      }),
+    ).toThrow();
+    expect(() =>
+      r.setPolicy.params.parse({
+        name: 'p',
+        pattern: '',
+        applyTo: 'all',
+        priority: 1.5,
+        definition: '{}',
+      }),
+    ).toThrow();
+    expect(() => r.deletePolicy.params.parse({ name: '' })).toThrow();
   });
 
   it('checks what the page asks for', () => {

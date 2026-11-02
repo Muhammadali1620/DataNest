@@ -39,6 +39,8 @@ export function stateTone(state: string): 'success' | 'warning' | 'error' | 'out
       return 'success';
     case 'flow':
     case 'minority':
+    case 'blocked':
+    case 'blocking':
       return 'warning';
     case 'down':
     case 'crashed':
@@ -47,4 +49,12 @@ export function stateTone(state: string): 'success' | 'warning' | 'error' | 'out
     default:
       return 'outline';
   }
+}
+
+/** `management, policymaker` → `['management', 'policymaker']`; commas or spaces divide, blanks go. */
+export function parseTags(text: string): string[] {
+  return text
+    .split(/[\s,]+/u)
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== '');
 }

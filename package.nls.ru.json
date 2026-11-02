@@ -256,6 +256,8 @@
   "commands.kafka.deleteTopic.title": "Удалить топик Kafka",
   "commands.kafka.resetOffsets.title": "Сбросить смещения группы Kafka…",
   "configuration.kafka.showInternalTopics.description": "Показывать в дереве служебные топики Kafka (`__consumer_offsets`, `_schemas`, …).",
+  "commands.loki.setRange.title": "Окно времени Loki…",
+  "commands.loki.follow.title": "Следить за запросом Loki вживую…",
   "commands.rabbitmq.openObject.title": "Открыть очередь или обменник",
   "commands.rabbitmq.newQueue.title": "Новая очередь…",
   "commands.rabbitmq.newExchange.title": "Новый обменник…",

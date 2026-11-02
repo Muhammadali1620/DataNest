@@ -53,6 +53,7 @@ function state(overrides: Partial<RabbitObjectState> = {}): RabbitObjectState {
       },
     ],
     bindingsCut: false,
+    consumersList: [],
     count: 10,
     messages: [],
     peeked: false,
@@ -96,6 +97,19 @@ async function open(
   host.handle('purge', reply('purge', { purged: true }));
   host.handle('deleteObject', reply('deleteObject', { deleted: true }));
   host.handle('copyText', reply('copyText', {}));
+  for (const method of [
+    'addBinding',
+    'removeBinding',
+    'closeConnection',
+    'createUser',
+    'deleteUser',
+    'setPermission',
+    'clearPermission',
+    'setPolicy',
+    'deletePolicy',
+  ] as const) {
+    host.handle(method, reply(method, { done: true }));
+  }
   render(App, { props: { rpc, t: createTranslator(language) } });
   await flush();
   host.emit('state', initial);
@@ -344,5 +358,394 @@ describe('RabbitMQ page: the toolbar', () => {
     await waitFor(() => {
       expect(within(screen.getByTestId('counts')).getByText('99')).toBeTruthy();
     });
+  });
+});
+
+const consumer = {
+  tag: 'amq.ctag-1',
+  connection: '10.0.0.5:4000 -> 10.0.0.1:5672',
+  channel: '10.0.0.5:4000 -> 10.0.0.1:5672 (1)',
+  user: 'app',
+  prefetch: 20,
+  ackRequired: true,
+  exclusive: false,
+  active: true,
+};
+
+describe('RabbitMQ page: consumers and bindings', () => {
+  it('lists who consumes the queue', async () => {
+    await open(
+      state({
+        consumersList: [
+          consumer,
+          {
+            ...consumer,
+            tag: 'tag-2',
+            prefetch: 0,
+            ackRequired: false,
+            active: false,
+            exclusive: true,
+          },
+        ],
+      }),
+    );
+    const table = within(screen.getByTestId('consumers'));
+    expect(table.getByText('amq.ctag-1')).toBeTruthy();
+    expect(table.getByText('20')).toBeTruthy();
+    expect(table.getByText('∞')).toBeTruthy();
+    expect(table.getByText('exclusive')).toBeTruthy();
+    expect(table.getByText('waiting')).toBeTruthy();
+  });
+
+  it('says so when nobody consumes the queue, and has no consumers on an exchange', async () => {
+    await open(state());
+    expect(
+      within(screen.getByTestId('consumers')).getByText('Nobody consumes this queue'),
+    ).toBeTruthy();
+  });
+
+  it('has no consumers section on an exchange', async () => {
+    await open(state({ kind: 'exchange', name: 'events', type: 'topic' }));
+    expect(screen.queryByTestId('consumers')).toBeNull();
+  });
+
+  it('removes a binding by its place in the list', async () => {
+    const opened = await open(state());
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove the binding' }));
+    await waitFor(() => {
+      expect(sent(opened, 'removeBinding')).toEqual([{ index: 0 }]);
+    });
+  });
+
+  it('offers no way to remove the binding of the default exchange', async () => {
+    await open(
+      state({
+        bindings: [
+          {
+            source: '',
+            destination: 'orders',
+            destinationType: 'queue',
+            routingKey: 'orders',
+            arguments: '',
+          },
+        ],
+      }),
+    );
+    expect(screen.queryByRole('button', { name: 'Remove the binding' })).toBeNull();
+  });
+
+  it('binds a queue to an exchange with a key and arguments, then empties the form', async () => {
+    const opened = await open(state());
+    await fireEvent.click(screen.getByRole('button', { name: 'Add a binding' }));
+    const form = within(screen.getByTestId('bind'));
+    // A queue only receives, so there is no choice of direction.
+    expect(form.queryByLabelText('Direction')).toBeNull();
+    await fireEvent.input(form.getByLabelText('The other end of the binding'), {
+      target: { value: 'amq.topic' },
+    });
+    await fireEvent.input(form.getByLabelText('Routing key'), { target: { value: 'order.#' } });
+    await fireEvent.input(form.getByLabelText('Arguments'), { target: { value: '{"a": 1}' } });
+    await fireEvent.click(form.getByRole('button', { name: 'Bind' }));
+    await waitFor(() => {
+      expect(sent(opened, 'addBinding')).toEqual([
+        {
+          direction: 'fromExchange',
+          peer: 'amq.topic',
+          routingKey: 'order.#',
+          arguments: '{"a": 1}',
+        },
+      ]);
+    });
+    await waitFor(() => {
+      expect(form.getByLabelText<HTMLInputElement>('Routing key').value).toBe('');
+    });
+  });
+
+  it('lets an exchange choose the direction of a binding', async () => {
+    const opened = await open(state({ kind: 'exchange', name: 'events', type: 'topic' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add a binding' }));
+    const form = within(screen.getByTestId('bind'));
+    await fireEvent.change(form.getByLabelText('Direction'), { target: { value: 'toQueue' } });
+    await fireEvent.input(form.getByLabelText('The other end of the binding'), {
+      target: { value: 'orders' },
+    });
+    await fireEvent.click(form.getByRole('button', { name: 'Bind' }));
+    await waitFor(() => {
+      expect(sent(opened, 'addBinding')).toEqual([
+        { direction: 'toQueue', peer: 'orders', routingKey: '', arguments: '' },
+      ]);
+    });
+  });
+
+  it('shows the error of a refused binding and keeps the form', async () => {
+    await open(state(), 'en', { addBinding: new Error('The default exchange cannot be bound') });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add a binding' }));
+    const form = within(screen.getByTestId('bind'));
+    await fireEvent.input(form.getByLabelText('The other end of the binding'), {
+      target: { value: 'x' },
+    });
+    await fireEvent.click(form.getByRole('button', { name: 'Bind' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toContain('cannot be bound');
+    });
+    expect(form.getByLabelText<HTMLInputElement>('The other end of the binding').value).toBe('x');
+  });
+
+  it('hides the binding forms on a read-only connection and on the default exchange', async () => {
+    await open(state({ readOnly: true }));
+    expect(screen.queryByRole('button', { name: 'Add a binding' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove the binding' })).toBeNull();
+  });
+
+  it('does not offer to bind the default exchange', async () => {
+    await open(state({ kind: 'exchange', name: '', type: 'direct' }));
+    expect(screen.queryByRole('button', { name: 'Add a binding' })).toBeNull();
+  });
+});
+
+function vhostState(
+  over: Partial<NonNullable<RabbitObjectState['admin']>> = {},
+): RabbitObjectState {
+  return state({
+    kind: 'vhost',
+    name: '/',
+    type: '',
+    state: '',
+    ready: 0,
+    unacked: 0,
+    total: 0,
+    consumers: 0,
+    arguments: [],
+    bindings: [],
+    facts: [{ key: 'Virtual host', value: '/' }],
+    admin: {
+      me: 'admin',
+      connections: [
+        {
+          name: '10.0.0.5:4000 -> 10.0.0.1:5672',
+          user: 'app',
+          state: 'running',
+          protocol: 'AMQP 0-9-1',
+          peer: '10.0.0.5:4000',
+          channels: 3,
+          connectedAt: '2026-11-02 10:15:00 UTC',
+          clientName: 'billing',
+          product: 'pika',
+          received: '1 KB',
+          sent: '2 KB',
+        },
+      ],
+      connectionsTotal: 1,
+      users: [
+        {
+          name: 'admin',
+          tags: ['administrator'],
+          permission: { configure: '.*', write: '.*', read: '.*' },
+        },
+        { name: 'app', tags: [], permission: { configure: '', write: '^q\\.', read: '^q\\.' } },
+        { name: 'idle', tags: ['monitoring'] },
+      ],
+      policies: [
+        {
+          name: 'ttl',
+          pattern: '^tmp\\.',
+          applyTo: 'queues',
+          priority: 2,
+          definition: '{\n  "message-ttl": 60000\n}',
+        },
+      ],
+      ...over,
+    },
+  });
+}
+
+describe('RabbitMQ page: a virtual host', () => {
+  it('shows connections, users and policies, and nothing of a queue', async () => {
+    await open(vhostState());
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('/');
+    expect(screen.queryByTestId('counts')).toBeNull();
+    expect(screen.queryByTestId('peeker')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Publish a message' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete the queue' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete the exchange' })).toBeNull();
+    expect(screen.queryByTestId('bindings')).toBeNull();
+    const connections = within(screen.getByTestId('connections'));
+    expect(connections.getByText('billing')).toBeTruthy();
+    expect(connections.getByText('pika')).toBeTruthy();
+    expect(connections.getByText('↓ 1 KB · ↑ 2 KB')).toBeTruthy();
+    const users = within(screen.getByTestId('users'));
+    expect(users.getByText('you')).toBeTruthy();
+    expect(users.getByText('no access to this virtual host')).toBeTruthy();
+    expect(users.getByText('administrator')).toBeTruthy();
+    const policies = within(screen.getByTestId('policies'));
+    expect(policies.getByText('ttl')).toBeTruthy();
+    expect(policies.getByText('queues')).toBeTruthy();
+  });
+
+  it('closes a connection by its name', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(screen.getByRole('button', { name: 'Close the connection' }));
+    await waitFor(() => {
+      expect(sent(opened, 'closeConnection')).toEqual([{ name: '10.0.0.5:4000 -> 10.0.0.1:5672' }]);
+    });
+  });
+
+  it('says how many connections are not shown', async () => {
+    await open(vhostState({ connectionsTotal: 700 }));
+    expect(screen.getByText('… and 699 more that are not shown')).toBeTruthy();
+  });
+
+  it('says there are no connections and no policies', async () => {
+    await open(vhostState({ connections: [], connectionsTotal: 0, policies: [] }));
+    expect(screen.getByText('No client is connected to this virtual host')).toBeTruthy();
+    expect(screen.getByText('No policies in this virtual host')).toBeTruthy();
+  });
+
+  it('shows the error of a part the user may not read, and the others still show', async () => {
+    await open(
+      vhostState({
+        users: [],
+        usersError: 'This needs the administrator tag',
+        connectionsError: 'refused',
+      }),
+    );
+    expect(within(screen.getByTestId('users')).getByRole('alert').textContent).toContain(
+      'administrator tag',
+    );
+    expect(within(screen.getByTestId('connections')).getByRole('alert').textContent).toContain(
+      'refused',
+    );
+    expect(screen.queryByRole('button', { name: 'New user' })).toBeNull();
+    expect(within(screen.getByTestId('policies')).getByText('ttl')).toBeTruthy();
+  });
+
+  it('gives a user access with three patterns', async () => {
+    const opened = await open(vhostState());
+    const buttons = within(screen.getByTestId('users')).getAllByRole('button', {
+      name: 'Set access',
+    });
+    // The row of "app" is the second one.
+    await fireEvent.click(must(buttons[1]));
+    const form = within(screen.getByTestId('grant'));
+    expect(form.getByLabelText<HTMLInputElement>('Write').value).toBe('^q\\.');
+    await fireEvent.input(form.getByLabelText('Configure'), { target: { value: '^c' } });
+    await fireEvent.click(form.getByRole('button', { name: 'Save access' }));
+    await waitFor(() => {
+      expect(sent(opened, 'setPermission')).toEqual([
+        { user: 'app', configure: '^c', write: '^q\\.', read: '^q\\.' },
+      ]);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('grant')).toBeNull();
+    });
+  });
+
+  it('starts a user without access from open patterns', async () => {
+    await open(vhostState());
+    const buttons = within(screen.getByTestId('users')).getAllByRole('button', {
+      name: 'Set access',
+    });
+    await fireEvent.click(must(buttons[2]));
+    const form = within(screen.getByTestId('grant'));
+    expect(form.getByLabelText<HTMLInputElement>('Configure').value).toBe('.*');
+  });
+
+  it('takes access away only from a user who has some', async () => {
+    const opened = await open(vhostState());
+    const clear = within(screen.getByTestId('users')).getAllByRole('button', {
+      name: 'Take away access',
+    });
+    expect(clear).toHaveLength(2);
+    await fireEvent.click(must(clear[1]));
+    await waitFor(() => {
+      expect(sent(opened, 'clearPermission')).toEqual([{ user: 'app' }]);
+    });
+  });
+
+  it('will not delete the user it is signed in as', async () => {
+    const opened = await open(vhostState());
+    const deletes = within(screen.getByTestId('users')).getAllByRole<HTMLButtonElement>('button', {
+      name: 'Delete the user',
+    });
+    expect(deletes[0]?.disabled).toBe(true);
+    await fireEvent.click(must(deletes[1]));
+    await waitFor(() => {
+      expect(sent(opened, 'deleteUser')).toEqual([{ name: 'app' }]);
+    });
+  });
+
+  it('creates a user with tags split by commas and spaces', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(screen.getByRole('button', { name: 'New user' }));
+    const form = within(screen.getByTestId('new-user'));
+    await fireEvent.input(form.getByLabelText('Name'), { target: { value: 'ann' } });
+    await fireEvent.input(form.getByLabelText('Password'), { target: { value: 'pw' } });
+    await fireEvent.input(form.getByLabelText('Tags'), {
+      target: { value: 'management, policymaker  monitoring' },
+    });
+    await fireEvent.click(form.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(sent(opened, 'createUser')).toEqual([
+        { name: 'ann', password: 'pw', tags: ['management', 'policymaker', 'monitoring'] },
+      ]);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('new-user')).toBeNull();
+    });
+  });
+
+  it('saves a policy from the form, and fills the form to edit one', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(
+      within(screen.getByTestId('policies')).getByRole('button', { name: 'Edit the policy' }),
+    );
+    const form = within(screen.getByTestId('policy-form'));
+    expect(form.getByLabelText<HTMLInputElement>('Name').value).toBe('ttl');
+    expect(form.getByLabelText<HTMLInputElement>('Pattern').value).toBe('^tmp\\.');
+    await fireEvent.input(form.getByLabelText('Priority'), { target: { value: '7' } });
+    await fireEvent.click(form.getByRole('button', { name: 'Save the policy' }));
+    await waitFor(() => {
+      expect(sent(opened, 'setPolicy')).toEqual([
+        {
+          name: 'ttl',
+          pattern: '^tmp\\.',
+          applyTo: 'queues',
+          priority: 7,
+          definition: '{\n  "message-ttl": 60000\n}',
+        },
+      ]);
+    });
+  });
+
+  it('deletes a policy', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(
+      within(screen.getByTestId('policies')).getByRole('button', { name: 'Delete the policy' }),
+    );
+    await waitFor(() => {
+      expect(sent(opened, 'deletePolicy')).toEqual([{ name: 'ttl' }]);
+    });
+  });
+
+  it('is read-only on a read-only connection', async () => {
+    await open({ ...vhostState(), readOnly: true });
+    for (const name of [
+      'Close the connection',
+      'New user',
+      'Set access',
+      'Take away access',
+      'Delete the user',
+      'New policy',
+      'Edit the policy',
+      'Delete the policy',
+    ]) {
+      expect(screen.queryByRole('button', { name }), name).toBeNull();
+    }
+  });
+
+  it('speaks Russian', async () => {
+    await open(vhostState(), 'ru');
+    expect(within(screen.getByTestId('users')).getByText('Пользователи и права')).toBeTruthy();
+    expect(within(screen.getByTestId('policies')).getByText('Политики')).toBeTruthy();
   });
 });

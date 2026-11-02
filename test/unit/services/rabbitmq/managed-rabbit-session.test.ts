@@ -21,6 +21,7 @@ function inner(overrides: Partial<RabbitSession> = {}): RabbitSession {
     arguments: {},
     incomingRate: undefined,
     node: '',
+    consumerDetails: [],
   };
   const exchange = {
     vhost: '/',
@@ -47,6 +48,19 @@ function inner(overrides: Partial<RabbitSession> = {}): RabbitSession {
     purgeQueue: () => Promise.resolve(),
     declareExchange: () => Promise.resolve(),
     deleteExchange: () => Promise.resolve(),
+    bind: () => Promise.resolve(),
+    unbind: () => Promise.resolve(),
+    listConnections: () => Promise.resolve({ items: [], total: 0 }),
+    closeConnection: () => Promise.resolve(),
+    listUsers: () => Promise.resolve([{ name: 'u', tags: [] }]),
+    createUser: () => Promise.resolve(),
+    deleteUser: () => Promise.resolve(),
+    listPermissions: () => Promise.resolve([]),
+    setPermission: () => Promise.resolve(),
+    clearPermission: () => Promise.resolve(),
+    listPolicies: () => Promise.resolve([]),
+    setPolicy: () => Promise.resolve(),
+    deletePolicy: () => Promise.resolve(),
     close: () => Promise.resolve(),
     ...overrides,
   };
@@ -75,6 +89,15 @@ describe('ManagedRabbitSession', () => {
         deleteExchange: note('deleteExchange'),
         declareQueue: note('declareQueue'),
         declareExchange: note('declareExchange'),
+        bind: note('bind'),
+        unbind: note('unbind'),
+        closeConnection: note('closeConnection'),
+        createUser: note('createUser'),
+        deleteUser: note('deleteUser'),
+        setPermission: note('setPermission'),
+        clearPermission: note('clearPermission'),
+        setPolicy: note('setPolicy'),
+        deletePolicy: note('deletePolicy'),
       }),
       { onLinkLost: () => undefined },
     );
@@ -108,12 +131,51 @@ describe('ManagedRabbitSession', () => {
       autoDelete: false,
       internal: false,
     });
+    const binding = {
+      source: 'x',
+      destination: 'q',
+      destinationType: 'queue' as const,
+      routingKey: 'k',
+      arguments: {},
+      propertiesKey: 'k',
+    };
+    await managed.bind('/', binding);
+    await managed.unbind('/', binding);
+    expect((await managed.listConnections('/')).total).toBe(0);
+    await managed.closeConnection('c');
+    expect(await managed.listUsers()).toEqual([{ name: 'u', tags: [] }]);
+    await managed.createUser({ name: 'n', password: 'p', tags: [] });
+    await managed.deleteUser('n');
+    expect(await managed.listPermissions('/')).toEqual([]);
+    const permission = { user: 'u', configure: '.*', write: '.*', read: '.*' };
+    await managed.setPermission('/', permission);
+    await managed.clearPermission('/', 'u');
+    expect(await managed.listPolicies('/')).toEqual([]);
+    const policy = {
+      vhost: '/',
+      name: 'p',
+      pattern: '.*',
+      applyTo: 'all',
+      priority: 0,
+      definition: {},
+    };
+    await managed.setPolicy(policy);
+    await managed.deletePolicy('/', 'p');
     expect(calls).toEqual([
       'deleteQueue "/" "q"',
       'purgeQueue "/" "q"',
       'deleteExchange "/" "x"',
       'declareQueue {"vhost":"/","name":"n","durable":true,"autoDelete":false}',
       'declareExchange {"vhost":"/","name":"e","type":"topic","durable":true,"autoDelete":false,"internal":false}',
+      `bind "/" ${JSON.stringify(binding)}`,
+      `unbind "/" ${JSON.stringify(binding)}`,
+      'closeConnection "c"',
+      'createUser {"name":"n","password":"p","tags":[]}',
+      'deleteUser "n"',
+      `setPermission "/" ${JSON.stringify(permission)}`,
+      'clearPermission "/" "u"',
+      `setPolicy ${JSON.stringify(policy)}`,
+      'deletePolicy "/" "p"',
     ]);
   });
 

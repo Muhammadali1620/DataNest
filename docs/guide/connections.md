@@ -52,6 +52,7 @@ comments above it:
 # step: 1m             the resolution of a metric query
 # direction: forward   oldest first (the default is newest first)
 # limit: 500           lines to read (the row limit of the grid wins when it is smaller)
+# tail: 30s            follow the query live for this long (up to 10m)
 {app="shop"} |= "error"
 ```
 
@@ -59,6 +60,11 @@ A statement that holds only such comments sets the defaults of the session, and 
 *Init SQL* of the connection. A log query gives a row per line — `time`, the exact `ns` stamp,
 the `labels` of the stream as JSON and the `line`; a metric query gives a row per sample.
 Loki hands over at most 5000 lines per query, and DataNest says so when that cut the answer.
+`# tail:` follows a query live: lines logged after it starts arrive in the grid as they come, until
+the time is up, the row limit is reached or you cancel (what was read stays). Add `# range: 5m` to
+start with the lines of the last minutes instead of from now. The commands **Set Loki Time Window…**
+and **Follow Loki Query Live…** (editor menu and Command Palette) write the `# range:` and `# tail:`
+lines for you.
 Loki is only read: nothing is written, and no change can be made through this connection.
 
 ## SSH tunnels

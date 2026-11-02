@@ -1,6 +1,6 @@
-// The RabbitMQ queue and exchange page (V13.26): one panel per object. It asks before
-// publishing on a production connection, always before purging or deleting, and tells the
-// tree when an object goes.
+// The RabbitMQ queue, exchange and virtual host page (V13.26, V13.28): one panel per object. It
+// asks before a change on a production connection, always before purging, deleting, removing
+// or closing, and tells the tree when an object goes.
 
 import * as vscode from 'vscode';
 import type { Logger } from '../../core/logging/logger';
@@ -24,8 +24,9 @@ export interface RabbitObjectPanelDeps {
   readonly onDeleted: (connectionId: string) => void;
 }
 
-function titleOf(name: string): string {
-  const shown = name === '' ? '(AMQP default)' : name;
+function titleOf(name: string, kind: string): string {
+  const shown =
+    kind === 'vhost' ? vscode.l10n.t('Broker {0}', name) : name === '' ? '(AMQP default)' : name;
   return shown.length > 60 ? `${shown.slice(0, 57)}…` : shown;
 }
 
@@ -67,7 +68,7 @@ export class RabbitObjectPanel implements vscode.Disposable {
     this.log = deps.logger.child('rabbitmq-object');
     this.panel = createWebviewAppPanel(deps.extensionUri, {
       viewType: RabbitObjectPanel.viewType,
-      title: titleOf(deps.model.name),
+      title: titleOf(deps.model.name, deps.model.kind),
       app: 'rabbitmq-object',
     });
     this.rpc = new RpcPeer({
@@ -116,6 +117,89 @@ export class RabbitObjectPanel implements vscode.Disposable {
     });
     this.rpc.handle('purge', async () => ({ purged: await this.purge() }));
     this.rpc.handle('deleteObject', async () => ({ deleted: await this.deleteObject() }));
+    this.rpc.handle('addBinding', async (params) => {
+      const peer = params.peer.trim();
+      const text =
+        params.direction === 'fromExchange'
+          ? vscode.l10n.t('Bind "{0}" to receive from the exchange "{1}"?', this.label(), peer)
+          : vscode.l10n.t('Bind the exchange "{0}" to "{1}"?', this.label(), peer);
+      return await this.change(text, vscode.l10n.t('Bind'), false, async () =>
+        model.addBinding(params),
+      );
+    });
+    this.rpc.handle('removeBinding', async ({ index }) => {
+      const binding = model.bindingAt(index);
+      const text =
+        binding === undefined
+          ? vscode.l10n.t('Remove this binding?')
+          : vscode.l10n.t(
+              'Remove the binding from "{0}" to "{1}" with the key "{2}"?',
+              binding.source,
+              binding.destination,
+              binding.routingKey,
+            );
+      return await this.change(text, vscode.l10n.t('Remove'), true, async () =>
+        model.removeBinding(index),
+      );
+    });
+    this.rpc.handle('closeConnection', async ({ name }) =>
+      this.change(
+        vscode.l10n.t('Close the connection "{0}"?', name),
+        vscode.l10n.t('Close Connection'),
+        true,
+        async () => model.closeConnection(name),
+        vscode.l10n.t('Its client loses the link; most clients connect again.'),
+      ),
+    );
+    this.rpc.handle('createUser', async ({ name, password, tags }) =>
+      this.change(
+        vscode.l10n.t('Create the user "{0}"?', name),
+        vscode.l10n.t('Create'),
+        false,
+        async () => model.createUser(name, password, tags),
+      ),
+    );
+    this.rpc.handle('deleteUser', async ({ name }) =>
+      this.change(
+        vscode.l10n.t('Delete the user "{0}"?', name),
+        vscode.l10n.t('Delete'),
+        true,
+        async () => model.deleteUser(name),
+        vscode.l10n.t('The user loses its permissions in every virtual host.'),
+      ),
+    );
+    this.rpc.handle('setPermission', async ({ user, ...permission }) =>
+      this.change(
+        vscode.l10n.t('Change what "{0}" may do in the virtual host "{1}"?', user, model.name),
+        vscode.l10n.t('Change'),
+        false,
+        async () => model.setPermission(user, permission),
+      ),
+    );
+    this.rpc.handle('clearPermission', async ({ user }) =>
+      this.change(
+        vscode.l10n.t('Take away all access of "{0}" to the virtual host "{1}"?', user, model.name),
+        vscode.l10n.t('Take Away'),
+        true,
+        async () => model.clearPermission(user),
+      ),
+    );
+    this.rpc.handle('setPolicy', async (params) =>
+      this.change(
+        vscode.l10n.t('Save the policy "{0}" in the virtual host "{1}"?', params.name, model.name),
+        vscode.l10n.t('Save'),
+        false,
+        async () => model.setPolicy(params),
+      ),
+    );
+    this.rpc.handle('deletePolicy', async ({ name }) =>
+      this.change(
+        vscode.l10n.t('Delete the policy "{0}"?', name),
+        vscode.l10n.t('Delete'),
+        true,
+        async () => model.deletePolicy(name),
+      ),
+    );
     this.rpc.handle('copyText', async ({ text }) => {
       await vscode.env.clipboard.writeText(text);
       return {};
@@ -166,6 +250,42 @@ export class RabbitObjectPanel implements vscode.Disposable {
     if (!this.disposed) {
       this.rpc.emit('state', state);
     }
+  }
+
+  /**
+   * Asks, makes one change and shows the result. A read-only connection skips the question,
+   * so the model can refuse with its reason; `always` asks on every connection, otherwise
+   * only a production one is asked.
+   */
+  private async change(
+    question: string,
+    action: string,
+    always: boolean,
+    run: () => Promise<RabbitObjectState>,
+    detail?: string,
+  ): Promise<{ done: boolean }> {
+    const policy = this.deps.policy;
+    if (!policy.readOnly && (always || changeVerdict(policy) === 'confirm')) {
+      const production =
+        changeVerdict(policy) === 'confirm'
+          ? vscode.l10n.t('"{0}" is a production connection.', policy.name)
+          : undefined;
+      const answer = await vscode.window.showWarningMessage(
+        question,
+        {
+          modal: true,
+          ...(detail === undefined && production === undefined
+            ? {}
+            : { detail: [production, detail].filter((line) => line !== undefined).join(' ') }),
+        },
+        action,
+      );
+      if (answer !== action) {
+        return { done: false };
+      }
+    }
+    this.push(await run());
+    return { done: true };
   }
 
   private label(): string {

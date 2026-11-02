@@ -233,6 +233,9 @@ export const COMMAND_IDS = {
   rabbitNewExchange: 'datanest.rabbitmq.newExchange',
   rabbitPurgeQueue: 'datanest.rabbitmq.purgeQueue',
   rabbitDeleteObject: 'datanest.rabbitmq.deleteObject',
+  /** Writes the `# range:` / `# tail:` line of the open Grafana Loki query (V13.27). */
+  lokiSetRange: 'datanest.loki.setRange',
+  lokiFollow: 'datanest.loki.follow',
   /** A MongoDB database comes to be with its first collection (V7.5). */
   mongoNewDatabase: 'datanest.mongo.newDatabase',
   mongoDropDatabase: 'datanest.mongo.dropDatabase',

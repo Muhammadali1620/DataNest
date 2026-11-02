@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   displayName,
   parseHeaders,
+  parseTags,
   sharePercent,
   stateTone,
 } from '../../../../../webview/src/apps/rabbitmq-object/object-view';
@@ -38,10 +39,25 @@ describe('RabbitMQ page helpers (V13.26)', () => {
     expect(stateTone('idle')).toBe('success');
     expect(stateTone('flow')).toBe('warning');
     expect(stateTone('minority')).toBe('warning');
+    expect(stateTone('blocked')).toBe('warning');
+    expect(stateTone('blocking')).toBe('warning');
     expect(stateTone('down')).toBe('error');
     expect(stateTone('crashed')).toBe('error');
     expect(stateTone('stopped')).toBe('error');
     expect(stateTone('')).toBe('outline');
     expect(stateTone('something new')).toBe('outline');
+  });
+});
+
+describe('parseTags', () => {
+  it('divides by commas and spaces and drops blanks', () => {
+    expect(parseTags('management, policymaker  monitoring,')).toEqual([
+      'management',
+      'policymaker',
+      'monitoring',
+    ]);
+    expect(parseTags('')).toEqual([]);
+    expect(parseTags(' , ,')).toEqual([]);
+    expect(parseTags('administrator')).toEqual(['administrator']);
   });
 });

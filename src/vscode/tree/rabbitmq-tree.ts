@@ -55,6 +55,7 @@ export function rabbitFolderChildren(node: RabbitVhostNode): TreeNode[] {
       vhost: node.vhost,
       folder: 'exchanges',
     },
+    { kind: 'rabbitFolder', connectionId: node.connectionId, vhost: node.vhost, folder: 'admin' },
   ];
 }
 
@@ -62,6 +63,10 @@ export async function rabbitObjectChildren(
   deps: RabbitTreeDeps,
   node: RabbitFolderNode,
 ): Promise<TreeNode[]> {
+  // The administration page is a leaf; it opens a page and has nothing below it.
+  if (node.folder === 'admin') {
+    return [];
+  }
   const session = await deps.manager.acquireRabbit(owner(node.connectionId), {
     connectionId: node.connectionId,
   });

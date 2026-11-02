@@ -256,6 +256,8 @@
   "commands.kafka.deleteTopic.title": "Delete Kafka Topic",
   "commands.kafka.resetOffsets.title": "Reset Offsets of Kafka Group…",
   "configuration.kafka.showInternalTopics.description": "List Kafka's own topics (`__consumer_offsets`, `_schemas`, …) in the tree.",
+  "commands.loki.setRange.title": "Set Loki Time Window…",
+  "commands.loki.follow.title": "Follow Loki Query Live…",
   "commands.rabbitmq.openObject.title": "Open Queue or Exchange",
   "commands.rabbitmq.newQueue.title": "New Queue…",
   "commands.rabbitmq.newExchange.title": "New Exchange…",

@@ -7,20 +7,27 @@ import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type {
   RabbitBinding,
+  RabbitBindingRequest,
+  RabbitConnectionInfo,
   RabbitDriver,
   RabbitExchangeDeclaration,
   RabbitExchangeInfo,
   RabbitMessage,
   RabbitPage,
   RabbitPeekRequest,
+  RabbitPermissionInfo,
+  RabbitPolicyDeclaration,
+  RabbitPolicyInfo,
   RabbitPublishRequest,
   RabbitQueueDeclaration,
   RabbitQueueInfo,
   RabbitServerInfo,
   RabbitSession,
+  RabbitUserInfo,
   RabbitVhostInfo,
 } from '../../src/drivers/rabbitmq-driver';
 import { DbError } from '../../src/core/errors';
+import { consumerOf } from '../../src/drivers/rabbitmq/session';
 import type { ResolvedConnectionConfig } from '../../src/shared/connection';
 
 export interface FakeMessage {
@@ -41,7 +48,29 @@ export interface FakeQueue {
   policy?: string | null;
   arguments?: Record<string, unknown>;
   unacked?: number;
+  /** The `consumer_details` the queue's own record carries, as the API words them. */
+  consumerDetails?: Record<string, unknown>[];
   messages: FakeMessage[];
+}
+
+export interface FakeConnection {
+  readonly name: string;
+  readonly user?: string;
+  readonly vhost: string;
+  readonly state?: string;
+  readonly peerHost?: string;
+  readonly peerPort?: number;
+  readonly channels?: number;
+  readonly connectedAt?: number;
+  readonly clientName?: string;
+  readonly product?: string;
+}
+
+/** What the broker calls a binding: the routing key quoted as in a URL, `~` when it is empty. */
+export function propertiesKeyOf(routingKey: string, args: Record<string, unknown> = {}): string {
+  const quoted = encodeURIComponent(routingKey).replaceAll('%20', '+');
+  const base = routingKey === '' ? '~' : quoted;
+  return Object.keys(args).length === 0 ? base : `${base}_${JSON.stringify(args).length}`;
 }
 
 export interface FakeExchange {
@@ -84,6 +113,71 @@ export class FakeBroker {
   readonly bindings: FakeBinding[] = [];
   /** Pretends a queue holds more than it lists in a page. */
   extraTotal = 0;
+  readonly connections: FakeConnection[] = [];
+  readonly users: { name: string; tags: string[]; password?: string }[] = [
+    { name: 'guest', tags: ['administrator'] },
+  ];
+  readonly permissions: {
+    vhost: string;
+    user: string;
+    configure: string;
+    write: string;
+    read: string;
+  }[] = [];
+  readonly policies: {
+    vhost: string;
+    name: string;
+    pattern: string;
+    applyTo: string;
+    priority: number;
+    definition: Record<string, unknown>;
+  }[] = [];
+
+  /** Makes a binding unless an equal one is there. */
+  bind(vhost: string, request: RabbitBindingRequest): void {
+    const key = propertiesKeyOf(request.routingKey, { ...request.arguments });
+    const known = this.bindings.some(
+      (one) =>
+        one.vhost === vhost &&
+        one.source === request.source &&
+        one.destination === request.destination &&
+        one.destinationType === request.destinationType &&
+        propertiesKeyOf(one.routingKey, one.arguments) === key,
+    );
+    if (!known) {
+      this.bindings.push({
+        vhost,
+        source: request.source,
+        destination: request.destination,
+        destinationType: request.destinationType,
+        routingKey: request.routingKey,
+        ...(request.arguments === undefined ? {} : { arguments: { ...request.arguments } }),
+      });
+    }
+  }
+
+  /** Removes a binding by the broker's name for it; false when there is none. */
+  unbind(
+    vhost: string,
+    source: string,
+    destinationType: string,
+    destination: string,
+    propertiesKey: string,
+  ): boolean {
+    const index = this.bindings.findIndex(
+      (one) =>
+        one.vhost === vhost &&
+        one.source === source &&
+        one.destinationType === destinationType &&
+        one.destination === destination &&
+        propertiesKeyOf(one.routingKey, one.arguments) === propertiesKey,
+    );
+    if (index < 0) {
+      return false;
+    }
+    this.bindings.splice(index, 1);
+    return true;
+  }
 
   addQueue(
     queue: Omit<FakeQueue, 'messages'> & { messages?: (string | FakeMessage)[] },
@@ -122,6 +216,7 @@ function queueJson(queue: FakeQueue): Record<string, unknown> {
     ...(queue.type === undefined ? {} : { type: queue.type }),
     node: 'rabbit@fake',
     message_stats: { publish_details: { rate: 1.5 } },
+    ...(queue.consumerDetails === undefined ? {} : { consumer_details: queue.consumerDetails }),
   };
 }
 
@@ -145,6 +240,38 @@ function bindingJson(binding: FakeBinding): Record<string, unknown> {
     destination_type: binding.destinationType,
     routing_key: binding.routingKey,
     arguments: binding.arguments ?? {},
+    properties_key: propertiesKeyOf(binding.routingKey, binding.arguments),
+  };
+}
+
+function connectionJson(connection: FakeConnection): Record<string, unknown> {
+  return {
+    name: connection.name,
+    user: connection.user ?? 'guest',
+    vhost: connection.vhost,
+    state: connection.state ?? 'running',
+    protocol: 'AMQP 0-9-1',
+    peer_host: connection.peerHost ?? '127.0.0.1',
+    peer_port: connection.peerPort ?? 50_000,
+    channels: connection.channels ?? 1,
+    ...(connection.connectedAt === undefined ? {} : { connected_at: connection.connectedAt }),
+    recv_oct: 1024,
+    send_oct: 2048,
+    client_properties: {
+      ...(connection.clientName === undefined ? {} : { connection_name: connection.clientName }),
+      product: connection.product ?? 'fake-client',
+    },
+  };
+}
+
+function policyJson(policy: FakeBroker['policies'][number]): Record<string, unknown> {
+  return {
+    vhost: policy.vhost,
+    name: policy.name,
+    pattern: policy.pattern,
+    'apply-to': policy.applyTo,
+    priority: policy.priority,
+    definition: policy.definition,
   };
 }
 
@@ -154,6 +281,8 @@ export class FakeRabbitServer {
   readonly requests: RecordedRequest[] = [];
   user = 'guest';
   password = 'guest';
+  /** False: the user lacks the administrator tag, so users and permissions answer 401. */
+  administrator = true;
   /** A status to answer every request with (to test failures). */
   failWith: { status: number; body: string } | undefined;
   /** Milliseconds to wait before answering `get`. */
@@ -239,6 +368,21 @@ export class FakeRabbitServer {
       answer(200, { name: this.user, tags: ['administrator'] });
       return;
     }
+    if (kind === 'vhosts' && vhost !== undefined && name === 'connections') {
+      answer(200, broker.connections.filter((c) => c.vhost === vhost).map(connectionJson));
+      return;
+    }
+    if (kind === 'vhosts' && vhost !== undefined && name === 'permissions') {
+      if (!this.administrator) {
+        answer(401, { error: 'not_authorised', reason: 'This needs the administrator tag' });
+        return;
+      }
+      answer(
+        200,
+        broker.permissions.filter((p) => p.vhost === vhost),
+      );
+      return;
+    }
     if (kind === 'vhosts') {
       if (vhost === undefined) {
         answer(
@@ -265,7 +409,171 @@ export class FakeRabbitServer {
       this.exchangeRoute(method, vhost, name, rest, url, body, answer);
       return;
     }
-    answer(404, { error: 'Object Not Found', reason: 'Not Found' });
+    this.adminRoute(method, kind, vhost, name, rest, body, answer);
+  }
+
+  /** Bindings, connections, users, permissions and policies. */
+  private adminRoute(
+    method: string,
+    kind: string | undefined,
+    first: string | undefined,
+    second: string | undefined,
+    rest: string[],
+    body: unknown,
+    answer: (status: number, json?: unknown) => void,
+  ): void {
+    const broker = this.broker;
+    const missing = (): void => {
+      answer(404, { error: 'Object Not Found', reason: 'Not Found' });
+    };
+    if (kind === 'bindings' && first !== undefined) {
+      // bindings/<vhost>/e/<source>/<q|e>/<destination>[/<properties key>]
+      const source = rest[0];
+      const type = rest[1];
+      const destination = rest[2];
+      const props = rest[3];
+      if (second !== 'e' || source === undefined || destination === undefined) {
+        missing();
+        return;
+      }
+      const destinationType = type === 'q' ? 'queue' : 'exchange';
+      if (method === 'POST' && props === undefined) {
+        if (source === 'amq.default' || source === '') {
+          // As the real broker does (checked against 3.13): a refusal of access, not a bad request.
+          answer(401, { error: 'not_authorised', reason: 'Access refused.' });
+          return;
+        }
+        const request = body as { routing_key: string; arguments: Record<string, unknown> };
+        broker.bind(first, {
+          source,
+          destination,
+          destinationType,
+          routingKey: request.routing_key,
+          arguments: request.arguments,
+        });
+        answer(201);
+        return;
+      }
+      if (method === 'DELETE' && props !== undefined) {
+        if (broker.unbind(first, source, destinationType, destination, props)) {
+          answer(204);
+        } else {
+          missing();
+        }
+        return;
+      }
+      missing();
+      return;
+    }
+    if (kind === 'connections' && first !== undefined && method === 'DELETE') {
+      const index = broker.connections.findIndex((c) => c.name === first);
+      if (index < 0) {
+        missing();
+      } else {
+        broker.connections.splice(index, 1);
+        answer(204);
+      }
+      return;
+    }
+    if (kind === 'users') {
+      if (!this.administrator) {
+        answer(401, { error: 'not_authorised', reason: 'This needs the administrator tag' });
+        return;
+      }
+      if (first === undefined && method === 'GET') {
+        answer(
+          200,
+          broker.users.map((u) => ({ name: u.name, tags: u.tags, password_hash: 'xx' })),
+        );
+      } else if (first !== undefined && method === 'PUT') {
+        const request = body as { password: string; tags: string };
+        const tags = request.tags.split(',').filter((tag) => tag !== '');
+        const known = broker.users.find((u) => u.name === first);
+        if (known === undefined) {
+          broker.users.push({ name: first, tags, password: request.password });
+          answer(201);
+        } else {
+          known.tags = tags;
+          answer(204);
+        }
+      } else if (first !== undefined && method === 'DELETE') {
+        const index = broker.users.findIndex((u) => u.name === first);
+        if (index < 0) {
+          missing();
+        } else {
+          broker.users.splice(index, 1);
+          answer(204);
+        }
+      } else {
+        missing();
+      }
+      return;
+    }
+    if (kind === 'permissions' && first !== undefined && second !== undefined) {
+      const index = broker.permissions.findIndex((p) => p.vhost === first && p.user === second);
+      if (method === 'PUT') {
+        const request = body as { configure: string; write: string; read: string };
+        const permission = { vhost: first, user: second, ...request };
+        if (index < 0) {
+          broker.permissions.push(permission);
+          answer(201);
+        } else {
+          broker.permissions[index] = permission;
+          answer(204);
+        }
+      } else if (method === 'DELETE') {
+        if (index < 0) {
+          missing();
+        } else {
+          broker.permissions.splice(index, 1);
+          answer(204);
+        }
+      } else {
+        missing();
+      }
+      return;
+    }
+    if (kind === 'policies' && first !== undefined) {
+      if (second === undefined && method === 'GET') {
+        answer(200, broker.policies.filter((p) => p.vhost === first).map(policyJson));
+        return;
+      }
+      const index = broker.policies.findIndex((p) => p.vhost === first && p.name === second);
+      if (second !== undefined && method === 'PUT') {
+        const request = body as {
+          pattern: string;
+          definition: Record<string, unknown>;
+          priority: number;
+          'apply-to': string;
+        };
+        const policy = {
+          vhost: first,
+          name: second,
+          pattern: request.pattern,
+          applyTo: request['apply-to'],
+          priority: request.priority,
+          definition: request.definition,
+        };
+        if (index < 0) {
+          broker.policies.push(policy);
+          answer(201);
+        } else {
+          broker.policies[index] = policy;
+          answer(204);
+        }
+        return;
+      }
+      if (second !== undefined && method === 'DELETE') {
+        if (index < 0) {
+          missing();
+        } else {
+          broker.policies.splice(index, 1);
+          answer(204);
+        }
+        return;
+      }
+    }
+    missing();
   }
 
   private page(items: unknown[], url: URL, answer: (s: number, j?: unknown) => void): void {
@@ -592,6 +900,7 @@ export class FakeRabbitSession implements RabbitSession {
         destinationType: b.destinationType,
         routingKey: b.routingKey,
         arguments: b.arguments ?? {},
+        propertiesKey: propertiesKeyOf(b.routingKey, b.arguments),
       })),
     );
   }
@@ -692,6 +1001,142 @@ export class FakeRabbitSession implements RabbitSession {
     return Promise.resolve();
   }
 
+  bind(vhost: string, binding: RabbitBindingRequest): Promise<void> {
+    this.note('bind');
+    this.broker.bind(vhost, binding);
+    return Promise.resolve();
+  }
+
+  unbind(vhost: string, binding: RabbitBinding): Promise<void> {
+    this.note('unbind');
+    this.broker.unbind(
+      vhost,
+      binding.source,
+      binding.destinationType,
+      binding.destination,
+      binding.propertiesKey,
+    );
+    return Promise.resolve();
+  }
+
+  listConnections(vhost: string): Promise<RabbitPage<RabbitConnectionInfo>> {
+    this.note('listConnections');
+    const items = this.broker.connections
+      .filter((c) => c.vhost === vhost)
+      .map((c): RabbitConnectionInfo => ({
+        name: c.name,
+        user: c.user ?? 'guest',
+        vhost: c.vhost,
+        state: c.state ?? 'running',
+        protocol: 'AMQP 0-9-1',
+        peer: `${c.peerHost ?? '127.0.0.1'}:${c.peerPort ?? 50_000}`,
+        channels: c.channels ?? 1,
+        connectedAt: c.connectedAt,
+        receivedBytes: 1024,
+        sentBytes: 2048,
+        clientName: c.clientName ?? '',
+        product: c.product ?? 'fake-client',
+      }));
+    return Promise.resolve({ items, total: items.length + this.broker.extraTotal });
+  }
+
+  closeConnection(name: string): Promise<void> {
+    this.note('closeConnection');
+    const index = this.broker.connections.findIndex((c) => c.name === name);
+    if (index >= 0) {
+      this.broker.connections.splice(index, 1);
+    }
+    return Promise.resolve();
+  }
+
+  listUsers(): Promise<readonly RabbitUserInfo[]> {
+    this.note('listUsers');
+    return Promise.resolve(
+      this.broker.users
+        .map((u) => ({ name: u.name, tags: u.tags }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  }
+
+  createUser(user: {
+    readonly name: string;
+    readonly password: string;
+    readonly tags: readonly string[];
+  }): Promise<void> {
+    this.note('createUser');
+    this.broker.users.push({ name: user.name, tags: [...user.tags], password: user.password });
+    return Promise.resolve();
+  }
+
+  deleteUser(name: string): Promise<void> {
+    this.note('deleteUser');
+    const index = this.broker.users.findIndex((u) => u.name === name);
+    if (index >= 0) {
+      this.broker.users.splice(index, 1);
+    }
+    return Promise.resolve();
+  }
+
+  listPermissions(vhost: string): Promise<readonly RabbitPermissionInfo[]> {
+    this.note('listPermissions');
+    return Promise.resolve(this.broker.permissions.filter((p) => p.vhost === vhost));
+  }
+
+  setPermission(vhost: string, permission: RabbitPermissionInfo): Promise<void> {
+    this.note('setPermission');
+    const index = this.broker.permissions.findIndex(
+      (p) => p.vhost === vhost && p.user === permission.user,
+    );
+    const stored = { vhost, ...permission };
+    if (index < 0) {
+      this.broker.permissions.push(stored);
+    } else {
+      this.broker.permissions[index] = stored;
+    }
+    return Promise.resolve();
+  }
+
+  clearPermission(vhost: string, user: string): Promise<void> {
+    this.note('clearPermission');
+    const index = this.broker.permissions.findIndex((p) => p.vhost === vhost && p.user === user);
+    if (index >= 0) {
+      this.broker.permissions.splice(index, 1);
+    }
+    return Promise.resolve();
+  }
+
+  listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]> {
+    this.note('listPolicies');
+    return Promise.resolve(
+      this.broker.policies
+        .filter((p) => p.vhost === vhost)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  }
+
+  setPolicy(policy: RabbitPolicyDeclaration): Promise<void> {
+    this.note('setPolicy');
+    const index = this.broker.policies.findIndex(
+      (p) => p.vhost === policy.vhost && p.name === policy.name,
+    );
+    const stored = { ...policy, definition: { ...policy.definition } };
+    if (index < 0) {
+      this.broker.policies.push(stored);
+    } else {
+      this.broker.policies[index] = stored;
+    }
+    return Promise.resolve();
+  }
+
+  deletePolicy(vhost: string, name: string): Promise<void> {
+    this.note('deletePolicy');
+    const index = this.broker.policies.findIndex((p) => p.vhost === vhost && p.name === name);
+    if (index >= 0) {
+      this.broker.policies.splice(index, 1);
+    }
+    return Promise.resolve();
+  }
+
   close(): Promise<void> {
     this.closed = true;
     return Promise.resolve();
@@ -716,6 +1161,7 @@ function queueInfo(queue: FakeQueue): RabbitQueueInfo {
     arguments: queue.arguments ?? {},
     incomingRate: 1.5,
     node: 'rabbit@fake',
+    consumerDetails: (queue.consumerDetails ?? []).map(consumerOf),
   };
 }
 

@@ -110,6 +110,7 @@ export const TREE_CONTEXT = {
   rabbitVhost: 'datanest.rabbitVhost',
   rabbitQueues: 'datanest.rabbitQueues',
   rabbitExchanges: 'datanest.rabbitExchanges',
+  rabbitAdmin: 'datanest.rabbitAdmin',
   rabbitQueue: 'datanest.rabbitQueue',
   rabbitExchange: 'datanest.rabbitExchange',
   database: 'datanest.database',
@@ -502,12 +503,12 @@ export interface RabbitVhostNode {
   readonly vhost: string;
 }
 
-/** The "Queues" or "Exchanges" folder of a virtual host. */
+/** The "Queues" or "Exchanges" folder of a virtual host, or its "Administration" page. */
 export interface RabbitFolderNode {
   readonly kind: 'rabbitFolder';
   readonly connectionId: string;
   readonly vhost: string;
-  readonly folder: 'queues' | 'exchanges';
+  readonly folder: 'queues' | 'exchanges' | 'admin';
 }
 
 export interface RabbitQueueNode {

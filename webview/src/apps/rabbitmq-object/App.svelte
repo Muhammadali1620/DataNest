@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type {
+    RabbitBindingDirection,
     RabbitMessageView,
     RabbitObjectProtocol,
     RabbitObjectState,
@@ -11,6 +12,7 @@
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import ValueEditor from '../redis-key/ValueEditor.svelte';
+  import AdminView from './AdminView.svelte';
   import { cellText } from '../redis-key/key-view';
   import { displayName, parseHeaders, sharePercent, stateTone } from './object-view';
 
@@ -40,7 +42,15 @@
   /** Bumped to make the editor start again from an empty payload. */
   let payloadVersion = $state(0);
 
+  // The form that binds this queue or exchange to another.
+  let binding = $state(false);
+  let bindingDirection = $state<RabbitBindingDirection>('fromExchange');
+  let bindingPeer = $state('');
+  let bindingKey = $state('');
+  let bindingArgs = $state('');
+
   const isQueue = $derived(object?.kind === 'queue');
+  const isVhost = $derived(object?.kind === 'vhost');
   const shownName = $derived(object === undefined ? '' : displayName(object.name, t('rabbit.default')));
   const chosen = $derived(
     selected === undefined || object === undefined ? undefined : object.messages[selected],
@@ -101,6 +111,23 @@
     );
   }
 
+  function bind(): void {
+    void run(
+      () =>
+        rpc.request('addBinding', {
+          direction: isQueue ? 'fromExchange' : bindingDirection,
+          peer: bindingPeer,
+          routingKey: bindingKey,
+          arguments: bindingArgs,
+        }),
+      () => {
+        bindingPeer = '';
+        bindingKey = '';
+        bindingArgs = '';
+      },
+    );
+  }
+
   function show(index: number): void {
     selected = index;
   }
@@ -121,11 +148,11 @@
     </div>
   {:else}
     <header class="top">
-      <span class="top-icon"><Icon name={isQueue ? 'mail' : 'git-merge'} size={18} /></span>
+      <span class="top-icon"><Icon name={isVhost ? 'shield' : isQueue ? 'mail' : 'git-merge'} size={18} /></span>
       <div class="top-text">
         <h1 title={shownName}>{shownName}</h1>
         <p class="meta" data-testid="meta">
-          <span class="badge"><Icon name={isQueue ? 'list-unordered' : 'git-merge'} size={12} />{isQueue ? t('rabbit.kind.queue') : t('rabbit.kind.exchange')}</span>
+          <span class="badge"><Icon name={isVhost ? 'shield' : isQueue ? 'list-unordered' : 'git-merge'} size={12} />{isVhost ? t('rabbit.kind.vhost') : isQueue ? t('rabbit.kind.queue') : t('rabbit.kind.exchange')}</span>
           {#if object.type !== ''}
             <span class="badge outline">{object.type}</span>
           {/if}
@@ -140,7 +167,7 @@
         </p>
       </div>
       <div class="toolbar">
-        {#if !object.readOnly}
+        {#if !object.readOnly && !isVhost}
           <button
             type="button"
             class="button"
@@ -174,7 +201,7 @@
             onclick={() => void run(() => rpc.request('purge', {}))}
           />
         {/if}
-        {#if !object.readOnly && object.name !== '' && !object.name.startsWith('amq.')}
+        {#if !object.readOnly && !isVhost && object.name !== '' && !object.name.startsWith('amq.')}
           <IconButton
             icon="trash"
             label={isQueue ? t('rabbit.deleteQueue') : t('rabbit.deleteExchange')}
@@ -217,6 +244,43 @@
         </section>
       {/if}
 
+      {#if isQueue}
+        <section class="block" aria-label={t('rabbit.consumersTitle')} data-testid="consumers">
+          <h2 class="section"><Icon name="plug" tone="green" />{t('rabbit.consumersTitle')}</h2>
+          {#if object.consumersList.length === 0}
+            <p class="hint">{t('rabbit.noConsumers')}</p>
+          {:else}
+            <table class="list static">
+              <thead>
+                <tr>
+                  <th>{t('rabbit.col.tag')}</th>
+                  <th>{t('rabbit.col.connection')}</th>
+                  <th>{t('rabbit.admin.user')}</th>
+                  <th>{t('rabbit.col.prefetch')}</th>
+                  <th>{t('rabbit.col.ack')}</th>
+                  <th>{t('rabbit.admin.state')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each object.consumersList as consumer (consumer.tag + consumer.channel)}
+                  <tr>
+                    <td class="mono clip" title={consumer.tag}>{consumer.tag}</td>
+                    <td class="mono clip" title={consumer.channel}>{consumer.connection}</td>
+                    <td class="mono">{consumer.user}</td>
+                    <td class="mono">{consumer.prefetch === 0 ? '∞' : consumer.prefetch}</td>
+                    <td>{consumer.ackRequired ? t('rabbit.yes') : t('rabbit.no')}</td>
+                    <td>
+                      <span class="badge {consumer.active ? 'success' : 'outline'}">{consumer.active ? t('rabbit.active') : t('rabbit.idle')}</span>
+                      {#if consumer.exclusive}<span class="badge outline">{t('rabbit.exclusive')}</span>{/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </section>
+      {/if}
+
       <section class="block two" aria-label={t('rabbit.facts')}>
         <div>
           <h2 class="section"><Icon name="info" tone="blue" />{t('rabbit.facts')}</h2>
@@ -228,6 +292,7 @@
             </tbody>
           </table>
         </div>
+        {#if !isVhost}
         <div>
           <h2 class="section"><Icon name="symbol-parameter" tone="purple" />{t('rabbit.arguments')}</h2>
           {#if object.arguments.length === 0}
@@ -242,8 +307,14 @@
             </table>
           {/if}
         </div>
+        {/if}
       </section>
 
+      {#if isVhost && object.admin !== undefined}
+        <AdminView admin={object.admin} readOnly={object.readOnly} {rpc} {busy} {t} {run} />
+      {/if}
+
+      {#if !isVhost}
       <section class="block" aria-label={t('rabbit.bindings')}>
         <h2 class="section"><Icon name="git-merge" tone="orange" />{t('rabbit.bindings')}</h2>
         {#if object.bindings.length === 0}
@@ -256,18 +327,30 @@
                 <th>{t('rabbit.col.to')}</th>
                 <th>{t('rabbit.col.routingKey')}</th>
                 <th>{t('rabbit.arguments')}</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {#each object.bindings as binding, index (index)}
+              {#each object.bindings as item, index (index)}
                 <tr>
-                  <td class="mono">{displayName(binding.source, t('rabbit.default'))}</td>
+                  <td class="mono">{displayName(item.source, t('rabbit.default'))}</td>
                   <td class="mono">
-                    <Icon name={binding.destinationType === 'queue' ? 'mail' : 'git-merge'} size={12} />
-                    {binding.destination}
+                    <Icon name={item.destinationType === 'queue' ? 'mail' : 'git-merge'} size={12} />
+                    {item.destination}
                   </td>
-                  <td class="mono">{binding.routingKey === '' ? '—' : binding.routingKey}</td>
-                  <td class="mono clip">{binding.arguments === '' ? '—' : binding.arguments}</td>
+                  <td class="mono">{item.routingKey === '' ? '—' : item.routingKey}</td>
+                  <td class="mono clip">{item.arguments === '' ? '—' : item.arguments}</td>
+                  <td class="actions-cell">
+                    {#if !object.readOnly && item.source !== ''}
+                      <IconButton
+                        icon="trash"
+                        tone="red"
+                        label={t('rabbit.removeBinding')}
+                        disabled={busy}
+                        onclick={() => void run(() => rpc.request('removeBinding', { index }))}
+                      />
+                    {/if}
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -276,9 +359,50 @@
             <p class="hint">{t('rabbit.bindingsCut')}</p>
           {/if}
         {/if}
+        {#if !object.readOnly && !(object.kind === 'exchange' && object.name === '')}
+          <div class="actions start">
+            <button
+              type="button"
+              class="button secondary"
+              aria-pressed={binding}
+              disabled={busy}
+              onclick={() => {
+                binding = !binding;
+              }}><Icon name="add" />{t('rabbit.addBinding')}</button
+            >
+          </div>
+          {#if binding}
+            <div class="row bind" data-testid="bind">
+              {#if !isQueue}
+                <label class="field">
+                  <span>{t('rabbit.binding.direction')}</span>
+                  <select class="control" bind:value={bindingDirection} aria-label={t('rabbit.binding.direction')}>
+                    <option value="toQueue">{t('rabbit.binding.toQueue')}</option>
+                    <option value="toExchange">{t('rabbit.binding.toExchange')}</option>
+                    <option value="fromExchange">{t('rabbit.binding.fromExchange')}</option>
+                  </select>
+                </label>
+              {/if}
+              <label class="field grow">
+                <span>{isQueue || bindingDirection === 'fromExchange' ? t('rabbit.binding.exchange') : t('rabbit.binding.destination')}</span>
+                <input class="control mono" bind:value={bindingPeer} aria-label={t('rabbit.binding.peer')} autocomplete="off" spellcheck="false" />
+              </label>
+              <label class="field grow">
+                <span>{t('rabbit.col.routingKey')}</span>
+                <input class="control mono" bind:value={bindingKey} aria-label={t('rabbit.col.routingKey')} autocomplete="off" spellcheck="false" />
+              </label>
+              <label class="field grow">
+                <span>{t('rabbit.arguments')}</span>
+                <input class="control mono" bind:value={bindingArgs} placeholder={'{"x-match": "all"}'} aria-label={t('rabbit.arguments')} autocomplete="off" spellcheck="false" />
+              </label>
+              <button type="button" class="button" disabled={busy} onclick={bind}><Icon name="check" />{t('rabbit.binding.make')}</button>
+            </div>
+          {/if}
+        {/if}
       </section>
+      {/if}
 
-      {#if publishing && !object.readOnly}
+      {#if publishing && !object.readOnly && !isVhost}
         <section class="block produce" data-testid="publish">
           <h2 class="section"><Icon name="send" tone="orange" />{t('rabbit.publishTitle')}</h2>
           <div class="row">
@@ -595,6 +719,23 @@
 
   tr.current {
     background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground));
+  }
+
+  .actions-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .actions.start {
+    justify-content: flex-start;
+  }
+
+  .bind {
+    margin-top: var(--dn-gap-m);
+  }
+
+  .list.static tbody tr {
+    cursor: default;
   }
 
   .clip {

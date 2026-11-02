@@ -2,8 +2,9 @@
 // sets. It records what it received, so a test can see the credentials, the tenant and the
 // query that went over the wire.
 
+import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
 
 export interface Received {
   readonly method: string;
@@ -33,11 +34,49 @@ export interface Answer {
   readonly hang?: boolean;
 }
 
+/** What the live view (WebSocket) endpoint does when a client connects. */
+export interface TailScript {
+  /** JSON messages to send, one frame each, `intervalMs` apart. */
+  readonly messages: readonly string[];
+  readonly intervalMs?: number;
+  /** Close the stream after the last message; otherwise it stays open until the client leaves. */
+  readonly close?: boolean;
+  /** Send a ping before the first message; the client must answer with a pong. */
+  readonly ping?: boolean;
+  /** Send the first message in two fragments (a continuation frame). */
+  readonly fragment?: boolean;
+  /** Refuse the upgrade with this status and body instead. */
+  readonly refuse?: { readonly status: number; readonly body: string };
+}
+
+/** A frame a server sends (never masked). */
+export function serverFrame(opcode: number, payload: Buffer, fin = true): Buffer {
+  const length = payload.length;
+  const head =
+    length < 126
+      ? Buffer.from([(fin ? 0x80 : 0) | opcode, length])
+      : length < 65_536
+        ? Buffer.from([(fin ? 0x80 : 0) | opcode, 126, length >> 8, length & 0xff])
+        : (() => {
+            const wide = Buffer.alloc(10);
+            wide[0] = (fin ? 0x80 : 0) | opcode;
+            wide[1] = 127;
+            wide.writeBigUInt64BE(BigInt(length), 2);
+            return wide;
+          })();
+  return Buffer.concat([head, payload]);
+}
+
 export class FakeLoki {
   readonly received: Received[] = [];
   readonly answers: { match: string; answer: Answer }[] = [];
   private server: Server | undefined;
   private readonly open = new Set<ServerResponse>();
+  /** What the tail endpoint does; unset: it answers 404. */
+  tailScript: TailScript | undefined;
+  /** Frames the clients sent to the tail endpoint (opcode and unmasked payload). */
+  readonly clientFrames: { opcode: number; payload: Buffer }[] = [];
+  private readonly sockets = new Set<Socket>();
   port = 0;
 
   constructor(private readonly options: FakeLokiOptions = {}) {}
@@ -45,6 +84,9 @@ export class FakeLoki {
   async start(): Promise<void> {
     this.server = createServer((request, response) => {
       void this.handle(request, response);
+    });
+    this.server.on('upgrade', (request, socket: Socket) => {
+      this.upgrade(request, socket);
     });
     await new Promise<void>((resolve) => {
       this.server?.listen(0, '127.0.0.1', resolve);
@@ -55,6 +97,9 @@ export class FakeLoki {
   async stop(): Promise<void> {
     for (const response of this.open) {
       response.destroy();
+    }
+    for (const socket of this.sockets) {
+      socket.destroy();
     }
     this.server?.closeAllConnections();
     await new Promise<void>((resolve) => {
@@ -127,6 +172,103 @@ export class FakeLoki {
     }
     response.writeHead(404, { 'content-type': 'text/plain' });
     response.end('404 page not found');
+  }
+
+  private upgrade(request: IncomingMessage, socket: Socket): void {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    const tenant = request.headers['x-scope-orgid'];
+    const authorization = request.headers.authorization;
+    this.received.push({
+      method: request.method ?? 'GET',
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+      authorization,
+      tenant: typeof tenant === 'string' ? tenant : undefined,
+      body: '',
+    });
+    const script = this.tailScript;
+    const refuse = (status: number, body: string): void => {
+      socket.end(
+        `HTTP/1.1 ${status} Refused\r\ncontent-type: text/plain\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`,
+      );
+    };
+    if (
+      (this.options.authorization !== undefined && authorization !== this.options.authorization) ||
+      (this.options.tenant !== undefined && tenant !== this.options.tenant)
+    ) {
+      refuse(401, 'no org id or bad credentials');
+      return;
+    }
+    if (url.pathname !== '/loki/api/v1/tail' || script === undefined) {
+      refuse(404, '404 page not found');
+      return;
+    }
+    if (script.refuse !== undefined) {
+      refuse(script.refuse.status, script.refuse.body);
+      return;
+    }
+    const key = request.headers['sec-websocket-key'];
+    const accept = createHash('sha1')
+      .update(`${typeof key === 'string' ? key : ''}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest('base64');
+    this.sockets.add(socket);
+    socket.on('close', () => {
+      this.sockets.delete(socket);
+    });
+    socket.on('error', () => undefined);
+    socket.on('data', (chunk: Buffer) => {
+      this.readClientFrames(chunk);
+    });
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: ${accept}\r\n\r\n`,
+    );
+    void this.play(socket, script);
+  }
+
+  private readClientFrames(chunk: Buffer): void {
+    // Enough of RFC 6455 for short frames from a client: always masked, under 126 bytes.
+    let offset = 0;
+    while (offset + 6 <= chunk.length) {
+      const opcode = (chunk[offset] ?? 0) & 0x0f;
+      const length = (chunk[offset + 1] ?? 0) & 0x7f;
+      const mask = chunk.subarray(offset + 2, offset + 6);
+      const payload = Buffer.from(chunk.subarray(offset + 6, offset + 6 + length));
+      for (let index = 0; index < payload.length; index += 1) {
+        payload[index] = (payload[index] ?? 0) ^ (mask[index % 4] ?? 0);
+      }
+      this.clientFrames.push({ opcode, payload });
+      offset += 6 + length;
+    }
+  }
+
+  private async play(socket: Socket, script: TailScript): Promise<void> {
+    const pause = async (): Promise<void> => {
+      await new Promise((resolve) => setTimeout(resolve, script.intervalMs ?? 10));
+    };
+    if (script.ping === true) {
+      socket.write(serverFrame(0x9, Buffer.from('hi')));
+      await pause();
+    }
+    let first = true;
+    for (const message of script.messages) {
+      if (socket.destroyed) {
+        return;
+      }
+      const bytes = Buffer.from(message, 'utf8');
+      if (first && script.fragment === true) {
+        const cut = Math.floor(bytes.length / 2);
+        socket.write(serverFrame(0x1, bytes.subarray(0, cut), false));
+        await pause();
+        socket.write(serverFrame(0x0, bytes.subarray(cut), true));
+      } else {
+        socket.write(serverFrame(0x1, bytes));
+      }
+      first = false;
+      await pause();
+    }
+    if (script.close === true && !socket.destroyed) {
+      socket.end(serverFrame(0x8, Buffer.alloc(0)));
+    }
   }
 
   private json(response: ServerResponse, document: unknown): void {

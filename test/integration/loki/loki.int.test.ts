@@ -245,6 +245,33 @@ describe('Grafana Loki', () => {
     });
   });
 
+  describe('live view', () => {
+    it('brings the lines pushed while it follows, and nothing older', async () => {
+      const app = `live_${RUN}`;
+      // A line from before the view starts: it must not show up.
+      await push([{ labels: { app }, lines: [[stamp(5), 'before the view']] }]);
+      const pending = run(session, `# tail: 20s\n# limit: 2\n{app="${app}"}`);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await push([{ labels: { app }, lines: [[stamp(0), 'first live line']] }]);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await push([{ labels: { app }, lines: [[stamp(0), 'second live line']] }]);
+      const events = await pending;
+      const lines = rowsOf(events).map((row) => row[3]);
+      expect(lines).toEqual(['first live line', 'second live line']);
+      expect(events.at(-1)).toMatchObject({ kind: 'done' });
+    }, 40_000);
+
+    it('ends on time and keeps the session usable', async () => {
+      const events = await run(session, `# tail: 1s\n{app="never_${RUN}"}`);
+      expect(rowsOf(events)).toEqual([]);
+      expect(rowsOf(await run(session, `{app="api_${RUN}"}`))).toHaveLength(1);
+    }, 20_000);
+
+    it('says what is wrong with a query Loki does not understand', async () => {
+      await expect(run(session, '# tail: 1s\n{app=')).rejects.toMatchObject({ code: 'syntax' });
+    }, 20_000);
+  });
+
   describe('cancelling', () => {
     it('stops a request and leaves the session usable', async () => {
       const pending = run(session, `{app="shop_${RUN}"}`).then(

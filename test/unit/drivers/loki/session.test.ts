@@ -460,6 +460,109 @@ describe('cancelling and closing', () => {
   });
 });
 
+describe('a live view', () => {
+  const batch = (n: number, line: string, app = 'shop'): string =>
+    JSON.stringify({ streams: [{ stream: { app }, values: [[T(n), line]] }] });
+
+  it('collects the lines that arrive until the time is up', async () => {
+    server.tailScript = { messages: [batch(1, 'one'), batch(2, 'two')], intervalMs: 5 };
+    const session = await open();
+    const events = await collect(session, '# tail: 300ms\n{app="shop"}');
+    expect(events[0]).toMatchObject({ kind: 'columns' });
+    expect(rowsOf(events).map((row) => row[3])).toEqual(['one', 'two']);
+    expect(doneOf(events).notice).toMatch(/ended after 300ms: 2 lines/u);
+  });
+
+  it('starts at the present unless the statement names a window', async () => {
+    server.tailScript = { messages: [], close: true };
+    const session = await open();
+    const before = BigInt(Date.now()) * 1_000_000n;
+    await collect(session, '# tail: 1s\n{app="shop"}');
+    const start = BigInt(server.calls('/loki/api/v1/tail')[0]?.query.start ?? '0');
+    expect(start >= before).toBe(true);
+    expect(server.calls('/loki/api/v1/tail')[0]?.query).toMatchObject({
+      query: '{app="shop"}',
+      delay_for: '0',
+    });
+    await collect(session, '# range: 1h\n# tail: 1s\n{app="shop"}');
+    const earlier = BigInt(server.calls('/loki/api/v1/tail')[1]?.query.start ?? '0');
+    expect(before - earlier > 3_000_000_000_000n).toBe(true);
+  });
+
+  it('stops at the row limit and says so', async () => {
+    server.tailScript = {
+      messages: [batch(1, 'one'), batch(2, 'two'), batch(3, 'three')],
+      intervalMs: 5,
+    };
+    const session = await open();
+    const events = await collect(session, '# tail: 5s\n# limit: 2\n{app="shop"}');
+    expect(rowsOf(events).map((row) => row[3])).toEqual(['one', 'two']);
+    expect(doneOf(events).notice).toMatch(/stopped at 2 lines/u);
+    expect(server.calls('/loki/api/v1/tail')[0]?.query.limit).toBe('2');
+  });
+
+  it('keeps to the limit of the grid when it is smaller', async () => {
+    server.tailScript = { messages: [batch(1, 'one'), batch(2, 'two')], intervalMs: 5 };
+    const session = await open();
+    const events = await collect(session, '# tail: 5s\n{app="shop"}', 1);
+    expect(rowsOf(events)).toHaveLength(1);
+  });
+
+  it('tells when the server closed the stream', async () => {
+    server.tailScript = { messages: [batch(1, 'one')], close: true };
+    const session = await open();
+    const events = await collect(session, '# tail: 5s\n{app="shop"}');
+    expect(doneOf(events).notice).toMatch(/server closed the live view: 1 lines/u);
+  });
+
+  it('reports the lines Loki dropped', async () => {
+    server.tailScript = {
+      messages: [
+        JSON.stringify({
+          streams: [{ stream: { app: 'shop' }, values: [[T(1), 'one']] }],
+          dropped_entries: [{ labels: {}, timestamp: T(0) }],
+        }),
+      ],
+      close: true,
+    };
+    const session = await open();
+    const events = await collect(session, '# tail: 5s\n{app="shop"}');
+    expect(doneOf(events).notice).toMatch(/dropped 1 lines/u);
+  });
+
+  it('keeps what it read when it is cancelled', async () => {
+    server.tailScript = { messages: [batch(1, 'one')] };
+    const session = await open();
+    const events: ExecuteEvent[] = [];
+    for await (const event of session.execute('# tail: 60s\n{app="shop"}')) {
+      events.push(event);
+      if (event.kind === 'rows') {
+        await session.cancel();
+      }
+    }
+    expect(rowsOf(events).map((row) => row[3])).toEqual(['one']);
+    expect(doneOf(events).notice).toMatch(/stopped: 1 lines/u);
+  });
+
+  it('refuses a count and passes on a refusal of the server', async () => {
+    const session = await open();
+    await expect(collect(session, '# tail: 1s\nSELECT COUNT(*) FROM `app`')).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+    server.tailScript = { messages: [], refuse: { status: 400, body: 'parse error at 1:1' } };
+    await expect(collect(session, '# tail: 1s\n{app="shop"} |= (')).rejects.toMatchObject({
+      code: 'syntax',
+    });
+  });
+
+  it('follows the stream of a label opened as a table', async () => {
+    server.tailScript = { messages: [batch(1, 'one')], close: true };
+    const session = await open();
+    await collect(session, '# tail: 1s\nSELECT * FROM `app` LIMIT 5');
+    expect(server.calls('/loki/api/v1/tail')[0]?.query.query).toContain('app');
+  });
+});
+
 describe('the driver', () => {
   it('says what it is and what it cannot do', () => {
     expect(driver.id).toBe('loki');

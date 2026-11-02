@@ -120,6 +120,7 @@ import { kafkaCommandHandlers } from './kafka/kafka-commands';
 import { kafkaCommandUi } from './kafka/kafka-ui';
 import { RabbitObjectModel } from './panels/rabbitmq-object-model';
 import { RabbitObjectPanel } from './panels/rabbitmq-object-panel';
+import { lokiCommandHandlers } from './loki/loki-commands';
 import { rabbitCommandHandlers } from './rabbitmq/rabbitmq-commands';
 import { rabbitCommandUi } from './rabbitmq/rabbitmq-ui';
 import { describeTarget, type DriverId } from '../shared/connection';
@@ -575,7 +576,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     await deps.manager.acquireRabbit(ConnectionManager.treeOwner(connectionId), { connectionId });
   const openRabbitObject = (
     connectionId: string,
-    kind: 'queue' | 'exchange',
+    kind: 'queue' | 'exchange' | 'vhost',
     vhost: string,
     name: string,
   ): Promise<void> => {
@@ -608,6 +609,45 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     texts: {
       noRabbit: vscode.l10n.t('There is no RabbitMQ connection yet'),
       readOnly: vscode.l10n.t('The connection is read-only: nothing may change'),
+    },
+  });
+  const lokiCommands = lokiCommandHandlers({
+    store: deps.store,
+    bindings: deps.editors.bindings,
+    activeEditor: () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor === undefined) {
+        return undefined;
+      }
+      return {
+        uri: editor.document.uri.toString(),
+        text: editor.document.getText(),
+        replaceText: async (text) => {
+          await editor.edit((edit) => {
+            edit.replace(
+              new vscode.Range(
+                editor.document.positionAt(0),
+                editor.document.positionAt(editor.document.getText().length),
+              ),
+              text,
+            );
+          });
+        },
+      };
+    },
+    ui: {
+      pick: async (title, choices, current) =>
+        await vscode.window
+          .showQuickPick(
+            choices.map((label) => ({ label, ...(label === current ? { description: '✓' } : {}) })),
+            { title },
+          )
+          .then((picked) => picked?.label),
+      inputDuration: async (title, prompt, check) =>
+        await vscode.window.showInputBox({ title, prompt, validateInput: check }),
+      warn: (message) => {
+        void vscode.window.showWarningMessage(message);
+      },
     },
   });
   const redisKeyFileCommands = redisKeyFileCommandHandlers({
@@ -1255,6 +1295,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.kafkaNewTopic]: kafkaCommands.newTopic,
     [COMMAND_IDS.kafkaDeleteTopic]: kafkaCommands.deleteTopic,
     [COMMAND_IDS.kafkaResetOffsets]: kafkaCommands.resetOffsets,
+    [COMMAND_IDS.lokiSetRange]: lokiCommands.setRange,
+    [COMMAND_IDS.lokiFollow]: lokiCommands.follow,
     [COMMAND_IDS.rabbitOpenObject]: rabbitCommands.openObject,
     [COMMAND_IDS.rabbitNewQueue]: rabbitCommands.newQueue,
     [COMMAND_IDS.rabbitNewExchange]: rabbitCommands.newExchange,

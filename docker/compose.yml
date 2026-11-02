@@ -489,7 +489,9 @@ services:
         ]
 
   # RabbitMQ (V13.26), group `rabbitmq`: one node with the management plugin, whose HTTP API
-  # is all the extension speaks (AMQP is not published). The default `guest` user may only
+  # is all the extension speaks. AMQP is published too (V13.28), for the test helper that opens a
+  # connection and a consumer, so the lists of connections and consumers have something to show.
+  # The default `guest` user may only
   # sign in from the machine itself, so the tests use a user of their own (see
   # test/helpers/rabbitmq-servers.ts). Memory is capped, so the broker sizes itself to it.
   rabbitmq:
@@ -502,6 +504,7 @@ services:
     mem_limit: 512m
     ports:
       - 127.0.0.1:7156:15672
+      - 127.0.0.1:7158:5672
     healthcheck:
       <<: *healthcheck
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']

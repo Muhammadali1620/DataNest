@@ -209,6 +209,20 @@ tree shows only that virtual host, which is what a user who may see just one nee
   coloured cards with a bar for ready against unacknowledged, its properties (type, state,
   memory, policy, node), its arguments, and its **bindings**. Every queue is also bound to
   the default exchange under its own name, as the broker has it.
+- On a queue's page, **Consumers** lists who reads the queue (tag, connection, user, prefetch,
+  whether it acknowledges). **Add a binding** binds a queue to an exchange; an exchange can be
+  bound to a queue or to another exchange, and another exchange can be bound into it, each with a
+  routing key and arguments (a JSON object). **Remove the binding** asks first. The binding every
+  queue has to the default exchange is the broker's and cannot be removed; the default exchange
+  cannot be bound.
+- **Administration** (the last item of a virtual host, with a shield) opens the page of the virtual
+  host: its **connections** (client, user, address, state, channels, since when, traffic; close one
+  after a question), its **users and permissions** (tags, and the three patterns of names each user
+  may configure, write to and read from here; set or take away access; create or delete a user,
+  never the one DataNest signs in as) and its **policies** (create, edit, delete). Users and
+  permissions need the `administrator` tag; without it that part says so and the others still show.
+  The broker refreshes its list of connections every few seconds, so a connection just opened
+  may take that long to appear.
 - **Look at the first messages** shows up to 100 messages of a queue with their payload (text,
   JSON or hex), routing key, size and properties. **Nothing is taken from the queue:** each
   message is fetched with `ack_requeue_true`, which puts it back at once. The broker marks

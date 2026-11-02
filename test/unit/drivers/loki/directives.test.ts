@@ -23,6 +23,11 @@ describe('parseStatement', () => {
     });
   });
 
+  it('reads how long to follow a query', () => {
+    expect(parseStatement('# tail: 30s\n{a="b"}').directives).toEqual({ tail: '30s' });
+    expect(parseStatement('# tail: 10m\n{a="b"}').directives).toEqual({ tail: '10m' });
+  });
+
   it('reads a start and an end of its own', () => {
     expect(
       parseStatement('# start: 2026-11-01T00:00:00Z\n# end: now-1h\n{a="b"}').directives,
@@ -65,6 +70,8 @@ describe('parseStatement', () => {
       ['# range: soon', /range of time/u],
       ['# step: fast', /not a step/u],
       ['# direction: sideways', /forward or backward/u],
+      ['# tail: soon', /time to follow/u],
+      ['# tail: 11m', /time to follow/u],
       ['# limit: 0', /whole number/u],
       ['# limit: 1.5', /whole number/u],
       ['# limit: many', /whole number/u],

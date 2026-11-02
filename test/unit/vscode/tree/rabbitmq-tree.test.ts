@@ -56,11 +56,24 @@ describe('RabbitMQ tree (V13.26)', () => {
     ]);
   });
 
-  it('shows a virtual host as its two folders', () => {
+  it('shows a virtual host as its two folders and its administration page', () => {
     expect(rabbitFolderChildren({ kind: 'rabbitVhost', connectionId: 'r1', vhost: '/' })).toEqual([
       { kind: 'rabbitFolder', connectionId: 'r1', vhost: '/', folder: 'queues' },
       { kind: 'rabbitFolder', connectionId: 'r1', vhost: '/', folder: 'exchanges' },
+      { kind: 'rabbitFolder', connectionId: 'r1', vhost: '/', folder: 'admin' },
     ]);
+  });
+
+  it('has nothing below the administration page, and does not ask the broker', async () => {
+    const { deps, session } = setup();
+    const nodes = await rabbitObjectChildren(deps, {
+      kind: 'rabbitFolder',
+      connectionId: 'r1',
+      vhost: '/',
+      folder: 'admin',
+    });
+    expect(nodes).toEqual([]);
+    expect(session.calls).toEqual([]);
   });
 
   it('lists the queues of a host with what waits in them', async () => {

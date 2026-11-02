@@ -78,9 +78,9 @@ describe('RabbitMQ commands', () => {
 });
 
 describe('RabbitMQ menus', () => {
-  it('opens a queue or an exchange from its item and nowhere else', () => {
+  it('opens a queue, an exchange or the administration page from its item and nowhere else', () => {
     expect(entriesOf(COMMAND_IDS.rabbitOpenObject).map((entry) => contextsOf(entry.when))).toEqual([
-      [TREE_CONTEXT.rabbitQueue, TREE_CONTEXT.rabbitExchange],
+      [TREE_CONTEXT.rabbitQueue, TREE_CONTEXT.rabbitExchange, TREE_CONTEXT.rabbitAdmin],
     ]);
   });
 

@@ -277,6 +277,7 @@ describe('RabbitMQ (V13.26)', () => {
         destinationType: 'queue',
         routingKey: target,
         arguments: {},
+        propertiesKey: target,
       },
       {
         source: exchange,
@@ -284,6 +285,8 @@ describe('RabbitMQ (V13.26)', () => {
         destinationType: 'queue',
         routingKey: 'order.*',
         arguments: {},
+        // The broker quotes the key as in a URL: the star becomes %2A.
+        propertiesKey: 'order.%2A',
       },
     ]);
     const onExchange = await session.listBindings('/', { exchange });

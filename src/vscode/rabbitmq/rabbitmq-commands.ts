@@ -43,7 +43,7 @@ export interface RabbitCommandDeps {
   /** Opens the page of a queue or an exchange. */
   readonly openObject: (
     connectionId: string,
-    kind: 'queue' | 'exchange',
+    kind: 'queue' | 'exchange' | 'vhost',
     vhost: string,
     name: string,
   ) => Promise<void>;
@@ -145,6 +145,9 @@ export function rabbitCommandHandlers(
         await deps.openObject(target.connectionId, 'queue', target.vhost, target.queue);
       } else if (target.kind === 'rabbitExchange') {
         await deps.openObject(target.connectionId, 'exchange', target.vhost, target.exchange);
+      } else if (target.kind === 'rabbitFolder' && target.folder === 'admin') {
+        // The page of a virtual host is named after it.
+        await deps.openObject(target.connectionId, 'vhost', target.vhost, target.vhost);
       }
       return undefined;
     },

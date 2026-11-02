@@ -20,6 +20,21 @@ export interface RabbitVhostInfo {
   readonly messages: number;
 }
 
+/** One consumer of a queue, as the queue's own record lists it. */
+export interface RabbitConsumerInfo {
+  readonly tag: string;
+  /** The connection it came in by (`127.0.0.1:5000 -> 127.0.0.1:5672` or the client's name). */
+  readonly connectionName: string;
+  /** The channel's name, `<connection> (1)`. */
+  readonly channel: string;
+  readonly user: string;
+  /** Messages the broker sends before it waits for acknowledgements; 0 for no limit. */
+  readonly prefetch: number;
+  readonly ackRequired: boolean;
+  readonly exclusive: boolean;
+  readonly active: boolean;
+}
+
 /** A queue as the management API lists it. */
 export interface RabbitQueueInfo {
   readonly vhost: string;
@@ -42,6 +57,8 @@ export interface RabbitQueueInfo {
   /** Messages per second published to the queue, when the broker says. */
   readonly incomingRate: number | undefined;
   readonly node: string;
+  /** Who consumes the queue; only a single queue's record has it, so a listing leaves it empty. */
+  readonly consumerDetails: readonly RabbitConsumerInfo[];
 }
 
 export interface RabbitExchangeInfo {
@@ -62,6 +79,65 @@ export interface RabbitBinding {
   readonly destinationType: 'queue' | 'exchange';
   readonly routingKey: string;
   readonly arguments: Readonly<Record<string, unknown>>;
+  /** The broker's own name for this binding, which is what removing it needs. */
+  readonly propertiesKey: string;
+}
+
+/** A binding to make. */
+export interface RabbitBindingRequest {
+  /** An exchange; the default exchange cannot be bound. */
+  readonly source: string;
+  readonly destination: string;
+  readonly destinationType: 'queue' | 'exchange';
+  readonly routingKey: string;
+  readonly arguments?: Readonly<Record<string, unknown>>;
+}
+
+/** A connection a client has open to the broker. */
+export interface RabbitConnectionInfo {
+  /** The broker's name for it; closing it needs this. */
+  readonly name: string;
+  readonly user: string;
+  readonly vhost: string;
+  /** `running`, `blocked`, `blocking`, … */
+  readonly state: string;
+  readonly protocol: string;
+  /** `host:port` of the client. */
+  readonly peer: string;
+  readonly channels: number;
+  /** Milliseconds since the epoch; undefined when the broker does not say. */
+  readonly connectedAt: number | undefined;
+  readonly receivedBytes: number;
+  readonly sentBytes: number;
+  /** The name the client gave its connection, and the library it uses. */
+  readonly clientName: string;
+  readonly product: string;
+}
+
+export interface RabbitUserInfo {
+  readonly name: string;
+  readonly tags: readonly string[];
+}
+
+/** What a user may do in a virtual host: three patterns (regular expressions) of names. */
+export interface RabbitPermissionInfo {
+  readonly user: string;
+  readonly configure: string;
+  readonly write: string;
+  readonly read: string;
+}
+
+export interface RabbitPolicyInfo {
+  readonly name: string;
+  readonly pattern: string;
+  /** `queues`, `exchanges`, `all`, `classic_queues`, `quorum_queues`, `streams`. */
+  readonly applyTo: string;
+  readonly priority: number;
+  readonly definition: Readonly<Record<string, unknown>>;
+}
+
+export interface RabbitPolicyDeclaration extends RabbitPolicyInfo {
+  readonly vhost: string;
 }
 
 /** A list the broker may have cut: `total` is how many there are. */
@@ -147,6 +223,29 @@ export interface RabbitSession {
   purgeQueue(vhost: string, name: string): Promise<void>;
   declareExchange(declaration: RabbitExchangeDeclaration): Promise<void>;
   deleteExchange(vhost: string, name: string): Promise<void>;
+  /** Binds a queue or an exchange to an exchange; an existing equal binding is left as it is. */
+  bind(vhost: string, binding: RabbitBindingRequest): Promise<void>;
+  /** Removes one binding, as `listBindings` named it. */
+  unbind(vhost: string, binding: RabbitBinding): Promise<void>;
+  /** The connections that use a virtual host (the first page; `total` counts them all). */
+  listConnections(vhost: string): Promise<RabbitPage<RabbitConnectionInfo>>;
+  /** Closes a connection by the name `listConnections` gave; its client sees it drop. */
+  closeConnection(name: string): Promise<void>;
+  /** Every user of the broker. Needs the administrator tag. */
+  listUsers(): Promise<readonly RabbitUserInfo[]>;
+  createUser(user: {
+    readonly name: string;
+    readonly password: string;
+    readonly tags: readonly string[];
+  }): Promise<void>;
+  deleteUser(name: string): Promise<void>;
+  /** The permissions of a virtual host. Needs the administrator tag. */
+  listPermissions(vhost: string): Promise<readonly RabbitPermissionInfo[]>;
+  setPermission(vhost: string, permission: RabbitPermissionInfo): Promise<void>;
+  clearPermission(vhost: string, user: string): Promise<void>;
+  listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]>;
+  setPolicy(policy: RabbitPolicyDeclaration): Promise<void>;
+  deletePolicy(vhost: string, name: string): Promise<void>;
   close(): Promise<void>;
 }
 

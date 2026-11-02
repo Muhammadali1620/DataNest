@@ -24,6 +24,25 @@ export function rabbitVhostItem(node: RabbitVhostNode): vscode.TreeItem {
 }
 
 export function rabbitFolderItem(node: RabbitFolderNode): vscode.TreeItem {
+  if (node.folder === 'admin') {
+    // A leaf that opens the page of the virtual host: connections, users and policies.
+    const admin = new vscode.TreeItem(
+      vscode.l10n.t('Administration'),
+      vscode.TreeItemCollapsibleState.None,
+    );
+    admin.id = nodeId(node);
+    admin.iconPath = new vscode.ThemeIcon('shield', new vscode.ThemeColor('charts.purple'));
+    admin.tooltip = vscode.l10n.t(
+      'Connections, users, permissions and policies of this virtual host',
+    );
+    admin.contextValue = TREE_CONTEXT.rabbitAdmin;
+    admin.command = {
+      command: 'datanest.rabbitmq.openObject',
+      title: vscode.l10n.t('Open'),
+      arguments: [node],
+    };
+    return admin;
+  }
   const queues = node.folder === 'queues';
   const item = new vscode.TreeItem(
     queues ? vscode.l10n.t('Queues') : vscode.l10n.t('Exchanges'),

@@ -836,6 +836,18 @@
         "icon": "$(debug-restart)"
       },
       {
+        "command": "datanest.loki.setRange",
+        "title": "%commands.loki.setRange.title%",
+        "category": "DataNest",
+        "icon": "$(history)"
+      },
+      {
+        "command": "datanest.loki.follow",
+        "title": "%commands.loki.follow.title%",
+        "category": "DataNest",
+        "icon": "$(pulse)"
+      },
+      {
         "command": "datanest.rabbitmq.openObject",
         "title": "%commands.rabbitmq.openObject.title%",
         "category": "DataNest",
@@ -2479,7 +2491,7 @@
         },
         {
           "command": "datanest.rabbitmq.openObject",
-          "when": "view == datanest.connections && (viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange)",
+          "when": "view == datanest.connections && (viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange || viewItem == datanest.rabbitAdmin)",
           "group": "0_open@1"
         },
         {
@@ -2590,6 +2602,16 @@
           "command": "datanest.elastic.copyAsCurl",
           "when": "editorLangId == datanest-es",
           "group": "datanest@2"
+        },
+        {
+          "command": "datanest.loki.setRange",
+          "when": "editorLangId == sql",
+          "group": "1_datanest_loki@1"
+        },
+        {
+          "command": "datanest.loki.follow",
+          "when": "editorLangId == sql",
+          "group": "1_datanest_loki@2"
         }
       ],
       "explorer/context": [

@@ -99,6 +99,8 @@ describe('docker/compose.yml (D17)', () => {
       redis: 2,
       'redis-sentinel': 2,
       'redis-cluster': 3,
+      // RabbitMQ's management port, and AMQP for the helper that plays a client (V13.28).
+      rabbitmq: 2,
     };
     expect(service.ports?.length ?? 0).toBe(expected[id] ?? 1);
     for (const mapping of service.ports ?? []) {

@@ -15,16 +15,23 @@ import {
 import { identityCheck, sniName, tlsFailure, tlsMaterial, type TlsMaterial } from '../common/tls';
 import type {
   RabbitBinding,
+  RabbitBindingRequest,
+  RabbitConnectionInfo,
+  RabbitConsumerInfo,
   RabbitExchangeDeclaration,
   RabbitExchangeInfo,
   RabbitMessage,
   RabbitPage,
   RabbitPeekRequest,
+  RabbitPermissionInfo,
+  RabbitPolicyDeclaration,
+  RabbitPolicyInfo,
   RabbitPublishRequest,
   RabbitQueueDeclaration,
   RabbitQueueInfo,
   RabbitServerInfo,
   RabbitSession,
+  RabbitUserInfo,
   RabbitVhostInfo,
 } from '../rabbitmq-driver';
 import { networkFailure, rabbitFailure } from './errors';
@@ -114,6 +121,21 @@ function policyName(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+export function consumerOf(raw: unknown): RabbitConsumerInfo {
+  const consumer = asObject(raw);
+  const channel = asObject(consumer.channel_details);
+  return {
+    tag: text(consumer.consumer_tag),
+    connectionName: text(channel.connection_name),
+    channel: text(channel.name),
+    user: text(channel.user),
+    prefetch: count(consumer.prefetch_count),
+    ackRequired: flag(consumer.ack_required),
+    exclusive: flag(consumer.exclusive),
+    active: consumer.active !== false,
+  };
+}
+
 export function queueOf(raw: unknown, vhostFallback = ''): RabbitQueueInfo {
   const queue = asObject(raw);
   const args = asObject(queue.arguments);
@@ -137,6 +159,9 @@ export function queueOf(raw: unknown, vhostFallback = ''): RabbitQueueInfo {
     arguments: args,
     incomingRate: typeof rate === 'number' ? rate : undefined,
     node: text(queue.node),
+    consumerDetails: (Array.isArray(queue.consumer_details) ? queue.consumer_details : []).map(
+      consumerOf,
+    ),
   };
 }
 
@@ -162,8 +187,54 @@ export function bindingOf(raw: unknown): RabbitBinding {
     destinationType: binding.destination_type === 'exchange' ? 'exchange' : 'queue',
     routingKey: text(binding.routing_key),
     arguments: asObject(binding.arguments),
+    propertiesKey: text(binding.properties_key),
   };
 }
+
+export function connectionOf(raw: unknown): RabbitConnectionInfo {
+  const connection = asObject(raw);
+  const client = asObject(connection.client_properties);
+  const host = text(connection.peer_host);
+  const port = count(connection.peer_port);
+  return {
+    name: text(connection.name),
+    user: text(connection.user),
+    vhost: text(connection.vhost),
+    state: text(connection.state),
+    protocol: text(connection.protocol),
+    peer: host === '' ? '' : port > 0 ? `${host}:${port}` : host,
+    channels: count(connection.channels),
+    connectedAt: typeof connection.connected_at === 'number' ? connection.connected_at : undefined,
+    receivedBytes: count(connection.recv_oct),
+    sentBytes: count(connection.send_oct),
+    clientName: text(client.connection_name),
+    product: text(client.product),
+  };
+}
+
+export function policyOf(raw: unknown): RabbitPolicyInfo {
+  const policy = asObject(raw);
+  return {
+    name: text(policy.name),
+    pattern: text(policy.pattern),
+    applyTo: text(policy['apply-to']) || 'all',
+    priority: count(policy.priority),
+    definition: asObject(policy.definition),
+  };
+}
+
+function permissionOf(raw: unknown): RabbitPermissionInfo {
+  const permission = asObject(raw);
+  return {
+    user: text(permission.user),
+    configure: text(permission.configure),
+    write: text(permission.write),
+    read: text(permission.read),
+  };
+}
+
+/** The most connections one listing reads; the rest is counted. */
+export const MAX_CONNECTIONS = 500;
 
 /** A listing is a page object when asked with `page`, a plain array on very old brokers. */
 function pageOf<T>(raw: unknown, read: (item: unknown) => T): RabbitPage<T> {
@@ -364,6 +435,104 @@ class ManagementSession implements RabbitSession {
 
   async deleteExchange(vhost: string, name: string): Promise<void> {
     await this.call('DELETE', `exchanges/${enc(vhost)}/${enc(name)}`);
+  }
+
+  async bind(vhost: string, binding: RabbitBindingRequest): Promise<void> {
+    await this.call(
+      'POST',
+      `bindings/${enc(vhost)}/e/${enc(binding.source)}/${binding.destinationType === 'queue' ? 'q' : 'e'}/${enc(binding.destination)}`,
+      { routing_key: binding.routingKey, arguments: binding.arguments ?? {} },
+    );
+  }
+
+  async unbind(vhost: string, binding: RabbitBinding): Promise<void> {
+    // The broker's name for the binding is quoted already, and the path quotes it once more.
+    await this.call(
+      'DELETE',
+      `bindings/${enc(vhost)}/e/${enc(binding.source)}/${binding.destinationType === 'queue' ? 'q' : 'e'}/${enc(binding.destination)}/${enc(binding.propertiesKey)}`,
+    );
+  }
+
+  async listConnections(vhost: string): Promise<RabbitPage<RabbitConnectionInfo>> {
+    const raw = await this.call('GET', `vhosts/${enc(vhost)}/connections`);
+    const all = Array.isArray(raw) ? raw : [];
+    return { items: all.slice(0, MAX_CONNECTIONS).map(connectionOf), total: all.length };
+  }
+
+  async closeConnection(name: string): Promise<void> {
+    await this.call('DELETE', `connections/${enc(name)}`);
+  }
+
+  async listUsers(): Promise<readonly RabbitUserInfo[]> {
+    const raw = await this.call('GET', 'users');
+    return (Array.isArray(raw) ? raw : [])
+      .map((item) => asObject(item))
+      .map((user) => ({
+        name: text(user.name),
+        tags: Array.isArray(user.tags)
+          ? user.tags.filter((tag): tag is string => typeof tag === 'string')
+          : typeof user.tags === 'string'
+            ? user.tags
+                .split(',')
+                .map((tag) => tag.trim())
+                .filter((tag) => tag !== '')
+            : [],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async createUser(user: {
+    readonly name: string;
+    readonly password: string;
+    readonly tags: readonly string[];
+  }): Promise<void> {
+    await this.call('PUT', `users/${enc(user.name)}`, {
+      password: user.password,
+      tags: user.tags.join(','),
+    });
+  }
+
+  async deleteUser(name: string): Promise<void> {
+    await this.call('DELETE', `users/${enc(name)}`);
+  }
+
+  async listPermissions(vhost: string): Promise<readonly RabbitPermissionInfo[]> {
+    const raw = await this.call('GET', `vhosts/${enc(vhost)}/permissions`);
+    return (Array.isArray(raw) ? raw : [])
+      .map(permissionOf)
+      .sort((a, b) => a.user.localeCompare(b.user));
+  }
+
+  async setPermission(vhost: string, permission: RabbitPermissionInfo): Promise<void> {
+    await this.call('PUT', `permissions/${enc(vhost)}/${enc(permission.user)}`, {
+      configure: permission.configure,
+      write: permission.write,
+      read: permission.read,
+    });
+  }
+
+  async clearPermission(vhost: string, user: string): Promise<void> {
+    await this.call('DELETE', `permissions/${enc(vhost)}/${enc(user)}`);
+  }
+
+  async listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]> {
+    const raw = await this.call('GET', `policies/${enc(vhost)}`);
+    return (Array.isArray(raw) ? raw : [])
+      .map(policyOf)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async setPolicy(policy: RabbitPolicyDeclaration): Promise<void> {
+    await this.call('PUT', `policies/${enc(policy.vhost)}/${enc(policy.name)}`, {
+      pattern: policy.pattern,
+      definition: policy.definition,
+      priority: policy.priority,
+      'apply-to': policy.applyTo,
+    });
+  }
+
+  async deletePolicy(vhost: string, name: string): Promise<void> {
+    await this.call('DELETE', `policies/${enc(vhost)}/${enc(name)}`);
   }
 
   async close(): Promise<void> {

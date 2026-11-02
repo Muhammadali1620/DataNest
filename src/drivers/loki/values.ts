@@ -197,3 +197,30 @@ export function readAnswer(
     more: entries.length > skip + limit,
   };
 }
+
+/** What one message of the live view brings: new lines (oldest first) and how many Loki dropped. */
+export interface TailBatch {
+  readonly rows: CellValue[][];
+  readonly dropped: number;
+}
+
+/** Reads a message of Loki's tail endpoint: `{"streams":[…],"dropped_entries":[…]}`. */
+export function readTailMessage(text: string): TailBatch {
+  let document: unknown;
+  try {
+    document = JSON.parse(text);
+  } catch {
+    throw new DbError('internal', msg('The server sent a message that is not JSON'));
+  }
+  if (!isRecord(document)) {
+    throw new DbError('internal', msg('The server sent a message that is not JSON'));
+  }
+  const entries = streamEntries(
+    Array.isArray(document.streams) ? (document.streams as unknown[]) : [],
+  );
+  entries.sort(byTime('forward'));
+  return {
+    rows: entries.map((entry) => entry.cells),
+    dropped: Array.isArray(document.dropped_entries) ? document.dropped_entries.length : 0,
+  };
+}

@@ -9,9 +9,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import {
   bindingOf,
+  connectionOf,
   exchangeOf,
   openRabbitSession,
   PAGE_SIZE,
+  policyOf,
   queueOf,
   rabbitTarget,
 } from '../../../../src/drivers/rabbitmq/session';
@@ -225,6 +227,7 @@ describe('RabbitMQ session over HTTP (V13.26)', () => {
         destinationType: 'queue',
         routingKey: 'order.*',
         arguments: {},
+        propertiesKey: 'order.*',
       },
     ]);
     const exchange = await session.listBindings('/', { exchange: 'amq.topic' });
@@ -638,6 +641,7 @@ describe('what the session makes of the broker’s JSON', () => {
       destinationType: 'exchange',
       routingKey: '',
       arguments: {},
+      propertiesKey: '',
     });
     expect(bindingOf(null).destinationType).toBe('queue');
   });
@@ -653,5 +657,327 @@ describe('what the session makes of the broker’s JSON', () => {
     });
     const withVhost = rabbitTarget(config(5, { database: ' app ' }), undefined);
     expect(withVhost).toMatchObject({ port: 5, vhost: 'app' });
+  });
+});
+
+describe('RabbitMQ administration over HTTP (V13.28)', () => {
+  it('reads the consumers of a queue from its own record', async () => {
+    const { server, port } = await start();
+    server.broker.addQueue({
+      vhost: '/',
+      name: 'orders',
+      consumers: 2,
+      consumerDetails: [
+        {
+          consumer_tag: 'amq.ctag-1',
+          ack_required: true,
+          prefetch_count: 20,
+          exclusive: false,
+          active: true,
+          channel_details: {
+            connection_name: '127.0.0.1:5000 -> 127.0.0.1:5672',
+            name: '127.0.0.1:5000 -> 127.0.0.1:5672 (1)',
+            user: 'app',
+          },
+        },
+        { consumer_tag: 'tag-2', active: false },
+      ],
+    });
+    const session = await openRabbitSession(config(port));
+    const queue = await session.getQueue('/', 'orders');
+    expect(queue.consumerDetails).toEqual([
+      {
+        tag: 'amq.ctag-1',
+        connectionName: '127.0.0.1:5000 -> 127.0.0.1:5672',
+        channel: '127.0.0.1:5000 -> 127.0.0.1:5672 (1)',
+        user: 'app',
+        prefetch: 20,
+        ackRequired: true,
+        exclusive: false,
+        active: true,
+      },
+      {
+        tag: 'tag-2',
+        connectionName: '',
+        channel: '',
+        user: '',
+        prefetch: 0,
+        ackRequired: false,
+        exclusive: false,
+        active: false,
+      },
+    ]);
+  });
+
+  it('makes a binding with the routing key and arguments', async () => {
+    const { server, port } = await start();
+    server.broker.addQueue({ vhost: '/', name: 'orders' });
+    const session = await openRabbitSession(config(port));
+    await session.bind('/', {
+      source: 'amq.topic',
+      destination: 'orders',
+      destinationType: 'queue',
+      routingKey: 'order.#',
+    });
+    const sent = server.requests.at(-1);
+    expect(sent?.method).toBe('POST');
+    expect(sent?.path).toBe('/api/bindings/%2F/e/amq.topic/q/orders');
+    expect(sent?.body).toEqual({ routing_key: 'order.#', arguments: {} });
+    expect(await session.listBindings('/', { queue: 'orders' })).toMatchObject([
+      { source: 'amq.topic', routingKey: 'order.#', propertiesKey: 'order.%23' },
+    ]);
+    // The same binding again changes nothing.
+    await session.bind('/', {
+      source: 'amq.topic',
+      destination: 'orders',
+      destinationType: 'queue',
+      routingKey: 'order.#',
+      arguments: {},
+    });
+    expect(server.broker.bindings).toHaveLength(1);
+  });
+
+  it('binds an exchange to an exchange, and quotes names in the path', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    await session.bind('/', {
+      source: 'amq.direct',
+      destination: 'amq.topic',
+      destinationType: 'exchange',
+      routingKey: '',
+    });
+    expect(server.requests.at(-1)?.path).toBe('/api/bindings/%2F/e/amq.direct/e/amq.topic');
+    await session.bind('my vhost', {
+      source: 'a/b',
+      destination: 'c d',
+      destinationType: 'queue',
+      routingKey: 'k',
+    });
+    expect(server.requests.at(-1)?.path).toBe('/api/bindings/my%20vhost/e/a%2Fb/q/c%20d');
+  });
+
+  it('passes on the broker’s refusal of a binding from the default exchange', async () => {
+    const { port } = await start();
+    const session = await openRabbitSession(config(port));
+    const error = await failure(
+      session.bind('/', {
+        source: 'amq.default',
+        destination: 'orders',
+        destinationType: 'queue',
+        routingKey: 'orders',
+      }),
+    );
+    expect(error.code).toBe('auth-failed');
+    expect(error.driverCode).toBe(401);
+  });
+
+  it('removes a binding by the name the broker gave it, quoted twice in the path', async () => {
+    const { server, port } = await start();
+    server.broker.addQueue({ vhost: '/', name: 'orders' });
+    const session = await openRabbitSession(config(port));
+    for (const routingKey of ['a#b/c d', '100%', '', 'plain']) {
+      await session.bind('/', {
+        source: 'amq.topic',
+        destination: 'orders',
+        destinationType: 'queue',
+        routingKey,
+      });
+    }
+    const bindings = await session.listBindings('/', { queue: 'orders' });
+    expect(bindings.map((binding) => binding.propertiesKey).sort()).toEqual(
+      ['100%25', 'a%23b%2Fc+d', 'plain', '~'].sort(),
+    );
+    for (const binding of bindings) {
+      await session.unbind('/', binding);
+    }
+    expect(server.broker.bindings).toEqual([]);
+    const paths = server.requests.filter((r) => r.method === 'DELETE').map((r) => r.path);
+    expect(paths).toContain('/api/bindings/%2F/e/amq.topic/q/orders/a%2523b%252Fc%2Bd');
+    expect(paths).toContain('/api/bindings/%2F/e/amq.topic/q/orders/100%2525');
+    expect(paths).toContain('/api/bindings/%2F/e/amq.topic/q/orders/~');
+  });
+
+  it('says not-found when the binding is gone already', async () => {
+    const { port } = await start();
+    const session = await openRabbitSession(config(port));
+    const error = await failure(
+      session.unbind('/', {
+        source: 'amq.topic',
+        destination: 'orders',
+        destinationType: 'queue',
+        routingKey: 'k',
+        arguments: {},
+        propertiesKey: 'k',
+      }),
+    );
+    expect(error.code).toBe('not-found');
+  });
+
+  it('lists the connections of a virtual host and closes one by name', async () => {
+    const { server, port } = await start();
+    server.broker.connections.push(
+      {
+        name: '127.0.0.1:5000 -> 127.0.0.1:5672',
+        vhost: '/',
+        user: 'app',
+        peerPort: 5000,
+        channels: 3,
+        connectedAt: 1_700_000_000_000,
+        clientName: 'billing',
+        product: 'pika',
+      },
+      { name: 'other', vhost: 'v2' },
+    );
+    const session = await openRabbitSession(config(port));
+    const page = await session.listConnections('/');
+    expect(page.total).toBe(1);
+    expect(page.items[0]).toEqual({
+      name: '127.0.0.1:5000 -> 127.0.0.1:5672',
+      user: 'app',
+      vhost: '/',
+      state: 'running',
+      protocol: 'AMQP 0-9-1',
+      peer: '127.0.0.1:5000',
+      channels: 3,
+      connectedAt: 1_700_000_000_000,
+      receivedBytes: 1024,
+      sentBytes: 2048,
+      clientName: 'billing',
+      product: 'pika',
+    });
+    expect(server.requests.at(-1)?.path).toBe('/api/vhosts/%2F/connections');
+    await session.closeConnection('127.0.0.1:5000 -> 127.0.0.1:5672');
+    expect(server.requests.at(-1)?.path).toBe(
+      '/api/connections/127.0.0.1%3A5000%20-%3E%20127.0.0.1%3A5672',
+    );
+    expect(server.broker.connections.map((c) => c.name)).toEqual(['other']);
+  });
+
+  it('reads a connection with missing fields as an empty one', () => {
+    expect(connectionOf({})).toEqual({
+      name: '',
+      user: '',
+      vhost: '',
+      state: '',
+      protocol: '',
+      peer: '',
+      channels: 0,
+      connectedAt: undefined,
+      receivedBytes: 0,
+      sentBytes: 0,
+      clientName: '',
+      product: '',
+    });
+    expect(connectionOf({ peer_host: 'h' }).peer).toBe('h');
+    expect(connectionOf(null).name).toBe('');
+  });
+
+  it('lists the users, sorted', async () => {
+    const { server, port } = await start();
+    server.broker.users.push({ name: 'ann', tags: ['monitoring', 'management'] });
+    server.broker.users.push({ name: 'bob', tags: [] });
+    const session = await openRabbitSession(config(port));
+    expect(await session.listUsers()).toEqual([
+      { name: 'ann', tags: ['monitoring', 'management'] },
+      { name: 'bob', tags: [] },
+      { name: 'guest', tags: ['administrator'] },
+    ]);
+  });
+
+  it('creates a user with the tags joined, and deletes it', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    await session.createUser({
+      name: 'new user',
+      password: 'pw',
+      tags: ['management', 'policymaker'],
+    });
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/users/new%20user',
+      body: { password: 'pw', tags: 'management,policymaker' },
+    });
+    expect(server.broker.users.map((u) => u.name)).toContain('new user');
+    await session.deleteUser('new user');
+    expect(server.broker.users.map((u) => u.name)).toEqual(['guest']);
+  });
+
+  it('reports a user without the administrator tag as refused', async () => {
+    const { server, port } = await start();
+    server.administrator = false;
+    const session = await openRabbitSession(config(port));
+    const error = await failure(session.listUsers());
+    expect(error.driverCode).toBe(401);
+    expect(error.message).toContain('administrator');
+    expect((await failure(session.listPermissions('/'))).driverCode).toBe(401);
+  });
+
+  it('sets, lists and clears permissions', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    await session.setPermission('/', {
+      user: 'guest',
+      configure: '^q\\..*',
+      write: '.*',
+      read: '',
+    });
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/permissions/%2F/guest',
+      body: { configure: '^q\\..*', write: '.*', read: '' },
+    });
+    await session.setPermission('/', { user: 'ann', configure: '', write: '', read: '.*' });
+    expect(await session.listPermissions('/')).toEqual([
+      { user: 'ann', configure: '', write: '', read: '.*' },
+      { user: 'guest', configure: '^q\\..*', write: '.*', read: '' },
+    ]);
+    await session.clearPermission('/', 'ann');
+    expect((await session.listPermissions('/')).map((p) => p.user)).toEqual(['guest']);
+  });
+
+  it('sets, lists and deletes policies', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    await session.setPolicy({
+      vhost: '/',
+      name: 'ttl',
+      pattern: '^tmp\\.',
+      applyTo: 'queues',
+      priority: 5,
+      definition: { 'message-ttl': 60_000 },
+    });
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/policies/%2F/ttl',
+      body: {
+        pattern: '^tmp\\.',
+        'apply-to': 'queues',
+        priority: 5,
+        definition: { 'message-ttl': 60_000 },
+      },
+    });
+    expect(await session.listPolicies('/')).toEqual([
+      {
+        name: 'ttl',
+        pattern: '^tmp\\.',
+        applyTo: 'queues',
+        priority: 5,
+        definition: { 'message-ttl': 60_000 },
+      },
+    ]);
+    await session.deletePolicy('/', 'ttl');
+    expect(await session.listPolicies('/')).toEqual([]);
+    expect((await failure(session.deletePolicy('/', 'ttl'))).code).toBe('not-found');
+  });
+
+  it('reads a policy without an apply-to as one for everything', () => {
+    expect(policyOf({ name: 'p', pattern: '.*', definition: { x: 1 } })).toEqual({
+      name: 'p',
+      pattern: '.*',
+      applyTo: 'all',
+      priority: 0,
+      definition: { x: 1 },
+    });
+    expect(policyOf(undefined).name).toBe('');
   });
 });

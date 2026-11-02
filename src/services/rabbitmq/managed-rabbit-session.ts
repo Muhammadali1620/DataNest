@@ -6,16 +6,22 @@
 import { toDbError } from '../../core/errors';
 import type {
   RabbitBinding,
+  RabbitBindingRequest,
+  RabbitConnectionInfo,
   RabbitExchangeDeclaration,
   RabbitExchangeInfo,
   RabbitMessage,
   RabbitPage,
   RabbitPeekRequest,
+  RabbitPermissionInfo,
+  RabbitPolicyDeclaration,
+  RabbitPolicyInfo,
   RabbitPublishRequest,
   RabbitQueueDeclaration,
   RabbitQueueInfo,
   RabbitServerInfo,
   RabbitSession,
+  RabbitUserInfo,
   RabbitVhostInfo,
 } from '../../drivers/rabbitmq-driver';
 
@@ -100,6 +106,62 @@ export class ManagedRabbitSession implements RabbitSession {
 
   deleteExchange(vhost: string, name: string): Promise<void> {
     return this.call(() => this.inner.deleteExchange(vhost, name));
+  }
+
+  bind(vhost: string, binding: RabbitBindingRequest): Promise<void> {
+    return this.call(() => this.inner.bind(vhost, binding));
+  }
+
+  unbind(vhost: string, binding: RabbitBinding): Promise<void> {
+    return this.call(() => this.inner.unbind(vhost, binding));
+  }
+
+  listConnections(vhost: string): Promise<RabbitPage<RabbitConnectionInfo>> {
+    return this.call(() => this.inner.listConnections(vhost));
+  }
+
+  closeConnection(name: string): Promise<void> {
+    return this.call(() => this.inner.closeConnection(name));
+  }
+
+  listUsers(): Promise<readonly RabbitUserInfo[]> {
+    return this.call(() => this.inner.listUsers());
+  }
+
+  createUser(user: {
+    readonly name: string;
+    readonly password: string;
+    readonly tags: readonly string[];
+  }): Promise<void> {
+    return this.call(() => this.inner.createUser(user));
+  }
+
+  deleteUser(name: string): Promise<void> {
+    return this.call(() => this.inner.deleteUser(name));
+  }
+
+  listPermissions(vhost: string): Promise<readonly RabbitPermissionInfo[]> {
+    return this.call(() => this.inner.listPermissions(vhost));
+  }
+
+  setPermission(vhost: string, permission: RabbitPermissionInfo): Promise<void> {
+    return this.call(() => this.inner.setPermission(vhost, permission));
+  }
+
+  clearPermission(vhost: string, user: string): Promise<void> {
+    return this.call(() => this.inner.clearPermission(vhost, user));
+  }
+
+  listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]> {
+    return this.call(() => this.inner.listPolicies(vhost));
+  }
+
+  setPolicy(policy: RabbitPolicyDeclaration): Promise<void> {
+    return this.call(() => this.inner.setPolicy(policy));
+  }
+
+  deletePolicy(vhost: string, name: string): Promise<void> {
+    return this.call(() => this.inner.deletePolicy(vhost, name));
   }
 
   async close(): Promise<void> {

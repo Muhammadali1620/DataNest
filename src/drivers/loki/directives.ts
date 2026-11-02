@@ -7,6 +7,8 @@
 //   # direction: forward  oldest first (the default is newest first)
 //   # limit: 500         lines to read (the grid's row limit wins when it is smaller)
 //
+//   # tail: 30s         follow the query live for this long: new lines arrive as they are logged
+//
 // A statement that holds only such comments does not run: it sets the session's defaults.
 
 import { DbError } from '../../core/errors';
@@ -21,6 +23,8 @@ export interface Directives {
   readonly step?: string;
   readonly direction?: 'forward' | 'backward';
   readonly limit?: number;
+  /** How long a live view lasts: `30s`, `5m`. */
+  readonly tail?: string;
 }
 
 export interface ParsedStatement {
@@ -29,8 +33,11 @@ export interface ParsedStatement {
   readonly hasQuery: boolean;
 }
 
-const KEYS = ['range', 'start', 'end', 'step', 'direction', 'limit'] as const;
+const KEYS = ['range', 'start', 'end', 'step', 'direction', 'limit', 'tail'] as const;
 const SYNTAX = syntaxOf('loki');
+
+/** The longest a live view may last: ten minutes. */
+export const MAX_TAIL_MS = 600_000;
 
 export function parseStatement(sql: string): ParsedStatement {
   const found: Record<string, string> = {};
@@ -88,6 +95,16 @@ function validated(found: Readonly<Record<string, string>>): Directives {
       throw new DbError('syntax', msg('The direction is forward or backward'));
     }
     result.direction = direction;
+  }
+  if (found.tail !== undefined) {
+    const ms = parseDuration(found.tail);
+    if (ms === undefined || ms > MAX_TAIL_MS) {
+      throw new DbError(
+        'syntax',
+        msg('"{0}" is not a time to follow for: write it like 30s or 5m, at most 10m', found.tail),
+      );
+    }
+    result.tail = found.tail;
   }
   if (found.limit !== undefined) {
     const limit = Number(found.limit);

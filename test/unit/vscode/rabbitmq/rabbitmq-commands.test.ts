@@ -147,6 +147,17 @@ describe('RabbitMQ commands (V13.26)', () => {
       ]);
     });
 
+    it('opens the page of a virtual host from its administration item', async () => {
+      const { handlers, opened } = setup();
+      await handlers.openObject({
+        kind: 'rabbitFolder',
+        connectionId: 'r1',
+        vhost: 'app',
+        folder: 'admin',
+      });
+      expect(opened).toEqual([['r1', 'vhost', 'app', 'app']]);
+    });
+
     it('does nothing for anything else', async () => {
       const { handlers, opened } = setup();
       await handlers.openObject(queuesFolder);

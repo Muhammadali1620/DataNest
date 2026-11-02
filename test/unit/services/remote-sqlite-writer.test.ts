@@ -354,7 +354,8 @@ describe.skipIf(!HAS_PYTHON)('RemoteSqliteWriter with a real SQLite', () => {
     );
 
     it('reports a path with characters that need escaping in a URI', async () => {
-      const odd = join(dir, 'a b#c?d%e.db');
+      // `?` and `*` are not allowed in a Windows file name.
+      const odd = join(dir, process.platform === 'win32' ? 'a b#c%e.db' : 'a b#c?d%e.db');
       new DatabaseSync(odd).close();
       const writer = await open({ path: odd });
       await writer.run('CREATE TABLE odd (id INTEGER)');

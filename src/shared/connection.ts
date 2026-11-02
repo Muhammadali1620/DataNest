@@ -19,6 +19,7 @@ export const DRIVER_IDS = [
   'influxdb',
   'neo4j',
   'cassandra',
+  'loki',
   'plugin',
 ] as const;
 
@@ -104,6 +105,8 @@ export const DEFAULT_PORTS: Readonly<Partial<Record<DriverId, number>>> = {
   neo4j: 7474,
   // The CQL native protocol port of Cassandra (V13.22).
   cassandra: 9042,
+  // Loki's HTTP API (V13.25); a gateway in front of it usually answers on 443 with TLS.
+  loki: 3100,
 };
 
 export const CONNECTION_LIMITS = {
@@ -448,6 +451,17 @@ export function optionSupport(driver: DriverId): OptionSupport {
         init: true,
       };
     // HTTP requests like libSQL's: a connect timeout, TLS and a run limit; no socket of ours.
+    // Loki also runs init statements: a `# range:` comment there sets the session's window.
+    case 'loki':
+      return {
+        connectTimeout: true,
+        keepAlive: false,
+        timeZone: false,
+        charset: false,
+        tls: true,
+        queryTimeout: true,
+        init: true,
+      };
     case 'neo4j':
       return {
         connectTimeout: true,
@@ -553,6 +567,7 @@ export function filterSupport(driver: DriverId): { databases: boolean; schemas: 
     case 'sqlite':
     case 'libsql':
     case 'plugin':
+    case 'loki':
       return { databases: false, schemas: false };
     case 'mssql':
       return { databases: true, schemas: true };

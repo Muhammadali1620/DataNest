@@ -957,6 +957,35 @@ const CQL_KEYWORDS = [
   'COUNTER',
 ] as const;
 
+/** LogQL (Grafana Loki, V13.25): the words around a stream selector, a pipeline and an aggregation. */
+const LOGQL_KEYWORDS = [
+  'by',
+  'without',
+  'on',
+  'ignoring',
+  'group_left',
+  'group_right',
+  'offset',
+  'bool',
+  'and',
+  'or',
+  'unless',
+  'json',
+  'logfmt',
+  'regexp',
+  'pattern',
+  'unpack',
+  'line_format',
+  'label_format',
+  'unwrap',
+  'drop',
+  'keep',
+  'decolorize',
+  'ip',
+  'duration',
+  'bytes',
+] as const;
+
 export const KEYWORDS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   mysql: MYSQL_KEYWORDS,
   postgres: POSTGRES_KEYWORDS,
@@ -965,6 +994,7 @@ export const KEYWORDS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   influxdb: INFLUX_KEYWORDS,
   neo4j: CYPHER_KEYWORDS,
   cassandra: CQL_KEYWORDS,
+  loki: LOGQL_KEYWORDS,
   // Plain SQL: the closest of ours to the standard.
   plugin: SQLITE_KEYWORDS,
   mssql: MSSQL_KEYWORDS,

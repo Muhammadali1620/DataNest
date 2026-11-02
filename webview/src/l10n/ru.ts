@@ -372,6 +372,17 @@ export const ru: Record<MessageKey, string> = {
   'form.neo4j.hostHint':
     'Адрес сервера: localhost, my-db.databases.neo4j.io или адрес neo4j://. Используется HTTP-порт (7474), а не Bolt; нужен Neo4j 5.19 или новее',
   'form.driver.etcd': 'etcd',
+  'form.driver.loki': 'Grafana Loki',
+  'form.loki.hostHint':
+    'Адрес Loki, например localhost или logs.example.com; используется HTTP-порт (3100). Для сервера за HTTPS включите TLS ниже',
+  'form.loki.user': 'Пользователь (basic auth)',
+  'form.loki.userHint': 'Оставьте пустым для входа по токену или когда сервер ничего не просит',
+  'form.loki.secret': 'Пароль или токен',
+  'form.loki.secretHint':
+    'С пользователем — его пароль. Без пользователя — отправляется как bearer-токен (Authorization: Bearer …)',
+  'form.loki.tenant': 'Арендатор (X-Scope-OrgID)',
+  'form.loki.tenantHint':
+    'Арендатор многоарендного Loki; для сервера без арендаторов оставьте пустым',
   'form.driver.influxdb': 'InfluxDB',
   'form.influx.org': 'Организация',
   'form.influx.orgHint': 'Организация, которой принадлежат корзины (InfluxDB 2.x)',

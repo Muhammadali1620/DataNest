@@ -17,6 +17,7 @@ import { driver as libsqlDriver } from '../../../src/drivers/libsql';
 import { driver as influxdbDriver } from '../../../src/drivers/influxdb';
 import { driver as neo4jDriver } from '../../../src/drivers/neo4j';
 import { driver as cassandraDriver } from '../../../src/drivers/cassandra';
+import { driver as lokiDriver } from '../../../src/drivers/loki';
 import { driver as oracleDriver } from '../../../src/drivers/oracle';
 import { createSqliteDriver } from '../../../src/drivers/sqlite';
 import { browseSession } from '../../../src/services/browse-session';
@@ -104,6 +105,7 @@ beforeAll(async () => {
     influxdb: influxdbDriver,
     neo4j: neo4jDriver,
     cassandra: cassandraDriver,
+    loki: lokiDriver,
   };
 }, 60_000);
 

@@ -76,6 +76,35 @@ const INFLUX_FUNCTIONS: readonly SqlFunction[] = [
   fn('derivative', 'unit: 1s'),
 ];
 
+/** LogQL (Loki, V13.25): range aggregations over a log stream, vector aggregations and a few helpers. */
+const LOGQL_FUNCTIONS: readonly SqlFunction[] = [
+  fn('rate', '{app="name"}[5m]'),
+  fn('count_over_time', '{app="name"}[5m]'),
+  fn('bytes_rate', '{app="name"}[5m]'),
+  fn('bytes_over_time', '{app="name"}[5m]'),
+  fn('sum_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('avg_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('max_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('min_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('first_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('last_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('stddev_over_time', '{app="name"} | unwrap value [5m]'),
+  fn('quantile_over_time', '0.95', '{app="name"} | unwrap value [5m]'),
+  fn('absent_over_time', '{app="name"}[5m]'),
+  fn('sum', 'vector'),
+  fn('avg', 'vector'),
+  fn('min', 'vector'),
+  fn('max', 'vector'),
+  fn('count', 'vector'),
+  fn('stddev', 'vector'),
+  fn('topk', '10', 'vector'),
+  fn('bottomk', '10', 'vector'),
+  fn('sort', 'vector'),
+  fn('sort_desc', 'vector'),
+  fn('label_replace', 'vector', 'dst', 'replacement', 'src', 'regex'),
+  fn('vector', 'scalar'),
+];
+
 const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlFunction[]>> = {
   // CQL (V13.22): its own functions; most of the SQL ones in COMMON do not exist there.
   cassandra: [
@@ -150,6 +179,7 @@ const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlFunction[
     fn('sqrt', 'number'),
   ],
   influxdb: INFLUX_FUNCTIONS,
+  loki: LOGQL_FUNCTIONS,
   mysql: [
     ...LENGTH_SUBSTR,
     fn('NOW'),

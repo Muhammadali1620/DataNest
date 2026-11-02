@@ -54,6 +54,12 @@ const OWN: Readonly<Partial<Record<DriverId, Art>>> = {
     ink: WHITE,
     body: '<path d="M12 6 6 17.500M12 6l6 11.500M6 17.500h12" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="5.500" r="3.200"/><circle cx="5.500" cy="18" r="3.200"/><circle cx="18.500" cy="18" r="3.200"/>',
   },
+  // Lines of a log, one short: what Loki stores (V13.25); the vendor's logo is not ours to use.
+  loki: {
+    hex: '#ea580c',
+    ink: WHITE,
+    body: '<rect x="3" y="4.500" width="18" height="3.200" rx="1.600"/><rect x="3" y="10.400" width="12" height="3.200" rx="1.600"/><rect x="3" y="16.300" width="15" height="3.200" rx="1.600"/>',
+  },
   // A ring of four nodes: the ring Cassandra spreads its data over (V13.22); the vendor's logo is
   // not ours to use.
   cassandra: {

@@ -209,6 +209,10 @@ function cypherReads(words: readonly Word[]): boolean {
 
 /** True when running the statement can only read; false when it may change anything. */
 export function isReadOnlyStatement(sql: string, syntax: SqlSyntax = syntaxOf()): boolean {
+  if (syntax.logql) {
+    // Loki's query API has no way to write: a stream selector, a pipeline and an aggregation read.
+    return true;
+  }
   const { words, topPunctuation, hasParentheses } = scan(sql, syntax);
   const first = words[0];
   if (first === undefined) {

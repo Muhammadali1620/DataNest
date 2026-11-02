@@ -94,6 +94,7 @@
     etcd: 'form.driver.etcd',
     kafka: 'form.driver.kafka',
     influxdb: 'form.driver.influxdb',
+    loki: 'form.driver.loki',
     plugin: 'form.driver.plugin',
   };
 
@@ -119,6 +120,7 @@
   const isEtcd = $derived(fields?.driver === 'etcd');
   const isKafka = $derived(fields?.driver === 'kafka');
   const isInflux = $derived(fields?.driver === 'influxdb');
+  const isLoki = $derived(fields?.driver === 'loki');
   const withApiKey = $derived(isElastic && fields?.elasticAuth === 'apiKey');
   const secretLabel = $derived(
     withApiKey
@@ -127,7 +129,9 @@
         ? t('form.libsql.token')
         : isInflux
           ? t('form.influx.token')
-          : t('form.password'),
+          : isLoki
+            ? t('form.loki.secret')
+            : t('form.password'),
   );
   const defaultPort = $derived(
     isNeo4j
@@ -433,6 +437,8 @@
                       : undefined
                   : isKafka
                     ? t('form.kafka.hostHint')
+                  : isLoki
+                    ? t('form.loki.hostHint')
                   : isNeo4j
                     ? t('form.neo4j.hostHint')
                   : isCassandra
@@ -591,7 +597,7 @@
             <div class="pair">
               {#if !withApiKey && !isLibsql}
               <Field
-                label={isInflux ? t('form.influx.org') : t('form.user')}
+                label={isInflux ? t('form.influx.org') : isLoki ? t('form.loki.user') : t('form.user')}
                 hint={isRedis
                   ? t('form.redis.userHint')
                   : isKafka
@@ -600,13 +606,15 @@
                     ? t('form.etcd.userHint')
                     : isInflux
                       ? t('form.influx.orgHint')
-                      : undefined}
+                      : isLoki
+                        ? t('form.loki.userHint')
+                        : undefined}
               >
                 <input
                   class="control"
                   bind:value={fields.user}
                   maxlength={CONNECTION_LIMITS.field}
-                  aria-label={isInflux ? t('form.influx.org') : t('form.user')}
+                  aria-label={isInflux ? t('form.influx.org') : isLoki ? t('form.loki.user') : t('form.user')}
                   autocomplete="off"
                 />
               </Field>
@@ -620,7 +628,9 @@
                       ? t('form.libsql.tokenHint')
                       : isInflux
                         ? t('form.influx.tokenHint')
-                        : undefined
+                        : isLoki
+                          ? t('form.loki.secretHint')
+                          : undefined
                   : formState?.hasStoredPassword
                     ? t('form.passwordStored')
                     : formState?.importedPassword === true
@@ -699,16 +709,20 @@
                 ? t('form.redis.database')
                 : isInflux
                   ? t('form.influx.bucket')
-                  : isCassandra
-                    ? t('form.cassandra.keyspace')
-                    : t('form.database')}
+                  : isLoki
+                    ? t('form.loki.tenant')
+                    : isCassandra
+                      ? t('form.cassandra.keyspace')
+                      : t('form.database')}
               hint={isRedis
                 ? t('form.redis.databaseHint')
                 : isMongo
                   ? t('form.mongo.databaseHint')
                   : isInflux
                     ? t('form.influx.bucketHint')
-                    : isCassandra
+                    : isLoki
+                      ? t('form.loki.tenantHint')
+                      : isCassandra
                       ? t('form.cassandra.keyspaceHint')
                       : t('form.databaseHint')}
               error={isRedis
@@ -725,9 +739,11 @@
                   ? t('form.redis.database')
                   : isInflux
                     ? t('form.influx.bucket')
-                    : isCassandra
-                      ? t('form.cassandra.keyspace')
-                      : t('form.database')}
+                    : isLoki
+                      ? t('form.loki.tenant')
+                      : isCassandra
+                        ? t('form.cassandra.keyspace')
+                        : t('form.database')}
                 autocomplete="off"
               />
             </Field>

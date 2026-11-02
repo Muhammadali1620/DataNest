@@ -9,10 +9,14 @@ describe('KEYWORDS', () => {
   });
 
   it('is uppercase everywhere, so completion looks consistent', () => {
-    for (const driver of SQL_DRIVER_IDS) {
+    // LogQL is the exception: its words (`by`, `without`, `json`) are case-sensitive and lowercase.
+    for (const driver of SQL_DRIVER_IDS.filter((id) => id !== 'loki')) {
       for (const keyword of KEYWORDS[driver]) {
         expect(keyword, keyword).toBe(keyword.toUpperCase());
       }
+    }
+    for (const keyword of KEYWORDS.loki) {
+      expect(keyword, keyword).toBe(keyword.toLowerCase());
     }
   });
 
@@ -24,8 +28,8 @@ describe('KEYWORDS', () => {
   });
 
   it('includes the core SQL every dialect shares', () => {
-    // Cypher (Neo4j) is no SQL: it has its own test below.
-    for (const driver of SQL_DRIVER_IDS.filter((id) => id !== 'neo4j')) {
+    // Cypher (Neo4j) and LogQL (Loki) are no SQL: they have their own tests below.
+    for (const driver of SQL_DRIVER_IDS.filter((id) => id !== 'neo4j' && id !== 'loki')) {
       // InfluxQL has neither joins nor INSERT (points are written by line protocol), CQL no joins.
       const shared =
         driver === 'influxdb' || driver === 'cassandra'
@@ -35,6 +39,14 @@ describe('KEYWORDS', () => {
         expect(KEYWORDS[driver], `${driver} is missing ${keyword}`).toContain(keyword);
       }
     }
+  });
+
+  it('gives LogQL its own words and none of SQL', () => {
+    for (const keyword of ['by', 'without', 'unwrap', 'line_format', 'json', 'logfmt']) {
+      expect(KEYWORDS.loki).toContain(keyword);
+    }
+    expect(KEYWORDS.loki).not.toContain('SELECT');
+    expect(KEYWORDS.loki).not.toContain('FROM');
   });
 
   it('gives Cypher its own clauses and none of SQL', () => {

@@ -137,6 +137,29 @@ const OWN: Readonly<Record<Exclude<SqlDriverId, 'libsql'>, readonly SqlSnippet[]
       body: 'SELECT * FROM "${1:measurement}" WHERE time > now() - ${2:1h} ORDER BY time DESC LIMIT ${3:100}',
     },
   ],
+  // LogQL (Loki, V13.25). A `# range:` comment above the query sets the time window.
+  loki: [
+    {
+      prefix: 'last1h',
+      title: 'LogQL: the last hour of a stream',
+      body: '# range: ${1:1h}\n{${2:app}="${3:name}"}',
+    },
+    {
+      prefix: 'errors',
+      title: 'LogQL: lines with an error',
+      body: '# range: ${1:1h}\n{${2:app}="${3:name}"} |~ "(?i)error|exception"',
+    },
+    {
+      prefix: 'rate',
+      title: 'LogQL: lines per second, by a label',
+      body: '# range: ${1:6h}\n# step: ${2:1m}\nsum by (${3:level}) (rate({${4:app}="${5:name}"}[${6:5m}]))',
+    },
+    {
+      prefix: 'json',
+      title: 'LogQL: parse JSON lines and filter a field',
+      body: '# range: ${1:1h}\n{${2:app}="${3:name}"} | json | ${4:level}="${5:error}"',
+    },
+  ],
   mysql: [
     {
       prefix: 'upsert',

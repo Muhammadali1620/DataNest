@@ -27,6 +27,7 @@ export function hasAccounts(driver: DriverId): boolean {
     driver !== 'influxdb' &&
     driver !== 'neo4j' &&
     driver !== 'cassandra' &&
+    driver !== 'loki' &&
     driver !== 'plugin'
   );
 }

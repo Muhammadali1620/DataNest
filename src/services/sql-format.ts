@@ -59,6 +59,7 @@ export function languageOf(driver: DriverId | undefined): FormatLanguage {
     case 'cassandra':
     case 'plugin':
     case 'influxdb':
+    case 'loki':
     case 'redis':
     case 'mongodb':
     case 'elasticsearch':
@@ -124,6 +125,10 @@ export function formatEdits(
   let failed = 0;
   let reason: string | undefined;
   for (const statement of statements) {
+    // LogQL is not SQL either: its pipes and brace selectors would only be garbled.
+    if (driver === 'loki') {
+      continue;
+    }
     // Flux is not SQL: a SQL formatter would only garble its pipes and lambdas.
     if (driver === 'influxdb' && influxLanguageOf(statement.text) === 'flux') {
       continue;

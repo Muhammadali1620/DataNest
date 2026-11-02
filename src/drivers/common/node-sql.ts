@@ -133,6 +133,9 @@ export function columnSql(
         note('change column name'),
         rename,
       ]);
+    // A column of Loki is a value of a label (V13.25): a double click opens the stream it names.
+    case 'loki':
+      return `# range: 1h\n{${table.name}=${JSON.stringify(column.name)}}\n`;
     case 'neo4j':
     case 'cassandra':
     case 'plugin':
@@ -245,6 +248,7 @@ export function indexSql(
     case 'etcd':
     case 'kafka':
     case 'influxdb':
+    case 'loki':
       throw new Error('This connection has no SQL indexes');
   }
 }
@@ -293,6 +297,7 @@ export function foreignKeySql(
     case 'etcd':
     case 'kafka':
     case 'influxdb':
+    case 'loki':
       throw new Error('This connection has no SQL foreign keys');
   }
 }

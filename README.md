@@ -87,6 +87,7 @@ page is in English; the short summaries below are for everyone else.
 | Apache Cassandra | CQL in the editor, keyspaces, tables and materialized views in the tree with their keys, exact big numbers and collections as JSON |
 | libSQL, Turso | sqld and hosted servers over HTTP, with an auth token; the SQL of SQLite |
 | InfluxDB 2.x | Flux and InfluxQL over HTTP: buckets, measurements, tags and fields in the tree, points as a table |
+| Grafana Loki | LogQL in the editor, labels and their values in the tree, log lines and metrics as a table; time range in a `# range:` comment |
 | TiDB, CockroachDB, YugabyteDB, Amazon Aurora | Through the MySQL and PostgreSQL drivers, with presets |
 
 All of them work through SSH tunnels, SOCKS5 and HTTP proxies and TLS where the server supports it.

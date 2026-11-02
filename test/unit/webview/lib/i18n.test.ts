@@ -79,6 +79,7 @@ describe('the Russian dictionary', () => {
     'form.driver.cassandra',
     'form.driver.etcd',
     'form.driver.influxdb',
+    'form.driver.loki',
     'form.preset.auroraMysql',
     'form.preset.auroraPostgres',
     'form.preset.cockroachdb',

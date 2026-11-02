@@ -15,6 +15,8 @@ const LIMITS: Readonly<
   sqlite: undefined,
   libsql: undefined,
   influxdb: undefined,
+  // Label names are free text to the tree; Loki itself checks them.
+  loki: undefined,
   // Labels and property keys are free text.
   neo4j: undefined,
   // Keyspace and table names: letters, digits and underscores, up to 48 characters.

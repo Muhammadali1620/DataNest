@@ -573,6 +573,28 @@ services:
       retries: 30
       start_period: 40s
 
+  # Grafana Loki (V13.25), group `loki`: one process with the stock single-binary settings, the
+  # HTTP API on 7100, no tenants and no sign-in. Its data lives in tmpfs. The test pushes its own
+  # lines to /loki/api/v1/push, so nothing is seeded here. It reports ready a few seconds after
+  # it starts (the ingester waits 15 seconds by design).
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: datanest-loki
+    profiles: [loki]
+    command: ['-config.file=/etc/loki/local-config.yaml', '-target=all']
+    ports:
+      - 127.0.0.1:7100:3100
+    tmpfs:
+      # The process runs as an unprivileged user, so the mount must be writable by anyone.
+      - /loki:mode=1777
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1:3100/ready | grep -q ready']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
   # MongoDB (V7.5), group `mongodb`: a single-member replica set on 7017 with users and
   # TLS next to plain connections. It listens on the same port inside and outside, so the
   # member address the set hands out works from the host.

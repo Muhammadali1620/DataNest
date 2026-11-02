@@ -61,7 +61,7 @@ export function sectionsFor(driver: DriverId): ManagerSection[] {
   if (!isSqlDriver(driver)) {
     return [];
   }
-  if (driver === 'neo4j' || driver === 'cassandra') {
+  if (driver === 'neo4j' || driver === 'cassandra' || driver === 'loki') {
     // The processes, dashboard and dump of the manager are SQL servers' tools.
     return [];
   }

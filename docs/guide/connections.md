@@ -18,6 +18,7 @@
 | etcd | A key-value cluster (v3) over its HTTP/JSON gateway on the client port (2379); user and password when the cluster has authentication. |
 | Apache Kafka | The bootstrap brokers (`host:port`, separated by commas; 9092); SASL PLAIN or SCRAM with the user and password, TLS. |
 | libSQL | A libSQL server (sqld, Turso) over HTTP; the address and an auth token. TLS is on for a hosted server (port 443), off for a local one (8080). |
+| Grafana Loki | Loki over its HTTP API (port 3100): a user and password are basic authentication, a password alone is a bearer token, and the *Tenant* field is sent as `X-Scope-OrgID`. Address: `loki://host:3100?tenant=acme&token=…` (`lokis://` or `tls=1` for TLS). Queries are LogQL; see [Querying Loki](#querying-loki). |
 | InfluxDB | InfluxDB 2.x over HTTP (port 8086): the organization goes in the *Organization* field, the API token in *API token*, and *Bucket* is the one InfluxQL runs on. Address: `influxdb://host:8086/bucket?org=acme&token=…` (`influxdbs://` or `tls=1` for TLS). |
 
 Each driver is loaded the first time you connect to that kind of database, so the ones
@@ -26,7 +27,7 @@ you never use cost nothing.
 ## Filling the form
 
 - **From a URL**: paste `postgres://`, `mysql://`, `sqlserver://`, `clickhouse://`,
-  `oracle://`, `redis://`, `mongodb://`, `elasticsearch://`, `libsql://`, `neo4j://` or `cassandra://` URLs (or a JDBC
+  `oracle://`, `redis://`, `mongodb://`, `elasticsearch://`, `libsql://`, `neo4j://`, `cassandra://` or `loki://` URLs (or a JDBC
   `oracle:thin:@…` one) into the field at the top of the form, or run
   **Add Connection from URL…**.
 - **From `.env` files**: **Import Connections from .env…** finds `DATABASE_URL`-style
@@ -35,6 +36,28 @@ you never use cost nothing.
   Explorer and pick **Open SQLite Database…** (or run it from the Command Palette and pick
   the file). The file's connection is made if there is none yet, connected and shown.
 - **Edit**, **Duplicate** and **Delete** are in the connection's context menu.
+
+## Querying Loki
+
+A label is listed as a table and the values of the label are its columns; double-click a value
+to open the stream `{label="value"}` in an editor, and open a label to page through the lines
+of every stream that has it. Queries are LogQL, and the settings of a query ride in `#`
+comments above it:
+
+```
+# range: 6h            how far back from now (15m, 1h, 7d); the default is 1h
+# start: 2026-11-01T00:00:00Z   and   # end: now-1h     a window of your own
+# step: 1m             the resolution of a metric query
+# direction: forward   oldest first (the default is newest first)
+# limit: 500           lines to read (the row limit of the grid wins when it is smaller)
+{app="shop"} |= "error"
+```
+
+A statement that holds only such comments sets the defaults of the session, and so does the
+*Init SQL* of the connection. A log query gives a row per line — `time`, the exact `ns` stamp,
+the `labels` of the stream as JSON and the `line`; a metric query gives a row per sample.
+Loki hands over at most 5000 lines per query, and DataNest says so when that cut the answer.
+Loki is only read: nothing is written, and no change can be made through this connection.
 
 ## SSH tunnels
 

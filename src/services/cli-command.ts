@@ -43,6 +43,8 @@ export const CLI_PROGRAMS: Readonly<Record<ConnectionConfig['driver'], readonly 
   neo4j: [],
   // cqlsh takes the password only as an argument or from a file of its own; neither is safe here.
   cassandra: [],
+  // Loki's `logcli` takes its settings from the environment, not from arguments we could pass safely.
+  loki: [],
   mssql: ['sqlcmd'],
   clickhouse: ['clickhouse-client', 'clickhouse'],
   oracle: ['sql', 'sqlplus'],
@@ -230,6 +232,7 @@ export function cliCommand(
     case 'influxdb':
     case 'neo4j':
     case 'cassandra':
+    case 'loki':
     case 'elasticsearch':
     case 'etcd':
     case 'kafka':

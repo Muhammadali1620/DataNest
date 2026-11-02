@@ -62,6 +62,8 @@ export interface SqlSyntax {
   readonly dashComments?: boolean;
   /** The language is Cypher, not SQL: what reads and what writes is told by other words (V13.21). */
   readonly cypher?: boolean;
+  /** The language is LogQL (Loki, V13.25): every statement only reads. */
+  readonly logql?: boolean;
 }
 
 const MYSQL: SqlSyntax = {
@@ -209,6 +211,26 @@ const CYPHER: SqlSyntax = {
   cypher: true,
 };
 
+/** LogQL (Loki): `"…"` strings with backslash escapes, `` `…` `` raw strings, `#` comments; `--` is not one. */
+const LOGQL: SqlSyntax = {
+  backslashEscapes: true,
+  hashComments: true,
+  backtickIdentifiers: true,
+  doubleQuoteIdentifiers: false,
+  escapeStrings: false,
+  dollarQuotes: false,
+  nestedBlockComments: false,
+  delimiterCommand: false,
+  triggerBodies: false,
+  executableComments: false,
+  bracketIdentifiers: false,
+  batchSeparator: false,
+  slashTerminator: false,
+  quoteOperator: false,
+  dashComments: false,
+  logql: true,
+};
+
 /** CQL (Cassandra): `'…'` strings with doubled quotes, `"…"` names, `$$…$$` bodies, `--` and `//` comments. */
 const CQL: SqlSyntax = {
   backslashEscapes: false,
@@ -231,6 +253,7 @@ const CQL: SqlSyntax = {
 const BY_DRIVER: Readonly<Record<SqlDriverId, SqlSyntax>> = {
   neo4j: CYPHER,
   cassandra: CQL,
+  loki: LOGQL,
   mysql: MYSQL,
   postgres: POSTGRES,
   sqlite: SQLITE,

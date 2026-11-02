@@ -17,6 +17,7 @@ const SYSTEM_DATABASES: Readonly<Record<SqlDriverId, readonly string[]>> = {
   libsql: [],
   // The buckets InfluxDB keeps for its own tasks and monitoring.
   influxdb: ['_monitoring', '_tasks'],
+  loki: [],
   // `system` holds the server's own users, roles and database list.
   neo4j: ['system'],
   // The keyspaces Cassandra keeps for itself (schema, auth, tracing, virtual tables).
@@ -45,6 +46,7 @@ const SYSTEM_SCHEMAS: Readonly<Record<SqlDriverId, readonly string[]>> = {
   sqlite: [],
   libsql: [],
   influxdb: [],
+  loki: [],
   neo4j: [],
   cassandra: [],
   plugin: [],
@@ -61,6 +63,7 @@ const SYSTEM_SCHEMA_PREFIXES: Readonly<Record<SqlDriverId, readonly string[]>> =
   sqlite: [],
   libsql: [],
   influxdb: [],
+  loki: [],
   neo4j: [],
   cassandra: [],
   plugin: [],

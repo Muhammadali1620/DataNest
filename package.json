@@ -50,6 +50,8 @@
     "etcd",
     "kafka",
     "influxdb",
+    "loki",
+    "logql",
     "flux",
     "time series",
     "cockroachdb",

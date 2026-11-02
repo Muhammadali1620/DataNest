@@ -89,6 +89,9 @@ export function containsCondition(
     case 'influxdb':
       // InfluxQL matches text with a regular expression, not LIKE: not offered here.
       throw new DbError('unsupported', msg('Searching all columns is not available for InfluxDB'));
+    case 'loki':
+      // LogQL filters lines with `|=` and `|~`, not by column: not offered here.
+      throw new DbError('unsupported', msg('Searching all columns is not available for Loki'));
     case 'cassandra':
       // CQL has no case-insensitive text match without a special index.
       throw new DbError('unsupported', msg('Searching all columns is not available for Cassandra'));

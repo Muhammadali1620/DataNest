@@ -47,6 +47,9 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   // InfluxDB 2.x (V13.20): `influxdb://host:8086/bucket?org=acme&token=…`; `influxdbs` is TLS.
   influxdb: 'influxdb',
   influxdbs: 'influxdb',
+  // Grafana Loki (V13.25): `loki://host:3100?tenant=acme&token=…`; `lokis` is TLS.
+  loki: 'loki',
+  lokis: 'loki',
   // Neo4j (V13.21): `neo4j+s://` asks for TLS; the address names Bolt, but the HTTP port is used.
   neo4j: 'neo4j',
   // Cassandra (V13.22): `cassandra://user:pass@host:9042/keyspace`, `?ssl=true` for TLS.
@@ -376,6 +379,49 @@ function influxdbUrl(plain: string): UrlResult {
 }
 
 /**
+ * `loki://[user:password@]host:3100?tenant=acme&token=…`: a user and password are basic
+ * authentication, a `token` (alone, with no user) is a bearer token, the tenant becomes the
+ * `X-Scope-OrgID` the connection sends. `lokis://`, or `tls=1`, asks for TLS.
+ */
+function lokiUrl(plain: string): UrlResult {
+  let url: URL;
+  try {
+    url = new URL(plain.replace(/^[a-z][a-z0-9.-]*:/i, 'datanest:'));
+  } catch {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const host = nonEmpty(decode(url.hostname).replace(/^\[(.*)\]$/, '$1'));
+  if (host === undefined) {
+    return { ok: false, problem: 'no-host' };
+  }
+  const portText = nonEmpty(url.port);
+  const port = portText !== undefined && /^\d+$/.test(portText) ? Number(portText) : undefined;
+  const tenant = nonEmpty(url.searchParams.get('tenant')) ?? nonEmpty(url.searchParams.get('org'));
+  const token = nonEmpty(url.searchParams.get('token'));
+  const user = token === undefined ? nonEmpty(decode(url.username)) : undefined;
+  const password = token ?? nonEmpty(decode(url.password));
+  const scheme = /^([a-z][a-z0-9.-]*):/i.exec(plain)?.[1]?.toLowerCase() ?? '';
+  const tls =
+    scheme === 'lokis' || ['1', 'true'].includes((url.searchParams.get('tls') ?? '').toLowerCase());
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'loki',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
+    ...(tenant === undefined ? {} : { database: tenant }),
+    ...(tls ? { ssl: { mode: 'verify-full' as const } } : {}),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(password === undefined ? {} : { password }),
+    },
+  };
+}
+
+/**
  * `neo4j://user:password@host:7687/database`, `neo4j+s://` for TLS. The address a Neo4j
  * client prints is a Bolt address, and DataNest speaks HTTP: Bolt's port is dropped, so the
  * HTTP default is used, and any other port is kept.
@@ -458,6 +504,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'influxdb') {
     return influxdbUrl(plain);
+  }
+  if (driver === 'loki') {
+    return lokiUrl(plain);
   }
   let url: URL;
   try {

@@ -74,6 +74,7 @@ jobs:
             influxdb,
             neo4j,
             cassandra,
+            loki,
             mongodb,
             elasticsearch,
           ]

@@ -231,6 +231,8 @@ const INTEGER_TYPES: Readonly<Record<SqlDriverId, ReadonlySet<string>>> = {
   neo4j: new Set(),
   // Tables are made with CQL; the designer is not offered.
   cassandra: new Set(),
+  // Labels and streams are not designed.
+  loki: new Set(),
   mssql: new Set(['tinyint', 'smallint', 'int', 'bigint']),
   // Nothing numbers itself: rows have no identity, only a sorting key.
   clickhouse: new Set(),

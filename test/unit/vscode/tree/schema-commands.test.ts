@@ -11,6 +11,7 @@ import { sqliteDialect } from '../../../../src/drivers/sqlite/dialect';
 import { influxdbDialect } from '../../../../src/drivers/influxdb/dialect';
 import { neo4jDialect } from '../../../../src/drivers/neo4j/dialect';
 import { cassandraDialect } from '../../../../src/drivers/cassandra/dialect';
+import { lokiDialect } from '../../../../src/drivers/loki/dialect';
 import type { SchemaAction } from '../../../../src/services/schema-actions';
 import type { BuiltInSqlDriverId } from '../../../../src/shared/connection';
 import type { TreeNode } from '../../../../src/vscode/tree/nodes';
@@ -64,6 +65,7 @@ const DIALECTS = {
   influxdb: influxdbDialect,
   neo4j: neo4jDialect,
   cassandra: cassandraDialect,
+  loki: lokiDialect,
   mssql: mssqlDialect,
   clickhouse: clickhouseDialect,
   oracle: oracleDialect,

@@ -80,6 +80,7 @@ export async function planServerOf(session: Session, driver: SqlDriverId): Promi
     case 'libsql':
       return 'sqlite';
     case 'influxdb':
+    case 'loki':
     case 'neo4j':
     case 'cassandra':
     case 'plugin':

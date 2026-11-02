@@ -364,6 +364,8 @@ export function targetType(
       throw new DbError('unsupported', msg('Tables cannot be copied to Elasticsearch'));
     case 'influxdb':
       throw new DbError('unsupported', msg('Tables cannot be copied to InfluxDB'));
+    case 'loki':
+      throw new DbError('unsupported', msg('Tables cannot be copied to Loki'));
     case 'etcd':
       throw new DbError('unsupported', msg('Tables cannot be copied to etcd'));
     case 'kafka':

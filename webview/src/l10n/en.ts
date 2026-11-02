@@ -368,6 +368,17 @@ export const en = {
   'form.neo4j.hostHint':
     'The server address, e.g. localhost or my-db.databases.neo4j.io, or a neo4j:// URL. The HTTP port (7474) is used, not Bolt; Neo4j 5.19 or newer',
   'form.driver.etcd': 'etcd',
+  'form.driver.loki': 'Grafana Loki',
+  'form.loki.hostHint':
+    'The address of Loki, e.g. localhost or logs.example.com; the HTTP port (3100) is used. Turn TLS on below for a server behind HTTPS',
+  'form.loki.user': 'User (basic auth)',
+  'form.loki.userHint': 'Leave empty to sign in with a token, or when the server asks for nothing',
+  'form.loki.secret': 'Password or token',
+  'form.loki.secretHint':
+    'With a user: its password. Without one: sent as a bearer token (Authorization: Bearer …)',
+  'form.loki.tenant': 'Tenant (X-Scope-OrgID)',
+  'form.loki.tenantHint':
+    'The tenant of a multi-tenant Loki; leave empty for a server without tenants',
   'form.driver.influxdb': 'InfluxDB',
   'form.influx.org': 'Organization',
   'form.influx.orgHint': 'The organization the buckets belong to (InfluxDB 2.x)',

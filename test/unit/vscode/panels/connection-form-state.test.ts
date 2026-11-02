@@ -130,6 +130,7 @@ describe('toInput', () => {
       color: 'red',
       production: true,
       readOnly: true,
+      remoteWrite: true,
       options: { keepAlive: 60, initSql: 'SET a = 1' },
       filter: { databases: ['shop'], schemas: ['public'] },
       redis: { mode: 'sentinel', masterName: 'm', nodes: [{ host: 's2' }], sentinelUser: 'u' },

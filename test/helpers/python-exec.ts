@@ -83,6 +83,8 @@ export class LocalPythonOpener implements ExecOpener {
 /** Serves an `exec` request of the test SSH server by running the command in `sh`. */
 export function runThroughShell(command: string, channel: ServerChannel): ChildProcess {
   const child = spawn('sh', ['-c', command]);
+  // The command may be gone before the client stops writing (a shell that found no python3).
+  child.stdin.on('error', () => undefined);
   channel.on('data', (chunk: Buffer) => {
     child.stdin.write(chunk);
   });

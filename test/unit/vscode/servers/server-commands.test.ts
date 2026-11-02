@@ -121,7 +121,8 @@ describe('adding a server', () => {
     answers('Staging', 'stage.example.com', '2200', 'deploy', 'pw1', '/var/www');
     window.showQuickPick
       .mockResolvedValueOnce({ auth: 'password' })
-      .mockResolvedValueOnce({ value: true });
+      .mockResolvedValueOnce({ value: true })
+      .mockResolvedValueOnce({ choice: 'direct' });
     const id = (await run('addServer')) as string;
     const saved = world.store.get(id);
     expect(saved).toMatchObject({
@@ -140,7 +141,8 @@ describe('adding a server', () => {
     answers('Keyed', 'k.example.com', '22', 'me', '~/.ssh/id_ed25519', 'secret phrase', '');
     window.showQuickPick
       .mockResolvedValueOnce({ auth: 'key' })
-      .mockResolvedValueOnce({ value: false });
+      .mockResolvedValueOnce({ value: false })
+      .mockResolvedValueOnce({ choice: 'direct' });
     const id = (await run('addServer')) as string;
     const saved = world.store.get(id);
     expect(saved?.ssh).toMatchObject({ auth: 'key', keyFile: '~/.ssh/id_ed25519' });
@@ -155,7 +157,8 @@ describe('adding a server', () => {
     answers('Agent', 'a.example.com', '22', 'me', '');
     window.showQuickPick
       .mockResolvedValueOnce({ auth: 'agent' })
-      .mockResolvedValueOnce({ value: false });
+      .mockResolvedValueOnce({ value: false })
+      .mockResolvedValueOnce({ choice: 'direct' });
     const id = (await run('addServer')) as string;
     expect(world.store.get(id)?.ssh.auth).toBe('agent');
     expect(Object.values(await world.store.getSshSecrets(id))[0]).toEqual({});
@@ -214,7 +217,8 @@ describe('editing a server', () => {
     answers('Web renamed', '127.0.0.1', String(world.server.port), 'deploy', '', '');
     window.showQuickPick
       .mockResolvedValueOnce({ auth: 'password' })
-      .mockResolvedValueOnce({ value: false });
+      .mockResolvedValueOnce({ value: false })
+      .mockResolvedValueOnce({ choice: 'direct' });
     expect(await run('editServer', server(world.serverId))).toBe(world.serverId);
     const boxes = window.showInputBox.mock.calls.map(
       (call) => (call[0] as { value?: string }).value,
@@ -233,7 +237,8 @@ describe('editing a server', () => {
     answers('Web', '127.0.0.1', String(world.server.port), 'deploy', 'new-pw', '');
     window.showQuickPick
       .mockResolvedValueOnce({ auth: 'password' })
-      .mockResolvedValueOnce({ value: false });
+      .mockResolvedValueOnce({ value: false })
+      .mockResolvedValueOnce({ choice: 'direct' });
     await run('editServer', server(world.serverId));
     expect(Object.values(await world.store.getSshSecrets(world.serverId))[0]).toEqual({
       password: 'new-pw',
@@ -246,7 +251,8 @@ describe('editing a server', () => {
     answers('Web', '127.0.0.1', String(world.server.port), 'deploy', '', '');
     window.showQuickPick
       .mockResolvedValueOnce({ auth: 'password' })
-      .mockResolvedValueOnce({ value: false });
+      .mockResolvedValueOnce({ value: false })
+      .mockResolvedValueOnce({ choice: 'direct' });
     await run('editServer', server(world.serverId));
     expect(world.hub.isOpen(world.serverId)).toBe(false);
   });
@@ -262,6 +268,275 @@ describe('editing a server', () => {
     await world.store.remove(world.readOnlyId);
     expect(await run('editServer')).toBeUndefined();
     expect(window.showInformationMessage).toHaveBeenCalledWith('There are no saved servers yet');
+  });
+});
+
+describe('how a server is reached', () => {
+  /** The picks of the wizard in order: login, read-only, then the way of reaching it. */
+  function picks(...values: unknown[]): void {
+    for (const value of values) {
+      window.showQuickPick.mockResolvedValueOnce(value);
+    }
+  }
+
+  const head = ['Via', 'target.example.com', '22', 'me', 'target-pw', ''];
+
+  it('saves jump hosts, each with its own login and secret', async () => {
+    answers(
+      ...head,
+      'jump1.example.com',
+      '2201',
+      'hopper',
+      'hop-pw',
+      'jump2.example.com',
+      '22',
+      'h2',
+      '',
+    );
+    picks(
+      { auth: 'password' },
+      { value: false },
+      { choice: 'jumps' },
+      { auth: 'password' },
+      { more: true },
+      { auth: 'agent' },
+      { more: false },
+    );
+    const id = (await run('addServer')) as string;
+    const saved = world.store.get(id);
+    expect(saved?.proxy).toBeUndefined();
+    expect(saved?.ssh.jumps).toMatchObject([
+      { host: 'jump1.example.com', port: 2201, user: 'hopper', auth: 'password' },
+      { host: 'jump2.example.com', port: 22, user: 'h2', auth: 'agent' },
+    ]);
+    const secrets = await world.store.getSshSecrets(id);
+    const jumpId = saved?.ssh.jumps?.[0]?.id ?? '';
+    expect(secrets[jumpId]).toEqual({ password: 'hop-pw' });
+    expect(secrets[saved?.ssh.id ?? '']).toEqual({ password: 'target-pw' });
+  });
+
+  it('stops asking for jump hosts at the limit', async () => {
+    const hop = ['j.example.com', '22', 'u'];
+    answers(...head, ...hop, ...hop, ...hop, ...hop, ...hop);
+    picks(
+      { auth: 'password' },
+      { value: false },
+      { choice: 'jumps' },
+      ...Array.from({ length: 5 }, () => [{ auth: 'agent' }, { more: true }]).flat(),
+    );
+    const id = (await run('addServer')) as string;
+    expect(world.store.get(id)?.ssh.jumps).toHaveLength(5);
+  });
+
+  it('saves a proxy with its login, the password going to the secrets', async () => {
+    answers(...head, 'proxy.example.com', '3128', 'puser', 'ppass');
+    picks({ auth: 'password' }, { value: false }, { choice: 'proxy' }, { proxyKind: 'http' });
+    const id = (await run('addServer')) as string;
+    expect(world.store.get(id)?.proxy).toEqual({
+      kind: 'http',
+      host: 'proxy.example.com',
+      port: 3128,
+      user: 'puser',
+    });
+    expect(world.store.get(id)?.ssh.jumps).toBeUndefined();
+    expect(await world.store.getProxyPassword(id)).toBe('ppass');
+  });
+
+  it('takes a proxy without a login and asks for no password', async () => {
+    answers(...head, 'p.example.com', '1080', '');
+    picks({ auth: 'password' }, { value: false }, { choice: 'proxy' }, { proxyKind: 'socks5' });
+    const id = (await run('addServer')) as string;
+    expect(world.store.get(id)?.proxy).toEqual({
+      kind: 'socks5',
+      host: 'p.example.com',
+      port: 1080,
+    });
+    expect(await world.store.getProxyPassword(id)).toBeUndefined();
+  });
+
+  it('takes jump hosts and a proxy together', async () => {
+    answers(...head, 'j.example.com', '22', 'u', 'px.example.com', '1080', '');
+    picks(
+      { auth: 'password' },
+      { value: false },
+      { choice: 'both' },
+      { auth: 'agent' },
+      { more: false },
+      { proxyKind: 'socks5' },
+    );
+    const id = (await run('addServer')) as string;
+    expect(world.store.get(id)?.ssh.jumps).toHaveLength(1);
+    expect(world.store.get(id)?.proxy?.host).toBe('px.example.com');
+  });
+
+  it.each([
+    ['the way of reaching it', [], [undefined]],
+    ['the host of a jump host', [undefined], ['jumps']],
+    ['the way to log in to a jump host', ['j', '22', 'u'], ['jumps', undefined]],
+    ['the proxy type', [], ['proxy', undefined]],
+    ['the proxy host', [undefined], ['proxy', 'http']],
+    ['the proxy port', ['p', undefined], ['proxy', 'http']],
+    ['the proxy user', ['p', '8080', undefined], ['proxy', 'http']],
+    ['the proxy password', ['p', '8080', 'u', undefined], ['proxy', 'http']],
+  ])('saves nothing when %s is dismissed', async (_name, inputs, later) => {
+    stub.resetWindow();
+    const before = world.store.list().length;
+    answers(...head, ...(inputs as (string | undefined)[]));
+    const [choice, ...rest] = later as (string | undefined)[];
+    picks({ auth: 'password' }, { value: false });
+    picks(choice === undefined ? undefined : { choice });
+    for (const value of rest) {
+      picks(
+        value === undefined
+          ? undefined
+          : value === 'http'
+            ? { proxyKind: 'http' }
+            : { auth: 'agent' },
+      );
+    }
+    expect(await run('addServer')).toBeUndefined();
+    expect(world.store.list()).toHaveLength(before);
+  });
+
+  it('checks the host, port and user of a jump host and of a proxy as they are typed', async () => {
+    answers(...head, 'j', '22', 'u', '', 'p', undefined);
+    picks(
+      { auth: 'password' },
+      { value: false },
+      { choice: 'both' },
+      { auth: 'agent' },
+      { more: false },
+      { proxyKind: 'http' },
+    );
+    await run('addServer');
+    interface Box {
+      title: string;
+      validateInput?(value: string): string | undefined;
+    }
+    const boxes = window.showInputBox.mock.calls.map((call) => call[0] as Box);
+    for (const title of ['Jump host 1: SSH host', 'Jump host 1: User', 'Proxy host']) {
+      const box = boxes.find((item) => item.title === title);
+      expect(box?.validateInput?.('  ')).toMatch(/cannot be empty/u);
+      expect(box?.validateInput?.('x')).toBeUndefined();
+    }
+    for (const title of ['Jump host 1: SSH port', 'Proxy port']) {
+      const box = boxes.find((item) => item.title === title);
+      expect(box?.validateInput?.('0')).toMatch(/1 to 65535/u);
+      expect(box?.validateInput?.('22')).toBeUndefined();
+    }
+    expect(boxes.find((item) => item.title === 'Proxy port')).toMatchObject({ value: '8080' });
+  });
+
+  it('keeps jump hosts and proxy as saved, with their secrets, when editing', async () => {
+    const jumpHop = {
+      id: 'jump',
+      host: 'j.example.com',
+      port: 22,
+      user: 'u',
+      auth: 'password' as const,
+    };
+    const added = await world.store.add(
+      {
+        name: 'Routed',
+        ssh: {
+          id: 'main',
+          host: '127.0.0.1',
+          port: world.server.port,
+          user: 'deploy',
+          auth: 'password',
+          jumps: [jumpHop],
+        },
+        proxy: { kind: 'socks5', host: 'px', port: 1080, user: 'pu' },
+      },
+      { main: { password: 'pw' }, jump: { password: 'jpw' } },
+      'proxy-pw',
+    );
+    answers('Routed', '127.0.0.1', String(world.server.port), 'deploy', '', '');
+    picks({ auth: 'password' }, { value: false }, { choice: 'keep' });
+    await run('editServer', server(added.id));
+    const saved = world.store.get(added.id);
+    expect(saved?.ssh.jumps).toEqual([jumpHop]);
+    expect(saved?.proxy).toMatchObject({ host: 'px' });
+    expect((await world.store.getSshSecrets(added.id)).jump).toEqual({ password: 'jpw' });
+    expect(await world.store.getProxyPassword(added.id)).toBe('proxy-pw');
+    const offered = window.showQuickPick.mock.calls.at(-1)?.[0] as {
+      label: string;
+      description?: string;
+    }[];
+    expect(offered.map((item) => item.description)).toContain('1 jump hosts · SOCKS5 px');
+  });
+
+  it('removes jump hosts and the proxy, with their secrets, when "Directly" is chosen', async () => {
+    const added = await world.store.add(
+      {
+        name: 'Routed',
+        ssh: {
+          id: 'main',
+          host: '127.0.0.1',
+          port: world.server.port,
+          user: 'deploy',
+          auth: 'password',
+          jumps: [{ id: 'jump', host: 'j', port: 22, user: 'u', auth: 'password' }],
+        },
+        proxy: { kind: 'http', host: 'px', user: 'pu' },
+      },
+      { main: { password: 'pw' }, jump: { password: 'jpw' } },
+      'proxy-pw',
+    );
+    answers('Routed', '127.0.0.1', String(world.server.port), 'deploy', '', '');
+    picks({ auth: 'password' }, { value: false }, { choice: 'direct' });
+    await run('editServer', server(added.id));
+    const saved = world.store.get(added.id);
+    expect(saved?.ssh.jumps).toBeUndefined();
+    expect(saved?.proxy).toBeUndefined();
+    expect((await world.store.getSshSecrets(added.id)).jump).toBeUndefined();
+    expect(await world.store.getProxyPassword(added.id)).toBeUndefined();
+  });
+
+  it('prefills the saved jump host and keeps its password when the box is left empty', async () => {
+    const added = await world.store.add(
+      {
+        name: 'Routed',
+        ssh: {
+          id: 'main',
+          host: '127.0.0.1',
+          port: world.server.port,
+          user: 'deploy',
+          auth: 'password',
+          jumps: [{ id: 'jump', host: 'j.example.com', port: 2200, user: 'u', auth: 'password' }],
+        },
+      },
+      { main: { password: 'pw' }, jump: { password: 'jpw' } },
+    );
+    answers(
+      'Routed',
+      '127.0.0.1',
+      String(world.server.port),
+      'deploy',
+      '',
+      '',
+      'j2.example.com',
+      '2200',
+      'u',
+      '',
+    );
+    picks(
+      { auth: 'password' },
+      { value: false },
+      { choice: 'jumps' },
+      { auth: 'password' },
+      { more: false },
+    );
+    await run('editServer', server(added.id));
+    const boxes = window.showInputBox.mock.calls.map(
+      (call) => call[0] as { title: string; value?: string },
+    );
+    expect(boxes.find((box) => box.title === 'Jump host 1: SSH host')?.value).toBe('j.example.com');
+    expect(world.store.get(added.id)?.ssh.jumps?.[0]).toMatchObject({
+      id: 'jump',
+      host: 'j2.example.com',
+    });
+    expect((await world.store.getSshSecrets(added.id)).jump).toEqual({ password: 'jpw' });
   });
 });
 

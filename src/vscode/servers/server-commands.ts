@@ -403,7 +403,7 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
       if (answers === undefined) {
         return undefined;
       }
-      const added = await deps.store.add(answers.input, answers.secrets);
+      const added = await deps.store.add(answers.input, answers.secrets, answers.proxyPassword);
       deps.tree.refresh();
       return added.id;
     },
@@ -420,7 +420,7 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
       }
       // The saved login must not outlive the settings it was made for.
       deps.hub.disconnect(id);
-      await deps.store.update(id, answers.input, answers.changes);
+      await deps.store.update(id, answers.input, answers.changes, answers.proxyChange);
       return id;
     },
 

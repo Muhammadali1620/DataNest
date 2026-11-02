@@ -13,8 +13,12 @@ the server is read-only.
 - Passwords and key passphrases go to the editor's secret storage and nowhere else.
 - The first time DataNest meets a server it asks you to trust its key, and a key that changes
   later is refused unless you accept the new one — the same as for database tunnels.
-- **Edit Server…** keeps what you leave empty: an empty password keeps the saved one. Jump
-  hosts, a proxy and algorithm rules saved with a server are kept as they are.
+- The last question of the wizard is **How is the server reached?**: directly, through one
+  or more **jump hosts** (each with its own login), through a **SOCKS5 or HTTP proxy**, or
+  both. Passwords of jump hosts and of the proxy go to the editor's secret storage.
+- **Edit Server…** keeps what you leave empty: an empty password keeps the saved one. Choose
+  **As saved** at the last question to keep the jump hosts and the proxy as they are;
+  algorithm rules saved with a server are always kept.
 - **Export Servers…** writes the list **without any secret**; **Import Servers…** reads it
   back, and you enter the passwords when you connect.
 
@@ -44,7 +48,14 @@ opens.
   files from the explorer** onto a folder.
 - **Download…** takes files or whole folders to a folder of this machine.
 - **Copy To…** copies to another path of the same server or to another server; **Move To…**
-  renames within the server.
+  renames within the server, or, for another server, copies first and deletes the original
+  only after every file arrived (and keeps it, saying so, if links or special files were not
+  copied).
+- **Drag and drop inside the tree** moves files and folders into the folder you drop them on
+  (a drop on a file means its folder, a drop on a server means its start folder). Between two
+  servers it asks first.
+- **Compare with a Local File…** opens the usual side-by-side diff of a file of this machine
+  against the file on the server (text files within the editor size limit).
 - Transfers are streams: memory stays small for any size. A notification shows the progress
   and **Cancel** stops the transfer; a half-written file is removed.
 - Something that is already there is replaced only after you confirm.
@@ -75,7 +86,12 @@ opens.
 - Deleting asks first and says that a folder goes with everything in it; a link is removed
   without touching what it points at.
 - **Change Permissions…** takes octal digits (`644`, `0755`).
+- **Change Permissions Inside…** (folders) gives every file and every folder below its own
+  mode, e.g. `644` and `755`; leave a box empty to keep that kind as it is. It asks first.
+- **Change Owner…** takes numeric ids as `user:group` (`1000:1000`, or only `1000`, or only
+  `:1000`); for a folder you choose whether everything inside changes too. The server decides
+  who may do it — usually only root. Links are never followed by these commands.
 
 ## Not here yet
 
-Moving by drag and drop inside the tree is not part of this view.
+Comparing two files of two servers, and user and group *names* (SFTP knows only numbers).

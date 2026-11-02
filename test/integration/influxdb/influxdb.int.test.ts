@@ -192,7 +192,9 @@ base |> filter(fn: (r) => r._measurement == "mem") |> keep(columns: ["host"]) |>
       );
       const done = mixed.at(-1);
       expect(done?.kind === 'done' ? done.notice : undefined).toContain('left out');
-      expect(columnsOf(mixed)).toContain('_value');
+      // The server decides which yielded result comes first; the other one is the one left out.
+      const columns = columnsOf(mixed);
+      expect(columns.includes('_value') !== columns.includes('host')).toBe(true);
     });
 
     it('stops at the row limit and tells the server to stop', async () => {

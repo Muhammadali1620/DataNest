@@ -270,6 +270,7 @@
   "commands.rabbitmq.newQueue.title": "Новая очередь…",
   "commands.rabbitmq.newExchange.title": "Новый обменник…",
   "commands.rabbitmq.purgeQueue.title": "Убрать все сообщения",
+  "commands.rabbitmq.cluster.title": "Кластер и узлы RabbitMQ…",
   "commands.rabbitmq.newVhost.title": "Новый виртуальный хост…",
   "commands.rabbitmq.deleteVhost.title": "Удалить виртуальный хост",
   "commands.rabbitmq.deleteObject.title": "Удалить",

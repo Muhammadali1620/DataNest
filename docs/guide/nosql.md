@@ -128,8 +128,17 @@ token is renewed by itself); leave both empty when it has none.
   also turns **authentication on and off** (etcd then wants a user named `root` with the
   role `root`; once it is on, every connection has to sign in, which the question says).
 
-Not here (yet): etcd's cluster administration (members, snapshots) and watching a prefix
-from the tree.
+- **Watch Keys under a Folder…** (on a folder, or on the connection for the whole store)
+  opens the page of the folder with the watch of every key below it already running.
+  It only reads, so a read-only connection may use it.
+- **etcd Cluster and Snapshot…** (on the connection) lists the **members** (name, role: leader,
+  follower or learner, client and peer addresses; the one DataNest talks to also shows its
+  version, the size of its store file and its Raft figures), the **alarms** the cluster raised
+  (a full store, a corrupt one), and **Save a snapshot…**: the whole store streamed into a
+  `.db` file. The file is written under a temporary name and takes the real one only when
+  the snapshot is whole; etcd ends a snapshot with a SHA-256 of what came before, which
+  DataNest checks and tells you about. The snapshot comes from the one member you are
+  connected to. Members are only looked at, not added or removed.
 
 ## Apache ZooKeeper
 
@@ -287,5 +296,19 @@ tree shows only that virtual host, which is what a user who may see just one nee
   moments of its own, and one sent down a connection it has just closed would fail, even
   a publish that must not be sent twice.
 
-Not here (yet): creating and removing bindings, consumers and connections of the broker,
-users, permissions and policies, and a live view of the rates.
+- **RabbitMQ Cluster and Nodes…** (on a connection) opens the page of the whole broker: the totals
+  (queues, exchanges, connections, channels, consumers, ready and unacknowledged messages), every
+  **node** with its type, uptime and meters of how much it has used of its memory, file
+  descriptors, sockets and processes (a meter turns yellow at 70% and red at 90% or at an alarm),
+  the free disk space against the level at which the broker raises its alarm, the badges
+  *memory alarm*, *disk alarm*, *draining* and *split from n nodes*, the **listeners** and the
+  broker's **global parameters**. It only reads.
+- On a virtual host's page, **Limits** shows and sets the most connections and the most queues the
+  virtual host may hold (**Lift** removes a limit; clients over a limit are refused by the broker).
+  **Policies** are made from fields: pattern, what it applies to, priority, and boxes for the
+  usual settings (message TTL, expiry, maximum length in messages and bytes, overflow behaviour,
+  dead-letter exchange and routing key, delivery limit, queue mode, alternate exchange), with the
+  keys that fit what the policy applies to; any other key goes in the box of JSON below the fields,
+  and nothing a policy already has is lost when you edit it.
+
+Not here (yet): parameters of a single virtual host and operator policies.

@@ -11,6 +11,13 @@
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
   import { parseTags, stateTone } from './object-view';
+  import {
+    hintOf,
+    joinDefinition,
+    type PolicyValues,
+    splitDefinition,
+    visibleFields,
+  } from './policy-definition';
 
   interface Props {
     admin: RabbitAdminView;
@@ -48,7 +55,16 @@
   let policyPattern = $state('');
   let policyApplyTo = $state<(typeof RABBIT_POLICY_TARGETS)[number]>('all');
   let policyPriority = $state(0);
-  let policyDefinition = $state('{\n  "max-length": 1000\n}');
+  /** The fields of the definition (message TTL, length limits, dead lettering…). */
+  let policyValues = $state<PolicyValues>({});
+  /** The keys the fields do not cover, as JSON. */
+  let policyExtra = $state('');
+  let policyProblem = $state<string | undefined>(undefined);
+  const fields = $derived(visibleFields(policyApplyTo, policyValues));
+
+  // The form that sets the limits of the virtual host.
+  const limitInputs = $state<Record<string, string>>({ 'max-connections': '', 'max-queues': '' });
+  let limitProblem = $state<string | undefined>(undefined);
 
   function editPermission(user: RabbitUserView): void {
     grantUser = user.name;
@@ -104,10 +120,48 @@
     policyPattern = policy.pattern;
     policyApplyTo = RABBIT_POLICY_TARGETS.find((one) => one === policy.applyTo) ?? 'all';
     policyPriority = policy.priority;
-    policyDefinition = policy.definition;
+    const parts = splitDefinition(policy.definition);
+    policyValues = parts.values;
+    policyExtra = parts.extra;
+    policyProblem = undefined;
+  }
+
+  function newPolicy(): void {
+    editingPolicy = !editingPolicy;
+    policyName = '';
+    policyPattern = '';
+    policyApplyTo = 'all';
+    policyPriority = 0;
+    policyValues = {};
+    policyExtra = '';
+    policyProblem = undefined;
+  }
+
+  function setLimit(limit: 'max-connections' | 'max-queues', clear: boolean): void {
+    const text = (limitInputs[limit] ?? '').trim();
+    if (!clear && !/^\d{1,10}$/u.test(text)) {
+      limitProblem = t('rabbit.admin.limitInvalid');
+      return;
+    }
+    limitProblem = undefined;
+    void run(
+      () => rpc.request('setLimit', clear ? { limit } : { limit, value: Number(text) }),
+      () => {
+        limitInputs[limit] = '';
+      },
+    );
   }
 
   function savePolicy(): void {
+    const joined = joinDefinition(policyValues, policyExtra);
+    if (!joined.ok) {
+      policyProblem =
+        joined.reason === 'number'
+          ? t('rabbit.admin.policy.numberInvalid', joined.key)
+          : t('rabbit.admin.policy.extraInvalid');
+      return;
+    }
+    policyProblem = undefined;
     void run(
       () =>
         rpc.request('setPolicy', {
@@ -115,7 +169,7 @@
           pattern: policyPattern,
           applyTo: policyApplyTo,
           priority: Number.isFinite(policyPriority) ? Math.trunc(policyPriority) : 0,
-          definition: policyDefinition,
+          definition: joined.json,
         }),
       () => {
         editingPolicy = false;
@@ -336,6 +390,37 @@
   {/if}
 </section>
 
+<section class="block" aria-label={t('rabbit.admin.limits')} data-testid="limits">
+  <h2 class="section"><Icon name="dashboard" tone="orange" />{t('rabbit.admin.limits')}</h2>
+  {#if admin.limitsError !== undefined}
+    <p class="notice error" role="alert"><Icon name="error" /><span>{admin.limitsError}</span></p>
+  {:else}
+    {#each [{ key: 'max-connections' as const, current: admin.limits?.maxConnections }, { key: 'max-queues' as const, current: admin.limits?.maxQueues }] as limit (limit.key)}
+      <div class="limit" data-testid="limit-{limit.key}">
+        <span class="limit-name mono">{limit.key}</span>
+        <span class="badge {limit.current === undefined ? 'outline' : 'warning'}">{limit.current ?? t('rabbit.admin.noLimit')}</span>
+        {#if !readOnly}
+          <input
+            class="control mono limit-input"
+            type="text"
+            inputmode="numeric"
+            bind:value={limitInputs[limit.key]}
+            placeholder="0"
+            aria-label={limit.key}
+            autocomplete="off"
+          />
+          <button type="button" class="button secondary" disabled={busy} onclick={() => { setLimit(limit.key, false); }}><Icon name="check" />{t('rabbit.admin.setLimit')}</button>
+          <button type="button" class="button secondary" disabled={busy || limit.current === undefined} onclick={() => { setLimit(limit.key, true); }}><Icon name="close" />{t('rabbit.admin.liftLimit')}</button>
+        {/if}
+      </div>
+    {/each}
+    {#if limitProblem !== undefined}
+      <p class="notice error" role="alert" data-testid="limit-problem"><Icon name="error" /><span>{limitProblem}</span></p>
+    {/if}
+    <p class="hint">{t('rabbit.admin.limitsHint')}</p>
+  {/if}
+</section>
+
 <section class="block" aria-label={t('rabbit.admin.policies')} data-testid="policies">
   <div class="heading">
     <h2 class="section"><Icon name="checklist" tone="purple" />{t('rabbit.admin.policies')}</h2>
@@ -345,9 +430,7 @@
         class="button"
         aria-pressed={editingPolicy}
         disabled={busy}
-        onclick={() => {
-          editingPolicy = !editingPolicy;
-        }}><Icon name="add" />{t('rabbit.admin.newPolicy')}</button
+        onclick={newPolicy}><Icon name="add" />{t('rabbit.admin.newPolicy')}</button
       >
     {/if}
   </div>
@@ -425,10 +508,44 @@
             <input class="control" type="number" bind:value={policyPriority} aria-label={t('rabbit.admin.priority')} />
           </label>
         </div>
+        <div class="fields-box" role="group" aria-label={t('rabbit.admin.policy.settings')}>
+          <span class="legend">{t('rabbit.admin.policy.settings')}</span>
+          <div class="fields" data-testid="policy-fields">
+          {#each fields as field (field.key)}
+            <label class="field">
+              <span class="mono">{field.key}</span>
+              {#if field.kind === 'select'}
+                <select class="control" bind:value={policyValues[field.key]} aria-label={field.key} data-testid="field-{field.key}">
+                  <option value="">{t('rabbit.admin.policy.unset')}</option>
+                  {#each field.options ?? [] as option (option)}
+                    <option value={option}>{option}</option>
+                  {/each}
+                </select>
+              {:else}
+                {@const hint = hintOf(field)}
+                <input
+                  class="control mono"
+                  type="text"
+                  inputmode={field.kind === 'number' ? 'numeric' : 'text'}
+                  bind:value={policyValues[field.key]}
+                  placeholder={hint === undefined ? '' : t(hint)}
+                  aria-label={field.key}
+                  data-testid="field-{field.key}"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              {/if}
+            </label>
+          {/each}
+          </div>
+        </div>
         <label class="field">
-          <span>{t('rabbit.admin.definition')}</span>
-          <textarea class="control mono" rows="4" bind:value={policyDefinition} aria-label={t('rabbit.admin.definition')} spellcheck="false"></textarea>
+          <span>{t('rabbit.admin.policy.extra')}</span>
+          <textarea class="control mono" rows="3" bind:value={policyExtra} placeholder={'{"queue-version": 2}'} aria-label={t('rabbit.admin.definition')} spellcheck="false"></textarea>
         </label>
+        {#if policyProblem !== undefined}
+          <p class="notice error" role="alert" data-testid="policy-problem"><Icon name="error" /><span>{policyProblem}</span></p>
+        {/if}
         <div class="actions">
           <button
             type="button"
@@ -529,6 +646,8 @@
 
   .form.column {
     flex-direction: column;
+    /* A column that wraps stretches its items to the height of the page. */
+    flex-wrap: nowrap;
     align-items: stretch;
   }
 
@@ -547,6 +666,43 @@
 
   .field.narrow .control {
     width: 90px;
+  }
+
+  .fields-box {
+    position: relative;
+    padding: var(--dn-gap-m);
+    border: 1px solid var(--dn-border);
+    border-radius: var(--dn-radius-l);
+  }
+
+  .fields-box .legend {
+    display: block;
+    margin-bottom: var(--dn-gap);
+    color: var(--dn-muted);
+    font-size: var(--dn-font-small);
+  }
+
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: var(--dn-gap) var(--dn-gap-m);
+  }
+
+  .limit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dn-gap);
+    align-items: center;
+    padding: var(--dn-gap-s) 0;
+  }
+
+  .limit-name {
+    min-width: 130px;
+    font-size: var(--dn-font-small);
+  }
+
+  .limit-input {
+    width: 110px;
   }
 
   .who {

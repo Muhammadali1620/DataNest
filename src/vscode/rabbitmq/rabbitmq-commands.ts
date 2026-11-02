@@ -43,7 +43,7 @@ export interface RabbitCommandDeps {
   /** Opens the page of a queue or an exchange. */
   readonly openObject: (
     connectionId: string,
-    kind: 'queue' | 'exchange' | 'vhost',
+    kind: 'queue' | 'exchange' | 'vhost' | 'cluster',
     vhost: string,
     name: string,
   ) => Promise<void>;
@@ -55,6 +55,7 @@ export interface RabbitCommandDeps {
 
 export type RabbitCommandName =
   | 'openObject'
+  | 'openCluster'
   | 'newQueue'
   | 'newExchange'
   | 'purgeQueue'
@@ -165,6 +166,15 @@ export function rabbitCommandHandlers(
       } else if (target.kind === 'rabbitFolder' && target.folder === 'admin') {
         // The page of a virtual host is named after it.
         await deps.openObject(target.connectionId, 'vhost', target.vhost, target.vhost);
+      }
+      return undefined;
+    },
+
+    /** The page of the whole broker: its nodes, their resources and its settings (V13.35). */
+    openCluster: async (target?: CommandTarget) => {
+      const connectionId = await connectionOf(target);
+      if (connectionId !== undefined) {
+        await deps.openObject(connectionId, 'cluster', '', '');
       }
       return undefined;
     },

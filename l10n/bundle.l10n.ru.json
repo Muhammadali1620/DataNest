@@ -2071,5 +2071,19 @@
   "{0} alarms": "Тревог: {0}",
   ", connected": ", подключены к нему",
   "Clients: {0}": "Клиентские адреса: {0}",
-  "Peers: {0}": "Адреса участников: {0}"
+  "Peers: {0}": "Адреса участников: {0}",
+  "{0} d {1} h": "{0} сут {1} ч",
+  "{0} h {1} min": "{0} ч {1} мин",
+  "{0} min {1} s": "{0} мин {1} с",
+  "{0} s": "{0} с",
+  "Cluster": "Кластер",
+  "Erlang": "Erlang",
+  "A virtual host limits its connections or its queues": "У виртуального хоста можно ограничить соединения или очереди",
+  "A limit is a whole number, 0 or more": "Лимит — целое число от 0",
+  "RabbitMQ Cluster": "Кластер RabbitMQ",
+  "Lift the limit {0} of the virtual host \"{1}\"?": "Снять лимит {0} у виртуального хоста «{1}»?",
+  "Set the limit {0} of the virtual host \"{1}\" to {2}?": "Задать лимит {0} виртуальному хосту «{1}»: {2}?",
+  "Lift": "Снять",
+  "Set": "Задать",
+  "Clients over the limit are refused.": "Клиентам сверх лимита брокер откажет."
 }

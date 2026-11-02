@@ -143,6 +143,73 @@ export interface RabbitPolicyDeclaration extends RabbitPolicyInfo {
   readonly vhost: string;
 }
 
+/** One node of the cluster, with its resources (V13.35). Figures the broker leaves out are 0. */
+export interface RabbitNodeInfo {
+  readonly name: string;
+  /** `disc` or `ram`. */
+  readonly type: string;
+  readonly running: boolean;
+  readonly uptimeMs: number;
+  readonly memUsed: number;
+  readonly memLimit: number;
+  /** True while the node holds back publishers because it is short of memory. */
+  readonly memAlarm: boolean;
+  readonly diskFree: number;
+  readonly diskFreeLimit: number;
+  readonly diskAlarm: boolean;
+  readonly fdUsed: number;
+  readonly fdTotal: number;
+  readonly socketsUsed: number;
+  readonly socketsTotal: number;
+  readonly procUsed: number;
+  readonly procTotal: number;
+  readonly processors: number;
+  /** Nodes this one lost sight of: a split of the cluster. */
+  readonly partitions: readonly string[];
+  /** The node is being drained: it takes no new work. */
+  readonly draining: boolean;
+}
+
+export interface RabbitListener {
+  readonly protocol: string;
+  readonly ip: string;
+  readonly port: number;
+  readonly node: string;
+}
+
+/** The whole broker: its version, totals and nodes (V13.35). */
+export interface RabbitClusterInfo {
+  readonly clusterName: string;
+  readonly version: string;
+  readonly erlang: string;
+  /** The node that answered. */
+  readonly node: string;
+  readonly queues: number;
+  readonly exchanges: number;
+  readonly connections: number;
+  readonly channels: number;
+  readonly consumers: number;
+  readonly ready: number;
+  readonly unacked: number;
+  readonly listeners: readonly RabbitListener[];
+  readonly nodes: readonly RabbitNodeInfo[];
+}
+
+/** A global parameter: a setting of the broker as a whole (V13.35). */
+export interface RabbitGlobalParameter {
+  readonly name: string;
+  readonly value: unknown;
+}
+
+/** The limits of a virtual host the extension sets. */
+export type VhostLimitName = 'max-connections' | 'max-queues';
+
+/** The limits of a virtual host that are set; one left out has none. */
+export interface RabbitVhostLimits {
+  readonly maxConnections?: number;
+  readonly maxQueues?: number;
+}
+
 /** A list the broker may have cut: `total` is how many there are. */
 export interface RabbitPage<T> {
   readonly items: readonly T[];
@@ -258,6 +325,15 @@ export interface RabbitSession {
   listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]>;
   setPolicy(policy: RabbitPolicyDeclaration): Promise<void>;
   deletePolicy(vhost: string, name: string): Promise<void>;
+  /** The broker's version, totals, listeners and every node with its resources (V13.35). */
+  readCluster(): Promise<RabbitClusterInfo>;
+  /** The settings of the broker as a whole. Needs the administrator tag. */
+  listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]>;
+  /** The limits set on a virtual host. */
+  listVhostLimits(vhost: string): Promise<RabbitVhostLimits>;
+  /** Sets one limit of a virtual host; a negative value means no limit to the broker, so use `clearVhostLimit`. */
+  setVhostLimit(vhost: string, name: VhostLimitName, value: number): Promise<void>;
+  clearVhostLimit(vhost: string, name: VhostLimitName): Promise<void>;
   close(): Promise<void>;
 }
 

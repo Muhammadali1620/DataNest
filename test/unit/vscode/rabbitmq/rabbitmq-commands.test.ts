@@ -168,6 +168,48 @@ describe('RabbitMQ commands (V13.26)', () => {
     });
   });
 
+  describe('openCluster (V13.35)', () => {
+    it('opens the page of the whole broker from the connection', async () => {
+      const { handlers, opened } = setup();
+      await handlers.openCluster({ kind: 'connection', connectionId: 'r1' });
+      expect(opened).toEqual([['r1', 'cluster', '', '']]);
+    });
+
+    it('uses the only RabbitMQ connection from the palette, and picks among several', async () => {
+      const one = setup();
+      await one.handlers.openCluster(undefined);
+      expect(one.opened).toEqual([['r1', 'cluster', '', '']]);
+      const two = setup({
+        connections: [broker(), broker({ id: 'r2', name: 'Other' })],
+        pickConnection: 'r2',
+      });
+      await two.handlers.openCluster(undefined);
+      expect(two.opened).toEqual([['r2', 'cluster', '', '']]);
+      const none = setup({
+        connections: [broker(), broker({ id: 'r2', name: 'Other' })],
+        pickConnection: undefined,
+      });
+      await none.handlers.openCluster(undefined);
+      expect(none.opened).toEqual([]);
+    });
+
+    it('is allowed on a read-only connection: it only reads', async () => {
+      const { handlers, opened } = setup({ connections: [broker({ readOnly: true })] });
+      await handlers.openCluster({ kind: 'connection', connectionId: 'r1' });
+      expect(opened).toHaveLength(1);
+    });
+
+    it('needs a RabbitMQ connection', async () => {
+      const none = setup({ connections: [{ id: 's', name: 's', driver: 'mysql', host: 'h' }] });
+      await expect(none.handlers.openCluster(undefined)).rejects.toMatchObject({
+        code: 'not-found',
+      });
+      await expect(
+        none.handlers.openCluster({ kind: 'connection', connectionId: 's' }),
+      ).rejects.toMatchObject({ code: 'unsupported' });
+    });
+  });
+
   describe('newQueue', () => {
     it('asks for the name and the type, declares a durable queue and refreshes the folder', async () => {
       const { handlers, session, infos, refreshed, picked } = setup({

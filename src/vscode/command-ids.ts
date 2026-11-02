@@ -240,6 +240,8 @@ export const COMMAND_IDS = {
   rabbitPurgeQueue: 'datanest.rabbitmq.purgeQueue',
   rabbitDeleteObject: 'datanest.rabbitmq.deleteObject',
   rabbitNewVhost: 'datanest.rabbitmq.newVhost',
+  /** Opens the page of the whole RabbitMQ broker: nodes, resources, settings (V13.35). */
+  rabbitOpenCluster: 'datanest.rabbitmq.cluster',
   rabbitDeleteVhost: 'datanest.rabbitmq.deleteVhost',
   /** Writes the `# range:` / `# tail:` line of the open Grafana Loki query (V13.27). */
   lokiSetRange: 'datanest.loki.setRange',

@@ -14,6 +14,7 @@ import type {
   RabbitMessage,
   RabbitQueueInfo,
   RabbitSession,
+  VhostLimitName,
 } from '../../drivers/rabbitmq-driver';
 import { formatSize } from '../../shared/byte-size';
 import {
@@ -27,6 +28,7 @@ import {
   type RabbitObjectState,
   type RabbitSampleView,
   MAX_RABBIT_SAMPLES,
+  RABBIT_VHOST_LIMITS,
 } from '../../shared/protocols/rabbitmq-object';
 import { redisValueBytes, type RedisValue, redisValueOf } from '../../shared/redis-value';
 
@@ -80,6 +82,24 @@ export interface RabbitPolicyParams {
 /** `2026-11-02 10:15:00 UTC`; empty when the broker did not say. */
 function timeText(ms: number | undefined): string {
   return ms === undefined ? '' : `${new Date(ms).toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+}
+
+/** How long a node has been up, in words: `3 d 4 h`, `2 h 5 min`, `40 s`. */
+export function uptimeText(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) {
+    return msg('{0} d {1} h', days, hours);
+  }
+  if (hours > 0) {
+    return msg('{0} h {1} min', hours, minutes);
+  }
+  if (minutes > 0) {
+    return msg('{0} min {1} s', minutes, seconds % 60);
+  }
+  return msg('{0} s', seconds);
 }
 
 /** Reads a JSON object typed by a person; empty text is an empty object. */
@@ -303,6 +323,10 @@ export class RabbitObjectModel {
       this.current = await this.readVhost(session);
       return this.state();
     }
+    if (kind === 'cluster') {
+      this.current = await this.readCluster(session);
+      return this.state();
+    }
     const bindings = await session.listBindings(
       vhost,
       kind === 'queue' ? { queue: name } : { exchange: name },
@@ -415,6 +439,15 @@ export class RabbitObjectModel {
     } catch (error) {
       admin.policiesError = failed(error);
     }
+    try {
+      const limits = await session.listVhostLimits(vhost);
+      admin.limits = {
+        ...(limits.maxConnections === undefined ? {} : { maxConnections: limits.maxConnections }),
+        ...(limits.maxQueues === undefined ? {} : { maxQueues: limits.maxQueues }),
+      };
+    } catch (error) {
+      admin.limitsError = failed(error);
+    }
     this.bindingList = [];
     return {
       ...this.empty(),
@@ -427,6 +460,70 @@ export class RabbitObjectModel {
     };
   }
 
+  /** The page of the whole broker: its totals, every node with its resources and its settings. */
+  private async readCluster(
+    session: RabbitSession,
+  ): Promise<Omit<RabbitObjectState, 'messages' | 'peeked' | 'count' | 'notice'>> {
+    const info = await session.readCluster();
+    let parameters: RabbitFactView[] = [];
+    let parametersError: string | undefined;
+    try {
+      parameters = (await session.listGlobalParameters()).map((parameter) => ({
+        key: parameter.name,
+        value: jsonText(parameter.value),
+      }));
+    } catch (error) {
+      parametersError = error instanceof Error ? error.message : String(error);
+    }
+    this.bindingList = [];
+    return {
+      ...this.empty(),
+      facts: [
+        { key: msg('Cluster'), value: info.clusterName },
+        { key: msg('Signed in as'), value: session.server.user },
+        { key: msg('Broker version'), value: info.version },
+        { key: msg('Erlang'), value: info.erlang },
+      ],
+      cluster: {
+        clusterName: info.clusterName,
+        version: info.version,
+        erlang: info.erlang,
+        node: info.node,
+        queues: info.queues,
+        exchanges: info.exchanges,
+        connections: info.connections,
+        channels: info.channels,
+        consumers: info.consumers,
+        ready: info.ready,
+        unacked: info.unacked,
+        listeners: info.listeners.map((listener) => ({ ...listener })),
+        nodes: info.nodes.map((node) => ({
+          name: node.name,
+          type: node.type,
+          running: node.running,
+          uptime: node.running ? uptimeText(node.uptimeMs) : '',
+          memUsed: node.memUsed,
+          memLimit: node.memLimit,
+          memAlarm: node.memAlarm,
+          diskFree: node.diskFree,
+          diskFreeLimit: node.diskFreeLimit,
+          diskAlarm: node.diskAlarm,
+          fdUsed: node.fdUsed,
+          fdTotal: node.fdTotal,
+          socketsUsed: node.socketsUsed,
+          socketsTotal: node.socketsTotal,
+          procUsed: node.procUsed,
+          procTotal: node.procTotal,
+          processors: node.processors,
+          partitions: [...node.partitions],
+          draining: node.draining,
+        })),
+        parameters,
+        ...(parametersError === undefined ? {} : { parametersError }),
+      },
+    };
+  }
+
   /**
    * Binds this queue or exchange to another. A queue is only ever the end of a binding; the
    * default exchange cannot be bound at all (the broker routes to a queue by its name).
@@ -435,7 +532,7 @@ export class RabbitObjectModel {
     this.requireWritable();
     const { kind, vhost, name } = this.deps;
     const peer = params.peer.trim();
-    if (kind === 'vhost') {
+    if (kind === 'vhost' || kind === 'cluster') {
       throw new DbError('unsupported', msg('A virtual host has no bindings of its own'));
     }
     if (peer === '' || DEFAULT_EXCHANGE_NAMES.has(peer)) {
@@ -603,6 +700,30 @@ export class RabbitObjectModel {
     return this.state();
   }
 
+  /**
+   * Sets one limit of the virtual host (the most connections or queues it may hold), or lifts
+   * it when `value` is left out. The broker treats a negative figure as "no limit", so lifting
+   * deletes the limit instead.
+   */
+  async setLimit(limit: VhostLimitName, value: number | undefined): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    if (!RABBIT_VHOST_LIMITS.includes(limit)) {
+      throw new DbError('syntax', msg('A virtual host limits its connections or its queues'));
+    }
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new DbError('syntax', msg('A limit is a whole number, 0 or more'));
+    }
+    const session = await this.deps.session();
+    if (value === undefined) {
+      await session.clearVhostLimit(this.deps.vhost, limit);
+    } else {
+      await session.setVhostLimit(this.deps.vhost, limit, value);
+    }
+    await this.refresh();
+    return this.state();
+  }
+
   async setPolicy(params: RabbitPolicyParams): Promise<RabbitObjectState> {
     this.requireWritable();
     this.requireVhostPage();
@@ -684,7 +805,7 @@ export class RabbitObjectModel {
     readonly routed: boolean;
   }> {
     this.requireWritable();
-    if (this.deps.kind === 'vhost') {
+    if (this.deps.kind === 'vhost' || this.deps.kind === 'cluster') {
       throw new DbError('unsupported', msg('Messages are published from a queue or an exchange'));
     }
     const session = await this.deps.session();
@@ -732,7 +853,7 @@ export class RabbitObjectModel {
 
   async deleteObject(): Promise<void> {
     this.requireWritable();
-    if (this.deps.kind === 'vhost') {
+    if (this.deps.kind === 'vhost' || this.deps.kind === 'cluster') {
       throw new DbError('unsupported', msg('A virtual host is not deleted from here'));
     }
     const session = await this.deps.session();

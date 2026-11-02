@@ -25,6 +25,9 @@ export interface RabbitObjectPanelDeps {
 }
 
 function titleOf(name: string, kind: string): string {
+  if (kind === 'cluster') {
+    return vscode.l10n.t('RabbitMQ Cluster');
+  }
   const shown =
     kind === 'vhost' ? vscode.l10n.t('Broker {0}', name) : name === '' ? '(AMQP default)' : name;
   return shown.length > 60 ? `${shown.slice(0, 57)}…` : shown;
@@ -211,6 +214,22 @@ export class RabbitObjectPanel implements vscode.Disposable {
         vscode.l10n.t('Delete'),
         true,
         async () => model.deletePolicy(name),
+      ),
+    );
+    this.rpc.handle('setLimit', async ({ limit, value }) =>
+      this.change(
+        value === undefined
+          ? vscode.l10n.t('Lift the limit {0} of the virtual host "{1}"?', limit, model.name)
+          : vscode.l10n.t(
+              'Set the limit {0} of the virtual host "{1}" to {2}?',
+              limit,
+              model.name,
+              value,
+            ),
+        value === undefined ? vscode.l10n.t('Lift') : vscode.l10n.t('Set'),
+        false,
+        async () => model.setLimit(limit, value),
+        value === undefined ? undefined : vscode.l10n.t('Clients over the limit are refused.'),
       ),
     );
     this.rpc.handle('setLive', async ({ on }) => {

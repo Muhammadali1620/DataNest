@@ -902,6 +902,12 @@
         "icon": "$(trash)"
       },
       {
+        "command": "datanest.rabbitmq.cluster",
+        "title": "%commands.rabbitmq.cluster.title%",
+        "category": "DataNest",
+        "icon": "$(server-environment)"
+      },
+      {
         "command": "datanest.rabbitmq.newVhost",
         "title": "%commands.rabbitmq.newVhost.title%",
         "category": "DataNest",
@@ -2647,6 +2653,11 @@
           "command": "datanest.rabbitmq.deleteObject",
           "when": "view == datanest.connections && (viewItem == datanest.rabbitQueue || viewItem == datanest.rabbitExchange)",
           "group": "8_destroy@1"
+        },
+        {
+          "command": "datanest.rabbitmq.cluster",
+          "when": "view == datanest.connections && (viewItem == datanest.rabbitConnection.connected || viewItem == datanest.rabbitConnection.connected.starred || viewItem == datanest.projectRabbitConnection.connected || viewItem == datanest.projectRabbitConnection.connected.starred)",
+          "group": "0_open@2"
         },
         {
           "command": "datanest.rabbitmq.newVhost",

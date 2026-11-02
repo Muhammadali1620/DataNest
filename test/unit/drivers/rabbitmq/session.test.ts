@@ -11,6 +11,7 @@ import {
   bindingOf,
   connectionOf,
   exchangeOf,
+  nodeOf,
   openRabbitSession,
   PAGE_SIZE,
   policyOf,
@@ -1078,5 +1079,137 @@ describe('RabbitMQ administration over HTTP (V13.28)', () => {
       definition: { x: 1 },
     });
     expect(policyOf(undefined).name).toBe('');
+  });
+
+  it('reads the totals, the listeners and every node of the cluster (V13.35)', async () => {
+    const { server, port } = await start();
+    server.broker.nodes.push({ ...server.broker.nodes[0], name: 'rabbit@a', running: false });
+    const session = await openRabbitSession(config(port));
+    const cluster = await session.readCluster();
+    expect(cluster).toMatchObject({
+      clusterName: 'rabbit@fake',
+      version: '3.13.7',
+      erlang: '26.2',
+      node: 'rabbit@fake',
+      queues: 2,
+      exchanges: 3,
+      connections: 1,
+      channels: 1,
+      consumers: 1,
+      ready: 5,
+      unacked: 2,
+    });
+    expect(cluster.listeners).toEqual([
+      { protocol: 'amqp', ip: '::', port: 5672, node: 'rabbit@fake' },
+    ]);
+    // The nodes come sorted by name.
+    expect(cluster.nodes.map((node) => node.name)).toEqual(['rabbit@a', 'rabbit@fake']);
+    expect(cluster.nodes[0]?.running).toBe(false);
+    expect(server.requests.map((request) => request.path).slice(-2)).toEqual([
+      '/api/overview',
+      '/api/nodes',
+    ]);
+  });
+
+  it('reads a broker that sends no totals as an empty one', async () => {
+    const { server, port } = await start();
+    server.broker.overview = {};
+    server.broker.nodes = [];
+    const session = await openRabbitSession(config(port));
+    expect(await session.readCluster()).toMatchObject({
+      queues: 0,
+      ready: 0,
+      listeners: [],
+      nodes: [],
+      erlang: '',
+    });
+  });
+
+  it('reads the resources of a node, and leaves out what the broker leaves out', () => {
+    const node = nodeOf({
+      name: 'rabbit@x',
+      type: 'disc',
+      running: true,
+      uptime: 5000,
+      mem_used: 10,
+      mem_limit: 100,
+      mem_alarm: true,
+      disk_free: 7,
+      disk_free_limit: 3,
+      disk_free_alarm: false,
+      fd_used: 4,
+      fd_total: 8,
+      sockets_used: 1,
+      sockets_total: 2,
+      proc_used: 9,
+      proc_total: 10,
+      processors: 6,
+      partitions: ['rabbit@y', 7],
+      being_drained: true,
+    });
+    expect(node).toEqual({
+      name: 'rabbit@x',
+      type: 'disc',
+      running: true,
+      uptimeMs: 5000,
+      memUsed: 10,
+      memLimit: 100,
+      memAlarm: true,
+      diskFree: 7,
+      diskFreeLimit: 3,
+      diskAlarm: false,
+      fdUsed: 4,
+      fdTotal: 8,
+      socketsUsed: 1,
+      socketsTotal: 2,
+      procUsed: 9,
+      procTotal: 10,
+      processors: 6,
+      partitions: ['rabbit@y'],
+      draining: true,
+    });
+    expect(nodeOf(undefined)).toMatchObject({
+      name: '',
+      running: false,
+      memUsed: 0,
+      partitions: [],
+    });
+  });
+
+  it('lists the global parameters, sorted by name', async () => {
+    const { server, port } = await start();
+    server.broker.globalParameters.push({ name: 'a_setting', value: { x: 1 } });
+    const session = await openRabbitSession(config(port));
+    expect(await session.listGlobalParameters()).toEqual([
+      { name: 'a_setting', value: { x: 1 } },
+      { name: 'cluster_name', value: 'rabbit@fake' },
+    ]);
+  });
+
+  it('sets, reads and lifts the limits of a virtual host, quoting its name (V13.35)', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    expect(await session.listVhostLimits('/')).toEqual({});
+    await session.setVhostLimit('/', 'max-queues', 50);
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/vhost-limits/%2F/max-queues',
+      body: { value: 50 },
+    });
+    await session.setVhostLimit('/', 'max-connections', 0);
+    expect(await session.listVhostLimits('/')).toEqual({ maxConnections: 0, maxQueues: 50 });
+    await session.clearVhostLimit('/', 'max-queues');
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'DELETE',
+      path: '/api/vhost-limits/%2F/max-queues',
+    });
+    expect(await session.listVhostLimits('/')).toEqual({ maxConnections: 0 });
+  });
+
+  it('reads a negative limit as no limit', async () => {
+    const { server, port } = await start();
+    server.broker.vhostLimits.set('/', { 'max-queues': -1, 'max-connections': 3 });
+    const session = await openRabbitSession(config(port));
+    expect(await session.listVhostLimits('/')).toEqual({ maxConnections: 3 });
   });
 });

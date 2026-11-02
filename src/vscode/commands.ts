@@ -594,7 +594,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     await deps.manager.acquireRabbit(ConnectionManager.treeOwner(connectionId), { connectionId });
   const openRabbitObject = (
     connectionId: string,
-    kind: 'queue' | 'exchange' | 'vhost',
+    kind: 'queue' | 'exchange' | 'vhost' | 'cluster',
     vhost: string,
     name: string,
   ): Promise<void> => {
@@ -1324,6 +1324,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.lokiSetRange]: lokiCommands.setRange,
     [COMMAND_IDS.lokiFollow]: lokiCommands.follow,
     [COMMAND_IDS.rabbitOpenObject]: rabbitCommands.openObject,
+    [COMMAND_IDS.rabbitOpenCluster]: rabbitCommands.openCluster,
     [COMMAND_IDS.rabbitNewQueue]: rabbitCommands.newQueue,
     [COMMAND_IDS.rabbitNewExchange]: rabbitCommands.newExchange,
     [COMMAND_IDS.rabbitPurgeQueue]: rabbitCommands.purgeQueue,

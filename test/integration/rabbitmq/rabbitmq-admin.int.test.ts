@@ -537,6 +537,124 @@ describe('RabbitMQ administration (V13.28)', () => {
       await expect(session.deleteVhost(vhost)).rejects.toMatchObject({ code: 'not-found' });
     });
   });
+
+  describe('the cluster and the limits (V13.35)', () => {
+    it('reads the one node of the broker with its resources, the totals and the listeners', async () => {
+      const cluster = await session.readCluster();
+      expect(cluster.version).toMatch(/^3\./u);
+      expect(cluster.erlang).not.toBe('');
+      expect(cluster.nodes).toHaveLength(1);
+      const [node] = cluster.nodes;
+      expect(node?.name).toBe(cluster.node);
+      expect(node).toMatchObject({
+        running: true,
+        memAlarm: false,
+        diskAlarm: false,
+        draining: false,
+      });
+      expect(node?.memUsed).toBeGreaterThan(0);
+      expect(node?.memLimit).toBeGreaterThan(node?.memUsed ?? 0);
+      expect(node?.fdTotal).toBeGreaterThan(0);
+      expect(node?.uptimeMs).toBeGreaterThan(0);
+      expect(node?.partitions).toEqual([]);
+      expect(cluster.listeners.some((listener) => listener.protocol === 'amqp')).toBe(true);
+      expect(cluster.exchanges).toBeGreaterThan(0);
+    });
+
+    it('lists the global parameters, with the cluster name', async () => {
+      const parameters = await session.listGlobalParameters();
+      expect(parameters.map((one) => one.name)).toContain('internal_cluster_id');
+    });
+
+    it('sets, reads and lifts the limits of a virtual host with a slash in its name', async () => {
+      const vhost = unique('limits/host');
+      await session.createVhost(vhost);
+      try {
+        expect(await session.listVhostLimits(vhost)).toEqual({});
+        await session.setVhostLimit(vhost, 'max-queues', 7);
+        await session.setVhostLimit(vhost, 'max-connections', 0);
+        expect(await session.listVhostLimits(vhost)).toEqual({ maxConnections: 0, maxQueues: 7 });
+        await session.clearVhostLimit(vhost, 'max-queues');
+        expect(await session.listVhostLimits(vhost)).toEqual({ maxConnections: 0 });
+        await session.clearVhostLimit(vhost, 'max-connections');
+        expect(await session.listVhostLimits(vhost)).toEqual({});
+      } finally {
+        await session.deleteVhost(vhost).catch(() => undefined);
+      }
+    });
+
+    it('enforces a limit of queues that the page set', async () => {
+      const vhost = unique('limited');
+      await session.createVhost(vhost);
+      try {
+        await session.setPermission(vhost, {
+          user: TEST_RABBITMQ.user,
+          configure: '.*',
+          write: '.*',
+          read: '.*',
+        });
+        const page = new RabbitObjectModel({
+          kind: 'vhost',
+          vhost,
+          name: vhost,
+          connectionName: 'RabbitMQ',
+          readOnly: false,
+          session: () => Promise.resolve(session),
+        });
+        const state = await page.setLimit('max-queues', 1);
+        expect(state.admin?.limits).toEqual({ maxQueues: 1 });
+        await session.declareQueue({ vhost, name: 'one', durable: false, autoDelete: false });
+        await expect(
+          session.declareQueue({ vhost, name: 'two', durable: false, autoDelete: false }),
+        ).rejects.toBeInstanceOf(Error);
+        expect((await page.setLimit('max-queues', undefined)).admin?.limits).toEqual({});
+        await session.declareQueue({ vhost, name: 'two', durable: false, autoDelete: false });
+        expect((await session.listQueues(vhost)).items.map((one) => one.name).sort()).toEqual([
+          'one',
+          'two',
+        ]);
+      } finally {
+        await session.deleteVhost(vhost).catch(() => undefined);
+      }
+    });
+
+    it('shows the cluster page of the real broker', async () => {
+      const page = new RabbitObjectModel({
+        kind: 'cluster',
+        vhost: '',
+        name: '',
+        connectionName: 'RabbitMQ',
+        readOnly: false,
+        session: () => Promise.resolve(session),
+      });
+      const state = await page.refresh();
+      expect(state.cluster?.nodes).toHaveLength(1);
+      expect(state.cluster?.nodes[0]?.uptime).not.toBe('');
+      expect(state.cluster?.parametersError).toBeUndefined();
+    });
+
+    it('keeps a policy made from fields, with every popular key, on the broker', async () => {
+      const name = unique('popular');
+      policies.push(name);
+      const definition = {
+        'message-ttl': 60_000,
+        'max-length': 1000,
+        overflow: 'reject-publish',
+        'dead-letter-exchange': 'amq.fanout',
+        'dead-letter-routing-key': 'dead',
+      };
+      await session.setPolicy({
+        vhost: '/',
+        name,
+        pattern: '^dn-it-popular-never-matches$',
+        applyTo: 'queues',
+        priority: 3,
+        definition,
+      });
+      const stored = (await session.listPolicies('/')).find((one) => one.name === name);
+      expect(stored?.definition).toEqual(definition);
+    });
+  });
 });
 
 function must<T>(value: T | undefined): T {

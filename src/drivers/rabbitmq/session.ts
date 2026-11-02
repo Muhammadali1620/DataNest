@@ -16,11 +16,15 @@ import { identityCheck, sniName, tlsFailure, tlsMaterial, type TlsMaterial } fro
 import type {
   RabbitBinding,
   RabbitBindingRequest,
+  RabbitClusterInfo,
   RabbitConnectionInfo,
   RabbitConsumerInfo,
   RabbitExchangeDeclaration,
   RabbitExchangeInfo,
+  RabbitGlobalParameter,
+  RabbitListener,
   RabbitMessage,
+  RabbitNodeInfo,
   RabbitPage,
   RabbitPeekRequest,
   RabbitPermissionInfo,
@@ -33,6 +37,8 @@ import type {
   RabbitSession,
   RabbitUserInfo,
   RabbitVhostInfo,
+  RabbitVhostLimits,
+  VhostLimitName,
 } from '../rabbitmq-driver';
 import { networkFailure, rabbitFailure } from './errors';
 
@@ -248,6 +254,43 @@ function permissionOf(raw: unknown): RabbitPermissionInfo {
     configure: text(permission.configure),
     write: text(permission.write),
     read: text(permission.read),
+  };
+}
+
+export function nodeOf(raw: unknown): RabbitNodeInfo {
+  const node = asObject(raw);
+  return {
+    name: text(node.name),
+    type: text(node.type),
+    running: flag(node.running),
+    uptimeMs: count(node.uptime),
+    memUsed: count(node.mem_used),
+    memLimit: count(node.mem_limit),
+    memAlarm: flag(node.mem_alarm),
+    diskFree: count(node.disk_free),
+    diskFreeLimit: count(node.disk_free_limit),
+    diskAlarm: flag(node.disk_free_alarm),
+    fdUsed: count(node.fd_used),
+    fdTotal: count(node.fd_total),
+    socketsUsed: count(node.sockets_used),
+    socketsTotal: count(node.sockets_total),
+    procUsed: count(node.proc_used),
+    procTotal: count(node.proc_total),
+    processors: count(node.processors),
+    partitions: (Array.isArray(node.partitions) ? node.partitions : []).filter(
+      (one): one is string => typeof one === 'string',
+    ),
+    draining: flag(node.being_drained),
+  };
+}
+
+function listenerOf(raw: unknown): RabbitListener {
+  const listener = asObject(raw);
+  return {
+    protocol: text(listener.protocol),
+    ip: text(listener.ip_address),
+    port: count(listener.port),
+    node: text(listener.node),
   };
 }
 
@@ -578,6 +621,62 @@ class ManagementSession implements RabbitSession {
 
   async deletePolicy(vhost: string, name: string): Promise<void> {
     await this.call('DELETE', `policies/${enc(vhost)}/${enc(name)}`);
+  }
+
+  async readCluster(): Promise<RabbitClusterInfo> {
+    const overview = asObject(await this.call('GET', 'overview'));
+    const totals = asObject(overview.object_totals);
+    const queueTotals = asObject(overview.queue_totals);
+    const nodes = await this.call('GET', 'nodes');
+    return {
+      clusterName: text(overview.cluster_name),
+      version: text(overview.rabbitmq_version),
+      erlang: text(overview.erlang_version),
+      node: text(overview.node),
+      queues: count(totals.queues),
+      exchanges: count(totals.exchanges),
+      connections: count(totals.connections),
+      channels: count(totals.channels),
+      consumers: count(totals.consumers),
+      ready: count(queueTotals.messages_ready),
+      unacked: count(queueTotals.messages_unacknowledged),
+      listeners: (Array.isArray(overview.listeners) ? overview.listeners : []).map(listenerOf),
+      nodes: (Array.isArray(nodes) ? nodes : [])
+        .map(nodeOf)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  }
+
+  async listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]> {
+    const raw = await this.call('GET', 'global-parameters');
+    return (Array.isArray(raw) ? raw : [])
+      .map((item) => asObject(item))
+      .map((parameter) => ({ name: text(parameter.name), value: parameter.value }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async listVhostLimits(vhost: string): Promise<RabbitVhostLimits> {
+    const raw = await this.call('GET', `vhost-limits/${enc(vhost)}`);
+    const value = asObject(asObject((Array.isArray(raw) ? raw : [])[0]).value);
+    // A negative figure is the broker's way of saying there is no limit.
+    const limit = (name: VhostLimitName): number | undefined => {
+      const one = value[name];
+      return typeof one === 'number' && Number.isFinite(one) && one >= 0 ? one : undefined;
+    };
+    const maxConnections = limit('max-connections');
+    const maxQueues = limit('max-queues');
+    return {
+      ...(maxConnections === undefined ? {} : { maxConnections }),
+      ...(maxQueues === undefined ? {} : { maxQueues }),
+    };
+  }
+
+  async setVhostLimit(vhost: string, name: VhostLimitName, value: number): Promise<void> {
+    await this.call('PUT', `vhost-limits/${enc(vhost)}/${name}`, { value });
+  }
+
+  async clearVhostLimit(vhost: string, name: VhostLimitName): Promise<void> {
+    await this.call('DELETE', `vhost-limits/${enc(vhost)}/${name}`);
   }
 
   async close(): Promise<void> {

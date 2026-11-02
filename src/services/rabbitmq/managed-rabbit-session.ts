@@ -7,9 +7,11 @@ import { toDbError } from '../../core/errors';
 import type {
   RabbitBinding,
   RabbitBindingRequest,
+  RabbitClusterInfo,
   RabbitConnectionInfo,
   RabbitExchangeDeclaration,
   RabbitExchangeInfo,
+  RabbitGlobalParameter,
   RabbitMessage,
   RabbitPage,
   RabbitPeekRequest,
@@ -23,6 +25,8 @@ import type {
   RabbitSession,
   RabbitUserInfo,
   RabbitVhostInfo,
+  RabbitVhostLimits,
+  VhostLimitName,
 } from '../../drivers/rabbitmq-driver';
 
 export interface ManagedRabbitSessionHooks {
@@ -177,6 +181,26 @@ export class ManagedRabbitSession implements RabbitSession {
 
   deletePolicy(vhost: string, name: string): Promise<void> {
     return this.call(() => this.inner.deletePolicy(vhost, name));
+  }
+
+  readCluster(): Promise<RabbitClusterInfo> {
+    return this.call(() => this.inner.readCluster());
+  }
+
+  listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]> {
+    return this.call(() => this.inner.listGlobalParameters());
+  }
+
+  listVhostLimits(vhost: string): Promise<RabbitVhostLimits> {
+    return this.call(() => this.inner.listVhostLimits(vhost));
+  }
+
+  setVhostLimit(vhost: string, name: VhostLimitName, value: number): Promise<void> {
+    return this.call(() => this.inner.setVhostLimit(vhost, name, value));
+  }
+
+  clearVhostLimit(vhost: string, name: VhostLimitName): Promise<void> {
+    return this.call(() => this.inner.clearVhostLimit(vhost, name));
   }
 
   async close(): Promise<void> {

@@ -14,6 +14,7 @@
   import type { Translate } from '../../lib/i18n';
   import ValueEditor from '../redis-key/ValueEditor.svelte';
   import AdminView from './AdminView.svelte';
+  import ClusterView from './ClusterView.svelte';
   import { cellText } from '../redis-key/key-view';
   import { displayName, parseHeaders, sharePercent, stateTone } from './object-view';
 
@@ -52,7 +53,16 @@
 
   const isQueue = $derived(object?.kind === 'queue');
   const isVhost = $derived(object?.kind === 'vhost');
-  const shownName = $derived(object === undefined ? '' : displayName(object.name, t('rabbit.default')));
+  const isCluster = $derived(object?.kind === 'cluster');
+  /** A page of the broker itself, not of a queue or an exchange. */
+  const isHostPage = $derived(isVhost || isCluster);
+  const shownName = $derived(
+    object === undefined
+      ? ''
+      : object.kind === 'cluster'
+        ? (object.cluster?.clusterName ?? '')
+        : displayName(object.name, t('rabbit.default')),
+  );
   const chosen = $derived(
     selected === undefined || object === undefined ? undefined : object.messages[selected],
   );
@@ -183,11 +193,11 @@
     </div>
   {:else}
     <header class="top">
-      <span class="top-icon"><Icon name={isVhost ? 'shield' : isQueue ? 'mail' : 'git-merge'} size={18} /></span>
+      <span class="top-icon"><Icon name={isCluster ? 'server-environment' : isVhost ? 'shield' : isQueue ? 'mail' : 'git-merge'} size={18} /></span>
       <div class="top-text">
         <h1 title={shownName}>{shownName}</h1>
         <p class="meta" data-testid="meta">
-          <span class="badge"><Icon name={isVhost ? 'shield' : isQueue ? 'list-unordered' : 'git-merge'} size={12} />{isVhost ? t('rabbit.kind.vhost') : isQueue ? t('rabbit.kind.queue') : t('rabbit.kind.exchange')}</span>
+          <span class="badge"><Icon name={isCluster ? 'server-environment' : isVhost ? 'shield' : isQueue ? 'list-unordered' : 'git-merge'} size={12} />{isCluster ? t('rabbit.kind.cluster') : isVhost ? t('rabbit.kind.vhost') : isQueue ? t('rabbit.kind.queue') : t('rabbit.kind.exchange')}</span>
           {#if object.type !== ''}
             <span class="badge outline">{object.type}</span>
           {/if}
@@ -197,12 +207,14 @@
           {#if object.readOnly}
             <span class="badge outline"><Icon name="lock" size={12} />{t('redis.readOnly')}</span>
           {/if}
-          <span class="fact"><Icon name="server" size={12} />{object.vhost}</span>
+          {#if !isCluster}
+            <span class="fact"><Icon name="server" size={12} />{object.vhost}</span>
+          {/if}
           <span class="fact"><Icon name="plug" size={12} />{object.connectionName}</span>
         </p>
       </div>
       <div class="toolbar">
-        {#if !object.readOnly && !isVhost}
+        {#if !object.readOnly && !isHostPage}
           <button
             type="button"
             class="button"
@@ -236,7 +248,7 @@
             onclick={() => void run(() => rpc.request('purge', {}))}
           />
         {/if}
-        {#if !object.readOnly && !isVhost && object.name !== '' && !object.name.startsWith('amq.')}
+        {#if !object.readOnly && !isHostPage && object.name !== '' && !object.name.startsWith('amq.')}
           <IconButton
             icon="trash"
             label={isQueue ? t('rabbit.deleteQueue') : t('rabbit.deleteExchange')}
@@ -365,7 +377,7 @@
             </tbody>
           </table>
         </div>
-        {#if !isVhost}
+        {#if !isHostPage}
         <div>
           <h2 class="section"><Icon name="symbol-parameter" tone="purple" />{t('rabbit.arguments')}</h2>
           {#if object.arguments.length === 0}
@@ -387,7 +399,11 @@
         <AdminView admin={object.admin} readOnly={object.readOnly} {rpc} {busy} {t} {run} />
       {/if}
 
-      {#if !isVhost}
+      {#if isCluster && object.cluster !== undefined}
+        <ClusterView cluster={object.cluster} {t} />
+      {/if}
+
+      {#if !isHostPage}
       <section class="block" aria-label={t('rabbit.bindings')}>
         <h2 class="section"><Icon name="git-merge" tone="orange" />{t('rabbit.bindings')}</h2>
         {#if object.bindings.length === 0}
@@ -475,7 +491,7 @@
       </section>
       {/if}
 
-      {#if publishing && !object.readOnly && !isVhost}
+      {#if publishing && !object.readOnly && !isHostPage}
         <section class="block produce" data-testid="publish">
           <h2 class="section"><Icon name="send" tone="orange" />{t('rabbit.publishTitle')}</h2>
           <div class="row">

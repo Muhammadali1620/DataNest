@@ -8,10 +8,12 @@ import type { AddressInfo } from 'node:net';
 import type {
   RabbitBinding,
   RabbitBindingRequest,
+  RabbitClusterInfo,
   RabbitConnectionInfo,
   RabbitDriver,
   RabbitExchangeDeclaration,
   RabbitExchangeInfo,
+  RabbitGlobalParameter,
   RabbitMessage,
   RabbitPage,
   RabbitPeekRequest,
@@ -25,9 +27,11 @@ import type {
   RabbitSession,
   RabbitUserInfo,
   RabbitVhostInfo,
+  RabbitVhostLimits,
+  VhostLimitName,
 } from '../../src/drivers/rabbitmq-driver';
 import { DbError } from '../../src/core/errors';
-import { consumerOf } from '../../src/drivers/rabbitmq/session';
+import { consumerOf, nodeOf } from '../../src/drivers/rabbitmq/session';
 import type { ResolvedConnectionConfig } from '../../src/shared/connection';
 
 export interface FakeMessage {
@@ -149,6 +153,43 @@ export class FakeBroker {
     priority: number;
     definition: Record<string, unknown>;
   }[] = [];
+
+  /** The nodes as the API words them; one by default. */
+  nodes: Record<string, unknown>[] = [
+    {
+      name: 'rabbit@fake',
+      type: 'disc',
+      running: true,
+      uptime: 90_000,
+      mem_used: 170_000_000,
+      mem_limit: 400_000_000,
+      mem_alarm: false,
+      disk_free: 100_000_000_000,
+      disk_free_limit: 50_000_000,
+      disk_free_alarm: false,
+      fd_used: 43,
+      fd_total: 1024,
+      sockets_used: 2,
+      sockets_total: 800,
+      proc_used: 400,
+      proc_total: 1_000_000,
+      processors: 4,
+      partitions: [],
+      being_drained: false,
+    },
+  ];
+  /** The rest of the overview: totals, listeners and the Erlang version. */
+  overview: Record<string, unknown> = {
+    erlang_version: '26.2',
+    node: 'rabbit@fake',
+    object_totals: { queues: 2, exchanges: 3, connections: 1, channels: 1, consumers: 1 },
+    queue_totals: { messages_ready: 5, messages_unacknowledged: 2 },
+    listeners: [{ node: 'rabbit@fake', protocol: 'amqp', ip_address: '::', port: 5672 }],
+  };
+  readonly globalParameters: { name: string; value: unknown }[] = [
+    { name: 'cluster_name', value: 'rabbit@fake' },
+  ];
+  readonly vhostLimits = new Map<string, Record<string, number>>();
 
   /** Makes a binding unless an equal one is there. */
   bind(vhost: string, request: RabbitBindingRequest): void {
@@ -384,8 +425,38 @@ export class FakeRabbitServer {
     const [kind, vhost, name, ...rest] = parts;
     const broker = this.broker;
     if (kind === 'overview') {
-      answer(200, { rabbitmq_version: broker.version, cluster_name: broker.clusterName });
+      answer(200, {
+        rabbitmq_version: broker.version,
+        cluster_name: broker.clusterName,
+        ...broker.overview,
+      });
       return;
+    }
+    if (kind === 'nodes' && method === 'GET') {
+      answer(200, broker.nodes);
+      return;
+    }
+    if (kind === 'global-parameters' && method === 'GET') {
+      answer(200, broker.globalParameters);
+      return;
+    }
+    if (kind === 'vhost-limits' && vhost !== undefined) {
+      const limits = broker.vhostLimits.get(vhost) ?? {};
+      if (name === undefined && method === 'GET') {
+        answer(200, Object.keys(limits).length === 0 ? [] : [{ vhost, value: limits }]);
+        return;
+      }
+      if (name !== undefined && method === 'PUT') {
+        broker.vhostLimits.set(vhost, { ...limits, [name]: (body as { value: number }).value });
+        answer(204);
+        return;
+      }
+      if (name !== undefined && method === 'DELETE') {
+        const { [name]: _gone, ...left } = limits;
+        broker.vhostLimits.set(vhost, left);
+        answer(204);
+        return;
+      }
     }
     if (kind === 'whoami') {
       answer(200, { name: this.user, tags: ['administrator'] });
@@ -1232,6 +1303,72 @@ export class FakeRabbitSession implements RabbitSession {
     if (index >= 0) {
       this.broker.policies.splice(index, 1);
     }
+    return Promise.resolve();
+  }
+
+  readCluster(): Promise<RabbitClusterInfo> {
+    this.note('readCluster');
+    const { overview } = this.broker;
+    const totals = (overview.object_totals ?? {}) as Record<string, number>;
+    const queueTotals = (overview.queue_totals ?? {}) as Record<string, number>;
+    return Promise.resolve({
+      clusterName: this.broker.clusterName,
+      version: this.broker.version,
+      erlang: typeof overview.erlang_version === 'string' ? overview.erlang_version : '',
+      node: typeof overview.node === 'string' ? overview.node : '',
+      queues: totals.queues ?? 0,
+      exchanges: totals.exchanges ?? 0,
+      connections: totals.connections ?? 0,
+      channels: totals.channels ?? 0,
+      consumers: totals.consumers ?? 0,
+      ready: queueTotals.messages_ready ?? 0,
+      unacked: queueTotals.messages_unacknowledged ?? 0,
+      listeners: (
+        (overview.listeners ?? []) as {
+          protocol: string;
+          ip_address: string;
+          port: number;
+          node: string;
+        }[]
+      ).map((listener) => ({
+        protocol: listener.protocol,
+        ip: listener.ip_address,
+        port: listener.port,
+        node: listener.node,
+      })),
+      nodes: this.broker.nodes.map(nodeOf),
+    });
+  }
+
+  listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]> {
+    this.note('listGlobalParameters');
+    return Promise.resolve(this.broker.globalParameters.map((one) => ({ ...one })));
+  }
+
+  listVhostLimits(vhost: string): Promise<RabbitVhostLimits> {
+    this.note('listVhostLimits');
+    const limits = this.broker.vhostLimits.get(vhost) ?? {};
+    return Promise.resolve({
+      ...(limits['max-connections'] === undefined
+        ? {}
+        : { maxConnections: limits['max-connections'] }),
+      ...(limits['max-queues'] === undefined ? {} : { maxQueues: limits['max-queues'] }),
+    });
+  }
+
+  setVhostLimit(vhost: string, name: VhostLimitName, value: number): Promise<void> {
+    this.note('setVhostLimit');
+    this.broker.vhostLimits.set(vhost, {
+      ...(this.broker.vhostLimits.get(vhost) ?? {}),
+      [name]: value,
+    });
+    return Promise.resolve();
+  }
+
+  clearVhostLimit(vhost: string, name: VhostLimitName): Promise<void> {
+    this.note('clearVhostLimit');
+    const { [name]: _gone, ...left } = this.broker.vhostLimits.get(vhost) ?? {};
+    this.broker.vhostLimits.set(vhost, left);
     return Promise.resolve();
   }
 

@@ -6,7 +6,15 @@ import { DbError, errorMessage } from '../../core/errors';
 import type { Logger } from '../../core/logging/logger';
 import { msg } from '../../core/user-message';
 import type { RemoteFileSpec } from '../remote-snapshots';
-import type { ExecControl, ExecResult, ShellExit, ShellSession, ShellWindow } from '../shell-types';
+import type {
+  ExecChannel,
+  ExecControl,
+  ExecEnd,
+  ExecResult,
+  ShellExit,
+  ShellSession,
+  ShellWindow,
+} from '../shell-types';
 import { connectChain } from './tunnel';
 import type { Client, ClientChannel } from 'ssh2';
 
@@ -271,5 +279,128 @@ export async function execRemoteCommand(
     });
   } finally {
     closeChain(clients);
+  }
+}
+
+class ExecPipe implements ExecChannel {
+  readonly closed: Promise<ExecEnd>;
+  private readonly listeners = new Set<(chunk: Buffer, error: boolean) => void>();
+  private early: { chunk: Buffer; error: boolean }[] | undefined = [];
+  private ending = false;
+
+  constructor(
+    private readonly channel: ClientChannel,
+    clients: readonly Client[],
+  ) {
+    this.closed = new Promise<ExecEnd>((resolve) => {
+      let code: number | undefined;
+      let signal: string | undefined;
+      let settled = false;
+      const finish = (reason: ExecEnd['reason']): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        closeChain(clients);
+        resolve({
+          reason: this.ending ? 'closed' : reason,
+          ...(code === undefined ? {} : { code }),
+          ...(signal === undefined ? {} : { signal }),
+        });
+      };
+      channel.on('exit', (exitCode: number | null, exitSignal?: string) => {
+        code = exitCode ?? undefined;
+        signal = exitSignal;
+      });
+      channel.on('error', () => {
+        finish('dropped');
+      });
+      channel.once('close', (closeCode?: number | null, closeSignal?: string) => {
+        code ??= typeof closeCode === 'number' ? closeCode : undefined;
+        signal ??= typeof closeSignal === 'string' ? closeSignal : undefined;
+        finish(code !== undefined || signal !== undefined ? 'exit' : 'dropped');
+      });
+      for (const client of clients) {
+        client.on('error', () => {
+          finish('dropped');
+        });
+      }
+      lastOf(clients).once('close', () => {
+        finish('dropped');
+      });
+    });
+    const hear = (chunk: Buffer, error: boolean): void => {
+      if (this.early !== undefined) {
+        this.early.push({ chunk, error });
+        return;
+      }
+      for (const listener of [...this.listeners]) {
+        listener(chunk, error);
+      }
+    };
+    channel.on('data', (chunk: Buffer) => {
+      hear(chunk, false);
+    });
+    channel.stderr.on('data', (chunk: Buffer) => {
+      hear(chunk, true);
+    });
+  }
+
+  onData(listener: (chunk: Buffer, error: boolean) => void): void {
+    this.listeners.add(listener);
+    const early = this.early;
+    this.early = undefined;
+    for (const item of early ?? []) {
+      listener(item.chunk, item.error);
+    }
+  }
+
+  write(data: string): void {
+    if (!this.ending && this.channel.writable) {
+      this.channel.write(data);
+    }
+  }
+
+  close(): void {
+    if (this.ending) {
+      return;
+    }
+    this.ending = true;
+    try {
+      this.channel.end();
+      this.channel.close();
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+/** Starts a command and keeps its input and output open, for a helper that is talked to. */
+export async function openExecChannel(
+  spec: RemoteFileSpec,
+  command: string,
+  logger: Logger,
+): Promise<ExecChannel> {
+  const clients = await connectChain(spec, logger);
+  try {
+    const channel = await new Promise<ClientChannel>((resolve, reject) => {
+      lastOf(clients).exec(command, (error, opened) => {
+        if (error) {
+          reject(
+            new DbError(
+              'connection-failed',
+              msg('The SSH server did not run the command: {0}', errorMessage(error)),
+              { cause: error },
+            ),
+          );
+        } else {
+          resolve(opened);
+        }
+      });
+    });
+    return new ExecPipe(channel, clients);
+  } catch (error) {
+    closeChain(clients);
+    throw error;
   }
 }

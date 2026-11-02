@@ -14,6 +14,8 @@ import type {
   SnapshotLease,
   SnapshotProvider,
 } from '../../../src/services/remote-snapshots';
+import type { ExecChannel, ExecEnd, ExecOpener } from '../../../src/services/shell-types';
+import type { Session } from '../../../src/drivers/driver';
 import type { ConnectionConfig } from '../../../src/shared/connection';
 import { FakeDriverProvider } from '../../helpers/fake-driver';
 import { FakeMemento, FakeSecretStorage, RecordingLogger } from '../../helpers/fakes';
@@ -23,6 +25,17 @@ class FakeSnapshots implements SnapshotProvider {
     [];
   released = 0;
   failWith: Error | undefined;
+  readonly invalidated: string[] = [];
+  private readonly generations = new Map<string, number>();
+
+  invalidate(key: string): void {
+    this.invalidated.push(key);
+    this.generations.set(key, this.generation(key) + 1);
+  }
+
+  generation(key: string): number {
+    return this.generations.get(key) ?? 0;
+  }
 
   acquire(
     key: string,
@@ -42,6 +55,59 @@ class FakeSnapshots implements SnapshotProvider {
         return Promise.resolve();
       },
     });
+  }
+}
+
+/** A helper on the "server" that answers like the real one, and remembers what it was asked. */
+class FakeExecs implements ExecOpener {
+  readonly requests: Record<string, unknown>[] = [];
+  readonly commands: string[] = [];
+  channels = 0;
+  closedChannels = 0;
+  /** Makes the helper die at once with this status and message, like a server without python3. */
+  dieWith: { code: number; stderr: string } | undefined;
+  /** The answer to a statement; undefined: one row changed. */
+  answer: ((sql: string) => Record<string, unknown>) | undefined;
+
+  openExec(_spec: RemoteFileSpec, command: string): Promise<ExecChannel> {
+    this.commands.push(command);
+    this.channels += 1;
+    const listeners: ((chunk: Buffer, error: boolean) => void)[] = [];
+    let finish: (end: ExecEnd) => void = () => undefined;
+    const closed = new Promise<ExecEnd>((resolve) => {
+      finish = resolve;
+    });
+    const say = (text: string, error = false): void => {
+      for (const listener of listeners) {
+        listener(Buffer.from(text), error);
+      }
+    };
+    const channel: ExecChannel = {
+      closed,
+      onData: (listener) => {
+        listeners.push(listener);
+      },
+      write: (data) => {
+        const request = JSON.parse(data) as Record<string, unknown>;
+        this.requests.push(request);
+        if (this.dieWith !== undefined) {
+          say(this.dieWith.stderr, true);
+          finish({ reason: 'exit', code: this.dieWith.code });
+          return;
+        }
+        if (request.op === 'exec') {
+          const reply = this.answer?.(String(request.sql)) ?? { changes: 1, tx: false };
+          say(`${JSON.stringify({ id: request.id, ok: true, ...reply })}\n`);
+        } else {
+          say(`${JSON.stringify({ id: request.id, ok: true })}\n`);
+        }
+      },
+      close: () => {
+        this.closedChannels += 1;
+        finish({ reason: 'closed' });
+      },
+    };
+    return Promise.resolve(channel);
   }
 }
 
@@ -220,5 +286,180 @@ describe('ConnectionManager with a SQLite file on a server', () => {
   it('does not copy anything for the test of a local file', async () => {
     await manager.test({ name: 'probe', driver: 'sqlite', file: '/x.db' });
     expect(snapshots.acquired).toEqual([]);
+  });
+
+  describe('changing the file on the server (V13.33)', () => {
+    let execs: FakeExecs;
+    let writable: ConnectionConfig;
+    let m: ConnectionManager;
+
+    const buildWith = (withExecs = true) =>
+      new ConnectionManager({
+        store,
+        drivers,
+        logger: new RecordingLogger(),
+        snapshots,
+        ...(withExecs ? { execs } : {}),
+      });
+
+    beforeEach(async () => {
+      execs = new FakeExecs();
+      m = buildWith();
+      writable = await store.add(
+        { name: 'W', driver: 'sqlite', file: '/srv/app/data.db', ssh: SSH, remoteWrite: true },
+        undefined,
+        { main: { password: 'pw' } },
+      );
+    });
+
+    const run = async (session: Session, sql: string): Promise<void> => {
+      for await (const _event of session.execute(sql)) {
+        // Only the effect matters.
+      }
+    };
+
+    it('sends a change to the server instead of the copy', async () => {
+      const session = await m.acquire('editor:a', { connectionId: writable.id });
+      await run(session, "INSERT INTO t VALUES ('a')");
+      expect(execs.requests.map((request) => request.op)).toEqual(['open', 'exec']);
+      expect(execs.requests[0]).toMatchObject({ op: 'open', path: '/srv/app/data.db' });
+      expect(execs.requests[1]).toMatchObject({ sql: "INSERT INTO t VALUES ('a')" });
+      expect(drivers.driver('sqlite').lastSession?.executed).toEqual([]);
+      // The command line holds the helper only: the path and the statement are not in it.
+      expect(execs.commands[0]).not.toContain('/srv/app/data.db');
+      expect(execs.commands[0]).not.toContain('INSERT');
+    });
+
+    it('still reads from the copy, and makes it again after a change', async () => {
+      const session = await m.acquire('editor:a', { connectionId: writable.id });
+      await run(session, 'SELECT 1');
+      expect(drivers.driver('sqlite').lastSession?.executed).toEqual(['SELECT 1']);
+      expect(snapshots.acquired).toHaveLength(1);
+      await run(session, 'DELETE FROM t');
+      expect(snapshots.invalidated).toHaveLength(1);
+      await run(session, 'SELECT 2');
+      expect(snapshots.acquired).toHaveLength(2);
+      expect(drivers.driver('sqlite').opened[1]).toMatchObject({
+        file: '/local/copy-2/data.db',
+        readOnly: true,
+      });
+      // One key names the copy for reading and for declaring it old.
+      expect(snapshots.invalidated[0]).toBe(snapshots.acquired[0]?.key);
+    });
+
+    it('hands the connection’s own init statements to the helper', async () => {
+      const withInit = await store.add(
+        {
+          name: 'Init',
+          driver: 'sqlite',
+          file: '/srv/i.db',
+          ssh: SSH,
+          remoteWrite: true,
+          options: { initSql: 'PRAGMA foreign_keys = ON;' },
+        },
+        undefined,
+        { main: { password: 'pw' } },
+      );
+      const session = await m.acquire('editor:a', { connectionId: withInit.id });
+      await run(session, 'DELETE FROM t');
+      expect(execs.requests[0]?.init).toEqual(['PRAGMA foreign_keys = ON']);
+    });
+
+    it('reports a transaction the way the server does', async () => {
+      execs.answer = (sql) => ({ changes: null, tx: sql === 'BEGIN' });
+      const session = await m.acquire('editor:a', { connectionId: writable.id });
+      expect(session.transactionState?.()).toBe('idle');
+      await run(session, 'BEGIN');
+      expect(session.transactionState?.()).toBe('open');
+    });
+
+    it('closes the helper and gives the copy back when the connection closes', async () => {
+      const session = await m.acquire('editor:a', { connectionId: writable.id });
+      await run(session, 'DELETE FROM t');
+      await m.disconnect(writable.id);
+      expect(execs.closedChannels).toBe(1);
+      expect(snapshots.released).toBeGreaterThanOrEqual(1);
+    });
+
+    it('says python3 is missing when a change is asked for on a server without it', async () => {
+      execs.dieWith = { code: 127, stderr: 'sh: python3: not found\n' };
+      const session = await m.acquire('editor:a', { connectionId: writable.id });
+      await expect(run(session, 'DELETE FROM t')).rejects.toMatchObject({ code: 'unsupported' });
+      // Reading goes on.
+      await run(session, 'SELECT 1');
+      expect(drivers.driver('sqlite').lastSession?.executed).toEqual(['SELECT 1']);
+    });
+
+    it('says changing is not available when there is no SSH to do it with', async () => {
+      m = buildWith(false);
+      const session = await m.acquire('editor:a', { connectionId: writable.id });
+      await expect(run(session, 'DELETE FROM t')).rejects.toMatchObject({ code: 'unsupported' });
+    });
+
+    it('leaves the session as it was without the switch', async () => {
+      const session = await m.acquire('editor:a', { connectionId: remote.id });
+      await run(session, 'DELETE FROM t');
+      expect(execs.channels).toBe(0);
+      expect(drivers.driver('sqlite').lastSession?.executed).toEqual(['DELETE FROM t']);
+    });
+
+    it('does not offer to change a read-only connection, whatever was saved', async () => {
+      const readOnly = await store.add(
+        {
+          name: 'RO',
+          driver: 'sqlite',
+          file: '/srv/ro.db',
+          ssh: SSH,
+          remoteWrite: true,
+          readOnly: true,
+        },
+        undefined,
+        { main: { password: 'pw' } },
+      );
+      expect(readOnly.remoteWrite).toBeUndefined();
+      const session = await m.acquire('editor:a', { connectionId: readOnly.id });
+      await run(session, 'SELECT 1');
+      expect(execs.channels).toBe(0);
+    });
+
+    it('checks the helper when the connection is tested', async () => {
+      await m.test(
+        { name: 'probe', driver: 'sqlite', file: '/srv/x.db', ssh: SSH, remoteWrite: true },
+        undefined,
+        { main: { password: 'pw' } },
+      );
+      expect(execs.requests[0]).toMatchObject({ op: 'open', path: '/srv/x.db' });
+      expect(execs.closedChannels).toBe(1);
+    });
+
+    it('fails the test when the server cannot run the helper', async () => {
+      execs.dieWith = { code: 127, stderr: 'python3: command not found\n' };
+      await expect(
+        m.test(
+          { name: 'probe', driver: 'sqlite', file: '/srv/x.db', ssh: SSH, remoteWrite: true },
+          undefined,
+          { main: { password: 'pw' } },
+        ),
+      ).rejects.toMatchObject({ code: 'unsupported' });
+      expect(snapshots.released).toBe(1);
+    });
+
+    it('does not start the helper for the test of a connection that only reads', async () => {
+      await m.test({ name: 'probe', driver: 'sqlite', file: '/srv/x.db', ssh: SSH }, undefined, {
+        main: { password: 'pw' },
+      });
+      expect(execs.channels).toBe(0);
+    });
+
+    it('says the test cannot change a file without SSH to do it with', async () => {
+      m = buildWith(false);
+      await expect(
+        m.test(
+          { name: 'probe', driver: 'sqlite', file: '/srv/x.db', ssh: SSH, remoteWrite: true },
+          undefined,
+          { main: { password: 'pw' } },
+        ),
+      ).rejects.toMatchObject({ code: 'unsupported' });
+    });
   });
 });

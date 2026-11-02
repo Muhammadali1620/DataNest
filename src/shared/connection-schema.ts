@@ -156,6 +156,7 @@ export const connectionInputShape = {
   color: optional(literal(...CONNECTION_COLORS)),
   production: optional(boolean()),
   readOnly: optional(boolean()),
+  remoteWrite: optional(boolean()),
   options: optional(optionsSchema),
   filter: optional(filterSchema),
   redis: optional(redisSchema),

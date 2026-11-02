@@ -60,6 +60,7 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     color: '',
     production: false,
     readOnly: false,
+    remoteWrite: false,
     project: '',
     connectTimeout: '',
     queryTimeout: '',
@@ -132,6 +133,7 @@ describe('fieldsFrom', () => {
       color: '',
       production: false,
       readOnly: false,
+      remoteWrite: false,
       project: '',
       connectTimeout: '',
       queryTimeout: '',
@@ -452,6 +454,42 @@ describe('SSH fields', () => {
     expect(toInput(fields({ ssh, useSsh: true, driver: 'sqlite', file: '/f' })).ssh).toMatchObject({
       host: 'b',
     });
+  });
+
+  it('sends the switch to change a file on a server only for SQLite behind SSH, and never read-only', () => {
+    const ssh = { ...newHopFields('h'), host: 'b', user: 'u' };
+    const remote = { ssh, useSsh: true, driver: 'sqlite' as const, file: '/srv/x.db' };
+    expect(toInput(fields({ ...remote, remoteWrite: true })).remoteWrite).toBe(true);
+    expect(toInput(fields({ ...remote })).remoteWrite).toBeUndefined();
+    // Off: the file is local, whatever the box says.
+    expect(
+      toInput(fields({ ssh, driver: 'sqlite', file: '/f', remoteWrite: true })).remoteWrite,
+    ).toBeUndefined();
+    // A read-only connection cannot be changed on the server either.
+    expect(
+      toInput(fields({ ...remote, remoteWrite: true, readOnly: true })).remoteWrite,
+    ).toBeUndefined();
+    // A network database has no such switch.
+    expect(toInput(fields({ ssh, useSsh: true, remoteWrite: true })).remoteWrite).toBeUndefined();
+  });
+
+  it('reads the switch back from a saved connection', () => {
+    const state = {
+      input: {
+        name: 'r',
+        driver: 'sqlite' as const,
+        file: '/srv/x.db',
+        ssh: { id: 'main', host: 'b', user: 'u', auth: 'password' as const },
+        remoteWrite: true,
+      },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    };
+    expect(fieldsFrom(state).remoteWrite).toBe(true);
+    expect(
+      fieldsFrom({ ...state, input: { ...state.input, remoteWrite: undefined } }).remoteWrite,
+    ).toBe(false);
   });
 
   it('keeps a SQLite file local while SSH is off, and a proxy never goes with a file', () => {

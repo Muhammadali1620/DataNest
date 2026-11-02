@@ -6,7 +6,7 @@
 |---|---|
 | MySQL, MariaDB | Also TiDB and Amazon Aurora MySQL, through presets in the form. |
 | PostgreSQL | Also CockroachDB, YugabyteDB and Amazon Aurora PostgreSQL. |
-| SQLite | A database file on this machine, or on a server through SSH (read-only copy). |
+| SQLite | A database file on this machine, or on a server through SSH (read-only copy; changes can run on the server). |
 | Microsoft SQL Server | 2016 and newer, and Azure SQL. |
 | ClickHouse | Over its HTTP interface (8123, or 8443 with TLS). |
 | Oracle | 12.2 and newer, no Instant Client needed. TLS is not supported yet: connect directly or through SSH. |
@@ -114,6 +114,34 @@ copy.
   before anything is copied. The server needs an SFTP subsystem, which OpenSSH has by default.
 - A file that is not a SQLite database, an empty one, or one that changed while it was
   being copied reports it; connect again.
+
+#### Changing the file on the server
+
+Tick **Allow changes: run them on the server** (under the SSH settings of a SQLite file) to
+make the file editable. Nothing is ever sent back: reading still uses the copy, but every
+statement that changes the file — `INSERT`, `UPDATE`, `DELETE`, DDL, `PRAGMA x = …`,
+`BEGIN`/`COMMIT` — is carried out **on the server**, by a short Python 3 program started over SSH
+that opens the real file with the server's own SQLite. SQLite takes its usual locks and keeps
+its `-wal` log, so an application that has the file open is not overwritten; at worst a
+change waits a few seconds for it and then says the database is in use.
+
+- The server needs **`python3`** (its built-in `sqlite3` module does the work; nothing is
+  installed) and a POSIX shell. The user you log in as must be allowed to write to the file
+  **and to the folder it lies in** (SQLite creates a journal beside it). **Test** checks both
+  and says what is missing.
+- Statements, the path of the file and every value travel on standard input as plain
+  ASCII text, never in the command line, so nothing you type is read as shell syntax.
+- A transaction spans statements, as for a local file. Reads inside an open transaction still
+  come from the copy, which does not show its changes until it ends.
+- After a change the copy is out of date; the next read, or the next time the tree opens, makes
+  a new one (several changes in a row cost one download). With a big file, run many changes in
+  one go rather than reading between them.
+- Stopping a running statement drops the link to the server, which undoes what was not
+  committed; the next change starts the program again.
+- Production connections still ask before a change, and a read-only connection cannot be set
+  to change the server.
+- Without Python on the server the switch stays on but every change says that `python3` was
+  not found; reading is unaffected.
 
 ## Proxies
 

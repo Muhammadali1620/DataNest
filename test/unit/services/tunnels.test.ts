@@ -174,6 +174,7 @@ function fakeModule(): SshModule & {
   opened: FakeTunnel[];
   downloads: { spec: RemoteFileSpec; requests: readonly DownloadRequest[]; maxBytes: number }[];
   failNext?: Error;
+  execs: string[];
 } {
   const module = {
     opened: [] as FakeTunnel[],
@@ -183,6 +184,7 @@ function fakeModule(): SshModule & {
       maxBytes: number;
     }[],
     failNext: undefined as Error | undefined,
+    execs: [] as string[],
     downloadFiles: (
       value: RemoteFileSpec,
       requests: readonly DownloadRequest[],
@@ -196,6 +198,15 @@ function fakeModule(): SshModule & {
     openSftp: () => Promise.reject(new Error('no SFTP in this fake')),
     openShell: () => Promise.reject(new Error('no shell in this fake')),
     execCommand: () => Promise.reject(new Error('no commands in this fake')),
+    openExec: (_spec: RemoteFileSpec, command: string) => {
+      module.execs.push(command);
+      return Promise.resolve({
+        closed: new Promise<never>(() => undefined),
+        onData: () => undefined,
+        write: () => undefined,
+        close: () => undefined,
+      });
+    },
     openTunnel: (value: TunnelSpec) => {
       if (module.failNext !== undefined) {
         const error = module.failNext;
@@ -485,5 +496,25 @@ describe('TunnelPool.downloadFiles (V12.8)', () => {
     await expect(pool.downloadFiles(remote, requests, { maxBytes: 1 })).rejects.toMatchObject({
       code: 'internal',
     });
+  });
+
+  it('opens a command that stays open, through the SSH bundle (V13.33)', async () => {
+    const module = fakeModule();
+    const pool = new TunnelPool({
+      load: () => Promise.resolve(module),
+      logger: new RecordingLogger(),
+    });
+    const channel = await pool.openExec(remote, 'python3 -u -c x');
+    expect(module.execs).toEqual(['python3 -u -c x']);
+    expect(typeof channel.write).toBe('function');
+  });
+
+  it('refuses to open a command after the pool is disposed', async () => {
+    const pool = new TunnelPool({
+      load: () => Promise.resolve(fakeModule()),
+      logger: new RecordingLogger(),
+    });
+    pool.dispose();
+    await expect(pool.openExec(remote, 'x')).rejects.toMatchObject({ code: 'internal' });
   });
 });

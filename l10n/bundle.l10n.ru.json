@@ -1959,5 +1959,13 @@
   "Apply to All": "Применить ко всем",
   "Give this ACL to more than {0} znodes below \"{1}\"?": "Выдать этот ACL более чем {0} узлам ниже «{1}»?",
   "Give this ACL to the {0} znodes below \"{1}\"?": "Выдать этот ACL {0} узлам ниже «{1}»?",
-  "Their present ACLs are replaced and cannot be brought back. A znode this user may not change is skipped and reported.": "Их нынешние ACL заменяются и не возвращаются. Узел, который этот пользователь менять не вправе, пропускается и попадает в отчёт."
+  "Their present ACLs are replaced and cannot be brought back. A znode this user may not change is skipped and reported.": "Их нынешние ACL заменяются и не возвращаются. Узел, который этот пользователь менять не вправе, пропускается и попадает в отчёт.",
+  "Changing files on a server is not available": "Изменение файлов на сервере недоступно",
+  "The database on the server is in use by another program (waited {0} s): {1}": "Базу на сервере сейчас использует другая программа (ждали {0} с): {1}",
+  "This user may not change the file on the server, or the folder it lies in: {0}": "У этого пользователя нет права менять файл на сервере или папку, в которой он лежит: {0}",
+  "The file could not be opened for changes on the server: it may not exist, or this user may not write to it and its folder ({0})": "Файл не удалось открыть для изменений на сервере: его может не быть, или у пользователя нет права писать в файл и в его папку ({0})",
+  "Changing the file on the server needs Python 3 there (its sqlite3 module does the work), and python3 was not found": "Чтобы менять файл на сервере, там нужен Python 3 (работу делает его модуль sqlite3), а python3 не найден",
+  "The connection to the file on the server was closed": "Связь с файлом на сервере закрыта",
+  "The connection to the server was lost; a transaction that was open is undone there": "Связь с сервером потеряна; открытая транзакция там отменена",
+  "The helper on the server stopped (exit code {0}): {1}": "Помощник на сервере остановился (код выхода {0}): {1}"
 }

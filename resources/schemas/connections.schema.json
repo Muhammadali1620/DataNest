@@ -299,6 +299,10 @@
           "type": "boolean",
           "description": "Changes are refused, and the session itself is opened read-only."
         },
+        "remoteWrite": {
+          "type": "boolean",
+          "description": "A SQLite file on a server (with ssh) may be changed: statements that change it run on the server through Python 3 there; the file is never sent back. Ignored for other connections and for a read-only one."
+        },
         "options": {
           "type": "object",
           "additionalProperties": false,

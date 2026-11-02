@@ -20,7 +20,7 @@ import {
   type BuiltInSqlDriverId,
   type SqlDriverId,
 } from '../shared/connection';
-import { setUpSession } from './session-setup';
+import { setUpSession, setupStatements } from './session-setup';
 import type { Driver, Session, TransactionState } from '../drivers/driver';
 import type { ElasticDriver, ElasticSession } from '../drivers/elastic-driver';
 import type { EtcdDriver, EtcdSession } from '../drivers/etcd-driver';
@@ -50,6 +50,8 @@ import {
 } from './tunnels';
 import { msg } from '../core/user-message';
 import type { SnapshotLease, SnapshotProvider } from './remote-snapshots';
+import { checkRemoteWritable, writableFileSession } from './remote-sqlite-open';
+import type { ExecOpener } from './shell-types';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -105,6 +107,8 @@ export interface ConnectionManagerDeps {
   readonly snapshots?: SnapshotProvider;
   /** The most a copied file may weigh, asked at connect time so a setting change counts. */
   readonly remoteMaxBytes?: () => number;
+  /** Runs the helper that changes a SQLite file on a server (V13.33); needs SSH. */
+  readonly execs?: ExecOpener;
 }
 
 const REFUSE_HOST_KEY: HostKeyCheck = () => Promise.resolve(false);
@@ -166,6 +170,7 @@ export class ConnectionManager implements Disposable {
   private readonly checkHostKey: HostKeyCheck;
   private readonly snapshots: SnapshotProvider | undefined;
   private readonly remoteMaxBytes: () => number;
+  private readonly execs: ExecOpener | undefined;
   private readonly holders = new Map<string, Holder>();
   private readonly opening = new Map<string, Promise<Holder>>();
   private readonly states = new Map<string, ConnectionState>();
@@ -181,6 +186,7 @@ export class ConnectionManager implements Disposable {
     this.checkHostKey = deps.checkHostKey ?? REFUSE_HOST_KEY;
     this.snapshots = deps.snapshots;
     this.remoteMaxBytes = deps.remoteMaxBytes ?? (() => DEFAULT_REMOTE_MAX_BYTES);
+    this.execs = deps.execs;
   }
 
   /**
@@ -555,6 +561,10 @@ export class ConnectionManager implements Disposable {
       } finally {
         await session.close().catch(() => undefined);
       }
+      if (remote !== undefined && input.remoteWrite === true && input.readOnly !== true) {
+        // Changing the file needs Python 3 and write access there: say so now, not at the first change.
+        await this.checkRemoteWrite(input, ssh, proxyPassword);
+      }
     } finally {
       await tunnel?.close();
       await remote?.release();
@@ -762,12 +772,11 @@ export class ConnectionManager implements Disposable {
     const driver = await this.sqlDriver(driverId, config.plugin);
     const password = await this.store.getPassword(connectionId);
     // A SQLite file on a server comes over first; sessions of one connection share the copy.
-    const remote = await this.leaseRemoteFile(
-      config,
-      config.id,
-      await this.store.getSshSecrets(config.id),
-      config.proxy === undefined ? undefined : await this.store.getProxyPassword(config.id),
-    );
+    const sshSecrets = await this.store.getSshSecrets(config.id);
+    const proxyPassword =
+      config.proxy === undefined ? undefined : await this.store.getProxyPassword(config.id);
+    const generation = this.snapshots?.generation(copyKeyOf(config.id, config)) ?? 0;
+    const remote = await this.leaseRemoteFile(config, config.id, sshSecrets, proxyPassword);
     let lease: TunnelLease | undefined;
     try {
       lease = await this.leaseTunnel(config);
@@ -794,8 +803,26 @@ export class ConnectionManager implements Disposable {
       await releaseAll();
       throw error;
     }
-    await this.closeIfDisposed(opened, { release: releaseAll });
-    const session = new ManagedSession(opened, {
+    // A file on a server that may be changed there (V13.33): changes go to the server.
+    const usable =
+      remote !== undefined && config.remoteWrite === true && config.readOnly !== true
+        ? this.writableSession(config, {
+            local: opened,
+            lease: remote,
+            generation,
+            sshSecrets,
+            proxyPassword,
+            open: async (path) =>
+              await driver.openSession(
+                withCopy(resolve(config, target, password, lease), { path }),
+              ),
+            init: setupStatements(config, driver.dialect)
+              .filter((statement) => statement.origin === 'init')
+              .map((statement) => statement.sql),
+          })
+        : opened;
+    await this.closeIfDisposed(usable, { release: releaseAll });
+    const session = new ManagedSession(usable, {
       onLinkLost: (error) => {
         this.forget(owner, error);
       },
@@ -1117,6 +1144,54 @@ export class ConnectionManager implements Disposable {
       : { endpoint: { host: '127.0.0.1', port: lease.port }, release: () => lease.release() };
   }
 
+  private async checkRemoteWrite(
+    input: ConnectionInput,
+    ssh: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword: string | undefined,
+  ): Promise<void> {
+    const spec = remoteFileSpecOf(input, ssh, this.checkHostKey, proxyPassword);
+    if (spec === undefined || input.file === undefined) {
+      return;
+    }
+    if (this.execs === undefined) {
+      throw new DbError('unsupported', msg('Changing files on a server is not available'));
+    }
+    await checkRemoteWritable(this.execs, spec, input.file, this.logger);
+  }
+
+  /** The session over a copy of a remote file, made able to change the file on the server. */
+  private writableSession(
+    config: ConnectionConfig,
+    parts: {
+      readonly local: Session;
+      readonly lease: SnapshotLease;
+      readonly generation: number;
+      readonly sshSecrets: Readonly<Record<string, SshHopSecrets>>;
+      readonly proxyPassword: string | undefined;
+      readonly open: (path: string) => Promise<Session>;
+      readonly init: readonly string[];
+    },
+  ): Session {
+    const spec = remoteFileSpecOf(config, parts.sshSecrets, this.checkHostKey, parts.proxyPassword);
+    if (spec === undefined || config.file === undefined || this.snapshots === undefined) {
+      return parts.local;
+    }
+    return writableFileSession({
+      key: copyKeyOf(config.id, config),
+      spec,
+      remotePath: config.file,
+      maxBytes: this.remoteMaxBytes(),
+      snapshots: this.snapshots,
+      execs: this.execs,
+      openLocal: parts.open,
+      init: parts.init,
+      logger: this.logger,
+      local: parts.local,
+      lease: parts.lease,
+      generation: parts.generation,
+    });
+  }
+
   /**
    * The local copy of a SQLite file that lives on a server, or undefined for every other
    * connection (V12.8). `key` names the copy: the connection id, so its sessions share one.
@@ -1138,7 +1213,7 @@ export class ConnectionManager implements Disposable {
       throw new DbError('unsupported', msg('Files on a server are not available'));
     }
     return await this.snapshots.acquire(
-      JSON.stringify([key, config.file, sshHopsOf(config)]),
+      copyKeyOf(key, config),
       spec,
       config.file,
       this.remoteMaxBytes(),
@@ -1281,6 +1356,11 @@ function sameTarget(a: SessionTarget, b: SessionTarget): boolean {
   return a.connectionId === b.connectionId && a.database === b.database;
 }
 
+/** Names the copy of a remote file: the connection, the path and the servers on the way. */
+function copyKeyOf(key: string, config: ConnectionInput): string {
+  return JSON.stringify([key, config.file, sshHopsOf(config)]);
+}
+
 /**
  * Points a SQLite connection at its local copy of a file from a server (V12.8). The copy is
  * a snapshot, so it opens read-only whatever the connection says: nothing written to it
@@ -1288,7 +1368,7 @@ function sameTarget(a: SessionTarget, b: SessionTarget): boolean {
  */
 function withCopy(
   resolved: ResolvedConnectionConfig,
-  copy: SnapshotLease | undefined,
+  copy: Pick<SnapshotLease, 'path'> | undefined,
 ): ResolvedConnectionConfig {
   return copy === undefined ? resolved : { ...resolved, file: copy.path, readOnly: true };
 }

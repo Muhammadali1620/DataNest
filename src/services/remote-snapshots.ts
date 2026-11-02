@@ -73,6 +73,13 @@ export interface SnapshotProvider {
     remotePath: string,
     maxBytes: number,
   ): Promise<SnapshotLease>;
+  /**
+   * The copy under `key` is out of date (the file was changed on the server, V13.33): the next
+   * `acquire` makes a fresh one. Sessions holding the old copy keep it until they let go.
+   */
+  invalidate(key: string): void;
+  /** Counts the times `key` was invalidated; a session compares it to know its copy is old. */
+  generation(key: string): number;
 }
 
 export interface RemoteSnapshotsDeps {
@@ -85,6 +92,11 @@ export interface RemoteSnapshotsDeps {
 interface Shared {
   readonly copy: Promise<{ readonly path: string; readonly bytes: number; readonly dir: string }>;
   users: number;
+}
+
+/** A name for the folder of one copy: never the same twice, so an old copy can live on. */
+function folderName(key: string, serial: number): string {
+  return createHash('sha256').update(`${key}\u0000${serial}`).digest('hex').slice(0, 24);
 }
 
 /** What every SQLite file starts with. */
@@ -102,6 +114,10 @@ export class RemoteSnapshots implements SnapshotProvider {
   private readonly folder: string;
   private readonly logger: Logger;
   private readonly shared = new Map<string, Shared>();
+  private readonly generations = new Map<string, number>();
+  /** Copies taken out of date but still used by a session. */
+  private readonly retired = new Set<Shared>();
+  private serial = 0;
 
   constructor(deps: RemoteSnapshotsDeps) {
     this.downloader = deps.downloader;
@@ -112,6 +128,20 @@ export class RemoteSnapshots implements SnapshotProvider {
   /** Number of copies kept or being made; for tests and diagnostics. */
   get size(): number {
     return this.shared.size;
+  }
+
+  invalidate(key: string): void {
+    this.generations.set(key, this.generation(key) + 1);
+    // The entry leaves the map but not the disk: the sessions that use it release it later.
+    const entry = this.shared.get(key);
+    if (entry !== undefined) {
+      this.shared.delete(key);
+      this.retired.add(entry);
+    }
+  }
+
+  generation(key: string): number {
+    return this.generations.get(key) ?? 0;
   }
 
   /** Removes what an earlier run left behind. Call once at start, before any copy. */
@@ -160,8 +190,11 @@ export class RemoteSnapshots implements SnapshotProvider {
         }
         released = true;
         held.users -= 1;
-        if (held.users === 0 && this.shared.get(key) === held) {
-          this.shared.delete(key);
+        if (held.users === 0) {
+          if (this.shared.get(key) === held) {
+            this.shared.delete(key);
+          }
+          this.retired.delete(held);
           await rm(copied.dir, REMOVE_OPTIONS);
         }
       },
@@ -170,8 +203,9 @@ export class RemoteSnapshots implements SnapshotProvider {
 
   /** Removes every copy now, e.g. when the extension shuts down. */
   async dispose(): Promise<void> {
-    const entries = [...this.shared.values()];
+    const entries = [...this.shared.values(), ...this.retired];
     this.shared.clear();
+    this.retired.clear();
     for (const entry of entries) {
       try {
         await rm((await entry.copy).dir, REMOVE_OPTIONS);
@@ -187,7 +221,7 @@ export class RemoteSnapshots implements SnapshotProvider {
     remotePath: string,
     maxBytes: number,
   ): Promise<{ path: string; bytes: number; dir: string }> {
-    const dir = join(this.folder, createHash('sha256').update(key).digest('hex').slice(0, 24));
+    const dir = join(this.folder, folderName(key, (this.serial += 1)));
     const path = join(dir, localNameOf(remotePath));
     await rm(dir, REMOVE_OPTIONS);
     await mkdir(dir, { recursive: true });

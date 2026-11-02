@@ -667,6 +667,12 @@ export interface ConnectionInput {
    * session itself is opened read-only, so the server refuses what slips through.
    */
   readonly readOnly?: boolean;
+  /**
+   * A SQLite file on a server (V12.8) may be changed: statements that change it run on the
+   * server, through Python 3 there (V13.33); the file is never sent back. Off by default, and
+   * ignored for any other connection and for a read-only one.
+   */
+  readonly remoteWrite?: boolean;
   /** Timeouts, keep-alive, init SQL, time zone and character set (V4.9). */
   readonly options?: ConnectionOptions;
   /** Databases and schemas to show (V4.10). */

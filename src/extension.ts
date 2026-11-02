@@ -176,6 +176,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     checkHostKey: hostKeyCheck,
     snapshots,
     remoteMaxBytes: readRemoteMaxBytes,
+    execs: tunnels,
   });
   context.subscriptions.push(manager);
   const cache = new MetadataCache({ logger });

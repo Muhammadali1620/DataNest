@@ -989,6 +989,54 @@ describe('ConnectionStore production and read-only', () => {
   });
 });
 
+describe('ConnectionStore changes on the server (V13.33)', () => {
+  const ssh = { id: 'main', host: 'b', user: 'u', auth: 'password' } as const;
+  const remote = { name: 'r', driver: 'sqlite', file: '/srv/x.db', ssh } as const;
+
+  function make() {
+    return new ConnectionStore({
+      state: new FakeMemento(),
+      secrets: new FakeSecretStorage(),
+      logger: new RecordingLogger(),
+    });
+  }
+
+  it('keeps the switch for a SQLite file on a server', async () => {
+    const stored = await make().add({ ...remote, remoteWrite: true }, undefined, {
+      main: { password: 'pw' },
+    });
+    expect(stored.remoteWrite).toBe(true);
+  });
+
+  it('stores nothing when the switch is off', async () => {
+    const stored = await make().add({ ...remote, remoteWrite: false }, undefined, {
+      main: { password: 'pw' },
+    });
+    expect(JSON.parse(JSON.stringify(stored))).not.toHaveProperty('remoteWrite');
+  });
+
+  it('drops the switch where it means nothing', async () => {
+    const store = make();
+    const local = await store.add({
+      name: 'l',
+      driver: 'sqlite',
+      file: '/a.db',
+      remoteWrite: true,
+    });
+    expect(local.remoteWrite).toBeUndefined();
+    const network = await store.add({ ...mysqlInput, remoteWrite: true });
+    expect(network.remoteWrite).toBeUndefined();
+  });
+
+  it('drops it for a read-only connection, which nothing may change', async () => {
+    const stored = await make().add({ ...remote, remoteWrite: true, readOnly: true }, undefined, {
+      main: { password: 'pw' },
+    });
+    expect(stored.remoteWrite).toBeUndefined();
+    expect(stored.readOnly).toBe(true);
+  });
+});
+
 describe('ConnectionStore disabling (V13.1)', () => {
   function make() {
     const state = new FakeMemento();

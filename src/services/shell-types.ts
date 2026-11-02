@@ -46,8 +46,36 @@ export interface ExecControl {
   readonly signal?: AbortSignal;
 }
 
+/** How a command with a pipe to it ended. */
+export interface ExecEnd {
+  /** `exit`: the command finished; `dropped`: the link failed; `closed`: we closed it. */
+  readonly reason: 'exit' | 'dropped' | 'closed';
+  readonly code?: number;
+  readonly signal?: string;
+}
+
+/**
+ * A command that keeps running with its input and output open (V13.33): the helper that
+ * changes a SQLite file on a server talks to it line by line. No terminal, so the two
+ * output streams stay apart.
+ */
+export interface ExecChannel {
+  /** Settles once, when the command is gone. */
+  readonly closed: Promise<ExecEnd>;
+  /** Listens to the output; `error` is true for the error stream. */
+  onData(listener: (chunk: Buffer, error: boolean) => void): void;
+  write(data: string): void;
+  /** Ends the command (its input is closed first); safe to call twice. */
+  close(): void;
+}
+
 /** What the SSH bundle offers the terminal: a shell and a one-shot command over a chain. */
 export interface ShellOpener {
   openShell(spec: RemoteFileSpec, window: ShellWindow): Promise<ShellSession>;
   execCommand(spec: RemoteFileSpec, command: string, control: ExecControl): Promise<ExecResult>;
+}
+
+/** What the writer of a remote SQLite file needs: a command that stays open. */
+export interface ExecOpener {
+  openExec(spec: RemoteFileSpec, command: string): Promise<ExecChannel>;
 }

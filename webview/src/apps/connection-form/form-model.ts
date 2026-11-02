@@ -137,6 +137,8 @@ export interface FormFields {
   color: ConnectionColor | '';
   production: boolean;
   readOnly: boolean;
+  /** A SQLite file on a server may be changed there (V13.33); needs SSH. */
+  remoteWrite: boolean;
   /** Key of the project whose file keeps the connection; empty for the user's own list. */
   project: string;
   /** Session options (V4.9), as typed; seconds stay text until they are checked. */
@@ -218,6 +220,7 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     color: input.color ?? '',
     production: input.production === true,
     readOnly: input.readOnly === true,
+    remoteWrite: input.remoteWrite === true,
     project: state.project?.key ?? '',
     connectTimeout: secondsText(input.options?.connectTimeout),
     queryTimeout: secondsText(input.options?.queryTimeout),
@@ -552,6 +555,7 @@ export function toInput(fields: FormFields): ConnectionInput {
             },
           }
         : {}),
+      ...(fields.useSsh && fields.remoteWrite && !fields.readOnly ? { remoteWrite: true } : {}),
       ...arrangement(fields),
       ...(options === undefined ? {} : { options }),
     };

@@ -691,6 +691,9 @@ export const en = {
   'form.error.fileEmpty': 'Choose a database file',
   'form.ssh.use': 'Connect through an SSH tunnel',
   'form.ssh.useFile': 'The file is on a server: open it through SSH',
+  'form.remoteWrite': 'Allow changes: run them on the server',
+  'form.remoteWriteHint':
+    'Changing statements run on the server through Python 3 there; the file is never sent back, and the copy you browse is made again after a change. Off: the file stays read-only.',
   'form.fileRemote': 'Path of the file on the server',
   'form.fileRemoteHint': 'Copied over SFTP when you connect and opened read-only',
   'form.ssh.title': 'SSH server',

@@ -28,7 +28,13 @@ import type {
 } from './remote-snapshots';
 import { openProxyTunnel } from './proxy/proxy-tunnel';
 import type { SftpSession } from './sftp-types';
-import type { ExecControl, ExecResult, ShellSession, ShellWindow } from './shell-types';
+import type {
+  ExecChannel,
+  ExecControl,
+  ExecResult,
+  ShellSession,
+  ShellWindow,
+} from './shell-types';
 
 /** How long each SSH server may take to answer and log us in. */
 export const SSH_TIMEOUT_MS = 10_000;
@@ -232,6 +238,8 @@ export interface SshModule extends FileDownloader {
     control: ExecControl,
     logger: Logger,
   ): Promise<ExecResult>;
+  /** A command that stays open for talking to, e.g. the SQLite helper (V13.33). */
+  openExec(spec: RemoteFileSpec, command: string, logger: Logger): Promise<ExecChannel>;
 }
 
 export type SshLoader = () => Promise<SshModule>;
@@ -363,6 +371,14 @@ export class TunnelPool {
       throw new DbError('internal', msg('The tunnel pool is disposed'));
     }
     return await (await this.sshModule()).execCommand(spec, command, control, this.logger);
+  }
+
+  /** A command that stays open, on a server of its own connection; the caller closes it. */
+  async openExec(spec: RemoteFileSpec, command: string): Promise<ExecChannel> {
+    if (this.disposed) {
+      throw new DbError('internal', msg('The tunnel pool is disposed'));
+    }
+    return await (await this.sshModule()).openExec(spec, command, this.logger);
   }
 
   /** A tunnel of its own, for "Test connection": never shared, closed by the caller. */

@@ -28,6 +28,7 @@ import {
   type ProxySettings,
   type SslSettings,
   supportsSocket,
+  isRemoteFile,
 } from '../shared/connection';
 import { cleanAlgorithms } from '../shared/ssh-algorithms';
 import { connectionInputShape } from '../shared/connection-schema';
@@ -845,6 +846,11 @@ function normalizeInput(input: ConnectionInput): ConnectionInput {
     // Only a set flag is stored, so configs stay the same as before for everyone else.
     production: input.production === true ? true : undefined,
     readOnly: input.readOnly === true ? true : undefined,
+    // Changing a file on a server is for a SQLite file behind SSH, and only if nothing forbids it.
+    remoteWrite:
+      input.remoteWrite === true && isRemoteFile(input) && input.readOnly !== true
+        ? true
+        : undefined,
     options: normalizeOptions(input.options, input.driver),
     filter: normalizeFilter(input.filter, input.driver),
     redis: input.driver === 'redis' ? normalizeRedis(input.redis) : undefined,

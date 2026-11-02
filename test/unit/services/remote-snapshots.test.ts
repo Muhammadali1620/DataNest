@@ -258,6 +258,67 @@ describe('RemoteSnapshots', () => {
     await pending;
   });
 
+  describe('a copy gone out of date (V13.33)', () => {
+    it('counts how many times a key was invalidated, per key', () => {
+      const { snapshots } = setup();
+      expect(snapshots.generation('k')).toBe(0);
+      snapshots.invalidate('k');
+      snapshots.invalidate('k');
+      expect(snapshots.generation('k')).toBe(2);
+      expect(snapshots.generation('other')).toBe(0);
+    });
+
+    it('makes a new copy for the next lease, and keeps the old one for those using it', async () => {
+      const { downloader, snapshots } = setup();
+      const old = await snapshots.acquire('k', SPEC, '/x.db', 1_000_000);
+      snapshots.invalidate('k');
+      expect(snapshots.size).toBe(0);
+      const fresh = await snapshots.acquire('k', SPEC, '/x.db', 1_000_000);
+      expect(downloader.calls).toHaveLength(2);
+      expect(fresh.path).not.toBe(old.path);
+      // The session on the old copy is not disturbed while it still reads it.
+      expect(existsSync(old.path)).toBe(true);
+      expect(existsSync(fresh.path)).toBe(true);
+      await old.release();
+      expect(existsSync(old.path)).toBe(false);
+      expect(existsSync(fresh.path)).toBe(true);
+      await fresh.release();
+      expect(existsSync(fresh.path)).toBe(false);
+      expect(snapshots.size).toBe(0);
+    });
+
+    it('lets sessions that took the new copy share it', async () => {
+      const { downloader, snapshots } = setup();
+      const old = await snapshots.acquire('k', SPEC, '/x.db', 1_000_000);
+      snapshots.invalidate('k');
+      const [a, b] = await Promise.all([
+        snapshots.acquire('k', SPEC, '/x.db', 1_000_000),
+        snapshots.acquire('k', SPEC, '/x.db', 1_000_000),
+      ]);
+      expect(a.path).toBe(b.path);
+      expect(downloader.calls).toHaveLength(2);
+      await Promise.all([old.release(), a.release(), b.release()]);
+      expect(snapshots.size).toBe(0);
+    });
+
+    it('does nothing for a key with no copy', () => {
+      const { snapshots } = setup();
+      expect(() => {
+        snapshots.invalidate('nothing');
+      }).not.toThrow();
+    });
+
+    it('removes the old copy too when disposed', async () => {
+      const { snapshots } = setup();
+      const old = await snapshots.acquire('k', SPEC, '/x.db', 1_000_000);
+      snapshots.invalidate('k');
+      const fresh = await snapshots.acquire('k', SPEC, '/x.db', 1_000_000);
+      await snapshots.dispose();
+      expect(existsSync(old.path)).toBe(false);
+      expect(existsSync(fresh.path)).toBe(false);
+    });
+  });
+
   it('logs the copy', async () => {
     const logger = new RecordingLogger();
     const snapshots = new RemoteSnapshots({ downloader: new FakeDownloader(), folder, logger });

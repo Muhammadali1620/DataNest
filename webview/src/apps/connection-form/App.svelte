@@ -896,6 +896,21 @@
                   }}
                 />
 
+                {#if isFile}
+                  <div>
+                    <label class="check">
+                      <input
+                        type="checkbox"
+                        bind:checked={fields.remoteWrite}
+                        disabled={fields.readOnly}
+                        aria-describedby="remote-write-hint"
+                      />
+                      {t('form.remoteWrite')}
+                    </label>
+                    <span class="hint" id="remote-write-hint">{t('form.remoteWriteHint')}</span>
+                  </div>
+                {/if}
+
                 <div class="jumps">
                   <span class="label">{t('form.ssh.jumps')}</span>
                   <span class="hint">{t('form.ssh.jumpsHint')}</span>

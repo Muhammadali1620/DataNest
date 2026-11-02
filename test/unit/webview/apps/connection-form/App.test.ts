@@ -357,6 +357,62 @@ describe('connection form App', () => {
       expect(screen.getByRole('button', { name: 'Browse…' })).toBeTruthy();
     });
 
+    describe('changes on the server (V13.33)', () => {
+      const LABEL = 'Allow changes: run them on the server';
+
+      it('offers the switch only for a file behind SSH', async () => {
+        await withState(newState({ input: { name: 'db', driver: 'sqlite', file: '/a.db' } }));
+        expect(screen.queryByLabelText(LABEL)).toBeNull();
+      });
+
+      it('is off by default and says what it does', async () => {
+        await withState(newState({ input: remote }));
+        const box = screen.getByLabelText<HTMLInputElement>(LABEL);
+        expect(box.checked).toBe(false);
+        expect(screen.getByText(/run on the server through Python 3/)).toBeTruthy();
+      });
+
+      it('sends the switch when it is on', async () => {
+        const { host } = await withState(newState({ input: { ...remote, remoteWrite: true } }));
+        expect(screen.getByLabelText<HTMLInputElement>(LABEL).checked).toBe(true);
+        const saved = vi.fn((_draft: unknown) => ({ connectionId: 'c1' }));
+        host.handle('save', saved);
+        await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => {
+          expect(saved).toHaveBeenCalledTimes(1);
+        });
+        expect(saved.mock.calls[0]?.[0]).toMatchObject({ input: { remoteWrite: true } });
+      });
+
+      it('sends it after the box is ticked', async () => {
+        const { host } = await withState(newState({ input: remote }));
+        await fireEvent.click(screen.getByLabelText(LABEL));
+        const saved = vi.fn((_draft: unknown) => ({ connectionId: 'c1' }));
+        host.handle('save', saved);
+        await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => {
+          expect(saved).toHaveBeenCalledTimes(1);
+        });
+        expect(saved.mock.calls[0]?.[0]).toMatchObject({ input: { remoteWrite: true } });
+      });
+
+      it('is switched off and blocked while the connection is read-only', async () => {
+        await withState(newState({ input: { ...remote, readOnly: true, remoteWrite: true } }));
+        expect(screen.getByLabelText<HTMLInputElement>(LABEL).disabled).toBe(true);
+      });
+
+      it('speaks Russian', async () => {
+        const harness = setup('ru');
+        await flush();
+        harness.host.emit('state', newState({ input: remote }));
+        await waitFor(() => {
+          expect(
+            screen.getByLabelText('Разрешить изменения: выполнять их на сервере'),
+          ).toBeTruthy();
+        });
+      });
+    });
+
     it('sends the SSH server with the path when saved', async () => {
       const { host } = await withState(newState({ input: remote }));
       const saved = vi.fn((_draft: unknown) => ({ connectionId: 'c1' }));

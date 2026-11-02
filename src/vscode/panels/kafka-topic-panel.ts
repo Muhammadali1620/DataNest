@@ -91,6 +91,16 @@ export class KafkaTopicPanel implements vscode.Disposable {
       }
       return {};
     });
+    this.rpc.handle('tail', async ({ partition, on }) => {
+      this.push(
+        on
+          ? await model.startTail(partition, () => {
+              this.push(model.state());
+            })
+          : model.stopTail(),
+      );
+      return {};
+    });
     this.rpc.handle('produce', async (params) => {
       if (!(await this.allowed(vscode.l10n.t('Send')))) {
         return { produced: false };
@@ -130,6 +140,7 @@ export class KafkaTopicPanel implements vscode.Disposable {
       return;
     }
     this.disposed = true;
+    this.deps.model.stopTail();
     for (const abort of this.aborts) {
       abort.abort();
     }

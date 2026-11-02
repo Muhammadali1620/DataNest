@@ -70,7 +70,7 @@ describe('Kafka commands', () => {
 describe('Kafka menus', () => {
   it('opens a topic from its item and from its partitions, and nowhere else', () => {
     expect(entriesOf(COMMAND_IDS.kafkaOpenTopic).map((entry) => contextsOf(entry.when))).toEqual([
-      [TREE_CONTEXT.kafkaTopic, TREE_CONTEXT.kafkaPartition],
+      [TREE_CONTEXT.kafkaTopic, `${TREE_CONTEXT.kafkaTopic}.starred`, TREE_CONTEXT.kafkaPartition],
     ]);
   });
 
@@ -87,8 +87,14 @@ describe('Kafka menus', () => {
 
   it('deletes a topic from its item only', () => {
     expect(entriesOf(COMMAND_IDS.kafkaDeleteTopic).map((entry) => contextsOf(entry.when))).toEqual([
-      [TREE_CONTEXT.kafkaTopic],
+      [TREE_CONTEXT.kafkaTopic, `${TREE_CONTEXT.kafkaTopic}.starred`],
     ]);
+  });
+
+  it('resets the offsets of a group from its item only, starred or not', () => {
+    expect(entriesOf(COMMAND_IDS.kafkaResetOffsets).map((entry) => contextsOf(entry.when))).toEqual(
+      [[TREE_CONTEXT.kafkaGroup, `${TREE_CONTEXT.kafkaGroup}.starred`]],
+    );
   });
 
   it('gives Kafka connections the menus every connection has, and etcd ones no Kafka entries', () => {

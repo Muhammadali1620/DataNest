@@ -110,6 +110,11 @@
     );
   }
 
+  function follow(): void {
+    const on = topic?.tailing !== true;
+    void run(() => rpc.request('tail', { partition, on }));
+  }
+
   function send(): void {
     void run(
       () =>
@@ -331,11 +336,30 @@
           <button type="button" class="button" disabled={busy || offsetBad || timeBad || topic.partitions.length === 0} onclick={read}
             ><Icon name="play" />{t('kafka.read')}</button
           >
+          <button
+            type="button"
+            class="button"
+            class:live={topic.tailing === true}
+            aria-pressed={topic.tailing === true}
+            data-testid="live"
+            disabled={busy || topic.partitions.length === 0}
+            onclick={follow}
+            ><Icon name={topic.tailing === true ? 'debug-stop' : 'broadcast'} />{topic.tailing === true
+              ? t('kafka.liveStop')
+              : t('kafka.live')}</button
+          >
         </div>
         <p class="hint">{t('kafka.readHint')}</p>
       </section>
 
       {#if topic.read}
+        {#if topic.tailing === true}
+          <p class="notice info problem" data-testid="live-note">
+            <Icon name="broadcast" /><span
+              >{topic.messages.length === 0 ? t('kafka.liveWaiting') : t('kafka.liveOn')}</span
+            >
+          </p>
+        {/if}
         {#if topic.notice !== undefined}
           <p class="notice info problem" data-testid="notice"><Icon name="info" /><span>{topic.notice}</span></p>
         {/if}
@@ -605,6 +629,11 @@
     background: transparent;
     border: none;
     cursor: pointer;
+  }
+
+  .button.live {
+    color: #fff;
+    background: #16a34a;
   }
 
   .mode[aria-pressed='true'] {

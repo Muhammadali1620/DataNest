@@ -253,6 +253,7 @@
   "commands.kafka.openTopic.title": "Открыть топик Kafka",
   "commands.kafka.newTopic.title": "Новый топик Kafka…",
   "commands.kafka.deleteTopic.title": "Удалить топик Kafka",
+  "commands.kafka.resetOffsets.title": "Сбросить смещения группы Kafka…",
   "configuration.kafka.showInternalTopics.description": "Показывать в дереве служебные топики Kafka (`__consumer_offsets`, `_schemas`, …).",
   "commands.rabbitmq.openObject.title": "Открыть очередь или обменник",
   "commands.rabbitmq.newQueue.title": "Новая очередь…",

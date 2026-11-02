@@ -15,6 +15,8 @@ interface Scenario {
   inputs?: (string | undefined)[];
   confirm?: boolean;
   pick?: string | undefined;
+  /** What the quick pick answers, one per question; `undefined` backs out. */
+  picks?: unknown[];
   connections?: ConnectionConfig[];
 }
 
@@ -35,6 +37,8 @@ async function setup(scenario: Scenario = {}) {
   );
   const connections = scenario.connections ?? [kafka()];
   const inputs = [...(scenario.inputs ?? [])];
+  const picks = [...(scenario.picks ?? [])];
+  const pickAsked: { labels: string[]; placeholder: string }[] = [];
   const asked: string[] = [];
   const confirms: { message: string; detail: string | undefined }[] = [];
   const infos: string[] = [];
@@ -52,6 +56,10 @@ async function setup(scenario: Scenario = {}) {
     confirm: (message, detail) => {
       confirms.push({ message, detail });
       return Promise.resolve(scenario.confirm ?? true);
+    },
+    pick: <T>(items: readonly { label: string; value: T }[], placeholder: string) => {
+      pickAsked.push({ labels: items.map((one) => one.label), placeholder });
+      return Promise.resolve(picks.shift() as T | undefined);
     },
     pickConnection: () => Promise.resolve(scenario.pick),
     info: (message) => {
@@ -76,7 +84,7 @@ async function setup(scenario: Scenario = {}) {
     },
     texts: { noKafka: 'no kafka', readOnly: 'read-only' },
   });
-  return { cluster, handlers, asked, confirms, infos, opened, refreshed };
+  return { cluster, handlers, asked, confirms, infos, opened, refreshed, pickAsked };
 }
 
 const topicNode = (topic = 'orders'): TreeNode => ({
@@ -249,5 +257,127 @@ describe('delete topic', () => {
     await other.handlers.deleteTopic(undefined);
     await other.handlers.deleteTopic({ kind: 'kafkaGroups', connectionId: 'k1' });
     expect(other.confirms).toEqual([]);
+  });
+});
+
+describe('reset offsets (V13.29)', () => {
+  const groupNode = (group = 'billing'): TreeNode => ({
+    kind: 'kafkaGroup',
+    connectionId: 'k1',
+    group,
+    state: 'Empty',
+    members: 0,
+  });
+
+  async function withGroup(scenario: Scenario = {}) {
+    const made = await setup(scenario);
+    for (let i = 0; i < 6; i++) {
+      made.cluster.append('orders', 0, `m${i}`, { at: 1000 * (i + 1) });
+    }
+    made.cluster.commit('billing', 'orders', 0, 4);
+    made.cluster.groupStates.set('billing', 'Empty');
+    return made;
+  }
+
+  it.each([
+    ['earliest', undefined, '0'],
+    ['latest', undefined, '6'],
+  ] as const)('moves the group to %s after the user agrees', async (kind, _unused, offset) => {
+    const { cluster, handlers, confirms, infos, refreshed } = await withGroup({ picks: [kind] });
+    await handlers.resetOffsets(groupNode());
+    expect(cluster.setOffsetCalls[0]?.partitions).toEqual([{ partition: 0, offset }]);
+    expect(confirms).toHaveLength(1);
+    expect(confirms[0]?.message).toMatch(/billing/u);
+    expect(refreshed).toEqual([groupNode()]);
+    expect(infos[0]).toMatch(/billing/u);
+  });
+
+  it('asks for an offset and checks it as it is typed', async () => {
+    const { cluster, handlers, asked } = await withGroup({ picks: ['offset'], inputs: ['3'] });
+    await handlers.resetOffsets(groupNode());
+    expect(asked).toHaveLength(1);
+    expect(cluster.setOffsetCalls[0]?.partitions).toEqual([{ partition: 0, offset: '3' }]);
+    const bad = await withGroup({ picks: ['offset'], inputs: ['-1'] });
+    await expect(bad.handlers.resetOffsets(groupNode())).rejects.toThrow(/rejected/u);
+    const text = await withGroup({ picks: ['offset'], inputs: ['x'] });
+    await expect(text.handlers.resetOffsets(groupNode())).rejects.toThrow(/rejected/u);
+  });
+
+  it('moves to the end for a moment after the last message, and checks the moment as it is typed', async () => {
+    const { cluster, handlers } = await withGroup({ picks: ['time'], inputs: ['2999-01-01'] });
+    await handlers.resetOffsets(groupNode());
+    expect(cluster.setOffsetCalls[0]?.partitions).toEqual([{ partition: 0, offset: '6' }]);
+    const bad = await withGroup({ picks: ['time'], inputs: ['not a date'] });
+    await expect(bad.handlers.resetOffsets(groupNode())).rejects.toThrow(/rejected/u);
+  });
+
+  it('reads a moment typed as a date', async () => {
+    const { cluster, handlers } = await withGroup({
+      picks: ['time'],
+      inputs: ['1970-01-01T00:00:04Z'],
+    });
+    await handlers.resetOffsets(groupNode());
+    expect(cluster.setOffsetCalls[0]?.partitions).toEqual([{ partition: 0, offset: '3' }]);
+  });
+
+  it('stops at any question the user backs out of, and commits nothing', async () => {
+    for (const scenario of [
+      { picks: [undefined] },
+      { picks: ['offset'], inputs: [undefined] },
+      { picks: ['time'], inputs: [undefined] },
+      { picks: ['latest'], confirm: false },
+    ] as Scenario[]) {
+      const { cluster, handlers } = await withGroup(scenario);
+      await handlers.resetOffsets(groupNode());
+      expect(cluster.setOffsetCalls, JSON.stringify(scenario)).toEqual([]);
+    }
+  });
+
+  it('asks which topic when the group has offsets on several', async () => {
+    const { cluster, handlers, pickAsked } = await withGroup({ picks: ['audit', 'latest'] });
+    cluster.addTopic('audit', 1);
+    cluster.append('audit', 0, 'a');
+    cluster.commit('billing', 'audit', 0, 0);
+    await handlers.resetOffsets(groupNode());
+    expect(pickAsked[0]?.labels).toEqual(['audit', 'orders']);
+    expect(cluster.setOffsetCalls[0]?.topic).toBe('audit');
+  });
+
+  it('says so when the group has no offsets', async () => {
+    const { handlers, infos, cluster } = await withGroup();
+    cluster.groups.delete('billing');
+    await handlers.resetOffsets(groupNode());
+    expect(infos[0]).toMatch(/no offsets/u);
+    expect(cluster.setOffsetCalls).toEqual([]);
+  });
+
+  it('names a production connection in the question', async () => {
+    const { handlers, confirms } = await withGroup({
+      picks: ['latest'],
+      connections: [kafka({ production: true })],
+    });
+    await handlers.resetOffsets(groupNode());
+    expect(confirms[0]?.detail).toMatch(/production/u);
+  });
+
+  it('refuses a read-only connection before asking anything, and anything that is not a group', async () => {
+    const { handlers, pickAsked, cluster } = await withGroup({
+      connections: [kafka({ readOnly: true })],
+    });
+    await expect(handlers.resetOffsets(groupNode())).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(pickAsked).toEqual([]);
+    expect(await handlers.resetOffsets(undefined)).toBeUndefined();
+    expect(await handlers.resetOffsets(topicNode())).toBeUndefined();
+    expect(cluster.setOffsetCalls).toEqual([]);
+  });
+
+  it('passes on the broker’s refusal of a group that is running', async () => {
+    const { handlers, cluster } = await withGroup({ picks: ['latest'] });
+    cluster.groupStates.set('billing', 'Stable');
+    await expect(handlers.resetOffsets(groupNode())).rejects.toMatchObject({
+      code: 'constraint',
+    });
   });
 });

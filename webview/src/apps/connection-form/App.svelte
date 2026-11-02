@@ -881,6 +881,9 @@
                 </label>
               </legend>
               {#if fields.useSsh}
+                {#if isKafka}
+                  <p class="hint" data-testid="kafka-tunnel-note">{t('form.kafka.tunnelNote')}</p>
+                {/if}
                 <SshHopEditor
                   hop={fields.ssh}
                   stored={storedFor(fields.ssh.id)}
@@ -965,6 +968,9 @@
               </legend>
               {#if fields.useProxy}
                 <p class="hint">{t('form.proxy.hint')}</p>
+                {#if isKafka}
+                  <p class="hint" data-testid="kafka-proxy-note">{t('form.kafka.tunnelNote')}</p>
+                {/if}
                 <Field label={t('form.proxy.kind')}>
                   <select class="control" bind:value={fields.proxyKind} aria-label={t('form.proxy.kind')}>
                     <option value="socks5">SOCKS5</option>

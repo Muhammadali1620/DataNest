@@ -47,6 +47,12 @@ export class FakeKafka {
   readonly consumers: FakeConsumer[] = [];
   readonly sent: { topic: string; messages: unknown[] }[] = [];
   readonly adminCalls: string[] = [];
+  /** The resets an admin client was asked for. */
+  readonly setOffsetCalls: {
+    groupId: string;
+    topic: string;
+    partitions: { partition: number; offset: string }[];
+  }[] = [];
   /** Makes the next admin call of this name throw. */
   readonly failures = new Map<string, Error>();
   adminConnected = 0;
@@ -237,15 +243,26 @@ export class FakeKafka {
           })),
         });
       },
-      fetchOffsets: ({ groupId }) => {
+      fetchOffsets: ({ groupId, topics: only }) => {
         this.fail('fetchOffsets');
         const topics = this.groups.get(groupId) ?? new Map<string, Map<number, string>>();
         return Promise.resolve(
-          [...topics].map(([topic, parts]) => ({
-            topic,
-            partitions: [...parts].map(([partition, offset]) => ({ partition, offset })),
-          })),
+          [...topics]
+            .filter(([topic]) => only === undefined || only.includes(topic))
+            .map(([topic, parts]) => ({
+              topic,
+              partitions: [...parts].map(([partition, offset]) => ({ partition, offset })),
+            })),
         );
+      },
+      setOffsets: ({ groupId, topic, partitions }) => {
+        this.fail('setOffsets');
+        this.partitionsOf(topic);
+        this.setOffsetCalls.push({ groupId, topic, partitions });
+        for (const one of partitions) {
+          this.commit(groupId, topic, one.partition, Number(one.offset));
+        }
+        return Promise.resolve();
       },
       describeCluster: () => {
         this.fail('describeCluster');
@@ -387,43 +404,59 @@ export class FakeConsumer implements KafkaConsumerLike {
     }
   }
 
+  private gone(): boolean {
+    return this.disconnected;
+  }
+
+  /** Delivers what is stored, then whatever is appended later, until the consumer goes. */
   private async deliver(): Promise<void> {
     const topic = this.subscribed;
     const handler = this.handler;
     if (this.cluster.silent || topic === undefined || handler === undefined) {
       return;
     }
-    const parts = this.cluster.topics.get(topic) ?? [];
-    for (const [partition, part] of parts.entries()) {
-      if (this.paused.includes(partition)) {
-        continue;
-      }
-      const seek = this.seeks.find((one) => one.partition === partition);
-      const start = seek === undefined ? part.low : Number(seek.offset);
-      for (
-        let offset = Math.max(start, part.low);
-        offset < part.low + part.records.length;
-        offset++
-      ) {
-        if (this.disconnected) {
-          return;
-        }
-        const record = part.records[offset - part.low];
-        if (record === undefined) {
+    const next = new Map<number, number>();
+    while (!this.disconnected) {
+      let moved = false;
+      const parts = this.cluster.topics.get(topic) ?? [];
+      for (const [partition, part] of parts.entries()) {
+        if (this.paused.includes(partition)) {
           continue;
         }
-        this.delivered.push(`${partition}:${offset}`);
-        await handler({
-          topic,
-          partition,
-          message: {
-            key: record.key,
-            value: record.value,
-            timestamp: record.timestamp,
-            offset: String(offset),
-            headers: record.headers,
-          },
-        });
+        if (!next.has(partition)) {
+          const seek = this.seeks.find((one) => one.partition === partition);
+          next.set(partition, seek === undefined ? part.low : Number(seek.offset));
+        }
+        for (
+          let offset = Math.max(next.get(partition) ?? 0, part.low);
+          offset < part.low + part.records.length;
+          offset++
+        ) {
+          if (this.gone()) {
+            return;
+          }
+          next.set(partition, offset + 1);
+          const record = part.records[offset - part.low];
+          if (record === undefined) {
+            continue;
+          }
+          moved = true;
+          this.delivered.push(`${partition}:${offset}`);
+          await handler({
+            topic,
+            partition,
+            message: {
+              key: record.key,
+              value: record.value,
+              timestamp: record.timestamp,
+              offset: String(offset),
+              headers: record.headers,
+            },
+          });
+        }
+      }
+      if (!moved) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
       }
     }
   }

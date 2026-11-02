@@ -17,10 +17,12 @@ import {
 } from '../../shared/connection';
 import { identityCheck, sniName, tlsFailure, tlsMaterial, type TlsMaterial } from '../common/tls';
 import type {
+  KafkaCommitted,
   KafkaGroupInfo,
   KafkaHeader,
   KafkaLag,
   KafkaMessage,
+  KafkaOffsetTarget,
   KafkaPartitionInfo,
   KafkaProduced,
   KafkaProduceRequest,
@@ -29,6 +31,7 @@ import type {
   KafkaSession,
   KafkaTopicDetails,
   KafkaTopicInfo,
+  KafkaWatchRequest,
 } from '../kafka-driver';
 import { kafkaFailure } from './errors';
 
@@ -70,6 +73,11 @@ export interface KafkaAdminLike {
     waitForLeaders?: boolean;
   }): Promise<boolean>;
   deleteTopics(options: { topics: string[] }): Promise<void>;
+  setOffsets(options: {
+    groupId: string;
+    topic: string;
+    partitions: { partition: number; offset: string }[];
+  }): Promise<void>;
 }
 
 export interface KafkaIncomingMessage {
@@ -393,6 +401,146 @@ class ClientSession implements KafkaSession {
       await consumer.disconnect().catch(() => undefined);
     }
     return messages.sort((a, b) => Number(BigInt(a.offset) - BigInt(b.offset)));
+  }
+
+  async watchMessages(
+    request: KafkaWatchRequest,
+    onMessages: (messages: readonly KafkaMessage[]) => void,
+  ): Promise<void> {
+    const offsets = await this.run(() => this.admin.fetchTopicOffsets(request.topic));
+    const range = offsets.find((one) => one.partition === request.partition);
+    if (range === undefined) {
+      throw new DbError(
+        'not-found',
+        msg('The topic "{0}" has no partition {1}', request.topic, request.partition),
+      );
+    }
+    const low = BigInt(range.low);
+    const high = BigInt(range.high);
+    let start = bigintOf(request.fromOffset, high);
+    start = start < low ? low : start > high ? high : start;
+    const consumer = this.client.consumer({
+      groupId: `${PEEK_GROUP_PREFIX}${randomUUID()}`,
+      allowAutoTopicCreation: false,
+      maxWaitTimeInMs: 500,
+    });
+    let finish: () => void = () => undefined;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const onAbort = (): void => {
+      finish();
+    };
+    request.signal.addEventListener('abort', onAbort, { once: true });
+    if (request.signal.aborted) {
+      finish();
+    }
+    try {
+      await this.run(async () => {
+        await consumer.connect();
+        await consumer.subscribe({ topic: request.topic, fromBeginning: true });
+        await consumer.run({
+          autoCommit: false,
+          eachMessage: ({ partition, message }) => {
+            if (
+              partition === request.partition &&
+              !request.signal.aborted &&
+              BigInt(message.offset) >= start
+            ) {
+              onMessages([messageOf(partition, message)]);
+            }
+            return Promise.resolve();
+          },
+        });
+        consumer.seek({
+          topic: request.topic,
+          partition: request.partition,
+          offset: start.toString(),
+        });
+        const others = offsets.map((one) => one.partition).filter((p) => p !== request.partition);
+        if (others.length > 0) {
+          consumer.pause([{ topic: request.topic, partitions: others }]);
+        }
+      });
+      await finished;
+    } finally {
+      request.signal.removeEventListener('abort', onAbort);
+      await consumer.disconnect().catch(() => undefined);
+    }
+  }
+
+  async resetGroupOffsets(
+    groupId: string,
+    topic: string,
+    target: KafkaOffsetTarget,
+  ): Promise<readonly KafkaCommitted[]> {
+    const [described, ranges, before] = await this.run(async () =>
+      Promise.all([
+        this.admin.describeGroups([groupId]),
+        this.admin.fetchTopicOffsets(topic),
+        this.admin.fetchOffsets({ groupId, topics: [topic] }),
+      ]),
+    );
+    const state = described.groups.find((one) => one.groupId === groupId)?.state;
+    if (state === undefined || state === 'Dead') {
+      throw new DbError('not-found', msg('The consumer group "{0}" does not exist', groupId));
+    }
+    if (state !== 'Empty') {
+      // Members commit on their own: a reset under them is lost, or the broker refuses it.
+      throw new DbError(
+        'constraint',
+        msg('The group "{0}" is running ({1}); stop its consumers first', groupId, state),
+        { driverCode: 'NON_EMPTY_GROUP' },
+      );
+    }
+    if (ranges.length === 0) {
+      throw new DbError('not-found', msg('The topic "{0}" has no partitions', topic));
+    }
+    const moments =
+      target.kind === 'time'
+        ? await this.offsetsForTime(topic, target.timestamp)
+        : new Map<number, string>();
+    const was = new Map(
+      (before.find((one) => one.topic === topic)?.partitions ?? []).map((one) => [
+        one.partition,
+        /^\d+$/u.test(one.offset) ? one.offset : '',
+      ]),
+    );
+    const commits: KafkaCommitted[] = ranges
+      .map((range) => {
+        const low = BigInt(range.low);
+        const high = BigInt(range.high);
+        let offset: bigint;
+        switch (target.kind) {
+          case 'earliest':
+            offset = low;
+            break;
+          case 'latest':
+            offset = high;
+            break;
+          case 'offset':
+            offset = bigintOf(target.offset, low);
+            break;
+          case 'time':
+            offset = bigintOf(moments.get(range.partition), high);
+            break;
+        }
+        offset = offset < low ? low : offset > high ? high : offset;
+        return {
+          partition: range.partition,
+          before: was.get(range.partition) ?? '',
+          offset: offset.toString(),
+        };
+      })
+      .sort((a, b) => a.partition - b.partition);
+    await this.run(() =>
+      this.admin.setOffsets({
+        groupId,
+        topic,
+        partitions: commits.map((one) => ({ partition: one.partition, offset: one.offset })),
+      }),
+    );
+    return commits;
   }
 
   async offsetsForTime(topic: string, timestamp: number): Promise<ReadonlyMap<number, string>> {

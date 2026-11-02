@@ -3,7 +3,14 @@
 // `sqlserver://host;databaseName=db`, with `jdbc:` and SQLAlchemy-style `+driver` prefixes. Shared by the host (commands,
 // .env import) and the connection form, which can fill itself from a pasted URL.
 
-import type { ConnectionInput, DriverId, SslMode, SslSettings } from './connection';
+import {
+  KAFKA_SASL_MECHANISMS,
+  type ConnectionInput,
+  type DriverId,
+  type KafkaSaslMechanism,
+  type SslMode,
+  type SslSettings,
+} from './connection';
 import { parseElasticUrl } from './elastic-url';
 import { parseMongoUrl } from './mongo-url';
 
@@ -57,6 +64,9 @@ const SCHEMES: Readonly<Record<string, DriverId>> = {
   cql: 'cassandra',
   // etcd (V13.19): the address of its client port; the path means nothing to it.
   etcd: 'etcd',
+  // Kafka (V13.29): `kafka://user:pass@a:9092,b:9092?sasl=scram-sha-256`; `kafkas` is TLS.
+  kafka: 'kafka',
+  kafkas: 'kafka',
   // `rediss` is Redis over TLS; Valkey is a Redis fork with the same protocol (V7.1).
   redis: 'redis',
   rediss: 'redis',
@@ -422,6 +432,75 @@ function lokiUrl(plain: string): UrlResult {
 }
 
 /**
+ * `kafka://user:password@a:9092,b:9092?sasl=scram-sha-256&tls=1` (V13.29). Brokers are a
+ * list, which the URL parser cannot take, so the address is cut by hand: one broker fills
+ * the host and port boxes, several stay as the list the host box accepts. A user means SASL
+ * (`plain` unless `sasl=` names another mechanism); `kafkas://`, or `tls=1`, asks for TLS.
+ */
+function kafkaUrl(plain: string): UrlResult {
+  const match = /^[a-z][a-z0-9.-]*:\/\/([^/?#]*)([^#]*)/iu.exec(plain);
+  if (match === null) {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const authority = match[1] ?? '';
+  const at = authority.lastIndexOf('@');
+  const credentials = at < 0 ? '' : authority.slice(0, at);
+  const brokers = (at < 0 ? authority : authority.slice(at + 1))
+    .split(',')
+    .map((one) => decode(one.trim()))
+    .filter((one) => one !== '');
+  if (brokers.length === 0) {
+    return { ok: false, problem: 'no-host' };
+  }
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams((match[2] ?? '').replace(/^[^?]*\??/u, ''));
+  } catch {
+    return { ok: false, problem: 'not-a-url' };
+  }
+  const colon = credentials.indexOf(':');
+  const user = nonEmpty(decode(colon < 0 ? credentials : credentials.slice(0, colon)));
+  const password = colon < 0 ? undefined : nonEmpty(decode(credentials.slice(colon + 1)));
+  let host = brokers.join(',');
+  let port: number | undefined;
+  if (brokers.length === 1) {
+    const one = /^(\[[^\]]*\]|[^:]+)(?::(\d+))?$/u.exec(brokers[0] ?? '');
+    if (one === null) {
+      return { ok: false, problem: 'not-a-url' };
+    }
+    host = (one[1] ?? '').replace(/^\[(.*)\]$/u, '$1');
+    port = one[2] === undefined ? undefined : Number(one[2]);
+  }
+  const scheme = /^([a-z][a-z0-9.-]*):/i.exec(plain)?.[1]?.toLowerCase() ?? '';
+  const tls =
+    scheme === 'kafkas' || ['1', 'true'].includes((params.get('tls') ?? '').toLowerCase());
+  const mechanism = (nonEmpty(params.get('sasl')) ?? nonEmpty(params.get('mechanism')) ?? '')
+    .toLowerCase()
+    .replaceAll('_', '-');
+  const sasl = (KAFKA_SASL_MECHANISMS as readonly string[]).includes(mechanism)
+    ? (mechanism as KafkaSaslMechanism)
+    : user === undefined
+      ? 'none'
+      : 'plain';
+  const input: ConnectionInput = {
+    name: '',
+    driver: 'kafka',
+    host,
+    ...(port === undefined || port < 1 || port > 65_535 ? {} : { port }),
+    ...(user === undefined ? {} : { user }),
+    ...(tls ? { ssl: { mode: 'verify-full' as const } } : {}),
+    ...(sasl === 'none' ? {} : { kafka: { sasl } }),
+  };
+  return {
+    ok: true,
+    value: {
+      input: { ...input, name: suggestedName(input) },
+      ...(password === undefined ? {} : { password }),
+    },
+  };
+}
+
+/**
  * `neo4j://user:password@host:7687/database`, `neo4j+s://` for TLS. The address a Neo4j
  * client prints is a Bolt address, and DataNest speaks HTTP: Bolt's port is dropped, so the
  * HTTP default is used, and any other port is kept.
@@ -507,6 +586,9 @@ export function parseConnectionUrl(text: string): UrlResult {
   }
   if (driver === 'loki') {
     return lokiUrl(plain);
+  }
+  if (driver === 'kafka') {
+    return kafkaUrl(plain);
   }
   let url: URL;
   try {

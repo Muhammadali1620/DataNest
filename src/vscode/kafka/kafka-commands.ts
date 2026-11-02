@@ -4,9 +4,10 @@
 
 import { DbError } from '../../core/errors';
 import { msg } from '../../core/user-message';
-import type { KafkaSession } from '../../drivers/kafka-driver';
+import type { KafkaOffsetTarget, KafkaSession } from '../../drivers/kafka-driver';
 import type { ConnectionStore } from '../../services/connection-store';
 import { changeVerdict, policyOf } from '../../services/write-policy';
+import { parseMoment } from '../panels/kafka-topic-model';
 import { connectionIdOf, isTreeNode, type TreeNode } from '../tree/nodes';
 import type { CommandTarget } from '../tree/tree-commands';
 
@@ -26,6 +27,11 @@ export interface KafkaCommandUi {
   }): Promise<string | undefined>;
   /** A modal question with one action; true when the user takes it. */
   confirm(message: string, detail: string | undefined, action: string): Promise<boolean>;
+  /** Picks one of the items; undefined when the user backs out. */
+  pick<T>(
+    items: readonly { readonly label: string; readonly description?: string; readonly value: T }[],
+    placeholder: string,
+  ): Promise<T | undefined>;
   /** Picks one of the connections; undefined when the user backs out. */
   pickConnection(ids: readonly string[]): Promise<string | undefined>;
   /** Tells the user something without asking. */
@@ -46,7 +52,7 @@ export interface KafkaCommandDeps {
   };
 }
 
-export type KafkaCommandName = 'openTopic' | 'newTopic' | 'deleteTopic';
+export type KafkaCommandName = 'openTopic' | 'newTopic' | 'deleteTopic' | 'resetOffsets';
 
 /** What is wrong with a topic name, or undefined when Kafka takes it. */
 export function topicNameProblem(name: string): string | undefined {
@@ -187,6 +193,116 @@ export function kafkaCommandHandlers(
       const session = await deps.session(target.connectionId);
       await session.deleteTopic(target.topic);
       deps.tree.refresh(topicsNode(target.connectionId));
+      return undefined;
+    },
+
+    resetOffsets: async (target?: CommandTarget) => {
+      if (!isTreeNode(target) || target.kind !== 'kafkaGroup') {
+        return undefined;
+      }
+      requireWritable(target.connectionId);
+      const policy = policyOf(deps.store.get(target.connectionId));
+      const session = await deps.session(target.connectionId);
+      const topics = [...new Set((await session.groupLag(target.group)).map((one) => one.topic))];
+      if (topics.length === 0) {
+        deps.ui.info(msg('The group "{0}" has committed no offsets yet', target.group));
+        return undefined;
+      }
+      const topic =
+        topics.length === 1
+          ? topics[0]
+          : await deps.ui.pick(
+              topics.map((name) => ({ label: name, value: name })),
+              msg('Which topic should the offsets of "{0}" move on?', target.group),
+            );
+      if (topic === undefined) {
+        return undefined;
+      }
+      const chosen = await deps.ui.pick<'earliest' | 'latest' | 'offset' | 'time'>(
+        [
+          {
+            label: msg('To the beginning'),
+            description: msg('the group reads the topic again from its oldest message'),
+            value: 'earliest',
+          },
+          {
+            label: msg('To the end'),
+            description: msg('the group skips everything that is there now'),
+            value: 'latest',
+          },
+          {
+            label: msg('To an offset…'),
+            description: msg('the same offset on every partition'),
+            value: 'offset',
+          },
+          {
+            label: msg('To a moment in time…'),
+            description: msg('the first message at or after it'),
+            value: 'time',
+          },
+        ],
+        msg('Where should the group of "{0}" read from?', topic),
+      );
+      if (chosen === undefined) {
+        return undefined;
+      }
+      let move: KafkaOffsetTarget;
+      if (chosen === 'offset') {
+        const text = await deps.ui.input({
+          title: msg('Reset Offsets'),
+          prompt: msg('The offset (a partition that holds fewer messages goes to its end)'),
+          value: '0',
+          validate: (value) =>
+            /^\d{1,18}$/u.test(value.trim()) ? undefined : msg('Enter a whole number, 0 or more'),
+        });
+        if (text === undefined) {
+          return undefined;
+        }
+        move = { kind: 'offset', offset: text.trim() };
+      } else if (chosen === 'time') {
+        const text = await deps.ui.input({
+          title: msg('Reset Offsets'),
+          prompt: msg('The moment, e.g. 2026-11-01 12:00 (or milliseconds since 1970)'),
+          validate: (value) => {
+            try {
+              parseMoment(value);
+              return undefined;
+            } catch {
+              return msg('That is not a date and time');
+            }
+          },
+        });
+        if (text === undefined) {
+          return undefined;
+        }
+        move = { kind: 'time', timestamp: parseMoment(text) };
+      } else {
+        move = { kind: chosen };
+      }
+      // The consumers will start from the new place: that is always worth a question.
+      const taken = await deps.ui.confirm(
+        msg('Move the offsets of the group "{0}" on the topic "{1}"?', target.group, topic),
+        policy.production
+          ? msg(
+              '"{0}" is a production connection. The group will read from the new place.',
+              policy.name,
+            )
+          : msg('The group will read from the new place; what it skips is not read again.'),
+        msg('Reset'),
+      );
+      if (!taken) {
+        return undefined;
+      }
+      const done = await session.resetGroupOffsets(target.group, topic, move);
+      deps.tree.refresh(target);
+      deps.ui.info(
+        msg(
+          'Moved the offsets of "{0}" on {1} partitions of "{2}"',
+          target.group,
+          done.length,
+          topic,
+        ),
+      );
       return undefined;
     },
   };

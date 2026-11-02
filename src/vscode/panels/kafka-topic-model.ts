@@ -28,7 +28,12 @@ export interface KafkaTopicModelDeps {
   readonly readOnly: boolean;
   /** The session of the topic's connection. */
   readonly session: () => Promise<KafkaSession>;
+  /** Milliseconds live messages are gathered before the page hears of them. */
+  readonly tailFlushMs?: number;
 }
+
+/** How long live messages are gathered before the page is told. */
+export const DEFAULT_TAIL_FLUSH_MS = 250;
 
 export interface KafkaReadParams {
   readonly partition: number;
@@ -79,11 +84,19 @@ export class KafkaTopicModel {
   private asked: KafkaReadParams = { partition: 0, mode: 'last', count: DEFAULT_KAFKA_COUNT };
   private read = false;
   private notice: string | undefined;
+  private tail: AbortController | undefined;
+  private tailPending: KafkaMessageView[] = [];
+  private tailTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly deps: KafkaTopicModelDeps) {}
 
   get topic(): string {
     return this.deps.topic;
+  }
+
+  /** True while the topic is followed live. */
+  get tailing(): boolean {
+    return this.tail !== undefined;
   }
 
   /** What the page renders. */
@@ -100,6 +113,7 @@ export class KafkaTopicModel {
       messages: this.messages,
       read: this.read,
       ...(this.notice === undefined ? {} : { notice: this.notice }),
+      ...(this.tail === undefined ? {} : { tailing: true }),
     };
   }
 
@@ -119,6 +133,7 @@ export class KafkaTopicModel {
 
   /** Reads messages of one partition as asked. */
   async readMessages(params: KafkaReadParams, signal?: AbortSignal): Promise<KafkaTopicState> {
+    this.stopTail();
     const session = await this.deps.session();
     const count = Math.min(Math.max(1, Math.trunc(params.count)), MAX_KAFKA_COUNT);
     let fromOffset: string | undefined;
@@ -166,6 +181,71 @@ export class KafkaTopicModel {
     return this.state();
   }
 
+  /**
+   * Follows a partition: the messages that arrive from now on are added to the ones shown
+   * (kept up to what a read brings, the oldest go first) and `onChange` is called, at most
+   * once per flush interval, so the page can show them. A failure ends the tail and says so.
+   */
+  async startTail(partition: number, onChange: () => void): Promise<KafkaTopicState> {
+    this.stopTail();
+    const session = await this.deps.session();
+    if (this.asked.partition !== partition || !this.read) {
+      this.messages = [];
+    }
+    this.asked = { ...this.asked, partition };
+    this.read = true;
+    this.notice = undefined;
+    const abort = new AbortController();
+    this.tail = abort;
+    const flushMs = this.deps.tailFlushMs ?? DEFAULT_TAIL_FLUSH_MS;
+    const flush = (): void => {
+      this.tailTimer = undefined;
+      this.takePending();
+      onChange();
+    };
+    void session
+      .watchMessages({ topic: this.deps.topic, partition, signal: abort.signal }, (arrived) => {
+        if (this.tail !== abort) {
+          return;
+        }
+        this.tailPending.push(...arrived.map(viewOf));
+        this.tailTimer ??= setTimeout(flush, flushMs);
+      })
+      .catch((error: unknown) => {
+        if (this.tail !== abort) {
+          return;
+        }
+        this.stopTail();
+        this.notice = msg(
+          'Live reading stopped: {0}',
+          error instanceof Error ? error.message : String(error),
+        );
+        onChange();
+      });
+    return this.state();
+  }
+
+  /** Stops following the partition; what arrived is kept. */
+  stopTail(): KafkaTopicState {
+    const running = this.tail;
+    this.tail = undefined;
+    running?.abort();
+    if (this.tailTimer !== undefined) {
+      clearTimeout(this.tailTimer);
+      this.tailTimer = undefined;
+    }
+    this.takePending();
+    return this.state();
+  }
+
+  private takePending(): void {
+    if (this.tailPending.length === 0) {
+      return;
+    }
+    this.messages = [...this.messages, ...this.tailPending].slice(-MAX_KAFKA_COUNT);
+    this.tailPending = [];
+  }
+
   /** Sends one message and reads the partitions again. */
   async produce(params: KafkaProduceParams): Promise<{
     readonly state: KafkaTopicState;
@@ -195,6 +275,7 @@ export class KafkaTopicModel {
 
   async deleteTopic(): Promise<void> {
     this.requireWritable();
+    this.stopTail();
     await (await this.deps.session()).deleteTopic(this.deps.topic);
   }
 

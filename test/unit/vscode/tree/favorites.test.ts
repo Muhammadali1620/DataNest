@@ -17,6 +17,7 @@ import {
 } from '../../../../src/vscode/tree/favorites';
 import { type TreeNode, TREE_CONTEXT, nodeId } from '../../../../src/vscode/tree/nodes';
 import { FakeMemento } from '../../../helpers/fakes';
+import { must } from '../../../helpers/must';
 
 const table: TreeNode = {
   kind: 'table',
@@ -56,6 +57,8 @@ const NODES: TreeNode[] = [
     connectionId: 'e',
     index: { name: 'logs', status: 'close', hidden: true, docs: '5' },
   },
+  { kind: 'kafkaTopic', connectionId: 'k', topic: 'orders', internal: false },
+  { kind: 'kafkaGroup', connectionId: 'k', group: 'billing', state: 'Stable', members: 3 },
 ];
 
 function node(index: number): TreeNode {
@@ -103,6 +106,32 @@ describe('refOf and nodeOfRef', () => {
   });
 });
 
+describe('Kafka favorites (V13.29)', () => {
+  it('keeps only the name of a topic or group, and builds a node that has the same id', () => {
+    const topic = refOf(node(NODES.length - 2));
+    const group = refOf(node(NODES.length - 1));
+    expect(topic).toEqual({ kind: 'kafkaTopic', connectionId: 'k', name: 'orders' });
+    expect(group).toEqual({ kind: 'kafkaGroup', connectionId: 'k', name: 'billing' });
+    expect(nodeOfRef(must(group))).toMatchObject({ state: '', members: 0 });
+  });
+
+  it('knows a topic of the cluster by its leading underscore', () => {
+    expect(
+      nodeOfRef({ kind: 'kafkaTopic', connectionId: 'k', name: '__consumer_offsets' }),
+    ).toMatchObject({
+      internal: true,
+    });
+    expect(nodeOfRef({ kind: 'kafkaTopic', connectionId: 'k', name: 'orders' })).toMatchObject({
+      internal: false,
+    });
+  });
+
+  it('does not star a partition or a folder', () => {
+    expect(refOf({ kind: 'kafkaTopics', connectionId: 'k' })).toBeUndefined();
+    expect(refOf({ kind: 'kafkaGroups', connectionId: 'k' })).toBeUndefined();
+  });
+});
+
 describe('parseRef', () => {
   it('reads what refOf wrote', () => {
     for (const node of NODES) {
@@ -137,6 +166,8 @@ describe('parseRef', () => {
         collectionType: 'bad',
       },
       { kind: 'elasticIndex', connectionId: 'c' },
+      { kind: 'kafkaTopic', connectionId: 'c' },
+      { kind: 'kafkaGroup', connectionId: 'c', name: '' },
       { kind: 'column', connectionId: 'c' },
       { kind: 'connection', connectionId: 'x'.repeat(1001) },
     ];

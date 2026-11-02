@@ -1243,6 +1243,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     [COMMAND_IDS.kafkaOpenTopic]: kafkaCommands.openTopic,
     [COMMAND_IDS.kafkaNewTopic]: kafkaCommands.newTopic,
     [COMMAND_IDS.kafkaDeleteTopic]: kafkaCommands.deleteTopic,
+    [COMMAND_IDS.kafkaResetOffsets]: kafkaCommands.resetOffsets,
     [COMMAND_IDS.rabbitOpenObject]: rabbitCommands.openObject,
     [COMMAND_IDS.rabbitNewQueue]: rabbitCommands.newQueue,
     [COMMAND_IDS.rabbitNewExchange]: rabbitCommands.newExchange,

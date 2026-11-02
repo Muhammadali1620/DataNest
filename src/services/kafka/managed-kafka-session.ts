@@ -5,9 +5,11 @@
 
 import { toDbError } from '../../core/errors';
 import type {
+  KafkaCommitted,
   KafkaGroupInfo,
   KafkaLag,
   KafkaMessage,
+  KafkaOffsetTarget,
   KafkaProduced,
   KafkaProduceRequest,
   KafkaReadRequest,
@@ -15,6 +17,7 @@ import type {
   KafkaSession,
   KafkaTopicDetails,
   KafkaTopicInfo,
+  KafkaWatchRequest,
 } from '../../drivers/kafka-driver';
 
 export interface ManagedKafkaSessionHooks {
@@ -59,6 +62,21 @@ export class ManagedKafkaSession implements KafkaSession {
 
   offsetsForTime(topic: string, timestamp: number): Promise<ReadonlyMap<number, string>> {
     return this.call(() => this.inner.offsetsForTime(topic, timestamp));
+  }
+
+  watchMessages(
+    request: KafkaWatchRequest,
+    onMessages: (messages: readonly KafkaMessage[]) => void,
+  ): Promise<void> {
+    return this.call(() => this.inner.watchMessages(request, onMessages));
+  }
+
+  resetGroupOffsets(
+    groupId: string,
+    topic: string,
+    target: KafkaOffsetTarget,
+  ): Promise<readonly KafkaCommitted[]> {
+    return this.call(() => this.inner.resetGroupOffsets(groupId, topic, target));
   }
 
   listGroups(): Promise<readonly KafkaGroupInfo[]> {

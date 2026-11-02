@@ -58,6 +58,8 @@ export const kafkaTopicStateSchema = object({
   read: boolean(),
   /** What the last read did not bring, in words (a moment past the last message, …). */
   notice: optional(string({ maxLength: 1000 })),
+  /** True while the page follows the partition live (V13.29). */
+  tailing: optional(boolean()),
 });
 
 export const kafkaTopicProtocol = defineProtocol({
@@ -77,6 +79,14 @@ export const kafkaTopicProtocol = defineProtocol({
           offset: optional(string({ maxLength: 24 })),
           time: optional(string({ maxLength: 100 })),
         }),
+        result: object({}),
+      },
+      /**
+       * Follows new messages of a partition live, or stops doing so (V13.29). The messages
+       * come as state updates; they are kept up to the most a read brings.
+       */
+      tail: {
+        params: object({ partition: number({ integer: true, min: 0 }), on: boolean() }),
         result: object({}),
       },
       /** Sends one message; `value` null sends a tombstone. */

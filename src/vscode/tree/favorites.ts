@@ -39,7 +39,9 @@ export type FavoriteRef =
       readonly collection: string;
       readonly collectionType: 'collection' | 'view' | 'timeseries';
     }
-  | { readonly kind: 'elasticIndex'; readonly connectionId: string; readonly name: string };
+  | { readonly kind: 'elasticIndex'; readonly connectionId: string; readonly name: string }
+  | { readonly kind: 'kafkaTopic'; readonly connectionId: string; readonly name: string }
+  | { readonly kind: 'kafkaGroup'; readonly connectionId: string; readonly name: string };
 
 /**
  * A starred node wears its usual context value plus this suffix, so the menus can offer
@@ -67,6 +69,10 @@ export const FAVORITABLE_CONTEXTS: readonly string[] = [
   TREE_CONTEXT.elasticConnectionConnected,
   TREE_CONTEXT.projectElasticConnection,
   TREE_CONTEXT.projectElasticConnectionConnected,
+  TREE_CONTEXT.kafkaConnection,
+  TREE_CONTEXT.kafkaConnectionConnected,
+  TREE_CONTEXT.projectKafkaConnection,
+  TREE_CONTEXT.projectKafkaConnectionConnected,
   TREE_CONTEXT.database,
   TREE_CONTEXT.schema,
   TREE_CONTEXT.table,
@@ -76,6 +82,8 @@ export const FAVORITABLE_CONTEXTS: readonly string[] = [
   TREE_CONTEXT.mongoCollection,
   TREE_CONTEXT.mongoView,
   TREE_CONTEXT.elasticIndex,
+  TREE_CONTEXT.kafkaTopic,
+  TREE_CONTEXT.kafkaGroup,
 ];
 
 /** The context value of a node, marked as starred. */
@@ -158,6 +166,10 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
       };
     case 'elasticIndex':
       return { kind: 'elasticIndex', connectionId: node.connectionId, name: node.index.name };
+    case 'kafkaTopic':
+      return { kind: 'kafkaTopic', connectionId: node.connectionId, name: node.topic };
+    case 'kafkaGroup':
+      return { kind: 'kafkaGroup', connectionId: node.connectionId, name: node.group };
     case 'project':
     case 'connectionFolder':
     case 'group':
@@ -182,10 +194,8 @@ export function refOf(node: TreeNode): FavoriteRef | undefined {
     case 'zookeeperNode':
     case 'zookeeperMore':
     case 'kafkaTopics':
-    case 'kafkaTopic':
     case 'kafkaPartition':
     case 'kafkaGroups':
-    case 'kafkaGroup':
     case 'rabbitVhost':
     case 'rabbitFolder':
     case 'rabbitQueue':
@@ -243,6 +253,21 @@ export function nodeOfRef(ref: FavoriteRef): TreeNode {
         kind: 'elasticIndex',
         connectionId: ref.connectionId,
         index: { name: ref.name, status: 'open', hidden: false },
+      };
+    case 'kafkaTopic':
+      return {
+        kind: 'kafkaTopic',
+        connectionId: ref.connectionId,
+        topic: ref.name,
+        internal: ref.name.startsWith('_'),
+      };
+    case 'kafkaGroup':
+      return {
+        kind: 'kafkaGroup',
+        connectionId: ref.connectionId,
+        group: ref.name,
+        state: '',
+        members: 0,
       };
   }
 }
@@ -314,7 +339,9 @@ export function parseRef(value: unknown): FavoriteRef | undefined {
           }
         : undefined;
     case 'elasticIndex':
-      return text(name) ? { kind: 'elasticIndex', connectionId, name } : undefined;
+    case 'kafkaTopic':
+    case 'kafkaGroup':
+      return text(name) ? { kind: value.kind, connectionId, name } : undefined;
     default:
       return undefined;
   }

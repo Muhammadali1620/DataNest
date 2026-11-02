@@ -28,6 +28,18 @@ export function kafkaCommandUi(store: Pick<ConnectionStore, 'get'>): KafkaComman
       return answer === action;
     },
 
+    pick: async (items, placeholder) => {
+      const chosen = await vscode.window.showQuickPick(
+        items.map((item) => ({
+          label: item.label,
+          ...(item.description === undefined ? {} : { description: item.description }),
+          value: item.value,
+        })),
+        { placeHolder: placeholder },
+      );
+      return chosen?.value;
+    },
+
     pickConnection: async (ids) => {
       const chosen = await vscode.window.showQuickPick(
         ids.map((id) => {

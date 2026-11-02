@@ -27,10 +27,10 @@ describe('urlDriver', () => {
   });
 
   it('ignores everything else', () => {
-    // MongoDB joined in V7.5 and Cassandra in V13.22; Kafka is still unknown.
+    // MongoDB joined in V7.5, Cassandra in V13.22 and Kafka in V13.29; memcached is unknown.
     expect(urlDriver('mongodb://h')).toBe('mongodb');
     expect(urlDriver('cassandra://h')).toBe('cassandra');
-    expect(urlDriver('kafka://h')).toBeUndefined();
+    expect(urlDriver('memcached://h')).toBeUndefined();
     expect(urlDriver('https://example.com')).toBeUndefined();
     expect(urlDriver('just text')).toBeUndefined();
   });
@@ -142,7 +142,7 @@ describe('parseConnectionUrl', () => {
     expect(parseConnectionUrl('localhost:5432')).toEqual({ ok: false, problem: 'unknown-scheme' });
     expect(parseConnectionUrl('just text')).toEqual({ ok: false, problem: 'not-a-url' });
     expect(parseConnectionUrl('')).toEqual({ ok: false, problem: 'not-a-url' });
-    expect(parseConnectionUrl('kafka://cache:9092')).toEqual({
+    expect(parseConnectionUrl('memcached://cache:11211')).toEqual({
       ok: false,
       problem: 'unknown-scheme',
     });
@@ -483,5 +483,82 @@ describe('etcd:// URLs (V13.19)', () => {
     expect(urlDriver('etcd://h')).toBe('etcd');
     const result = parseConnectionUrl('etcd://h?sslmode=require');
     expect(result.ok && result.value.input.ssl).toEqual({ mode: 'require' });
+  });
+});
+
+describe('kafka:// URLs (V13.29)', () => {
+  const input = (text: string) => {
+    const result = parseConnectionUrl(text);
+    expect(result.ok, text).toBe(true);
+    return result.ok ? result.value : undefined;
+  };
+
+  it('is a Kafka URL by either scheme', () => {
+    expect(urlDriver('kafka://h')).toBe('kafka');
+    expect(urlDriver('kafkas://h')).toBe('kafka');
+  });
+
+  it('puts one broker into the host and port boxes', () => {
+    const value = input('kafka://broker.local:9093');
+    expect(value?.input).toMatchObject({ driver: 'kafka', host: 'broker.local', port: 9093 });
+    expect(value?.input.user).toBeUndefined();
+    expect(value?.input.kafka).toBeUndefined();
+    expect(value?.input.ssl).toBeUndefined();
+    expect(value?.password).toBeUndefined();
+  });
+
+  it('leaves the port empty when the address has none, and reads an IPv6 broker', () => {
+    expect(input('kafka://broker')?.input.port).toBeUndefined();
+    expect(input('kafka://[::1]:9092')?.input).toMatchObject({ host: '::1', port: 9092 });
+    expect(input('kafka://[::1]')?.input).toMatchObject({ host: '::1' });
+  });
+
+  it('keeps several brokers as the list the host box takes', () => {
+    const value = input('kafka://a:9092,b:9093, c');
+    expect(value?.input.host).toBe('a:9092,b:9093,c');
+    expect(value?.input.port).toBeUndefined();
+  });
+
+  it('reads a user as SASL PLAIN, with the password kept apart', () => {
+    const value = input('kafka://alice:p%40ss@h:9092');
+    expect(value?.input).toMatchObject({ user: 'alice', kafka: { sasl: 'plain' } });
+    expect(value?.password).toBe('p@ss');
+  });
+
+  it('takes the SASL mechanism from the query, in either spelling', () => {
+    expect(input('kafka://u:p@h?sasl=scram-sha-512')?.input.kafka).toEqual({
+      sasl: 'scram-sha-512',
+    });
+    expect(input('kafka://u:p@h?mechanism=SCRAM_SHA_256')?.input.kafka).toEqual({
+      sasl: 'scram-sha-256',
+    });
+    expect(input('kafka://u:p@h?sasl=gssapi')?.input.kafka).toEqual({ sasl: 'plain' });
+  });
+
+  it('signs in with nothing when there is no user', () => {
+    expect(input('kafka://h?sasl=plain')?.input.kafka).toEqual({ sasl: 'plain' });
+    expect(input('kafka://h?sasl=none')?.input.kafka).toBeUndefined();
+  });
+
+  it('asks for TLS by the scheme or by a query', () => {
+    expect(input('kafkas://h')?.input.ssl).toEqual({ mode: 'verify-full' });
+    expect(input('kafka://h?tls=1')?.input.ssl).toEqual({ mode: 'verify-full' });
+    expect(input('kafka://h?tls=false')?.input.ssl).toBeUndefined();
+  });
+
+  it('names the connection after the host and ignores a path', () => {
+    expect(input('kafka://h:9092/ignored')?.input.name).toBe('h');
+  });
+
+  it('refuses a URL without a broker, or with a broken one', () => {
+    expect(parseConnectionUrl('kafka://')).toEqual({ ok: false, problem: 'no-host' });
+    expect(parseConnectionUrl('kafka://u:p@')).toEqual({ ok: false, problem: 'no-host' });
+    expect(parseConnectionUrl('kafka://,,')).toEqual({ ok: false, problem: 'no-host' });
+    expect(parseConnectionUrl('kafka://a b:c:d')).toEqual({ ok: false, problem: 'not-a-url' });
+  });
+
+  it('drops a port that is out of range and keeps a stray percent sign', () => {
+    expect(input('kafka://h:70000')?.input.port).toBeUndefined();
+    expect(input('kafka://u:100%@h')?.password).toBe('100%');
   });
 });

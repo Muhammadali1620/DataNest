@@ -179,6 +179,10 @@ export const en = {
   'kafka.time': 'Time',
   'kafka.count': 'Count',
   'kafka.read': 'Read',
+  'kafka.live': 'Follow live',
+  'kafka.liveStop': 'Stop',
+  'kafka.liveWaiting': 'Live: waiting for new messages…',
+  'kafka.liveOn': 'Live: new messages are added below as they arrive',
   'kafka.readHint': 'Reading does not move what any consumer group has read: nothing is committed.',
   'kafka.messagesTitle': 'Messages',
   'kafka.tombstoneBadge': 'tombstone',
@@ -237,6 +241,8 @@ export const en = {
   'form.kafka.hostHint':
     'The bootstrap brokers, as host:port separated by commas; the port box fills in those without one',
   'form.kafka.userHint': 'The SASL user name; leave empty when the brokers ask for no sign-in',
+  'form.kafka.tunnelNote':
+    'The tunnel only reaches the first address. After that the brokers name themselves (their advertised listeners), and the client connects to those addresses directly. The tunnel works only when the cluster advertises addresses this computer can reach (for example, forwarded to the same ports).',
   'form.kafka.sasl': 'Sign-in (SASL)',
   'form.kafka.saslHint':
     'How the brokers want the user to sign in; use TLS below when the password must not travel in the clear',

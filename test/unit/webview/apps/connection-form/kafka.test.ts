@@ -159,6 +159,27 @@ describe('connection form: Kafka (V13.23)', () => {
     expect(drafts[0]?.input).not.toHaveProperty('kafka');
   });
 
+  it('warns that a tunnel or proxy only reaches the first address, and only for Kafka', async () => {
+    await withState(kafka());
+    expect(screen.queryByTestId('kafka-tunnel-note')).toBeNull();
+    await fireEvent.click(screen.getByLabelText(/Connect through an SSH tunnel/u));
+    await waitFor(() => {
+      expect(screen.queryByTestId('kafka-tunnel-note')?.textContent).toMatch(
+        /advertised listeners|names themselves/u,
+      );
+    });
+    await fireEvent.click(screen.getByTestId('use-proxy'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('kafka-proxy-note')).not.toBeNull();
+    });
+    const card = cards().find((item) => item.getAttribute('data-value') === 'postgres');
+    await fireEvent.click(must(card));
+    await waitFor(() => {
+      expect(screen.queryByTestId('kafka-tunnel-note')).toBeNull();
+    });
+    expect(screen.queryByTestId('kafka-proxy-note')).toBeNull();
+  });
+
   it('speaks Russian when asked', async () => {
     await withState(kafka(), 'ru');
     expect(screen.getByLabelText('Вход (SASL)')).toBeTruthy();

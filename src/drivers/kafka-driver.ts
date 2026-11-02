@@ -64,6 +64,32 @@ export interface KafkaReadRequest {
   readonly signal?: AbortSignal;
 }
 
+/** Follows new messages of one partition until `signal` aborts (V13.29). */
+export interface KafkaWatchRequest {
+  readonly topic: string;
+  readonly partition: number;
+  /** Where to start. Absent: the end of the partition, so only messages that arrive later. */
+  readonly fromOffset?: string;
+  readonly signal: AbortSignal;
+}
+
+/** Where a group's committed offsets go when they are reset (V13.29). */
+export type KafkaOffsetTarget =
+  | { readonly kind: 'earliest' }
+  | { readonly kind: 'latest' }
+  /** One offset for every partition, held inside what the partition stores. */
+  | { readonly kind: 'offset'; readonly offset: string }
+  /** The first message at or after a moment (ms); past the last message: the end. */
+  | { readonly kind: 'time'; readonly timestamp: number };
+
+/** What a reset committed for one partition. */
+export interface KafkaCommitted {
+  readonly partition: number;
+  /** The offset the group had before; empty when it had none. */
+  readonly before: string;
+  readonly offset: string;
+}
+
 export interface KafkaGroupInfo {
   readonly id: string;
   /** `Stable`, `Empty`, `PreparingRebalance`, … */
@@ -110,7 +136,25 @@ export interface KafkaSession {
    * after the last message gives the end offset, the one the next message will get.
    */
   offsetsForTime(topic: string, timestamp: number): Promise<ReadonlyMap<number, string>>;
+  /**
+   * Follows a partition live: `onMessages` gets every message that arrives, in order, until
+   * the signal aborts (then this resolves). Like a read it uses a throw-away group and
+   * commits nothing (D153).
+   */
+  watchMessages(
+    request: KafkaWatchRequest,
+    onMessages: (messages: readonly KafkaMessage[]) => void,
+  ): Promise<void>;
   listGroups(): Promise<readonly KafkaGroupInfo[]>;
+  /**
+   * Commits new offsets for a group on every partition of a topic. The group must have no
+   * live members: the broker would refuse otherwise, and the consumers would overwrite it.
+   */
+  resetGroupOffsets(
+    groupId: string,
+    topic: string,
+    target: KafkaOffsetTarget,
+  ): Promise<readonly KafkaCommitted[]>;
   groupLag(groupId: string): Promise<readonly KafkaLag[]>;
   produce(request: KafkaProduceRequest): Promise<KafkaProduced>;
   createTopic(name: string, partitions: number, replication: number): Promise<void>;

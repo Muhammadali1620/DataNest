@@ -79,6 +79,7 @@ async function open(
   host.handle('produce', reply('produce', { produced: true, partition: 1, offset: '9' }));
   host.handle('deleteTopic', reply('deleteTopic', { deleted: true }));
   host.handle('copyText', reply('copyText', {}));
+  host.handle('tail', reply('tail', {}));
   render(App, { props: { rpc, t: createTranslator(language) } });
   await flush();
   host.emit('state', initial);
@@ -352,5 +353,62 @@ describe('Kafka topic page: the toolbar', () => {
     expect(sent(opened, 'refresh')).toHaveLength(1);
     expect(sent(opened, 'copyText')).toEqual([{ text: 'orders' }]);
     expect(sent(opened, 'deleteTopic')).toHaveLength(1);
+  });
+});
+
+describe('Kafka topic page: following live (V13.29)', () => {
+  it('asks the host to follow the chosen partition', async () => {
+    const opened = await open(state());
+    const live = screen.getByTestId<HTMLButtonElement>('live');
+    expect(live.textContent.trim()).toBe('Follow live');
+    expect(live.getAttribute('aria-pressed')).toBe('false');
+    const rows = within(screen.getByTestId('partitions')).getAllByRole('row').slice(1);
+    await fireEvent.click(must(rows[2]));
+    await fireEvent.click(live);
+    await flush();
+    expect(sent(opened, 'tail')).toEqual([{ partition: 2, on: true }]);
+  });
+
+  it('says it is live and waiting, then that messages are being added', async () => {
+    const opened = await open(state());
+    opened.host.emit('state', state({ read: true, tailing: true }));
+    await waitFor(() => {
+      expect(screen.getByTestId('live-note').textContent).toMatch(/waiting for new messages/u);
+    });
+    expect(screen.getByTestId('live').textContent.trim()).toBe('Stop');
+    expect(screen.getByTestId('live').getAttribute('aria-pressed')).toBe('true');
+    opened.host.emit('state', state({ read: true, tailing: true, messages: [message('8')] }));
+    await waitFor(() => {
+      expect(screen.getByTestId('live-note').textContent).toMatch(/added below/u);
+    });
+    expect(screen.getByTestId('messages')).toBeTruthy();
+  });
+
+  it('asks the host to stop when it is live', async () => {
+    const opened = await open(state({ read: true, tailing: true }));
+    await fireEvent.click(screen.getByTestId('live'));
+    await flush();
+    expect(sent(opened, 'tail')).toEqual([{ partition: 1, on: false }]);
+  });
+
+  it('shows no live note once it has stopped', async () => {
+    const opened = await open(state({ read: true, tailing: true }));
+    opened.host.emit('state', state({ read: true, notice: 'Live reading stopped: gone' }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('live-note')).toBeNull();
+    });
+    expect(screen.getByTestId('notice').textContent).toMatch(/Live reading stopped/u);
+    expect(screen.getByTestId('live').textContent.trim()).toBe('Follow live');
+  });
+
+  it('cannot follow a topic without partitions', async () => {
+    await open(state({ partitions: [] }));
+    expect(screen.getByTestId<HTMLButtonElement>('live').disabled).toBe(true);
+  });
+
+  it('speaks Russian when asked', async () => {
+    await open(state({ read: true, tailing: true }), 'ru');
+    expect(screen.getByTestId('live').textContent.trim()).toBe('Остановить');
+    expect(screen.getByTestId('live-note').textContent).toMatch(/Вживую/u);
   });
 });

@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- SQLite files on a server can be changed without sending the file back: tick "Allow changes" in the SSH settings of a SQLite connection, and statements that change the file run on the server through Python 3 there (its own SQLite takes the locks); the copy you browse is made again after a change.
 - etcd and ZooKeeper: watch a key or znode live from its page (changes are listed as they happen), turn etcd authentication on and off from "Users and Roles", and give a ZooKeeper ACL to every znode below.
 - Grafana Loki: check over TLS and follow a query with no time limit (`# tail: forever`). RabbitMQ: make and delete virtual hosts, change a user's password or tags (the password is kept when only the tags change), and live graphs of a queue's messages and rates.
 - Servers: move files between servers and drag them inside the tree, change permissions and owner of a whole folder, compare a file with a local one, and set jump hosts and a proxy when adding or editing a server.

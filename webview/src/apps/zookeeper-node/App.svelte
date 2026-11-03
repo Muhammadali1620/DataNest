@@ -493,7 +493,7 @@
   }
 
   .button.active {
-    color: var(--vscode-charts-green);
+    color: var(--dn-success);
     border-color: var(--vscode-charts-green);
   }
 
@@ -533,15 +533,21 @@
 
   .change.kind-created .badge,
   .change.kind-data .badge {
-    color: var(--vscode-charts-green);
+    color: var(--dn-success);
+    background: transparent;
+    border-color: currentColor;
   }
 
   .change.kind-children .badge {
-    color: var(--vscode-charts-blue);
+    color: var(--dn-info);
+    background: transparent;
+    border-color: currentColor;
   }
 
   .change.kind-deleted .badge {
     color: var(--dn-danger);
+    background: transparent;
+    border-color: currentColor;
   }
 
   main {
@@ -600,11 +606,13 @@
   .kind.ephemeral,
   .kind.ttl {
     color: var(--dn-warning);
+    background: transparent;
     border-color: currentColor;
   }
 
   .kind.container {
-    color: var(--vscode-charts-purple);
+    color: var(--dn-purple);
+    background: transparent;
     border-color: currentColor;
   }
 
@@ -695,7 +703,7 @@
   }
 
   .perms {
-    color: var(--vscode-charts-green);
+    color: var(--dn-success);
   }
 
   .children {

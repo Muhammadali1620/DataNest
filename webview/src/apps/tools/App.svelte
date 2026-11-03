@@ -179,7 +179,7 @@
     justify-content: center;
     width: 44px;
     height: 44px;
-    color: var(--vscode-charts-orange, var(--dn-warning));
+    color: var(--dn-orange);
     background: color-mix(in srgb, var(--vscode-charts-orange, var(--dn-warning)) 16%, transparent);
     border-radius: 14px;
   }

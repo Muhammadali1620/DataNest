@@ -279,7 +279,8 @@ input[type='radio']:disabled {
 /* A row of icon buttons with optional separators, in one rounded capsule. */
 .toolbar {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   gap: 4px;
   align-items: center;
   min-width: 0;

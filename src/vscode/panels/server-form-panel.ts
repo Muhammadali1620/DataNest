@@ -66,7 +66,7 @@ export class ServerFormPanel implements vscode.Disposable {
       const id = await this.model.save(draft);
       this.panel.title = this.title();
       if (wasNew) {
-        // The form now belongs to a saved server: a second "Add server" opens a blank one.
+        // The form now belongs to a saved server: a second "New Server" opens a blank one.
         ServerFormPanel.open.delete('');
         ServerFormPanel.open.set(id, this);
       }

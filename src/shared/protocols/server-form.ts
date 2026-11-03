@@ -1,4 +1,4 @@
-// The form of a saved SSH server (V13.37): the window "Add server" opens, like the form of a
+// The form of a saved SSH server (V13.37): the window "New Server" opens, like the form of a
 // new connection. Passwords travel only from the page to the host; a saved one is described
 // by a flag (ARCHITECTURE.md §8).
 

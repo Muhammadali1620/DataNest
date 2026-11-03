@@ -18,7 +18,8 @@
   --dn-control-height: 26px;
   --dn-font-small: 12px;
   --dn-mono: var(--vscode-editor-font-family, monospace);
-  --dn-muted: var(--vscode-descriptionForeground);
+  /* A little toward the text colour: muted text sits on tinted rows and cards too (4.5:1). */
+  --dn-muted: color-mix(in srgb, var(--vscode-descriptionForeground) 85%, var(--vscode-foreground));
   --dn-border: var(--vscode-widget-border, var(--vscode-contrastBorder, transparent));
   --dn-divider: var(--vscode-panel-border, var(--dn-border));
   --dn-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
@@ -26,10 +27,13 @@
   --dn-pressed: var(--vscode-toolbar-activeBackground, var(--dn-hover));
   --dn-accent: var(--vscode-focusBorder);
   --dn-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
-  --dn-success: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  /* The chart colours follow the theme (green is #388a34 in a light one, #89d185 in a dark one). */
+  --dn-success: var(--vscode-charts-green, var(--vscode-testing-iconPassed));
   --dn-warning: var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow));
   --dn-danger: var(--vscode-errorForeground);
   --dn-info: var(--vscode-editorInfo-foreground, var(--vscode-charts-blue));
+  --dn-orange: var(--vscode-charts-orange);
+  --dn-purple: var(--vscode-charts-purple);
 
   /* Short and only on opacity, colour and transform: smooth without costing layout. */
   --dn-duration: 120ms;
@@ -40,6 +44,34 @@
   :root {
     --dn-duration: 0ms;
   }
+}
+
+/*
+ * Text in a state colour must stay readable on the page. The colours the editor gives a
+ * light theme are meant for icons and fills (the warning yellow is 3.3:1 on white, the
+ * error red 3.2:1, the chart orange 2.9:1), so in a light theme the state colours used
+ * for text are darkened toward the text colour until they pass 4.5:1. A dark theme's own
+ * colours already do, and a high contrast theme picks them for that.
+ */
+body:is(.vscode-light, .vscode-high-contrast-light) {
+  --dn-success: color-mix(
+    in srgb,
+    var(--vscode-charts-green, var(--vscode-testing-iconPassed)) 65%,
+    var(--vscode-foreground)
+  );
+  --dn-warning: color-mix(
+    in srgb,
+    var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow)) 55%,
+    var(--vscode-foreground)
+  );
+  --dn-danger: color-mix(in srgb, var(--vscode-errorForeground) 70%, var(--vscode-foreground));
+  --dn-info: color-mix(
+    in srgb,
+    var(--vscode-editorInfo-foreground, var(--vscode-charts-blue)) 70%,
+    var(--vscode-foreground)
+  );
+  --dn-orange: color-mix(in srgb, var(--vscode-charts-orange) 55%, var(--vscode-foreground));
+  --dn-purple: color-mix(in srgb, var(--vscode-charts-purple) 75%, var(--vscode-foreground));
 }
 
 body {
@@ -100,6 +132,9 @@ samp {
 /* Text for screen readers only: there, but taking no room on screen. */
 .sr-only {
   position: absolute;
+  /* Anchored at the left: left to its place in a table cell far to the right it would
+     stretch the page sideways, as the cell's scroll box does not contain it. */
+  left: 0;
   width: 1px;
   height: 1px;
   padding: 0;
@@ -127,6 +162,21 @@ body:is(.vscode-high-contrast, .vscode-high-contrast-light)
   ) {
   outline: 1px dashed var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
   outline-offset: -1px;
+}
+
+/* The marked item that has the keyboard keeps a ring of its own, thicker and solid. */
+body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+  :is(
+    [aria-selected='true'],
+    [aria-pressed='true'],
+    [aria-checked='true'],
+    [aria-current='true'],
+    .selected,
+    .current,
+    .active
+  ):focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
 }
 
 body:is(.vscode-high-contrast, .vscode-high-contrast-light) :is(.changed, .inserted, .added) {

@@ -447,6 +447,23 @@ describe('connection form App', () => {
     });
   });
 
+  it('tells which URLs the URL field takes without listing only the first few', async () => {
+    await withState();
+    const hint = screen.getByText(/Paste a connection URL/u).textContent;
+    for (const scheme of ['mysql://', 'postgres://', 'mongodb://', 'redis://', 'kafka://']) {
+      expect(hint).toContain(scheme);
+    }
+  });
+
+  it('tells it in Russian too', async () => {
+    const harness = setup('ru');
+    await flush();
+    harness.host.emit('state', newState());
+    await waitFor(() => {
+      expect(screen.getByText(/Вставьте URL подключения/u).textContent).toContain('redis://');
+    });
+  });
+
   it('uses the page language', async () => {
     const harness = setup('ru');
     await flush();

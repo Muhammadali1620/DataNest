@@ -205,7 +205,7 @@
 
   .json-invalid,
   .xml-invalid {
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
     text-decoration: underline wavy;
   }
 </style>

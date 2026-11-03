@@ -58,7 +58,7 @@
   }
 
   .error {
-    color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground));
+    color: var(--vscode-inputValidation-errorForeground, var(--dn-danger));
   }
 
   .hint {

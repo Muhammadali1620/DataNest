@@ -240,7 +240,9 @@
   .item:hover {
     color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
     background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground));
-    outline: none;
+    /* A high contrast theme marks the chosen item by this border, not by a fill. */
+    outline: 1px solid var(--vscode-menu-selectionBorder, transparent);
+    outline-offset: -1px;
   }
 
   .item[aria-disabled='true'] {

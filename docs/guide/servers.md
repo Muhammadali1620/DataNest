@@ -6,7 +6,7 @@ is browse, open, edit, upload, download, copy, rename and delete files.
 
 ## Adding a server
 
-**Add Server…** (the plus in the view title) opens a form in the editor, like the form of a
+**New Server** (the plus in the view title) opens a form in the editor, like the form of a
 new connection. Fill in the **name**, an optional **start folder** and colour, and whether the
 server is **read-only**; then the **SSH host**, **port**, **user** and how to sign in
 (password, private key with its passphrase, or the SSH agent). **SSH algorithms** folds away

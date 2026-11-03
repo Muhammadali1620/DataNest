@@ -450,6 +450,6 @@
 
   .problem {
     margin: 0;
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
   }
 </style>

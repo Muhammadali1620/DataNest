@@ -188,7 +188,7 @@
 <style>
   .head-icon {
     display: inline-flex;
-    color: var(--vscode-charts-orange, var(--dn-warning));
+    color: var(--dn-orange);
   }
 
   .fields {

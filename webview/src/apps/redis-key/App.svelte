@@ -556,6 +556,7 @@
 
   .badge.expiring {
     color: var(--dn-warning);
+    background: transparent;
     border-color: currentColor;
   }
 

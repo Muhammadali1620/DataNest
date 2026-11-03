@@ -306,7 +306,7 @@
     gap: 6px;
     align-items: flex-start;
     margin: -6px 0 0;
-    color: var(--vscode-editorWarning-foreground, #cca700);
+    color: var(--dn-warning);
   }
 
   .check {

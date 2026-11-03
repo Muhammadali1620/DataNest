@@ -487,15 +487,15 @@
 
   /* Values wear the colour of their kind, as a code editor would draw them. */
   .row:not(.selected) .value.string {
-    color: var(--vscode-charts-green);
+    color: var(--dn-success);
   }
 
   .row:not(.selected) .value.number {
-    color: var(--vscode-charts-orange);
+    color: var(--dn-orange);
   }
 
   .row:not(.selected) .value.boolean {
-    color: var(--vscode-charts-blue);
+    color: var(--dn-info);
   }
 
   .button.small {

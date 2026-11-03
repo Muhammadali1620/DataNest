@@ -453,7 +453,7 @@
   }
 
   .warn {
-    color: var(--vscode-editorWarning-foreground);
+    color: var(--dn-warning);
   }
 
   .close,
@@ -527,7 +527,7 @@
   }
 
   .invalid {
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
     text-decoration: underline wavy;
   }
 
@@ -554,7 +554,7 @@
   }
 
   .x-invalid {
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
     text-decoration: underline wavy;
   }
 

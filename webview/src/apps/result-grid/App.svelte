@@ -2149,7 +2149,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   .tab.failed {
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
   }
 
   .tab.failed.active {
@@ -2159,7 +2159,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
 
   .tab-icon {
     display: inline-flex;
-    color: var(--vscode-charts-blue, var(--dn-info));
+    color: var(--dn-info);
   }
 
   .tab-icon.ok {
@@ -2173,7 +2173,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   .tab-pin {
     display: inline-flex;
     margin-right: 4px;
-    color: var(--vscode-charts-orange, var(--dn-warning));
+    color: var(--dn-orange);
   }
 
   .grid-wrap {
@@ -2243,7 +2243,7 @@ import type { RowAction } from '../../../../src/shared/row-action';
   }
 
   .hits.none {
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
   }
 
   .note {

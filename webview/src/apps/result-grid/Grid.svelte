@@ -1670,15 +1670,15 @@
 
   /* One colour per kind of value: numbers, text, dates and keys tell apart at a glance. */
   .name .type[data-kind='symbol-numeric'] {
-    color: var(--vscode-charts-blue, var(--dn-info));
+    color: var(--dn-info);
   }
 
   .name .type[data-kind='symbol-string'] {
-    color: var(--vscode-charts-green, var(--dn-success));
+    color: var(--dn-success);
   }
 
   .name .type[data-kind='calendar'] {
-    color: var(--vscode-charts-orange, var(--dn-warning));
+    color: var(--dn-orange);
   }
 
   .name .type[data-kind='symbol-boolean'] {
@@ -1686,12 +1686,12 @@
   }
 
   .name .type[data-kind='symbol-key'] {
-    color: var(--vscode-charts-yellow, var(--dn-warning));
+    color: var(--dn-warning);
   }
 
   .name .type[data-kind='json'],
   .name .type[data-kind='symbol-array'] {
-    color: var(--vscode-charts-purple, var(--dn-muted));
+    color: var(--dn-purple);
   }
 
   .name .type[data-kind='globe'],
@@ -1700,7 +1700,7 @@
   }
 
   .name .type[data-kind='file-media'] {
-    color: var(--vscode-charts-red, var(--dn-muted));
+    color: var(--dn-danger);
   }
 
   .head-tools {
@@ -2051,7 +2051,7 @@
 
   /* The jump to a related row sits left of the magnifier when a cell has both. */
   .zoom.jump {
-    color: var(--vscode-charts-blue, var(--vscode-focusBorder));
+    color: var(--dn-info);
   }
 
   .zoom.jump:has(+ .zoom) {
@@ -2071,7 +2071,7 @@
   }
 
   .problem {
-    color: var(--vscode-errorForeground);
+    color: var(--dn-danger);
   }
 
   .pending {

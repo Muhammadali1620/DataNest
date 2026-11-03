@@ -114,7 +114,7 @@
   .sql-icon {
     display: inline-flex;
     padding-top: 7px;
-    color: var(--vscode-charts-green, var(--dn-success));
+    color: var(--dn-success);
   }
 
   .sql {

@@ -123,7 +123,7 @@
 
   .head-icon {
     display: inline-flex;
-    color: var(--vscode-charts-green, var(--dn-success));
+    color: var(--dn-success);
   }
 
   .choices {

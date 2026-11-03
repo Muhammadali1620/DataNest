@@ -516,22 +516,25 @@
   }
 
   .button.active {
-    color: var(--vscode-charts-green);
+    color: var(--dn-success);
     border-color: var(--vscode-charts-green);
   }
 
   .lease.ok {
     color: var(--dn-success, var(--vscode-charts-green));
+    background: transparent;
     border-color: currentColor;
   }
 
   .lease.soon {
     color: var(--dn-warning);
+    background: transparent;
     border-color: currentColor;
   }
 
   .lease.ended {
     color: var(--dn-danger);
+    background: transparent;
     border-color: currentColor;
   }
 
@@ -578,11 +581,15 @@
   }
 
   .change.put .badge {
-    color: var(--vscode-charts-green);
+    color: var(--dn-success);
+    background: transparent;
+    border-color: currentColor;
   }
 
   .change.delete .badge {
     color: var(--dn-danger);
+    background: transparent;
+    border-color: currentColor;
   }
 
   .change .key {

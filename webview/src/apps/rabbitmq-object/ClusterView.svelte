@@ -202,36 +202,39 @@
   }
 
   .card.queues {
-    border-left-color: #3b82f6;
+    border-left-color: var(--vscode-charts-blue, #3794ff);
   }
 
   .card.exchanges {
-    border-left-color: #a855f7;
+    border-left-color: var(--vscode-charts-purple, #b180d7);
   }
 
   .card.connections {
-    border-left-color: #22c55e;
+    border-left-color: var(--dn-success, #89d185);
   }
 
   .card.channels {
-    border-left-color: #14b8a6;
+    border-left-color: var(--vscode-terminal-ansiCyan, #29b8db);
   }
 
   .card.consumers {
-    border-left-color: #06b6d4;
+    border-left-color: var(--vscode-terminal-ansiBrightCyan, #29b8db);
   }
 
   .card.ready {
-    border-left-color: #f97316;
+    border-left-color: var(--vscode-charts-orange, #d18616);
   }
 
   .card.unacked {
-    border-left-color: #eab308;
+    border-left-color: var(--vscode-charts-yellow, #cca700);
   }
 
   .card-label {
+    overflow: hidden;
     color: var(--dn-muted);
     font-size: var(--dn-font-small);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .card-value {
@@ -252,12 +255,12 @@
     padding: var(--dn-gap-m);
     background: var(--dn-surface);
     border: 1px solid var(--dn-border);
-    border-top: 3px solid #22c55e;
+    border-top: 3px solid var(--dn-success, #89d185);
     border-radius: var(--dn-radius-l);
   }
 
   .node.down {
-    border-top-color: #ef4444;
+    border-top-color: var(--vscode-charts-red, #f14c4c);
   }
 
   .node header {
@@ -324,25 +327,25 @@
     height: 8px;
     overflow: hidden;
     background: var(--dn-border);
-    border-radius: 4px;
+    border-radius: var(--dn-radius);
   }
 
   .fill {
     display: block;
     height: 100%;
-    border-radius: 4px;
+    border-radius: var(--dn-radius);
   }
 
   .fill.ok {
-    background: linear-gradient(90deg, #4ade80, #22c55e);
+    background: var(--dn-success, #89d185);
   }
 
   .fill.warn {
-    background: linear-gradient(90deg, #facc15, #eab308);
+    background: var(--vscode-charts-yellow, #cca700);
   }
 
   .fill.bad {
-    background: linear-gradient(90deg, #f87171, #ef4444);
+    background: var(--vscode-charts-red, #f14c4c);
   }
 
   .figure {

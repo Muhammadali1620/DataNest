@@ -6,6 +6,7 @@
   } from '../../../../src/shared/protocols/etcd-key';
   import type { RedisValue } from '../../../../src/shared/redis-value';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import DbMark from '../../components/DbMark.svelte';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
@@ -115,7 +116,7 @@
     </div>
   {:else}
     <header class="top">
-      <span class="top-icon"><Icon name="key" size={18} /></span>
+      <span class="top-icon tile plain compact"><DbMark driver="etcd" size={26} /></span>
       <div class="top-text">
         <h1 title={keyState.key.text}>{keyState.key.text}</h1>
         <p class="meta" data-testid="meta">
@@ -435,13 +436,6 @@
     border-bottom: 1px solid var(--dn-divider);
   }
 
-  .top-icon {
-    display: inline-flex;
-    padding: 7px;
-    color: #fff;
-    background: linear-gradient(135deg, #58a6ff, #2563eb);
-    border-radius: var(--dn-radius-l);
-  }
 
   .top-text {
     flex: 1;

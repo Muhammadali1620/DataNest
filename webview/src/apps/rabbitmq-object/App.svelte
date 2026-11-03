@@ -8,6 +8,7 @@
   } from '../../../../src/shared/protocols/rabbitmq-object';
   import type { RedisValue } from '../../../../src/shared/redis-value';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import DbMark from '../../components/DbMark.svelte';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import LineChart, { type ChartSeries } from '../../components/LineChart.svelte';
@@ -193,7 +194,7 @@
     </div>
   {:else}
     <header class="top">
-      <span class="top-icon"><Icon name={isCluster ? 'server-environment' : isVhost ? 'shield' : isQueue ? 'mail' : 'git-merge'} size={18} /></span>
+      <span class="top-icon tile plain compact"><DbMark driver="rabbitmq" size={26} /></span>
       <div class="top-text">
         <h1 title={shownName}>{shownName}</h1>
         <p class="meta" data-testid="meta">
@@ -631,13 +632,6 @@
     border-bottom: 1px solid var(--dn-divider);
   }
 
-  .top-icon {
-    display: inline-flex;
-    padding: 7px;
-    color: #fff;
-    background: linear-gradient(135deg, #fb7185, #e11d48);
-    border-radius: var(--dn-radius-l);
-  }
 
   .top-text {
     flex: 1;
@@ -743,19 +737,19 @@
   }
 
   .card.ready {
-    border-left-color: #f97316;
+    border-left-color: var(--vscode-charts-orange, #d18616);
   }
 
   .card.unacked {
-    border-left-color: #eab308;
+    border-left-color: var(--vscode-charts-yellow, #cca700);
   }
 
   .card.total {
-    border-left-color: #3b82f6;
+    border-left-color: var(--vscode-charts-blue, #3794ff);
   }
 
   .card.consumers {
-    border-left-color: #22c55e;
+    border-left-color: var(--dn-success, #89d185);
   }
 
   .card-label {
@@ -775,15 +769,15 @@
     margin-top: var(--dn-gap-m);
     overflow: hidden;
     background: var(--dn-surface);
-    border-radius: 3px;
+    border-radius: var(--dn-radius);
   }
 
   .bar-ready {
-    background: linear-gradient(90deg, #fb923c, #f97316);
+    background: var(--vscode-charts-orange, #d18616);
   }
 
   .bar-unacked {
-    background: linear-gradient(90deg, #facc15, #eab308);
+    background: var(--vscode-charts-yellow, #cca700);
   }
 
   table {

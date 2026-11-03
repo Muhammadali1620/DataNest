@@ -682,6 +682,13 @@ kbd {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 32%, transparent);
 }
 
+/* The tile of a page header that sits in a row with the title and its facts. */
+.tile.compact {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
 /* A tile that holds a drawing of its own (a database mark) keeps the tone out of it. */
 .tile.plain {
   background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);

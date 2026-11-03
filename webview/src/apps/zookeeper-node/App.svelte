@@ -8,6 +8,7 @@
   import type { RedisValue } from '../../../../src/shared/redis-value';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import { hexId, permissionLetters } from '../../../../src/shared/zk-path';
+  import DbMark from '../../components/DbMark.svelte';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
@@ -157,7 +158,7 @@
     </div>
   {:else}
     <header class="top">
-      <span class="top-icon"><Icon name="list-tree" size={18} /></span>
+      <span class="top-icon tile plain compact"><DbMark driver="zookeeper" size={26} /></span>
       <div class="top-text">
         <h1 title={nodeState.path}>{nodeState.path}</h1>
         <p class="meta" data-testid="meta">
@@ -565,13 +566,6 @@
     border-bottom: 1px solid var(--dn-divider);
   }
 
-  .top-icon {
-    display: inline-flex;
-    padding: 7px;
-    color: #fff;
-    background: linear-gradient(135deg, #f472b6, #be185d);
-    border-radius: var(--dn-radius-l);
-  }
 
   .top-text {
     flex: 1;

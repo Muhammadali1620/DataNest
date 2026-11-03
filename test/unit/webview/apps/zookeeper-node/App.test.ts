@@ -689,3 +689,12 @@ describe('ZooKeeper znode page: the ACL below (V13.31)', () => {
     expect(screen.getByTestId('acl-tree').textContent).toContain('ACL выдан узлам ниже: 7.');
   });
 });
+
+describe('ZooKeeper node page: the look (V13.37)', () => {
+  it('opens with the mark of ZooKeeper on a tile', async () => {
+    await open(state());
+    expect(
+      document.querySelector('.top-icon.tile.plain [data-driver="zookeeper"] svg'),
+    ).not.toBeNull();
+  });
+});

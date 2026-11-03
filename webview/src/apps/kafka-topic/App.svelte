@@ -8,6 +8,7 @@
   } from '../../../../src/shared/protocols/kafka-topic';
   import type { RedisValue } from '../../../../src/shared/redis-value';
   import type { RpcPeer } from '../../../../src/shared/rpc';
+  import DbMark from '../../components/DbMark.svelte';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
   import type { Translate } from '../../lib/i18n';
@@ -154,7 +155,7 @@
     </div>
   {:else}
     <header class="top">
-      <span class="top-icon"><Icon name="comment-discussion" size={18} /></span>
+      <span class="top-icon tile plain compact"><DbMark driver="kafka" size={26} /></span>
       <div class="top-text">
         <h1 title={topic.topic}>{topic.topic}</h1>
         <p class="meta" data-testid="meta">
@@ -306,11 +307,10 @@
               {/each}
             </select>
           </label>
-          <span class="modes" role="group" aria-label={t('kafka.mode')}>
+          <span class="seg" role="group" aria-label={t('kafka.mode')}>
             {#each ['last', 'offset', 'time'] as const as option (option)}
               <button
                 type="button"
-                class="mode"
                 aria-pressed={mode === option}
                 onclick={() => {
                   mode = option;
@@ -339,7 +339,7 @@
           <button
             type="button"
             class="button"
-            class:live={topic.tailing === true}
+            class:danger={topic.tailing === true}
             aria-pressed={topic.tailing === true}
             data-testid="live"
             disabled={busy || topic.partitions.length === 0}
@@ -451,13 +451,6 @@
     border-bottom: 1px solid var(--dn-divider);
   }
 
-  .top-icon {
-    display: inline-flex;
-    padding: 7px;
-    color: #fff;
-    background: linear-gradient(135deg, #fb923c, #ea580c);
-    border-radius: var(--dn-radius-l);
-  }
 
   .top-text {
     flex: 1;
@@ -579,14 +572,14 @@
     margin-right: 8px;
     vertical-align: middle;
     background: var(--dn-surface);
-    border-radius: 3px;
+    border-radius: var(--dn-radius);
   }
 
   .fill > span {
     display: block;
     height: 100%;
-    background: linear-gradient(90deg, #fb923c, #ea580c);
-    border-radius: 3px;
+    background: var(--vscode-charts-orange, #d18616);
+    border-radius: var(--dn-radius);
   }
 
   .row {
@@ -620,30 +613,9 @@
     padding-bottom: 4px;
   }
 
-  .modes {
-    display: inline-flex;
-    overflow: hidden;
-    border: 1px solid var(--dn-border);
-    border-radius: var(--dn-radius);
-  }
 
-  .mode {
-    padding: 4px 10px;
-    color: var(--vscode-foreground);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-  }
 
-  .button.live {
-    color: #fff;
-    background: #16a34a;
-  }
 
-  .mode[aria-pressed='true'] {
-    color: #fff;
-    background: #ea580c;
-  }
 
   .hint {
     margin: var(--dn-gap) 0 0;

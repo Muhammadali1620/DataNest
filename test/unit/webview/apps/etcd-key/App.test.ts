@@ -555,3 +555,11 @@ describe('etcd key page: watching', () => {
     expect(screen.getByLabelText('и за ключами ниже')).toBeTruthy();
   });
 });
+
+describe('etcd key page: the look (V13.37)', () => {
+  it('opens with the mark of etcd on a tile, as the tree and the form show it', async () => {
+    await open(state());
+    const tile = document.querySelector('.top-icon.tile.plain');
+    expect(tile?.querySelector('[data-driver="etcd"] svg')).not.toBeNull();
+  });
+});

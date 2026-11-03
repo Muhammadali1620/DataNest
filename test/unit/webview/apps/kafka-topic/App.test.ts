@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import {
   kafkaTopicProtocol,
@@ -445,5 +445,22 @@ describe('Kafka topic page: following live (V13.29)', () => {
     await open(state({ read: true, tailing: true }), 'ru');
     expect(screen.getByTestId('live').textContent.trim()).toBe('Остановить');
     expect(screen.getByTestId('live-note').textContent).toMatch(/Вживую/u);
+  });
+});
+
+describe('Kafka topic page: the look (V13.37)', () => {
+  it('opens with the mark of Kafka on a tile', async () => {
+    await open(state());
+    expect(document.querySelector('.top-icon.tile.plain [data-driver="kafka"] svg')).not.toBeNull();
+  });
+
+  it('draws the read mode as the shared capsule and the live button in the danger tone while it follows', async () => {
+    await open(state({ read: true }));
+    const group = screen.getByRole('group', { name: 'What to read' });
+    expect(group.classList.contains('seg')).toBe(true);
+    expect(screen.getByTestId('live').classList.contains('danger')).toBe(false);
+    cleanup();
+    await open(state({ read: true, tailing: true }));
+    expect(screen.getByTestId('live').classList.contains('danger')).toBe(true);
   });
 });

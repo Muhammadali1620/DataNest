@@ -925,3 +925,12 @@ describe('RabbitMQ page: live graphs (V13.32)', () => {
     expect(live.getAllByText('Сообщений в секунду').length).toBeGreaterThan(0);
   });
 });
+
+describe('RabbitMQ page: the look (V13.37)', () => {
+  it('opens with the mark of RabbitMQ on a tile', async () => {
+    await open(state());
+    expect(
+      document.querySelector('.top-icon.tile.plain [data-driver="rabbitmq"] svg'),
+    ).not.toBeNull();
+  });
+});

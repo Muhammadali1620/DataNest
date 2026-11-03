@@ -165,3 +165,12 @@ export class ExpansionKeeper<N> {
     }
   }
 }
+
+/**
+ * Runs an editor request that may be refused (`TreeView.reveal` of a row whose parents the tree
+ * does not name: "No tree item with id … found") and forgets the refusal: the row simply stays
+ * as the user left it, and nothing lands in the log as an unhandled rejection.
+ */
+export function ignoreRefusal(request: PromiseLike<unknown>): void {
+  request.then(undefined, () => undefined);
+}

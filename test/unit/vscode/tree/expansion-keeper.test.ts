@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CLICK_SYNC_MS,
   ExpansionKeeper,
+  ignoreRefusal,
   JUDGE_MS,
 } from '../../../../src/vscode/tree/expansion-keeper';
 
@@ -255,5 +256,33 @@ describe('ExpansionKeeper.quiet', () => {
     advance(2000);
     await keeper.quiet('t');
     expect(waits).toEqual([CLICK_SYNC_MS]);
+  });
+});
+
+describe('ignoreRefusal', () => {
+  it('swallows a refused request, as TreeView.reveal does for a row it cannot place', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', listener);
+    try {
+      ignoreRefusal(Promise.reject(new Error("No tree item with id '1/table:x' found.")));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', listener);
+    }
+  });
+
+  it('leaves an accepted request alone', async () => {
+    let done = false;
+    ignoreRefusal(
+      Promise.resolve().then(() => {
+        done = true;
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(done).toBe(true);
   });
 });

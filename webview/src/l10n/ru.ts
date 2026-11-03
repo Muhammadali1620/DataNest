@@ -14,7 +14,7 @@ export const ru: Record<MessageKey, string> = {
   'form.url': 'URL подключения',
   'form.url.fill': 'Заполнить',
   'form.url.hint':
-    'Вставьте mysql://, postgres://, mongodb:// или sqlite://, чтобы заполнить поля ниже',
+    'Вставьте URL подключения (mysql://, postgres://, redis://, mongodb://, kafka://, sqlite://, …), чтобы заполнить поля ниже',
   'form.url.filled': 'Поля заполнены из URL; проверьте и сохраните',
   'form.url.error.notUrl': 'Это не URL подключения',
   'form.url.error.scheme': 'Поддерживаются только mysql://, mariadb://, postgres:// и sqlite://',

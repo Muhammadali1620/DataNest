@@ -69,7 +69,7 @@ import { monitorCommandHandlers } from './monitor-commands';
 import { ToolsPanel } from './panels/tools-panel';
 import { toolsCommandHandlers } from './tools-commands';
 import { userCommandHandlers } from './user-commands';
-import { ExpansionKeeper } from './tree/expansion-keeper';
+import { ExpansionKeeper, ignoreRefusal } from './tree/expansion-keeper';
 import { showNodeActions } from './tree/node-actions-ui';
 import { savedQueryCommandHandlers } from './tree/saved-query-commands';
 import { readNodeSql, nodeSqlDatabase } from '../services/node-sql';
@@ -786,7 +786,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     {
       idOf: nodeId,
       expand: (node) => {
-        void deps.treeView.reveal(node, { select: false, focus: false, expand: true });
+        ignoreRefusal(deps.treeView.reveal(node, { select: false, focus: false, expand: true }));
       },
       collapse: () => {
         void vscode.commands.executeCommand('list.collapse');

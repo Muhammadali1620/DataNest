@@ -191,7 +191,11 @@ class SqliteSession implements Session {
       let settled = false as boolean;
       let worker: Worker;
       try {
-        worker = new Worker(this.workerPath);
+        // node:sqlite still prints "ExperimentalWarning: SQLite is an experimental feature" to the
+        // editor's log (as an error) on every start of the worker; the user cannot act on it.
+        worker = new Worker(this.workerPath, {
+          execArgv: ['--disable-warning=ExperimentalWarning'],
+        });
       } catch (error) {
         reject(toSqliteDbError(error));
         return;

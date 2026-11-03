@@ -12,7 +12,8 @@ export const en = {
   'form.loading': 'Loading…',
   'form.url': 'Connection URL',
   'form.url.fill': 'Fill',
-  'form.url.hint': 'Paste mysql://, postgres://, mongodb:// or sqlite:// to fill the fields below',
+  'form.url.hint':
+    'Paste a connection URL (mysql://, postgres://, redis://, mongodb://, kafka://, sqlite://, …) to fill the fields below',
   'form.url.filled': 'Filled from the URL; check the fields and save',
   'form.url.error.notUrl': 'This is not a connection URL',
   'form.url.error.scheme': 'Only mysql://, mariadb://, postgres:// and sqlite:// are supported',

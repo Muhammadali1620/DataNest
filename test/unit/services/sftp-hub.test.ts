@@ -277,6 +277,71 @@ describe('SftpHub', () => {
     }).not.toThrow();
   });
 
+  describe('trying settings that are not saved', () => {
+    const draft = {
+      ssh: { id: 'main', host: 'new-host', port: 2200, user: 'me', auth: 'password' as const },
+      proxy: { kind: 'http' as const, host: 'px2', port: 3128, user: 'u' },
+    };
+
+    it('logs in with them, asks for the login folder and closes again', async () => {
+      const result = await hub.probe(draft, { main: { password: 'typed' } }, 'proxy-typed');
+      expect(result).toEqual({ home: '/home/u', hops: 1 });
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.home).toHaveBeenCalledTimes(1);
+      expect(sessions[0]?.closes).toBe(1);
+      expect(specs[0]?.hops).toEqual([
+        { host: 'new-host', port: 2200, user: 'me', auth: 'password', password: 'typed' },
+      ]);
+      expect(specs[0]?.proxy).toMatchObject({
+        kind: 'http',
+        host: 'px2',
+        port: 3128,
+        password: 'proxy-typed',
+      });
+    });
+
+    it('counts every server on the way', async () => {
+      const result = await hub.probe(
+        { ssh: { ...draft.ssh, jumps: [{ id: 'j', host: 'jump', user: 'hop', auth: 'agent' }] } },
+        { main: { password: 'a' } },
+      );
+      expect(result.hops).toBe(2);
+      expect(specs[0]?.hops.map((hop) => hop.host)).toEqual(['jump', 'new-host']);
+      expect(specs[0]?.proxy).toBeUndefined();
+    });
+
+    it('keeps nothing in the hub, not even a session that is open', async () => {
+      await hub.probe(draft, {});
+      expect(hub.isOpen(id)).toBe(false);
+      await hub.session(id);
+      await hub.probe(draft, {});
+      // The tries closed their own sessions; the one the hub holds is still open.
+      expect(sessions.map((session) => session.closes)).toEqual([1, 0, 1]);
+      expect(hub.isOpen(id)).toBe(true);
+    });
+
+    it('closes the session and says what went wrong when the folder cannot be read', async () => {
+      const broken = new FakeSession();
+      broken.home.mockRejectedValueOnce(lost());
+      const hubWith = new SftpHub({
+        store,
+        opener: { openSftp: () => Promise.resolve(broken) },
+        checkHostKey: () => Promise.resolve(true),
+        logger: new RecordingLogger(),
+        idleMs: 0,
+      });
+      await expect(hubWith.probe(draft, {})).rejects.toMatchObject({ code: 'connection-failed' });
+      expect(broken.closes).toBe(1);
+      hubWith.dispose();
+    });
+
+    it('passes on a refused login', async () => {
+      failOpen = new DbError('auth-failed', 'SSH login failed');
+      await expect(hub.probe(draft, {})).rejects.toMatchObject({ code: 'auth-failed' });
+      expect(sessions).toHaveLength(0);
+    });
+  });
+
   it('does not fail because a state listener does', async () => {
     hub.onDidChangeState(() => {
       throw new Error('boom');

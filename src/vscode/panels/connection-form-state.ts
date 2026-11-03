@@ -54,7 +54,7 @@ export function toInput(config: ConnectionConfig): ConnectionInput {
   return Object.fromEntries(kept) as unknown as ConnectionInput;
 }
 
-function toChange(message: PasswordChangeMessage): PasswordChange {
+export function toChange(message: PasswordChangeMessage): PasswordChange {
   switch (message.kind) {
     case 'set':
       return { kind: 'set', value: message.value ?? '' };
@@ -113,7 +113,7 @@ export function testProxyPassword(
 }
 
 /** The form's choices for SSH secrets, by hop id, as the store expects them. */
-export function toSshChanges(draft: ConnectionDraft): SshSecretChanges {
+export function toSshChanges(draft: Pick<ConnectionDraft, 'ssh'>): SshSecretChanges {
   const changes: Record<string, { password: PasswordChange; passphrase: PasswordChange }> = {};
   for (const change of draft.ssh ?? []) {
     changes[change.hopId] = {
@@ -132,9 +132,17 @@ export function testSshSecrets(
   draft: ConnectionDraft,
   stored: Readonly<Record<string, SshHopSecrets>>,
 ): Record<string, SshHopSecrets> {
-  const changes = toSshChanges(draft);
+  return secretsForTest(toSshChanges(draft), sshHopsOf(draft.input), stored);
+}
+
+/** The same for any list of hops: what was typed for each, else what is stored. */
+export function secretsForTest(
+  changes: SshSecretChanges,
+  hops: readonly { readonly id: string }[],
+  stored: Readonly<Record<string, SshHopSecrets>>,
+): Record<string, SshHopSecrets> {
   const result: Record<string, SshHopSecrets> = {};
-  for (const hop of sshHopsOf(draft.input)) {
+  for (const hop of hops) {
     const pick = (kind: keyof SshHopSecrets): string | undefined => {
       const change = changes[hop.id]?.[kind] ?? { kind: 'keep' };
       if (change.kind === 'set') {

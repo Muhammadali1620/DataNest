@@ -546,6 +546,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
     hub: sftpHub,
     tree: serversTree,
     logger,
+    extensionUri: context.extensionUri,
     maxOpenBytes: readServersMaxOpenBytes,
   });
   serverTreeBridge.drop = serverCommands.drop;

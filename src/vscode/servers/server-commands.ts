@@ -35,7 +35,7 @@ import {
 } from '../../services/sftp-ops';
 import { NO_OWNER_NAMES, ownerText, resolveOwner } from '../../services/sftp-owners';
 import type { SftpEntry } from '../../services/sftp-types';
-import { askServer } from './server-wizard';
+import { ServerFormPanel, type ServerFormDeps } from '../panels/server-form-panel';
 import { sftpUriParts } from './server-model';
 import { folderOf, isServerNode, type ServerNode, type ServersTree } from './servers-tree';
 
@@ -44,6 +44,8 @@ export interface ServerCommandDeps {
   readonly hub: SftpHub;
   readonly tree: ServersTree;
   readonly logger: Logger;
+  /** Where the extension lives; the server form loads its page from there. */
+  readonly extensionUri: vscode.Uri;
   /** The largest file that opens in the editor, in bytes. */
   readonly maxOpenBytes: () => number;
 }
@@ -110,6 +112,13 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
     }
     return server;
   };
+
+  const formDeps = (): ServerFormDeps => ({
+    extensionUri: deps.extensionUri,
+    store: deps.store,
+    hub: deps.hub,
+    logger: deps.logger,
+  });
 
   const startFolder = async (serverId: string): Promise<string> => {
     const server = serverOf(serverId);
@@ -399,14 +408,8 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
   };
 
   const handlers: Record<ServerCommandName, Handler> = {
-    addServer: async () => {
-      const answers = await askServer();
-      if (answers === undefined) {
-        return undefined;
-      }
-      const added = await deps.store.add(answers.input, answers.secrets, answers.proxyPassword);
-      deps.tree.refresh();
-      return added.id;
+    addServer: () => {
+      ServerFormPanel.show(formDeps());
     },
 
     editServer: async (node?: unknown) => {
@@ -414,14 +417,8 @@ export function serverCommandHandlers(deps: ServerCommandDeps): ServerCommands {
       if (id === undefined) {
         return undefined;
       }
-      const server = serverOf(id);
-      const answers = await askServer(server);
-      if (answers === undefined) {
-        return undefined;
-      }
-      // The saved login must not outlive the settings it was made for.
-      deps.hub.disconnect(id);
-      await deps.store.update(id, answers.input, answers.changes, answers.proxyChange);
+      serverOf(id);
+      ServerFormPanel.show(formDeps(), id);
       return id;
     },
 

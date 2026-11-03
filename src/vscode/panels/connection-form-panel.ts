@@ -291,7 +291,8 @@ async function pickDatabaseFile(create: boolean): Promise<{ file?: string }> {
   return first === undefined ? {} : { file: first.fsPath };
 }
 
-async function pickKeyFile(): Promise<{ file?: string }> {
+/** The editor's file dialog for a private key, opened in `~/.ssh`; shared with the server form. */
+export async function pickKeyFile(): Promise<{ file?: string }> {
   const ssh = vscode.Uri.joinPath(vscode.Uri.file(homedir()), '.ssh');
   const chosen = await vscode.window.showOpenDialog({
     title: vscode.l10n.t('SSH Private Key'),

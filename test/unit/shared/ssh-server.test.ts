@@ -61,6 +61,22 @@ describe('serverProblems', () => {
     );
   });
 
+  it('finds a proxy without a host or with a port that is not one', () => {
+    expect(serverProblems({ ...input, proxy: { kind: 'socks5', host: '  ' } })).toEqual([
+      'proxy-host-empty',
+    ]);
+    expect(serverProblems({ ...input, proxy: { kind: 'http', host: 'p', port: 70_000 } })).toEqual([
+      'proxy-port-invalid',
+    ]);
+    expect(serverProblems({ ...input, proxy: { kind: 'http', host: 'p', port: 0 } })).toEqual([
+      'proxy-port-invalid',
+    ]);
+    expect(serverProblems({ ...input, proxy: { kind: 'socks5', host: 'p' } })).toEqual([]);
+    expect(serverProblems({ ...input, proxy: { kind: 'socks5', host: 'p', port: 1080 } })).toEqual(
+      [],
+    );
+  });
+
   it('finds the problems of every hop, each once', () => {
     const problems = serverProblems({
       ...input,

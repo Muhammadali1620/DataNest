@@ -10,6 +10,8 @@ import { serverFileSpecOf } from './tunnels';
 import type { HostKeyCheck } from './tunnels';
 import type { RemoteFileSpec } from './remote-snapshots';
 import type { ServerStore } from './server-store';
+import type { SshHopSecrets } from '../shared/connection';
+import type { SshServerInput } from '../shared/ssh-server';
 import { loadOwnerNames, type OwnerNames } from './sftp-owners';
 import type { SftpSession } from './sftp-types';
 
@@ -89,6 +91,24 @@ export class SftpHub implements Disposable {
         entry.busy -= 1;
         this.armTimer(serverId, entry);
       }
+    }
+  }
+
+  /**
+   * Logs in with settings that are not saved yet, asks for the login folder and closes again:
+   * what "Test connection" of the server form does. Nothing is kept in the hub.
+   */
+  async probe(
+    server: Pick<SshServerInput, 'ssh' | 'proxy'>,
+    secrets: Readonly<Record<string, SshHopSecrets>>,
+    proxyPassword?: string,
+  ): Promise<{ readonly home: string; readonly hops: number }> {
+    const spec = serverFileSpecOf(server, secrets, this.deps.checkHostKey, proxyPassword);
+    const session = await this.deps.opener.openSftp(spec);
+    try {
+      return { home: await session.home(), hops: spec.hops.length };
+    } finally {
+      session.close();
     }
   }
 

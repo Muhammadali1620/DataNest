@@ -6,19 +6,23 @@ is browse, open, edit, upload, download, copy, rename and delete files.
 
 ## Adding a server
 
-**Add Server…** (the plus in the view title) asks one thing at a time: a name, the host, the
-port, the user, how to log in (password, key file or SSH agent), a start folder and whether
-the server is read-only.
+**Add Server…** (the plus in the view title) opens a form in the editor, like the form of a
+new connection. Fill in the **name**, an optional **start folder** and colour, and whether the
+server is **read-only**; then the **SSH host**, **port**, **user** and how to sign in
+(password, private key with its passphrase, or the SSH agent). **SSH algorithms** folds away
+under the sign-in for old servers that need a weak method.
 
 - Passwords and key passphrases go to the editor's secret storage and nowhere else.
+- **Test connection** logs in with what is on the form, opens SFTP and tells you the login
+  folder (and how many jump hosts the way led through); nothing is saved by the test.
 - The first time DataNest meets a server it asks you to trust its key, and a key that changes
   later is refused unless you accept the new one — the same as for database tunnels.
-- The last question of the wizard is **How is the server reached?**: directly, through one
-  or more **jump hosts** (each with its own login), through a **SOCKS5 or HTTP proxy**, or
-  both. Passwords of jump hosts and of the proxy go to the editor's secret storage.
-- **Edit Server…** keeps what you leave empty: an empty password keeps the saved one. Choose
-  **As saved** at the last question to keep the jump hosts and the proxy as they are;
-  algorithm rules saved with a server are always kept.
+- **Route to the server**: add **jump hosts** (up to five, each with its own login, in the
+  order they are logged in to) and, if you need one, a **SOCKS5 or HTTP proxy**. Passwords of
+  jump hosts and of the proxy go to the editor's secret storage too.
+- **Edit Server…** opens the same form with the saved values. A saved password is not shown:
+  leave its box empty to keep it, type a new one to replace it, or tick *Remove the saved
+  password*.
 - **Export Servers…** writes the list **without any secret**; **Import Servers…** reads it
   back, and you enter the passwords when you connect.
 

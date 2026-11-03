@@ -76,6 +76,10 @@ export function describeServerProblem(problem: ServerProblem): string {
       return msg('too many jump hosts');
     case 'ssh-algorithms-invalid':
       return msg('the SSH algorithm rules are not valid');
+    case 'proxy-host-empty':
+      return msg('the proxy host is empty');
+    case 'proxy-port-invalid':
+      return msg('the proxy port must be 1–65535');
   }
 }
 

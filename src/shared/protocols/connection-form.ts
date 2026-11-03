@@ -22,7 +22,7 @@ export const passwordChangeSchema = object({
 });
 
 /** What the form says about the secrets of one SSH hop, by the hop's id. */
-const sshSecretChangeSchema = object({
+export const sshSecretChangeSchema = object({
   hopId: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
   password: passwordChangeSchema,
   passphrase: passwordChangeSchema,

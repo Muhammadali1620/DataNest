@@ -2213,6 +2213,23 @@ export const en = {
   'manager.sync.select': 'Select…',
   'manager.sync.compare': 'Compare',
   'manager.sync.back': 'New comparison',
+  'serverForm.titleNew': 'New server',
+  'serverForm.titleEdit': 'Edit server',
+  'serverForm.subtitle':
+    'Log in over SSH to browse and change its files over SFTP and to open a terminal',
+  'serverForm.section.general': 'Name and folder',
+  'serverForm.section.login': 'Server and sign-in',
+  'serverForm.section.route': 'Route to the server',
+  'serverForm.startPath': 'Start folder',
+  'serverForm.startPathHint': 'The folder shown first; empty: the login folder of the user',
+  'serverForm.readOnly': 'Read-only',
+  'serverForm.readOnlyHint': 'Browse, open and download; nothing on the server changes',
+  'serverForm.proxyHint': 'The proxy reaches the first SSH server.',
+  'serverForm.saved': 'Server saved',
+  'serverForm.testOk': 'Logged in; the login folder is {0}',
+  'serverForm.testOkJumps': 'Logged in through {1} jump hosts; the login folder is {0}',
+  'serverForm.error.nameEmpty': 'Give the server a name',
+  'serverForm.error.tooLong': 'The name or the start folder is too long',
 } as const;
 
 export type MessageKey = keyof typeof en;

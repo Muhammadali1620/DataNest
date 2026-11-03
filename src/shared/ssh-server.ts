@@ -7,6 +7,7 @@ import {
   type ConnectionColor,
   effectiveSshPort,
   hopsOfTunnel,
+  isPortValid,
   type ProxySettings,
   type SshHop,
   sshHopProblems,
@@ -63,7 +64,8 @@ export function describeServer(server: Pick<SshServerInput, 'ssh'>): string {
   return `${user}@${host}${port === 22 ? '' : `:${port}`}`;
 }
 
-export type ServerProblem = SshProblem | 'name-empty' | 'too-long';
+export type ServerProblem =
+  SshProblem | 'name-empty' | 'too-long' | 'proxy-host-empty' | 'proxy-port-invalid';
 
 /** Why a server cannot be saved; empty when it can. */
 export function serverProblems(input: SshServerInput): ServerProblem[] {
@@ -82,6 +84,14 @@ export function serverProblems(input: SshServerInput): ServerProblem[] {
       if (!problems.includes(problem)) {
         problems.push(problem);
       }
+    }
+  }
+  if (input.proxy !== undefined) {
+    if (input.proxy.host.trim() === '') {
+      problems.push('proxy-host-empty');
+    }
+    if (!isPortValid(input.proxy.port)) {
+      problems.push('proxy-port-invalid');
     }
   }
   return problems;

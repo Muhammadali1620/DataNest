@@ -50,6 +50,7 @@ export const PANEL_ICONS: Readonly<Record<string, string>> = {
   'zookeeper-node': 'list-tree',
   'kafka-topic': 'comment-discussion',
   'rabbitmq-object': 'mail',
+  'server-form': 'server',
   manager: 'dashboard',
   'mongo-documents': 'json',
   ping: 'debug-disconnect',

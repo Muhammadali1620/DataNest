@@ -506,6 +506,7 @@ export class ConnectionManager implements Disposable {
     ssh: Readonly<Record<string, SshHopSecrets>> = {},
     sentinelPassword?: string,
     proxyPassword?: string,
+    registrySecret?: string,
   ): Promise<void> {
     if (input.driver === 'redis') {
       await this.testRedis(input, password, ssh, sentinelPassword, proxyPassword);
@@ -524,7 +525,7 @@ export class ConnectionManager implements Disposable {
       return;
     }
     if (input.driver === 'kafka') {
-      await this.testKafka(input, password, ssh, proxyPassword);
+      await this.testKafka(input, password, ssh, proxyPassword, registrySecret);
       return;
     }
     if (input.driver === 'zookeeper') {
@@ -617,13 +618,18 @@ export class ConnectionManager implements Disposable {
     driver: {
       openSession(config: ResolvedConnectionConfig): Promise<{ close(): Promise<void> }>;
     },
+    /** A secret of the family that the resolved config does not carry (V13.41). */
+    extra: Readonly<Record<string, string>> = {},
   ): Promise<void> {
     const spec = tunnelSpecOf(input, ssh, this.checkHostKey, proxyPassword);
     const tunnel = spec === undefined ? undefined : await this.tunnelProvider().openPrivate(spec);
     try {
       let session: { close(): Promise<void> };
       try {
-        session = await driver.openSession(resolve({ ...input, id: 'test' }, {}, password, tunnel));
+        session = await driver.openSession({
+          ...resolve({ ...input, id: 'test' }, {}, password, tunnel),
+          ...extra,
+        });
       } catch (error) {
         throw tunnel?.forwardError() ?? error;
       }
@@ -675,8 +681,16 @@ export class ConnectionManager implements Disposable {
     password: string | undefined,
     ssh: Readonly<Record<string, SshHopSecrets>>,
     proxyPassword: string | undefined,
+    registrySecret: string | undefined,
   ): Promise<void> {
-    await this.testSession(input, password, ssh, proxyPassword, await this.kafkaDriver());
+    await this.testSession(
+      input,
+      password,
+      ssh,
+      proxyPassword,
+      await this.kafkaDriver(),
+      registrySecret === undefined || registrySecret === '' ? {} : { registrySecret },
+    );
   }
 
   private async testRabbit(
@@ -970,10 +984,14 @@ export class ConnectionManager implements Disposable {
   ): Promise<Holder> {
     const driver = await this.kafkaDriver();
     const password = await this.store.getPassword(config.id);
+    const registrySecret = await this.store.getRegistrySecret(config.id);
     const lease = await this.leaseTunnel(config);
     let opened: KafkaSession;
     try {
-      opened = await driver.openSession(resolve(config, target, password, lease));
+      opened = await driver.openSession({
+        ...resolve(config, target, password, lease),
+        ...(registrySecret === undefined || registrySecret === '' ? {} : { registrySecret }),
+      });
     } catch (error) {
       await lease?.release();
       throw lease?.forwardError() ?? error;

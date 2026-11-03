@@ -468,6 +468,14 @@
             "registry": {
               "type": "string",
               "description": "The address of a Confluent-compatible schema registry (http or https); messages written with a schema show decoded."
+            },
+            "registryAuth": {
+              "enum": ["connection", "basic", "bearer"],
+              "description": "How the registry is signed in to: connection (default): the connection's own user and password with Basic; basic: a user of its own (registryUser) and a password kept on each computer; bearer: a token kept on each computer."
+            },
+            "registryUser": {
+              "type": "string",
+              "description": "The registry's own user, for registryAuth basic."
             }
           }
         },

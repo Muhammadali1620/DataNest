@@ -8,8 +8,10 @@ import {
   toPasswordChange,
   toSshChanges,
   testProxyPassword,
+  testRegistrySecret,
   testSentinelPassword,
   toProxyChange,
+  toRegistryChange,
   toSentinelChange,
 } from '../../../../src/vscode/panels/connection-form-state';
 import type { ConnectionDraft } from '../../../../src/shared/protocols/connection-form';
@@ -338,5 +340,51 @@ describe('proxy password (V10.2.5)', () => {
     expect(testProxyPassword(draft({ kind: 'set', value: 'new' }), 'stored')).toBe('new');
     expect(testProxyPassword(draft({ kind: 'set', value: '' }), 'stored')).toBeUndefined();
     expect(testProxyPassword(draft({ kind: 'clear' }), 'stored')).toBeUndefined();
+  });
+});
+
+describe('registry secret (V13.41)', () => {
+  const draft = (registrySecret?: ConnectionDraft['registrySecret']): ConnectionDraft => ({
+    input: {
+      name: 'k',
+      driver: 'kafka',
+      host: 'b',
+      kafka: { sasl: 'none', registry: 'https://r', registryAuth: 'bearer' },
+    },
+    password: { kind: 'keep' },
+    ...(registrySecret === undefined ? {} : { registrySecret }),
+  });
+
+  it('keeps the stored one when the form says nothing or keep', () => {
+    expect(toRegistryChange(draft())).toEqual({ kind: 'keep' });
+    expect(testRegistrySecret(draft(), 'stored')).toBe('stored');
+    expect(testRegistrySecret(draft({ kind: 'keep' }), 'stored')).toBe('stored');
+  });
+
+  it('uses a typed one and forgets an erased or emptied one', () => {
+    expect(toRegistryChange(draft({ kind: 'set', value: 'new' }))).toEqual({
+      kind: 'set',
+      value: 'new',
+    });
+    expect(testRegistrySecret(draft({ kind: 'set', value: 'new' }), 'stored')).toBe('new');
+    expect(testRegistrySecret(draft({ kind: 'set', value: '' }), 'stored')).toBeUndefined();
+    expect(toRegistryChange(draft({ kind: 'clear' }))).toEqual({ kind: 'clear' });
+    expect(testRegistrySecret(draft({ kind: 'clear' }), 'stored')).toBeUndefined();
+  });
+
+  it('travels in the draft the page sends, and its flag in the state event', () => {
+    const parsed = connectionFormProtocol.host.requests.save.params.parse(
+      draft({ kind: 'set', value: 'tok' }),
+    );
+    expect(parsed.registrySecret).toEqual({ kind: 'set', value: 'tok' });
+    expect(() =>
+      connectionFormProtocol.webview.events.state.parse({
+        input: draft().input,
+        hasStoredPassword: false,
+        hasStoredRegistrySecret: true,
+        storedSsh: [],
+        drivers: driverOptions(),
+      }),
+    ).not.toThrow();
   });
 });

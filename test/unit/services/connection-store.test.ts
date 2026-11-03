@@ -6,6 +6,7 @@ import {
   ConnectionStore,
   passwordSecretKey,
   proxySecretKey,
+  registrySecretKey,
   sentinelSecretKey,
   sshSecretKey,
 } from '../../../src/services/connection-store';
@@ -1682,6 +1683,157 @@ describe('ConnectionStore Elasticsearch (V7.8)', () => {
       kafka: { sasl: 'none', registry: 'http://r' },
     });
     expect(other.kafka).toBeUndefined();
+  });
+});
+
+describe('ConnectionStore: the registry sign-in of a Kafka connection (V13.41)', () => {
+  function setup(): { secrets: FakeSecretStorage; store: ConnectionStore } {
+    const secrets = new FakeSecretStorage();
+    const store = new ConnectionStore({
+      state: new FakeMemento(),
+      secrets,
+      logger: new RecordingLogger(),
+    });
+    return { secrets, store };
+  }
+  const kafka = (extra: object, registry = 'https://r'): ConnectionInput => ({
+    name: 'K',
+    driver: 'kafka',
+    host: 'b:9092',
+    kafka: { sasl: 'plain', registry, ...extra } as never,
+  });
+  const basic = kafka({ registryAuth: 'basic', registryUser: ' reg ' });
+  const bearer = kafka({ registryAuth: 'bearer' });
+
+  it('keeps the settings of a sign-in of its own, trimmed, and the default of the connection out', async () => {
+    const { store } = setup();
+    expect((await store.add(basic)).kafka).toEqual({
+      sasl: 'plain',
+      registry: 'https://r',
+      registryAuth: 'basic',
+      registryUser: 'reg',
+    });
+    expect((await store.add(bearer)).kafka).toEqual({
+      sasl: 'plain',
+      registry: 'https://r',
+      registryAuth: 'bearer',
+    });
+    expect(
+      (await store.add(kafka({ registryAuth: 'connection', registryUser: 'x' }))).kafka,
+    ).toEqual({ sasl: 'plain', registry: 'https://r' });
+  });
+
+  it('forgets a sign-in of its own when there is no registry, and a user that is not Basic', async () => {
+    const { store } = setup();
+    expect((await store.add(kafka({ registryAuth: 'bearer' }, ''))).kafka).toEqual({
+      sasl: 'plain',
+    });
+    expect((await store.add(kafka({ registryAuth: 'bearer', registryUser: 'u' }))).kafka).toEqual({
+      sasl: 'plain',
+      registry: 'https://r',
+      registryAuth: 'bearer',
+    });
+  });
+
+  it('keeps the password or token only in secrets', async () => {
+    const { secrets, store } = setup();
+    const added = await store.add(basic, undefined, {}, { registrySecret: 'p4ss' });
+    expect(await store.getRegistrySecret(added.id)).toBe('p4ss');
+    expect(secrets.data.get(registrySecretKey(added.id))).toBe('p4ss');
+    expect(JSON.stringify(added)).not.toContain('p4ss');
+    const token = await store.add(bearer, undefined, {}, { registrySecret: 'tok' });
+    expect(await store.getRegistrySecret(token.id)).toBe('tok');
+  });
+
+  it('ignores a secret for a registry that follows the connection or a connection of another family', async () => {
+    const { secrets, store } = setup();
+    const follows = await store.add(kafka({}), undefined, {}, { registrySecret: 'x' });
+    expect(secrets.data.has(registrySecretKey(follows.id))).toBe(false);
+    const none = await store.add(
+      kafka({ registryAuth: 'bearer' }, ''),
+      undefined,
+      {},
+      {
+        registrySecret: 'x',
+      },
+    );
+    expect(secrets.data.has(registrySecretKey(none.id))).toBe(false);
+    const sql = await store.add(
+      { name: 'S', driver: 'mysql', host: 'h' },
+      undefined,
+      {},
+      { registrySecret: 'x' },
+    );
+    expect(secrets.data.has(registrySecretKey(sql.id))).toBe(false);
+  });
+
+  it('does not store an empty secret', async () => {
+    const { secrets, store } = setup();
+    const added = await store.add(basic, undefined, {}, { registrySecret: '' });
+    expect(secrets.data.has(registrySecretKey(added.id))).toBe(false);
+  });
+
+  it('keeps, replaces and clears the secret on update', async () => {
+    const { store } = setup();
+    const added = await store.add(basic, undefined, {}, { registrySecret: 'one' });
+    await store.update(added.id, basic);
+    expect(await store.getRegistrySecret(added.id)).toBe('one');
+    await store.update(
+      added.id,
+      basic,
+      { kind: 'keep' },
+      {},
+      { kind: 'keep' },
+      { kind: 'keep' },
+      {
+        kind: 'set',
+        value: 'two',
+      },
+    );
+    expect(await store.getRegistrySecret(added.id)).toBe('two');
+    await store.update(
+      added.id,
+      basic,
+      { kind: 'keep' },
+      {},
+      { kind: 'keep' },
+      { kind: 'keep' },
+      {
+        kind: 'clear',
+      },
+    );
+    expect(await store.getRegistrySecret(added.id)).toBeUndefined();
+  });
+
+  it('erases the secret when the registry goes back to the connection login, or is removed', async () => {
+    const { store } = setup();
+    const added = await store.add(basic, undefined, {}, { registrySecret: 'one' });
+    await store.update(
+      added.id,
+      kafka({}),
+      { kind: 'keep' },
+      {},
+      { kind: 'keep' },
+      { kind: 'keep' },
+      {
+        kind: 'set',
+        value: 'ignored',
+      },
+    );
+    expect(await store.getRegistrySecret(added.id)).toBeUndefined();
+    const other = await store.add(bearer, undefined, {}, { registrySecret: 'tok' });
+    await store.update(other.id, kafka({ registryAuth: 'bearer' }, ''));
+    expect(await store.getRegistrySecret(other.id)).toBeUndefined();
+  });
+
+  it('copies the secret with a duplicate and deletes it with the connection', async () => {
+    const { secrets, store } = setup();
+    const added = await store.add(basic, undefined, {}, { registrySecret: 'p4ss' });
+    const copy = await store.duplicate(added.id);
+    expect(await store.getRegistrySecret(copy.id)).toBe('p4ss');
+    await store.remove(added.id);
+    expect(secrets.data.has(registrySecretKey(added.id))).toBe(false);
+    expect(await store.getRegistrySecret(copy.id)).toBe('p4ss');
   });
 });
 

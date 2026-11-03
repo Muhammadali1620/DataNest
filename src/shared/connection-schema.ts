@@ -16,6 +16,7 @@ import {
   MONGO_MODES,
   type MongoSettings,
   ELASTIC_AUTH_METHODS,
+  KAFKA_REGISTRY_AUTH,
   KAFKA_SASL_MECHANISMS,
   type KafkaSettings,
   type ElasticSettings,
@@ -130,6 +131,8 @@ export const elasticSchema: Schema<ElasticSettings> = object({
 export const kafkaSchema: Schema<KafkaSettings> = object({
   sasl: literal(...KAFKA_SASL_MECHANISMS),
   registry: optional(string({ maxLength: CONNECTION_LIMITS.field })),
+  registryAuth: optional(literal(...KAFKA_REGISTRY_AUTH)),
+  registryUser: optional(string({ maxLength: CONNECTION_LIMITS.field })),
 });
 
 export const proxySchema: Schema<ProxySettings> = object({

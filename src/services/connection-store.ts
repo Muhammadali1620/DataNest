@@ -96,6 +96,11 @@ export function sentinelSecretKey(connectionId: string): string {
   return `connection.${connectionId}.sentinel.password`;
 }
 
+/** Key of the password or token of a Kafka connection's own registry sign-in (V13.41). */
+export function registrySecretKey(connectionId: string): string {
+  return `connection.${connectionId}.registry.secret`;
+}
+
 const SSH_SECRET_KINDS = ['password', 'passphrase'] as const satisfies (keyof SshHopSecrets)[];
 
 const connectionConfigSchema: Schema<ConnectionConfig> = object({
@@ -165,6 +170,8 @@ export interface AddOptions {
   readonly sentinelPassword?: string;
   /** The password of the connection's proxy (V10.2.5). */
   readonly proxyPassword?: string;
+  /** The password or token of the registry's own sign-in of a Kafka connection (V13.41). */
+  readonly registrySecret?: string;
 }
 
 /**
@@ -458,6 +465,9 @@ export class ConnectionStore {
     if (config.proxy !== undefined && (options.proxyPassword ?? '') !== '') {
       await this.secrets.store(proxySecretKey(config.id), options.proxyPassword ?? '');
     }
+    if (usesRegistryLogin(config) && (options.registrySecret ?? '') !== '') {
+      await this.secrets.store(registrySecretKey(config.id), options.registrySecret ?? '');
+    }
     for (const hop of sshHopsOf(config)) {
       for (const kind of SSH_SECRET_KINDS) {
         const value = ssh[hop.id]?.[kind];
@@ -477,6 +487,7 @@ export class ConnectionStore {
     ssh: SshSecretChanges = {},
     sentinelPassword: PasswordChange = { kind: 'keep' },
     proxyPassword: PasswordChange = { kind: 'keep' },
+    registrySecret: PasswordChange = { kind: 'keep' },
   ): Promise<ConnectionConfig> {
     const index = this.items.findIndex((item) => item.id === id);
     const before = this.items[index] ?? this.projects?.get(id);
@@ -507,6 +518,11 @@ export class ConnectionStore {
     await this.applySecret(
       proxySecretKey(id),
       config.proxy === undefined ? { kind: 'clear' } : proxyPassword,
+    );
+    // A registry that is signed in to with the connection's own login has no secret of its own.
+    await this.applySecret(
+      registrySecretKey(id),
+      usesRegistryLogin(config) ? registrySecret : { kind: 'clear' },
     );
     const kept = new Set(sshHopsOf(config).map((hop) => hop.id));
     for (const hop of sshHopsOf(config)) {
@@ -617,6 +633,10 @@ export class ConnectionStore {
     if (proxy !== undefined) {
       await this.secrets.store(proxySecretKey(targetId), proxy);
     }
+    const registry = await this.secrets.get(registrySecretKey(source.id));
+    if (registry !== undefined) {
+      await this.secrets.store(registrySecretKey(targetId), registry);
+    }
     for (const hop of sshHopsOf(source)) {
       for (const kind of SSH_SECRET_KINDS) {
         const value = await this.secrets.get(sshSecretKey(source.id, hop.id, kind));
@@ -631,6 +651,7 @@ export class ConnectionStore {
     await this.secrets.delete(passwordSecretKey(config.id));
     await this.secrets.delete(sentinelSecretKey(config.id));
     await this.secrets.delete(proxySecretKey(config.id));
+    await this.secrets.delete(registrySecretKey(config.id));
     for (const hop of sshHopsOf(config)) {
       await this.deleteHopSecrets(config.id, hop);
     }
@@ -668,6 +689,11 @@ export class ConnectionStore {
   /** The password of a connection's proxy, if one is stored (V10.2.5). */
   async getProxyPassword(id: string): Promise<string | undefined> {
     return await this.secrets.get(proxySecretKey(id));
+  }
+
+  /** The password or token of a Kafka connection's own registry sign-in, if stored (V13.41). */
+  async getRegistrySecret(id: string): Promise<string | undefined> {
+    return await this.secrets.get(registrySecretKey(id));
   }
 
   /** The stored password and passphrase of every SSH hop of a connection, by hop id. */
@@ -998,7 +1024,10 @@ function normalizeElastic(elastic: ElasticSettings | undefined): ElasticSettings
   return { auth: elastic.auth, ...(prefix === '' ? {} : { pathPrefix: prefix }) };
 }
 
-/** No SASL and no registry is the default and is not stored. */
+/**
+ * No SASL and no registry is the default and is not stored; neither is the registry's
+ * sign-in with the connection's login, and a sign-in of its own only goes with a registry.
+ */
 function normalizeKafka(kafka: KafkaSettings | undefined): KafkaSettings | undefined {
   if (kafka === undefined) {
     return undefined;
@@ -1007,7 +1036,24 @@ function normalizeKafka(kafka: KafkaSettings | undefined): KafkaSettings | undef
   if (kafka.sasl === 'none' && registry === '') {
     return undefined;
   }
-  return { sasl: kafka.sasl, ...(registry === '' ? {} : { registry }) };
+  const auth = registry === '' ? 'connection' : (kafka.registryAuth ?? 'connection');
+  const user = auth === 'basic' ? (kafka.registryUser?.trim() ?? '') : '';
+  return {
+    sasl: kafka.sasl,
+    ...(registry === '' ? {} : { registry }),
+    ...(auth === 'connection' ? {} : { registryAuth: auth }),
+    ...(user === '' ? {} : { registryUser: user }),
+  };
+}
+
+/** True for a Kafka connection whose registry is signed in to with a login of its own. */
+function usesRegistryLogin(config: ConnectionInput): boolean {
+  const auth = config.kafka?.registryAuth;
+  return (
+    config.driver === 'kafka' &&
+    (config.kafka?.registry ?? '') !== '' &&
+    (auth === 'basic' || auth === 'bearer')
+  );
 }
 
 /** True for a Redis connection that finds its master through Sentinels. */

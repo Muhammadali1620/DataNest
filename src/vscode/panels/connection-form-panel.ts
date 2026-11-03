@@ -15,11 +15,13 @@ import {
   NEW_CONNECTION,
   storedSshFlags,
   testProxyPassword,
+  testRegistrySecret,
   testSentinelPassword,
   testSshSecrets,
   toInput,
   toPasswordChange,
   toProxyChange,
+  toRegistryChange,
   toSentinelChange,
   toSshChanges,
 } from './connection-form-state';
@@ -157,12 +159,17 @@ export class ConnectionFormPanel implements vscode.Disposable {
       this.connectionId === undefined
         ? undefined
         : await this.deps.store.getProxyPassword(this.connectionId);
+    const registry =
+      this.connectionId === undefined
+        ? undefined
+        : await this.deps.store.getRegistrySecret(this.connectionId);
     await this.deps.manager.test(
       draft.input,
       password,
       testSshSecrets(draft, stored),
       testSentinelPassword(draft, sentinel),
       testProxyPassword(draft, proxy),
+      testRegistrySecret(draft, registry),
     );
   }
 
@@ -195,6 +202,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
           ...(draft.project === undefined ? {} : { project: draft.project }),
           ...(sentinelValue(draft) === undefined ? {} : { sentinelPassword: sentinelValue(draft) }),
           ...(proxyValue(draft) === undefined ? {} : { proxyPassword: proxyValue(draft) }),
+          ...(registryValue(draft) === undefined ? {} : { registrySecret: registryValue(draft) }),
         },
       );
       this.connectionId = created.id;
@@ -210,6 +218,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       toSshChanges(draft),
       toSentinelChange(draft),
       toProxyChange(draft),
+      toRegistryChange(draft),
     );
     this.retitle(updated.name);
     this.sendState();
@@ -241,6 +250,10 @@ export class ConnectionFormPanel implements vscode.Disposable {
       connectionId === undefined
         ? false
         : (await this.deps.store.getProxyPassword(connectionId)) !== undefined;
+    const hasStoredRegistrySecret =
+      connectionId === undefined
+        ? false
+        : (await this.deps.store.getRegistrySecret(connectionId)) !== undefined;
     const project =
       connectionId === undefined ? undefined : this.deps.store.projectOf(connectionId);
     // The panel may have been closed while the secret was read; stay silent then.
@@ -253,6 +266,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       hasStoredPassword,
       ...(hasStoredSentinelPassword ? { hasStoredSentinelPassword } : {}),
       ...(hasStoredProxyPassword ? { hasStoredProxyPassword } : {}),
+      ...(hasStoredRegistrySecret ? { hasStoredRegistrySecret } : {}),
       ...(this.prefill?.password === undefined ? {} : { importedPassword: true }),
       storedSsh: storedSshFlags(storedSsh),
       projects: this.deps.store.projectFolders().map(({ key, name }) => ({ key, name })),
@@ -266,6 +280,11 @@ export class ConnectionFormPanel implements vscode.Disposable {
 /** The proxy password a new connection is saved with (V10.2.5). */
 function proxyValue(draft: ConnectionDraft): string | undefined {
   return testProxyPassword(draft, undefined);
+}
+
+/** The registry password or token a new connection is saved with (V13.41). */
+function registryValue(draft: ConnectionDraft): string | undefined {
+  return testRegistrySecret(draft, undefined);
 }
 
 /** The Sentinel password a new connection is saved with. */

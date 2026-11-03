@@ -588,6 +588,74 @@
                   aria-invalid={errorFor('kafka-registry-invalid') !== undefined}
                 />
               </Field>
+              {#if fields.kafkaRegistry.trim() !== ''}
+                <Field
+                  label={t('form.kafka.registryAuth')}
+                  hint={t('form.kafka.registryAuthHint')}
+                >
+                  <select
+                    class="control"
+                    bind:value={fields.kafkaRegistryAuth}
+                    aria-label={t('form.kafka.registryAuth')}
+                  >
+                    <option value="connection">{t('form.kafka.registryAuth.connection')}</option>
+                    <option value="basic">{t('form.kafka.registryAuth.basic')}</option>
+                    <option value="bearer">{t('form.kafka.registryAuth.bearer')}</option>
+                  </select>
+                </Field>
+                {#if fields.kafkaRegistryAuth !== 'connection'}
+                  <div class="pair">
+                    {#if fields.kafkaRegistryAuth === 'basic'}
+                      <Field
+                        label={t('form.kafka.registryUser')}
+                        required
+                        error={errorFor('kafka-registry-user-missing')}
+                      >
+                        <input
+                          class="control"
+                          bind:value={fields.kafkaRegistryUser}
+                          maxlength={CONNECTION_LIMITS.field}
+                          aria-label={t('form.kafka.registryUser')}
+                          aria-invalid={errorFor('kafka-registry-user-missing') !== undefined}
+                          autocomplete="off"
+                        />
+                      </Field>
+                    {/if}
+                    <Field
+                      label={fields.kafkaRegistryAuth === 'bearer'
+                        ? t('form.kafka.registryToken')
+                        : t('form.kafka.registryPassword')}
+                      hint={fields.kafkaRegistrySecret.touched
+                        ? undefined
+                        : formState?.hasStoredRegistrySecret
+                          ? t('form.kafka.registrySecretStored')
+                          : undefined}
+                    >
+                      <SecretInput
+                        bind:value={fields.kafkaRegistrySecret.value}
+                        oninput={() => {
+                          if (fields) {
+                            fields.kafkaRegistrySecret.touched = true;
+                          }
+                        }}
+                        maxlength={PASSWORD_MAX_LENGTH}
+                        disabled={fields.kafkaRegistrySecret.erase}
+                        label={fields.kafkaRegistryAuth === 'bearer'
+                          ? t('form.kafka.registryToken')
+                          : t('form.kafka.registryPassword')}
+                        showLabel={t('form.showSecret')}
+                        hideLabel={t('form.hideSecret')}
+                      />
+                    </Field>
+                  </div>
+                  {#if formState?.hasStoredRegistrySecret}
+                    <label class="check">
+                      <input type="checkbox" bind:checked={fields.kafkaRegistrySecret.erase} />
+                      {t('form.kafka.eraseRegistrySecret')}
+                    </label>
+                  {/if}
+                {/if}
+              {/if}
             {/if}
             {#if isElastic}
               <div class="pair">

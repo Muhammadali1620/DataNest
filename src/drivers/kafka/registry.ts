@@ -4,6 +4,7 @@
 // the data after it is Avro, Protobuf or JSON. Only reading is done, and a message the
 // registry cannot explain stays as it is: the page never loses the bytes.
 
+import type { KafkaSettings } from '../../shared/connection';
 import { decodeAvro, parseAvroSchema, type AvroType } from './avro';
 import {
   addTypes,
@@ -308,7 +309,32 @@ export const globalRegistryFetch: RegistryFetch = async (url, init) => {
   return { ok: response.ok, status: response.status, json: () => response.json() };
 };
 
-/** The Basic header for a user and password; the registry shares the connection's sign-in. */
+/** The Basic header for a user and password. */
 export function basicAuth(user: string, password: string): string {
   return `Basic ${Buffer.from(`${user}:${password}`, 'utf8').toString('base64')}`;
+}
+
+/**
+ * The `Authorization` header the registry is asked with (V13.41), or nothing for a registry
+ * that needs no sign-in. By default (and when `registryAuth` is left out) it is the
+ * connection's own user and password with Basic; `basic` uses a user of the registry's own
+ * with `secret` as its password; `bearer` sends `secret` as a token. A choice of its own
+ * without what it needs (no user, no token) signs in with nothing rather than with the
+ * connection's login, which the registry was told not to get.
+ */
+export function registryAuthorization(
+  kafka: KafkaSettings | undefined,
+  login: { readonly user?: string; readonly password?: string },
+  secret: string | undefined,
+): string | undefined {
+  const mode = kafka?.registryAuth ?? 'connection';
+  if (mode === 'bearer') {
+    return secret === undefined || secret === '' ? undefined : `Bearer ${secret}`;
+  }
+  if (mode === 'basic') {
+    const user = kafka?.registryUser?.trim() ?? '';
+    return user === '' ? undefined : basicAuth(user, secret ?? '');
+  }
+  const user = login.user?.trim() ?? '';
+  return user === '' ? undefined : basicAuth(user, login.password ?? '');
 }

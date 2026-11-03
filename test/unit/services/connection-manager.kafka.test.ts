@@ -127,6 +127,42 @@ describe('ConnectionManager with Kafka (V13.23)', () => {
     });
   });
 
+  it('hands the registry its own secret to the session, and no other config (V13.41)', async () => {
+    const { manager, kafka, store } = await setup();
+    const registry = await store.add(
+      {
+        name: 'R',
+        driver: 'kafka',
+        host: 'b',
+        kafka: { sasl: 'plain', registry: 'https://r', registryAuth: 'bearer' },
+      },
+      'pw',
+      {},
+      { registrySecret: 'tok' },
+    );
+    await manager.acquireKafka('r', { connectionId: registry.id });
+    expect(kafka.configs.at(-1)).toMatchObject({ password: 'pw', registrySecret: 'tok' });
+    const plain = await store.add({ name: 'P', driver: 'kafka', host: 'b' }, 'pw');
+    await manager.acquireKafka('p', { connectionId: plain.id });
+    expect(kafka.configs.at(-1)).not.toHaveProperty('registrySecret');
+  });
+
+  it('tests with the secret the form typed, and without one when there is none', async () => {
+    const { manager, kafka } = await setup();
+    const input = {
+      name: 't',
+      driver: 'kafka' as const,
+      host: 'h',
+      kafka: { sasl: 'none' as const, registry: 'https://r', registryAuth: 'basic' as const },
+    };
+    await manager.test(input, 'pw', {}, undefined, undefined, 'typed');
+    expect(kafka.configs.at(-1)).toMatchObject({ id: 'test', registrySecret: 'typed' });
+    await manager.test(input, 'pw', {}, undefined, undefined, '');
+    expect(kafka.configs.at(-1)).not.toHaveProperty('registrySecret');
+    await manager.test(input, 'pw');
+    expect(kafka.configs.at(-1)).not.toHaveProperty('registrySecret');
+  });
+
   it('says Kafka is not available without the driver', async () => {
     const { store, cluster } = await setup();
     const plain = new ConnectionManager({

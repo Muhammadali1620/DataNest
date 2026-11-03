@@ -21,6 +21,7 @@ import {
   DEFAULT_SENTINEL_PORT,
   type ElasticAuthMethod,
   type ElasticSettings,
+  type KafkaRegistryAuth,
   type KafkaSaslMechanism,
   type KafkaSettings,
   type MongoAuthMechanism,
@@ -176,6 +177,12 @@ export interface FormFields {
   kafkaSasl: KafkaSaslMechanism;
   /** The address of a schema registry (V13.34); empty: none. */
   kafkaRegistry: string;
+  /** How the registry is signed in to (V13.41): the connection's login, or one of its own. */
+  kafkaRegistryAuth: KafkaRegistryAuth;
+  /** The registry's own user, for `basic`. */
+  kafkaRegistryUser: string;
+  /** The registry's own password, or its token for `bearer`; kept in SecretStorage. */
+  kafkaRegistrySecret: SecretField;
   /** A Unix socket instead of host and port (V10.2.5); MySQL, PostgreSQL, Redis. */
   socket: string;
   /** Connect through a proxy (V10.2.5); its fields are kept while it is off. */
@@ -243,6 +250,9 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     elasticPrefix: input.elastic?.pathPrefix ?? '',
     kafkaSasl: input.kafka?.sasl ?? 'none',
     kafkaRegistry: input.kafka?.registry ?? '',
+    kafkaRegistryAuth: input.kafka?.registryAuth ?? 'connection',
+    kafkaRegistryUser: input.kafka?.registryUser ?? '',
+    kafkaRegistrySecret: emptySecret(),
     socket: input.socket ?? '',
     useProxy: input.proxy !== undefined,
     proxyKind: input.proxy?.kind ?? 'socks5',
@@ -277,7 +287,15 @@ export function toKafka(fields: FormFields): KafkaSettings | undefined {
   if (fields.kafkaSasl === 'none' && registry === '') {
     return undefined;
   }
-  return { sasl: fields.kafkaSasl, ...(registry === '' ? {} : { registry }) };
+  // The registry's own sign-in means something only with a registry.
+  const auth = registry === '' ? 'connection' : fields.kafkaRegistryAuth;
+  const user = auth === 'basic' ? fields.kafkaRegistryUser.trim() : '';
+  return {
+    sasl: fields.kafkaSasl,
+    ...(registry === '' ? {} : { registry }),
+    ...(auth === 'connection' ? {} : { registryAuth: auth }),
+    ...(auth === 'basic' ? { registryUser: user } : {}),
+  };
 }
 
 /** The Elasticsearch settings to send; none for a user and password at the root. */
@@ -657,6 +675,10 @@ export function toDraft(fields: FormFields): ConnectionDraft {
     ...(input.ssh === undefined
       ? {}
       : { ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)) }),
+    // Only a registry with a sign-in of its own has the secret; the store drops it otherwise.
+    ...(input.kafka?.registryAuth === 'basic' || input.kafka?.registryAuth === 'bearer'
+      ? { registrySecret: secretChange(fields.kafkaRegistrySecret) }
+      : {}),
     // Without a proxy the store drops its password by itself.
     ...(input.proxy === undefined ? {} : { proxyPassword: secretChange(fields.proxyPassword) }),
   };
@@ -766,6 +788,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<ConnectionProblem, MessageKey>> =
   'mongo-ssh-topology': 'form.mongo.error.ssh',
   'elastic-prefix-invalid': 'form.elastic.error.prefix',
   'kafka-registry-invalid': 'form.kafka.error.registry',
+  'kafka-registry-user-missing': 'form.kafka.error.registryUser',
   'socket-unsupported': 'form.socket.error.unsupported',
   'socket-with-tunnel': 'form.socket.error.tunnel',
   'proxy-host-empty': 'form.error.hostEmpty',
@@ -808,6 +831,8 @@ export function applyUrl(fields: FormFields, parsed: ParsedConnectionUrl): void 
   fields.elasticPrefix = input.elastic?.pathPrefix ?? '';
   fields.kafkaSasl = input.kafka?.sasl ?? 'none';
   fields.kafkaRegistry = input.kafka?.registry ?? '';
+  fields.kafkaRegistryAuth = input.kafka?.registryAuth ?? 'connection';
+  fields.kafkaRegistryUser = input.kafka?.registryUser ?? '';
   if (password !== undefined) {
     fields.password = password;
     fields.passwordTouched = true;

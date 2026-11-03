@@ -454,6 +454,18 @@ export const en = {
   'form.kafka.registryHint':
     'Optional. The address of a Confluent-compatible registry; messages written with an Avro, Protobuf or JSON schema then show decoded. The user and password above, if set, sign in to it too',
   'form.kafka.error.registry': 'Write the address as http://host:port or https://host:port',
+  'form.kafka.registryAuth': 'Registry sign-in',
+  'form.kafka.registryAuthHint':
+    "Most registries are open or take the connection's own user and password; give the registry its own login when it differs",
+  'form.kafka.registryAuth.connection': 'As the connection (user and password above)',
+  'form.kafka.registryAuth.basic': 'A user and password of its own',
+  'form.kafka.registryAuth.bearer': 'A token (Bearer)',
+  'form.kafka.registryUser': 'Registry user',
+  'form.kafka.registryPassword': 'Registry password',
+  'form.kafka.registryToken': 'Registry token',
+  'form.kafka.registrySecretStored': 'Saved; leave empty to keep it',
+  'form.kafka.eraseRegistrySecret': 'Erase the saved registry password or token',
+  'form.kafka.error.registryUser': 'Give the user the registry expects, or choose another sign-in',
   'redis.view': 'View',
   'redis.mode.text': 'Text',
   'redis.mode.json': 'JSON',

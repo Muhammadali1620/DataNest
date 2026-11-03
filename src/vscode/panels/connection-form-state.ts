@@ -91,6 +91,27 @@ export function testSentinelPassword(
   }
 }
 
+/** The form's choice for the registry's own password or token (V13.41); silence keeps it. */
+export function toRegistryChange(draft: ConnectionDraft): PasswordChange {
+  return draft.registrySecret === undefined ? { kind: 'keep' } : toChange(draft.registrySecret);
+}
+
+/** The registry secret "Test" should use: what the form typed, else what is stored. */
+export function testRegistrySecret(
+  draft: ConnectionDraft,
+  stored: string | undefined,
+): string | undefined {
+  const change = toRegistryChange(draft);
+  switch (change.kind) {
+    case 'set':
+      return change.value === '' ? undefined : change.value;
+    case 'clear':
+      return undefined;
+    case 'keep':
+      return stored;
+  }
+}
+
 /** The form's choice for the proxy password (V10.2.5); a form that says nothing keeps it. */
 export function toProxyChange(draft: ConnectionDraft): PasswordChange {
   return draft.proxyPassword === undefined ? { kind: 'keep' } : toChange(draft.proxyPassword);

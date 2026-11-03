@@ -31,6 +31,7 @@ import {
   toMongo,
   changeMongoMode,
   toElastic,
+  toKafka,
   toProxy,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
@@ -86,6 +87,9 @@ function fields(overrides: Partial<FormFields> = {}): FormFields {
     elasticPrefix: '',
     kafkaSasl: 'none',
     kafkaRegistry: '',
+    kafkaRegistryAuth: 'connection',
+    kafkaRegistryUser: '',
+    kafkaRegistrySecret: emptySecret(),
     socket: '',
     useProxy: false,
     proxyKind: 'socks5',
@@ -160,6 +164,9 @@ describe('fieldsFrom', () => {
       elasticPrefix: '',
       kafkaSasl: 'none',
       kafkaRegistry: '',
+      kafkaRegistryAuth: 'connection',
+      kafkaRegistryUser: '',
+      kafkaRegistrySecret: emptySecret(),
       socket: '',
       useProxy: false,
       proxyKind: 'socks5',
@@ -1315,6 +1322,115 @@ describe('Kafka registry field (V13.34)', () => {
     expect(toInput({ ...state, name: 'K' })).toMatchObject({
       kafka: { sasl: 'none', registry: 'http://r' },
     });
+  });
+});
+
+describe('Kafka registry sign-in fields (V13.41)', () => {
+  const kafka = (overrides: Partial<FormFields> = {}): FormFields =>
+    fields({ driver: 'kafka', host: 'b:9092', kafkaRegistry: 'https://r', ...overrides });
+
+  it('sends nothing extra while the registry follows the connection', () => {
+    expect(toKafka(kafka({ kafkaRegistryUser: 'ignored' }))).toEqual({
+      sasl: 'none',
+      registry: 'https://r',
+    });
+    expect(toDraft(kafka()).registrySecret).toBeUndefined();
+  });
+
+  it('sends a user of its own, trimmed, for Basic, and the token choice for Bearer', () => {
+    expect(toKafka(kafka({ kafkaRegistryAuth: 'basic', kafkaRegistryUser: ' reg ' }))).toEqual({
+      sasl: 'none',
+      registry: 'https://r',
+      registryAuth: 'basic',
+      registryUser: 'reg',
+    });
+    expect(toKafka(kafka({ kafkaRegistryAuth: 'bearer', kafkaRegistryUser: 'ignored' }))).toEqual({
+      sasl: 'none',
+      registry: 'https://r',
+      registryAuth: 'bearer',
+    });
+  });
+
+  it('forgets the sign-in of its own when there is no registry', () => {
+    expect(toKafka(kafka({ kafkaRegistry: '', kafkaRegistryAuth: 'bearer' }))).toBeUndefined();
+    expect(
+      toKafka(kafka({ kafkaRegistry: ' ', kafkaSasl: 'plain', kafkaRegistryAuth: 'basic' })),
+    ).toEqual({ sasl: 'plain' });
+  });
+
+  it('asks for the user of Basic, in both languages', () => {
+    expect(problemsOf(kafka({ kafkaRegistryAuth: 'basic' }))).toContain(
+      'kafka-registry-user-missing',
+    );
+    expect(problemsOf(kafka({ kafkaRegistryAuth: 'basic', kafkaRegistryUser: ' ' }))).toContain(
+      'kafka-registry-user-missing',
+    );
+    expect(problemsOf(kafka({ kafkaRegistryAuth: 'basic', kafkaRegistryUser: 'u' }))).not.toContain(
+      'kafka-registry-user-missing',
+    );
+    expect(problemsOf(kafka({ kafkaRegistryAuth: 'bearer' }))).not.toContain(
+      'kafka-registry-user-missing',
+    );
+    expect(en[PROBLEM_MESSAGES['kafka-registry-user-missing']]).toBeTruthy();
+    expect(ru[PROBLEM_MESSAGES['kafka-registry-user-missing']]).toBeTruthy();
+  });
+
+  it('sends the secret in the draft only for a sign-in of its own', () => {
+    const typed = { value: 's3', touched: true, erase: false };
+    expect(
+      toDraft(kafka({ kafkaRegistryAuth: 'bearer', kafkaRegistrySecret: typed })).registrySecret,
+    ).toEqual({ kind: 'set', value: 's3' });
+    expect(
+      toDraft(
+        kafka({
+          kafkaRegistryAuth: 'basic',
+          kafkaRegistryUser: 'u',
+          kafkaRegistrySecret: { value: '', touched: false, erase: true },
+        }),
+      ).registrySecret,
+    ).toEqual({ kind: 'clear' });
+    expect(
+      toDraft(kafka({ kafkaRegistryAuth: 'basic', kafkaRegistryUser: 'u' })).registrySecret,
+    ).toEqual({ kind: 'keep' });
+    expect(toDraft(kafka({ kafkaRegistry: '', kafkaRegistryAuth: 'bearer' })).registrySecret).toBe(
+      undefined,
+    );
+  });
+
+  it('puts the saved sign-in into the fields and never the secret', () => {
+    const state = fieldsFrom({
+      input: {
+        name: 'K',
+        driver: 'kafka',
+        host: 'b',
+        kafka: {
+          sasl: 'none',
+          registry: 'http://r',
+          registryAuth: 'basic',
+          registryUser: 'reg',
+        },
+      },
+      hasStoredPassword: false,
+      hasStoredRegistrySecret: true,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect(state.kafkaRegistryAuth).toBe('basic');
+    expect(state.kafkaRegistryUser).toBe('reg');
+    expect(state.kafkaRegistrySecret).toEqual({ value: '', touched: false, erase: false });
+    const plain = fieldsFrom({
+      input: {
+        name: 'K',
+        driver: 'kafka',
+        host: 'b',
+        kafka: { sasl: 'none', registry: 'http://r' },
+      },
+      hasStoredPassword: false,
+      storedSsh: [],
+      drivers: [],
+    });
+    expect(plain.kafkaRegistryAuth).toBe('connection');
+    expect(plain.kafkaRegistryUser).toBe('');
   });
 });
 

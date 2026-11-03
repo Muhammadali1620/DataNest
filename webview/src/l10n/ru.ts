@@ -455,6 +455,18 @@ export const ru: Record<MessageKey, string> = {
   'form.kafka.registryHint':
     'Необязательно. Адрес реестра, совместимого с Confluent; сообщения, записанные со схемой Avro, Protobuf или JSON, покажутся расшифрованными. Пользователь и пароль выше, если заданы, входят и в реестр',
   'form.kafka.error.registry': 'Пишите адрес как http://хост:порт или https://хост:порт',
+  'form.kafka.registryAuth': 'Вход в реестр',
+  'form.kafka.registryAuthHint':
+    'Большинство реестров открыты или принимают пользователя и пароль подключения; свой вход нужен, если у реестра он другой',
+  'form.kafka.registryAuth.connection': 'Как у подключения (пользователь и пароль выше)',
+  'form.kafka.registryAuth.basic': 'Свои пользователь и пароль',
+  'form.kafka.registryAuth.bearer': 'Токен (Bearer)',
+  'form.kafka.registryUser': 'Пользователь реестра',
+  'form.kafka.registryPassword': 'Пароль реестра',
+  'form.kafka.registryToken': 'Токен реестра',
+  'form.kafka.registrySecretStored': 'Сохранён; оставьте пустым, чтобы не менять',
+  'form.kafka.eraseRegistrySecret': 'Стереть сохранённый пароль или токен реестра',
+  'form.kafka.error.registryUser': 'Укажите пользователя реестра или выберите другой вход',
   'redis.view': 'Вид',
   'redis.mode.text': 'Текст',
   'redis.mode.json': 'JSON',

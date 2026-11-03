@@ -39,9 +39,15 @@ import type {
   KafkaTopicDetails,
   KafkaTopicInfo,
   KafkaWatchRequest,
+  ResolvedKafkaConfig,
 } from '../kafka-driver';
 import { kafkaFailure } from './errors';
-import { basicAuth, globalRegistryFetch, type RegistryFetch, SchemaRegistry } from './registry';
+import {
+  globalRegistryFetch,
+  type RegistryFetch,
+  registryAuthorization,
+  SchemaRegistry,
+} from './registry';
 
 const ACL_ANY = 1;
 const ACL_ALLOW = 3;
@@ -982,7 +988,7 @@ class ClientSession implements KafkaSession {
 }
 
 export async function openKafkaSession(
-  config: ResolvedConnectionConfig,
+  config: ResolvedKafkaConfig,
   factory: KafkaClientFactory = kafkajsFactory,
   registryFetch: RegistryFetch = globalRegistryFetch,
 ): Promise<KafkaSession> {
@@ -994,14 +1000,17 @@ export async function openKafkaSession(
     throw kafkaFailure(error);
   }
   const registryUrl = config.kafka?.registry?.trim() ?? '';
-  const user = config.user?.trim() ?? '';
   const registry =
     registryUrl === ''
       ? undefined
       : new SchemaRegistry(
           registryUrl,
           registryFetch,
-          user === '' ? undefined : basicAuth(user, config.password ?? ''),
+          registryAuthorization(
+            config.kafka,
+            { user: config.user, password: config.password },
+            config.registrySecret,
+          ),
         );
   const session = new ClientSession(client, client.admin(), registry);
   try {

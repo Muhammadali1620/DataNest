@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   basicAuth,
+  registryAuthorization,
   isRegistryUrl,
   SchemaRegistry,
   type RegistryFetch,
@@ -180,5 +181,53 @@ describe('SchemaRegistry (V13.34)', () => {
     }
     await registry.decode(framed(0, avroLong(1)));
     expect(calls.length).toBeGreaterThan(502);
+  });
+});
+
+describe('registryAuthorization (V13.41)', () => {
+  const basic = (user: string, password: string): string =>
+    `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
+  const login = { user: 'ann', password: 'pw' };
+
+  it('follows the connection by default and with `connection`', () => {
+    expect(registryAuthorization(undefined, login, 'x')).toBe(basic('ann', 'pw'));
+    expect(registryAuthorization({ sasl: 'none' }, login, undefined)).toBe(basic('ann', 'pw'));
+    expect(registryAuthorization({ sasl: 'none', registryAuth: 'connection' }, login, 'x')).toBe(
+      basic('ann', 'pw'),
+    );
+  });
+
+  it('asks without a sign-in when the connection has no user, even with an empty password', () => {
+    expect(registryAuthorization(undefined, {}, undefined)).toBeUndefined();
+    expect(registryAuthorization(undefined, { user: '  ' }, undefined)).toBeUndefined();
+    expect(registryAuthorization(undefined, { user: 'ann' }, undefined)).toBe(basic('ann', ''));
+  });
+
+  it('signs in with a user of its own and the secret as password', () => {
+    const kafka = { sasl: 'none', registryAuth: 'basic', registryUser: ' reg ' } as const;
+    expect(registryAuthorization(kafka, login, 's3:cret')).toBe(basic('reg', 's3:cret'));
+    // No secret stored: an empty password, not the connection's.
+    expect(registryAuthorization(kafka, login, undefined)).toBe(basic('reg', ''));
+  });
+
+  it('sends nothing for `basic` without a user and for `bearer` without a token', () => {
+    expect(
+      registryAuthorization({ sasl: 'none', registryAuth: 'basic' }, login, 'x'),
+    ).toBeUndefined();
+    expect(
+      registryAuthorization({ sasl: 'none', registryAuth: 'basic', registryUser: ' ' }, login, 'x'),
+    ).toBeUndefined();
+    expect(
+      registryAuthorization({ sasl: 'none', registryAuth: 'bearer' }, login, ''),
+    ).toBeUndefined();
+    expect(
+      registryAuthorization({ sasl: 'none', registryAuth: 'bearer' }, login, undefined),
+    ).toBeUndefined();
+  });
+
+  it('sends a token as Bearer', () => {
+    expect(registryAuthorization({ sasl: 'none', registryAuth: 'bearer' }, login, 'abc.def')).toBe(
+      'Bearer abc.def',
+    );
   });
 });

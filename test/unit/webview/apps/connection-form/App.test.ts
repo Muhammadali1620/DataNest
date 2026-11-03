@@ -1371,6 +1371,92 @@ describe('connection form App: compatible servers (V6.5)', () => {
     });
   });
 
+  describe('Kafka registry sign-in (V13.41)', () => {
+    const KAFKA: ConnectionFormState['drivers'] = [
+      ...DRIVERS,
+      { id: 'kafka', defaultPort: 9092, file: false },
+    ];
+
+    async function kafkaForm(
+      kafka: NonNullable<ConnectionFormState['input']['kafka']>,
+      extra: Partial<ConnectionFormState> = {},
+    ) {
+      return await withState(
+        newState({
+          input: { name: 'K', driver: 'kafka', host: 'b:9092', kafka },
+          drivers: KAFKA,
+          ...extra,
+        }),
+      );
+    }
+
+    it('offers no sign-in of its own until there is a registry', async () => {
+      await kafkaForm({ sasl: 'none' });
+      expect(screen.queryByLabelText('Registry sign-in')).toBeNull();
+      await fireEvent.input(field('Schema registry'), { target: { value: 'http://r:8081' } });
+      await waitFor(() => {
+        expect(screen.getByLabelText('Registry sign-in')).toBeTruthy();
+      });
+      expect(screen.queryByLabelText('Registry user')).toBeNull();
+    });
+
+    it('saves a user and password of its own for the registry', async () => {
+      const { host } = await kafkaForm({ sasl: 'plain', registry: 'http://r:8081' });
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.change(screen.getByLabelText('Registry sign-in'), {
+        target: { value: 'basic' },
+      });
+      await fireEvent.input(field('Registry user'), { target: { value: 'reg' } });
+      await fireEvent.input(field('Registry password'), { target: { value: 'p4ss' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      expect(drafts[0]?.input.kafka).toEqual({
+        sasl: 'plain',
+        registry: 'http://r:8081',
+        registryAuth: 'basic',
+        registryUser: 'reg',
+      });
+      expect(drafts[0]?.registrySecret).toEqual({ kind: 'set', value: 'p4ss' });
+    });
+
+    it('asks for a token alone for Bearer, and blocks Basic without a user', async () => {
+      const { host } = await kafkaForm({ sasl: 'none', registry: 'http://r' });
+      const save = vi.fn(() => ({ connectionId: 'c1' }));
+      host.handle('save', save);
+      await fireEvent.change(screen.getByLabelText('Registry sign-in'), {
+        target: { value: 'bearer' },
+      });
+      expect(screen.queryByLabelText('Registry user')).toBeNull();
+      expect(screen.getByLabelText('Registry token')).toBeTruthy();
+      await fireEvent.change(screen.getByLabelText('Registry sign-in'), {
+        target: { value: 'basic' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(
+          screen.getByText('Give the user the registry expects, or choose another sign-in'),
+        ).toBeTruthy();
+      });
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('says a secret is saved and offers to erase it, without showing it', async () => {
+      await kafkaForm(
+        { sasl: 'none', registry: 'http://r', registryAuth: 'bearer' },
+        { connectionId: 'c1', hasStoredRegistrySecret: true },
+      );
+      expect(screen.getByText('Saved; leave empty to keep it')).toBeTruthy();
+      expect(screen.getByLabelText('Erase the saved registry password or token')).toBeTruthy();
+      expect(field('Registry token').value).toBe('');
+    });
+  });
+
   describe('Redis (V7.1)', () => {
     const REDIS: ConnectionFormState['drivers'] = [
       ...DRIVERS,

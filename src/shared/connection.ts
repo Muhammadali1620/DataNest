@@ -264,14 +264,30 @@ export const KAFKA_SASL_MECHANISMS = ['none', 'plain', 'scram-sha-256', 'scram-s
 
 export type KafkaSaslMechanism = (typeof KAFKA_SASL_MECHANISMS)[number];
 
+/**
+ * How the schema registry is signed in to (V13.41): with the connection's own user and
+ * password (the default, Basic), with a user and password of its own (Basic), or with a
+ * Bearer token of its own.
+ */
+export const KAFKA_REGISTRY_AUTH = ['connection', 'basic', 'bearer'] as const;
+
+export type KafkaRegistryAuth = (typeof KAFKA_REGISTRY_AUTH)[number];
+
 export interface KafkaSettings {
   readonly sasl: KafkaSaslMechanism;
   /**
    * A schema registry (V13.34): the address of its Confluent-compatible API, e.g.
-   * `http://host:8081`. Messages written with a schema show decoded. The connection's user and
-   * password, when given, sign in to it with Basic.
+   * `http://host:8081`. Messages written with a schema show decoded. By default the
+   * connection's user and password, when given, sign in to it with Basic.
    */
   readonly registry?: string;
+  /** How the registry is signed in to; left out means `connection` (V13.41). */
+  readonly registryAuth?: KafkaRegistryAuth;
+  /**
+   * The registry's own user, for `basic` (V13.41). Its password, and the token of `bearer`,
+   * are a secret kept in SecretStorage, never here.
+   */
+  readonly registryUser?: string;
 }
 
 /** How DataNest proves who it is to an SSH server. */
@@ -771,6 +787,8 @@ export type ConnectionProblem =
   | 'elastic-prefix-invalid'
   /** The schema registry of a Kafka connection is not an http(s) address (V13.34). */
   | 'kafka-registry-invalid'
+  /** Basic sign-in of the registry with a user of its own needs that user (V13.41). */
+  | 'kafka-registry-user-missing'
   /** A Unix socket for a driver that has none (V10.2.5). */
   | 'socket-unsupported'
   /** A socket is on this machine: no tunnel or proxy leads to it. */
@@ -1059,6 +1077,13 @@ export function connectionProblems(input: ConnectionInput): ConnectionProblem[] 
     const registry = input.driver === 'kafka' ? (input.kafka?.registry ?? '') : '';
     if (registry !== '' && !isHttpAddress(registry)) {
       problems.push('kafka-registry-invalid');
+    }
+    if (
+      registry !== '' &&
+      input.kafka?.registryAuth === 'basic' &&
+      (input.kafka.registryUser ?? '').trim() === ''
+    ) {
+      problems.push('kafka-registry-user-missing');
     }
   }
   return problems;

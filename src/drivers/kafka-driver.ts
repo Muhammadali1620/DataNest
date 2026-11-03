@@ -4,6 +4,11 @@
 
 import type { ResolvedConnectionConfig } from '../shared/connection';
 
+/** What the registry's own sign-in adds to a resolved config; a secret of its own (V13.41). */
+export interface ResolvedKafkaConfig extends ResolvedConnectionConfig {
+  readonly registrySecret?: string;
+}
+
 /** What the cluster said about itself when the session opened. */
 export interface KafkaServerInfo {
   /** The id of the cluster; empty when the brokers are too old to tell. */
@@ -246,7 +251,7 @@ export interface KafkaSession {
 
 export interface KafkaDriver {
   readonly id: 'kafka';
-  openSession(config: ResolvedConnectionConfig): Promise<KafkaSession>;
+  openSession(config: ResolvedKafkaConfig): Promise<KafkaSession>;
 }
 
 /** The shape of the lazily loaded bundle dist/drivers/kafka.js. */

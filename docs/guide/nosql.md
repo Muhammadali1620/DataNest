@@ -221,7 +221,11 @@ when the listener is encrypted.
   an **Avro**, **Protobuf** or **JSON Schema** message as JSON, with a badge that names the
   format and the id. A message the registry cannot explain (no zero byte, an unknown id, the
   registry is down) shows as the bytes it is. The bytes on the topic never change. The
-  connection's user and password, if set, sign in to the registry with Basic. Protobuf is
+  connection's user and password, if set, sign in to the registry with Basic; when the
+  registry has a login of its own, pick **Registry sign-in** under the address: **A user and
+  password of its own** (Basic) or **A token (Bearer)**. Its password or token is kept like the
+  connection's password, in the editor's secret storage, never in the connection file, and the
+  connection's own login is then not sent to the registry. Protobuf is
   read by the `.proto` text the registry keeps, and the files it imports are read too (the
   references the registry lists, and the well-known types such as `google.protobuf.Timestamp`),
   so a field of an imported type decodes as that type; one whose file the registry cannot give
@@ -238,8 +242,7 @@ when the listener is encrypted.
   resource, so DataNest sends back the overrides that exist along with the change; a
   resource that holds a secret setting (which a cluster never tells) is not changed here.
 
-Not here (yet): GSSAPI (Kerberos) and OAuth sign-in, and signing in to a registry apart
-from the connection's own user and password.
+Not here (yet): GSSAPI (Kerberos) and OAuth sign-in.
 
 ## RabbitMQ
 

@@ -42,6 +42,8 @@ const draftSchema = object({
   sentinelPassword: optional(passwordChangeSchema),
   /** The password of the connection's proxy (V10.2.5); left out keeps the stored one. */
   proxyPassword: optional(passwordChangeSchema),
+  /** The password or token of a Kafka registry's own sign-in (V13.41); left out keeps it. */
+  registrySecret: optional(passwordChangeSchema),
 });
 
 const projectSchema = object({ key: projectKeySchema, name: string({ maxLength: 500 }) });
@@ -62,6 +64,8 @@ const formStateSchema = object({
   hasStoredSentinelPassword: optional(boolean()),
   /** True when a proxy password is stored for this connection (V10.2.5). */
   hasStoredProxyPassword: optional(boolean()),
+  /** True when a Kafka registry's own password or token is stored (V13.41). */
+  hasStoredRegistrySecret: optional(boolean()),
   /** Which SSH hops have a stored password or passphrase; values never travel. */
   storedSsh: array(
     object({

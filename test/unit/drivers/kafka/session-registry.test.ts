@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RegistryFetch } from '../../../../src/drivers/kafka/registry';
 import { openKafkaSession } from '../../../../src/drivers/kafka/session';
-import type { ResolvedConnectionConfig } from '../../../../src/shared/connection';
+import type { ResolvedKafkaConfig } from '../../../../src/drivers/kafka-driver';
 import { FakeKafka } from '../../../helpers/fake-kafka';
 import { avroLong, avroString, framed } from '../../../helpers/wire-encoders';
 
@@ -14,7 +14,7 @@ const SCHEMA = JSON.stringify({
   ],
 });
 
-function config(extra: Partial<ResolvedConnectionConfig> = {}): ResolvedConnectionConfig {
+function config(extra: Partial<ResolvedKafkaConfig> = {}): ResolvedKafkaConfig {
   return {
     id: 'k',
     name: 'Kafka',
@@ -158,5 +158,73 @@ describe('reading messages through a schema registry (V13.34)', () => {
       fromOffset: '0',
     });
     expect(headers[0]?.authorization).toBeUndefined();
+  });
+
+  describe('a sign-in of its own (V13.41)', () => {
+    async function headerWith(extra: Partial<ResolvedKafkaConfig>): Promise<string | undefined> {
+      const { fetcher, headers } = registryFetch();
+      const session = await openKafkaSession(config(extra), cluster().factory, fetcher);
+      await session.readMessages({
+        topic: 'users',
+        partition: 0,
+        count: 1,
+        maxBytes: 1_000_000,
+        fromOffset: '0',
+      });
+      return headers[0]?.authorization;
+    }
+    const kafka = (extra: object): ResolvedKafkaConfig['kafka'] => ({
+      sasl: 'plain',
+      registry: 'http://registry:8081',
+      ...extra,
+    });
+
+    it('uses a user of its own and its secret, not the connection login', async () => {
+      const header = await headerWith({
+        user: 'ann',
+        password: 'conn-secret',
+        kafka: kafka({ registryAuth: 'basic', registryUser: 'reg' }),
+        registrySecret: 'reg-secret',
+      });
+      expect(header).toBe(`Basic ${Buffer.from('reg:reg-secret').toString('base64')}`);
+    });
+
+    it('sends a token as Bearer', async () => {
+      const header = await headerWith({
+        user: 'ann',
+        password: 'conn-secret',
+        kafka: kafka({ registryAuth: 'bearer' }),
+        registrySecret: 'tok.en',
+      });
+      expect(header).toBe('Bearer tok.en');
+    });
+
+    it('never lends the connection login to a registry told to use its own', async () => {
+      expect(
+        await headerWith({
+          user: 'ann',
+          password: 'conn-secret',
+          kafka: kafka({ registryAuth: 'bearer' }),
+        }),
+      ).toBeUndefined();
+      expect(
+        await headerWith({
+          user: 'ann',
+          password: 'conn-secret',
+          kafka: kafka({ registryAuth: 'basic' }),
+          registrySecret: 'x',
+        }),
+      ).toBeUndefined();
+    });
+
+    it('still follows the connection with registryAuth connection', async () => {
+      const header = await headerWith({
+        user: 'ann',
+        password: 's3',
+        kafka: kafka({ registryAuth: 'connection' }),
+        registrySecret: 'ignored',
+      });
+      expect(header).toBe(`Basic ${Buffer.from('ann:s3').toString('base64')}`);
+    });
   });
 });

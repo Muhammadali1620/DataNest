@@ -687,6 +687,24 @@ describe('Elasticsearch connections (V7.8)', () => {
     expect(filterSupport('elasticsearch')).toEqual({ databases: false, schemas: false });
   });
 
+  it('asks for the user of a registry signed in to with Basic of its own (V13.41)', () => {
+    const kafka = { name: 'K', driver: 'kafka' as const, host: 'b:9092' };
+    const registry = 'https://r';
+    const problems = (extra: object): string[] =>
+      connectionProblems({ ...kafka, kafka: { sasl: 'none', registry, ...extra } as never });
+    expect(problems({ registryAuth: 'basic' })).toEqual(['kafka-registry-user-missing']);
+    expect(problems({ registryAuth: 'basic', registryUser: '  ' })).toEqual([
+      'kafka-registry-user-missing',
+    ]);
+    expect(problems({ registryAuth: 'basic', registryUser: 'u' })).toEqual([]);
+    expect(problems({ registryAuth: 'bearer' })).toEqual([]);
+    expect(problems({ registryAuth: 'connection' })).toEqual([]);
+    // Without a registry its sign-in does not matter.
+    expect(
+      connectionProblems({ ...kafka, kafka: { sasl: 'none', registryAuth: 'basic' } as never }),
+    ).toEqual([]);
+  });
+
   it('accepts the address of a Kafka schema registry and refuses one that is not http(s)', () => {
     const kafka = { name: 'K', driver: 'kafka' as const, host: 'b:9092' };
     expect(

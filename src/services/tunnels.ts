@@ -247,7 +247,8 @@ export type SshLoader = () => Promise<SshModule>;
 /** Resolves `./ssh.js` next to the running bundle, like the drivers. */
 export function createBundleSshLoader(bundlePath: string): SshLoader {
   const requireFromBundle = createRequire(bundlePath);
-  return () => Promise.resolve(requireFromBundle('./ssh.js') as SshModule);
+  // The bundle exports `{ ssh }` (like `{ formatter }` of dist/formatter.js), not the module itself.
+  return () => Promise.resolve((requireFromBundle('./ssh.js') as { ssh: SshModule }).ssh);
 }
 
 /** A tunnel handed to one session; `release` is safe to call more than once. */

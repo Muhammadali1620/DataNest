@@ -1,8 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import type { ConnectionInput } from '../../../src/shared/connection';
 import {
+  createBundleSshLoader,
   type HostKeyCheck,
   SSH_TIMEOUT_MS,
   remoteFileSpecOf,
@@ -516,5 +520,30 @@ describe('TunnelPool.downloadFiles (V12.8)', () => {
     });
     pool.dispose();
     await expect(pool.openExec(remote, 'x')).rejects.toMatchObject({ code: 'internal' });
+  });
+});
+
+describe('createBundleSshLoader', () => {
+  it('hands out the module the bundle exports as `ssh`, not the export object around it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'datanest-ssh-bundle-'));
+    try {
+      writeFileSync(
+        join(dir, 'ssh.js'),
+        'module.exports = { ssh: { openTunnel() {}, downloadFiles() {}, openSftp() {}, openShell() {}, execCommand() {}, openExec() {} } };',
+      );
+      const loaded = await createBundleSshLoader(join(dir, 'extension.js'))();
+      for (const name of [
+        'openTunnel',
+        'downloadFiles',
+        'openSftp',
+        'openShell',
+        'execCommand',
+        'openExec',
+      ]) {
+        expect(typeof (loaded as unknown as Record<string, unknown>)[name]).toBe('function');
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

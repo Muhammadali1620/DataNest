@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.0.1] - 2026-11-03
+
+### Fixed
+
+- The changelog shown with the extension no longer starts with an empty "Unreleased" heading.
+
 ## [2.0.0] - 2026-11-03
 
 ### Added

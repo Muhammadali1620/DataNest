@@ -5,7 +5,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ## [Unreleased]
 
-## [1.8.0] - 2026-11-02
+## [2.0.0] - 2026-11-03
 
 ### Added
 
@@ -56,6 +56,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Fixed
 
+- Servers and SSH tunnels: every request no longer waits 40 ms (removing 800 files took 30 s, now 0.2 s), a file you may not read says so instead of "Permission denied" or "Premature close", and a server with no cipher, MAC or compression in common is explained with the way out ("SSH algorithms").
+- Exports and generated SQL: a one-column table with empty values keeps its rows in CSV; JSON export writes NaN and infinity as text, not null; SQLite infinity round-trips; ClickHouse names with a backslash no longer swallow the statements after them; a server owner number beyond 32 bits is refused; history lines no longer split an emoji.
+- Pages look the same in every theme: state colours of text are readable in light themes, rows of buttons and grids of cards fit a narrow window, a chosen menu item and the item with the keyboard are visible in high contrast, and "Add Server" is "New Server".
+- Quieter and tidier: the log no longer fills with a refused tree reveal or with SQLite's "experimental feature" warning, the user/password row of the connection forms stays inside its card on a narrow editor, and the hint of the connection URL names more kinds of address.
 - Servers: aborting a command that runs on a server now returns at once (it used to wait for the command to end) and asks it to stop; "make a folder" and "remove a folder" say that the name is taken or the folder is not empty instead of the server's bare "Failure".
 - The Servers view and SSH tunnels failed with "openSftp is not a function" ("openTunnel is not a function"): the SSH module was loaded wrapped in its export object.
 

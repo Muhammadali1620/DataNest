@@ -75,7 +75,7 @@ jobs:
           steps.published.outputs.already == 'false'
         env:
           OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
-        run: npx ovsx publish *.vsix --pat "$OPEN_VSX_TOKEN"
+        run: npx ovsx publish *.vsix -p "$OPEN_VSX_TOKEN"
 
       # The VS Marketplace has no token yet (ARCHITECTURE.md D18): the .vsix above
       # is attached to the release and uploaded by hand.

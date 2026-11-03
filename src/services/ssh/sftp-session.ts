@@ -205,6 +205,19 @@ class Session implements SftpSession {
     if (stats.kind === 'directory') {
       throw new DbError('unsupported', msg('{0} on the server is a folder, not a file', path));
     }
+    // As for writing: a file the user may not read is refused here, in words, and not by the
+    // stream with ssh2's bare "Permission denied" (and a copy of a tree "Premature close").
+    await call<undefined>(path, (done) => {
+      this.sftp.open(path, 'r', (error, handle) => {
+        if (error) {
+          done(error);
+        } else {
+          this.sftp.close(handle, (closeError) => {
+            done(closeError);
+          });
+        }
+      });
+    });
     const stream = this.sftp.createReadStream(path);
     // ssh2 reads ahead; if the link closes while those reads are out, the stream reports
     // an error nobody is waiting for any more, and an unheard 'error' would be thrown.

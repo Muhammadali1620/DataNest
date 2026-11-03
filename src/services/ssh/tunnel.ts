@@ -141,7 +141,9 @@ export function sshError(hop: TunnelHop, error: unknown, hostKeyRejected: boolea
       },
     );
   }
-  if (/no matching (key exchange|host key|cipher|mac|compression)/i.test(message)) {
+  // The texts of ssh2: `no matching key exchange algorithm`, `… host key format`, and per direction
+  // `… C->S cipher`, `… S->C MAC`, `… C->S compression`.
+  if (/no matching (key exchange|host key|(C->S|S->C) (cipher|MAC|compression))/i.test(message)) {
     // The server and ssh2 share no method: the connection's SSH algorithms can add one.
     return new DbError(
       'connection-failed',
@@ -215,6 +217,11 @@ async function login(
           })();
         },
       });
+      // Small requests and answers (a file browser's stat, unlink, mkdir) wait for each other
+      // under Nagle's algorithm and the other side's delayed ACK: about 40 ms for every one.
+      // Found on a real OpenSSH, where removing 800 files took 30 s. A hop reached through
+      // another one has no socket of its own to set, which `setNoDelay` leaves alone.
+      client.setNoDelay(true);
     } catch (error) {
       // Key parsing errors are thrown right away instead of emitted.
       fail(error);

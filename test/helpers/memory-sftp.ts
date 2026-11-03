@@ -52,6 +52,7 @@ function parentOf(path: string): string {
 export class MemorySftpFs {
   private readonly nodes = new Map<string, Node>();
   private readonly denied = new Set<string>();
+  private readonly unreadable = new Set<string>();
   /** Every request, as `VERB path`, in order. */
   readonly log: string[] = [];
   /** The time new files get; tests move it to show a change. */
@@ -101,6 +102,12 @@ export class MemorySftpFs {
   /** Every request for the path, and anything below it, is refused with "permission denied". */
   deny(path: string): this {
     this.denied.add(normalize(path, this.home));
+    return this;
+  }
+
+  /** The path can be seen and stat'ed, but opening it for reading is refused (a file of mode 000). */
+  unreadableFile(path: string): this {
+    this.unreadable.add(normalize(path, this.home));
     return this;
   }
 
@@ -297,6 +304,10 @@ export class MemorySftpFs {
       }
       const { path: real, node } = this.resolve(path, true);
       const writing = (flags & (OPEN_MODE.WRITE | OPEN_MODE.APPEND)) !== 0;
+      if (!writing && this.unreadable.has(real)) {
+        status(reqid, STATUS_CODE.PERMISSION_DENIED);
+        return;
+      }
       if (node?.type === 'dir') {
         status(reqid, STATUS_CODE.FAILURE);
         return;

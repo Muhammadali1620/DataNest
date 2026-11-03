@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Client } from 'ssh2';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import {
@@ -88,9 +89,15 @@ describe('connectConfig and algorithms', () => {
 
   it('explains a handshake that found no common method', () => {
     for (const text of [
+      // The very texts ssh2 raises (lib/protocol/kex.js).
       'Handshake failed: no matching key exchange algorithm',
-      'Handshake failed: no matching cipher',
       'Handshake failed: no matching host key format',
+      'Handshake failed: no matching C->S cipher',
+      'Handshake failed: no matching S->C cipher',
+      'Handshake failed: no matching C->S MAC',
+      'Handshake failed: no matching S->C MAC',
+      'Handshake failed: no matching C->S compression',
+      'Handshake failed: no matching S->C compression',
     ]) {
       const error = sshError(hopBase, new Error(text), false);
       expect(error).toMatchObject({ code: 'connection-failed' });
@@ -261,6 +268,25 @@ describe('openSshTunnel', () => {
     expect(tunnel.forwardError()).toBeUndefined();
   });
 
+  it('sends small requests at once: the socket of every hop it opens has no Nagle delay', async () => {
+    // On a real OpenSSH every unlink of a file browser took 40 ms until this was set.
+    const noDelay = vi.spyOn(Client.prototype, 'setNoDelay');
+    try {
+      const first = await server({ users: [{ name: 'deploy', password: 'pw' }] });
+      const second = await server({ users: [{ name: 'deploy', password: 'pw' }] });
+      await open(
+        spec([
+          { ...hopBase, port: first.port, password: 'pw' },
+          { ...hopBase, host: '127.0.0.1', port: second.port, password: 'pw' },
+        ]),
+      );
+      expect(noDelay).toHaveBeenCalledTimes(2);
+      expect(noDelay).toHaveBeenCalledWith(true);
+    } finally {
+      noDelay.mockRestore();
+    }
+  });
+
   describe('SSH algorithms (V13.10)', () => {
     // A server of the old kind: it speaks SHA-1 key exchange only, which ssh2 does not offer by default.
     const OLD_KEX: NonNullable<Parameters<typeof startSshServer>[0]['algorithms']> = {
@@ -321,9 +347,14 @@ describe('openSshTunnel', () => {
         users: [{ name: 'deploy', password: 'pw' }],
         algorithms: { cipher: ['aes128-cbc'] },
       });
+      // A server with no cipher in common is explained with the way out (found with a real
+      // OpenSSH: ssh2 says `C->S cipher`, which the explanation once missed).
       await expect(
         open(spec([{ ...hopBase, port: cipher.port, password: 'pw' }])),
-      ).rejects.toMatchObject({ code: 'connection-failed' });
+      ).rejects.toMatchObject({
+        code: 'connection-failed',
+        message: expect.stringContaining('SSH algorithms') as unknown,
+      });
       const viaCipher = await open(
         spec([
           { ...hopBase, port: cipher.port, password: 'pw', algorithms: { cipher: '+aes128-cbc' } },

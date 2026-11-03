@@ -24,7 +24,9 @@ beforeEach(async () => {
     .link('/srv/to-sub', '/srv/sub')
     .link('/srv/broken', '/srv/nothing')
     .file('/secret/key', 'k')
-    .deny('/secret');
+    .deny('/secret')
+    .file('/srv/locked.txt', 'x')
+    .unreadableFile('/srv/locked.txt');
   fixture = await startSftpFixture(fs);
   session = await fixture.open();
 });
@@ -43,7 +45,7 @@ describe('SFTP session', () => {
     const entries = await session.list('/srv');
     const byName = Object.fromEntries(entries.map((entry) => [entry.name, entry]));
     expect(Object.keys(byName).sort()).toEqual(
-      ['a.txt', 'b.sh', 'broken', 'sub', 'to-a', 'to-sub'].sort(),
+      ['a.txt', 'b.sh', 'broken', 'locked.txt', 'sub', 'to-a', 'to-sub'].sort(),
     );
     expect(byName['a.txt']).toMatchObject({
       kind: 'file',
@@ -99,6 +101,16 @@ describe('SFTP session', () => {
       chunks.push(chunk as Buffer);
     }
     expect(Buffer.concat(chunks).equals(data)).toBe(true);
+  });
+
+  it('says in words that a file it may not read cannot be read, before any data moves', async () => {
+    // Found on a real OpenSSH: the file is listed and stat'ed, only opening it fails, and the
+    // read stream then reported ssh2's bare code-3 error (and a copy of a tree "Premature close").
+    await expect(session.stat('/srv/locked.txt')).resolves.toMatchObject({ kind: 'file' });
+    await expect(session.openRead('/srv/locked.txt')).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: expect.stringContaining('/srv/locked.txt') as unknown,
+    });
   });
 
   it('refuses to read a folder as a file, or a missing file', async () => {

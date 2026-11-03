@@ -21,7 +21,12 @@ export function literal(value: CellValue): string {
     return value ? '1' : '0';
   }
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? String(value) : 'NULL';
+    if (Number.isFinite(value)) {
+      return String(value);
+    }
+    // SQLite keeps no NaN (it stores NULL) but does keep infinity: a literal too big for a
+    // double reads as one.
+    return Number.isNaN(value) ? 'NULL' : value > 0 ? '9e999' : '-9e999';
   }
   if (typeof value === 'string') {
     return quoteString(value);

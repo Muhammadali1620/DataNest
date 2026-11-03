@@ -142,3 +142,17 @@ describe('cellJson', () => {
     expect(JSON.parse(json)).toEqual([null, 1, 'text', '9007199254740993', { nested: { a: 1 } }]);
   });
 });
+
+describe('cellJson on numbers JSON cannot write (V14.3)', () => {
+  it('turns NaN and the infinities into text instead of a `null` that reads as NULL', () => {
+    expect(cellJson(Number.NaN)).toBe('NaN');
+    expect(cellJson(Number.POSITIVE_INFINITY)).toBe('Infinity');
+    expect(cellJson(Number.NEGATIVE_INFINITY)).toBe('-Infinity');
+    expect(JSON.stringify([cellJson(Number.NaN), cellJson(null)])).toBe('["NaN",null]');
+  });
+
+  it('leaves finite numbers as they are', () => {
+    expect(cellJson(1.5)).toBe(1.5);
+    expect(cellJson(0)).toBe(0);
+  });
+});

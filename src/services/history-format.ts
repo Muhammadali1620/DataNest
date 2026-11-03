@@ -4,12 +4,21 @@
 /** The statement on one line, cut to a length a list can show. */
 export function summaryLine(sql: string, maxLength = 90): string {
   const flat = sql.replace(/\s+/g, ' ').trim();
-  return flat.length <= maxLength ? flat : `${flat.slice(0, maxLength - 1)}…`;
+  if (flat.length <= maxLength) {
+    return flat;
+  }
+  // Cut between characters, never inside a surrogate pair (an emoji would turn into �).
+  let end = maxLength - 1;
+  const last = flat.charCodeAt(end - 1);
+  if (end > 0 && last >= 0xd800 && last <= 0xdbff) {
+    end -= 1;
+  }
+  return `${flat.slice(0, end)}…`;
 }
 
 /** `45 ms`, `1.2 s`, `3 min 5 s`, `2 h 4 min`. */
 export function formatDuration(ms: number): string {
-  const value = Math.max(0, Math.round(ms));
+  const value = Number.isFinite(ms) ? Math.max(0, Math.round(ms)) : 0;
   if (value < 1000) {
     return `${value} ms`;
   }

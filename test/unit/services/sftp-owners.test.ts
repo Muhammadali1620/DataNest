@@ -169,3 +169,11 @@ describe('loadOwnerNames', () => {
     expect(names.users.size).toBe(0);
   });
 });
+
+describe('resolveOwner with numbers no server can hold (V14.3)', () => {
+  it('is not an owner when a number is beyond 32 bits', () => {
+    expect(resolveOwner('4294967296')).toBeUndefined();
+    expect(resolveOwner('1000:99999999999')).toBeUndefined();
+    expect(resolveOwner('4294967295:0')).toEqual({ uid: 4294967295, gid: 0 });
+  });
+});

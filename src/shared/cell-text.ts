@@ -67,7 +67,11 @@ export function isStructuredValue(value: CellValue): boolean {
  * strings so no precision is lost, and JSON columns are embedded as real JSON.
  */
 export function cellJson(value: CellValue): unknown {
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === 'number') {
+    // JSON has no NaN or Infinity: `JSON.stringify` would write `null`, which reads as NULL.
+    return Number.isFinite(value) ? value : String(value);
+  }
+  if (value === null || typeof value === 'boolean') {
     return value;
   }
   if (typeof value === 'string') {

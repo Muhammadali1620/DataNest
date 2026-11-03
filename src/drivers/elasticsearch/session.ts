@@ -122,6 +122,7 @@ class HttpSession implements ElasticSession {
             size += chunk.length;
             if (size > MAX_RESPONSE_BYTES) {
               incoming.destroy();
+              clearTimeout(timer);
               reject(
                 new DbError(
                   'constraint',

@@ -54,3 +54,18 @@ describe('formatWhen', () => {
     expect(formatWhen(at(2025, 10, 28, 14, 5), at(2026, 10, 28, 8, 0))).toBe('2025-10-28 14:05');
   });
 });
+
+describe('edges of the list wording (V14.3)', () => {
+  it('cuts a long statement between characters, never inside an emoji', () => {
+    const sql = `${'a'.repeat(88)}\u{1F600}\u{1F600}`;
+    const line = summaryLine(sql, 90);
+    expect(line).toBe(`${'a'.repeat(88)}…`);
+    expect(/[\uD800-\uDFFF]/u.test(line.replace(/\p{Extended_Pictographic}/gu, ''))).toBe(false);
+    expect(summaryLine(`${'a'.repeat(89)}\u{1F600}`, 90)).toBe(`${'a'.repeat(89)}…`);
+  });
+
+  it('writes a duration that is not a number as no time at all', () => {
+    expect(formatDuration(Number.NaN)).toBe('0 ms');
+    expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('0 ms');
+  });
+});

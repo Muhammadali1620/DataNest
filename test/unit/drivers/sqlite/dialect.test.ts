@@ -87,3 +87,11 @@ describe('sqliteDialect.setTimeZone (V4.9)', () => {
     expect(sqliteDialect.setTimeZone).toBeUndefined();
   });
 });
+
+describe('sqliteDialect.literal for floats SQLite can keep (V14.3)', () => {
+  it('writes the infinities as numbers too big for a double, and NaN as NULL', () => {
+    expect(sqliteDialect.literal(Number.POSITIVE_INFINITY)).toBe('9e999');
+    expect(sqliteDialect.literal(Number.NEGATIVE_INFINITY)).toBe('-9e999');
+    expect(sqliteDialect.literal(Number.NaN)).toBe('NULL');
+  });
+});

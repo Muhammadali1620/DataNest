@@ -119,6 +119,9 @@ export function ownerText(
   return `${user}:${group}`;
 }
 
+/** The largest user or group number SFTP can carry (an unsigned 32-bit number). */
+const MAX_ID = 0xffff_ffff;
+
 export type OwnerRequest =
   | { readonly uid?: number; readonly gid?: number }
   | { readonly unknown: 'user' | 'group'; readonly name: string };
@@ -140,6 +143,9 @@ export function resolveOwner(
   const user = match[1];
   if (user !== undefined) {
     const id = /^\d+$/u.test(user) ? Number(user) : names.userIds.get(user);
+    if (id !== undefined && id > MAX_ID) {
+      return undefined;
+    }
     if (id === undefined) {
       return { unknown: 'user', name: user };
     }
@@ -148,6 +154,9 @@ export function resolveOwner(
   const group = match[2];
   if (group !== undefined) {
     const id = /^\d+$/u.test(group) ? Number(group) : names.groupIds.get(group);
+    if (id !== undefined && id > MAX_ID) {
+      return undefined;
+    }
     if (id === undefined) {
       return { unknown: 'group', name: group };
     }

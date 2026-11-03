@@ -725,7 +725,7 @@ export function applyServer(
 
 /** Fills one jump host with the login of a saved server (its own hop, not its jumps). */
 export function applyServerToJump(
-  fields: FormFields,
+  fields: Pick<FormFields, 'jumps'>,
   links: ServerLinks,
   index: number,
   choice: ServerChoice,
@@ -739,6 +739,29 @@ export function applyServerToJump(
   const copy = hopFieldsFromServer(own);
   links.hops[copy.id] = { serverId: choice.server.id, hopId: own.id };
   fields.jumps[index] = copy;
+}
+
+/**
+ * The saved servers a hop may be filled from: none that another hop of the chain already was,
+ * and not `except` (the server being edited). A chain through one server twice, or through
+ * itself, leads nowhere.
+ */
+export function availableServers(
+  servers: readonly ServerChoice[] | undefined,
+  links: ServerLinks,
+  hopId: string,
+  except?: string,
+): ServerChoice[] {
+  const used = new Set(
+    Object.entries(links.hops)
+      .filter(([id]) => id !== hopId)
+      .map(([, link]) => link.serverId),
+  );
+  const own = links.hops[hopId]?.serverId;
+  return (servers ?? []).filter(
+    (choice) =>
+      choice.server.id !== except && (choice.server.id === own || !used.has(choice.server.id)),
+  );
 }
 
 /** The flags of a hop's secrets in the saved server it was filled from, if it was. */

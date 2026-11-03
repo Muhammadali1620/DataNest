@@ -71,6 +71,12 @@ async function fillRequired(): Promise<void> {
   await fireEvent.input(field('SSH user'), { target: { value: 'deploy' } });
 }
 
+const choiceOf = (id: string, name: string, host: string) => ({
+  server: { id, name, ssh: { id: `${id}-hop`, host, user: 'u', auth: 'password' as const } },
+  storedSsh: [{ hopId: `${id}-hop`, password: true, passphrase: false }],
+  proxyPassword: false,
+});
+
 describe('server form App', () => {
   it('tells the host it is ready and waits for the state', async () => {
     const { ready } = setup();
@@ -499,5 +505,67 @@ describe('server form App', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await flush();
     expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  describe('jump hosts from saved servers (V15.4)', () => {
+    const servers = [choiceOf('a', 'Gate A', 'a.example'), choiceOf('b', 'Gate B', 'b.example')];
+
+    async function addJump(): Promise<void> {
+      await fireEvent.click(screen.getByRole('button', { name: 'Add jump host' }));
+    }
+
+    it('offers no choice for the server itself and none when no server is saved', async () => {
+      await withState({ ...blank, servers });
+      expect(screen.queryByTestId('ssh-server-pick')).toBeNull();
+      await addJump();
+      expect(screen.getAllByTestId('ssh-server-pick')).toHaveLength(1);
+    });
+
+    it('offers no choice at all without other servers', async () => {
+      await withState();
+      await addJump();
+      expect(screen.queryByTestId('ssh-server-pick')).toBeNull();
+    });
+
+    it('fills a jump from a server, and does not offer that server to another jump', async () => {
+      await withState({ ...blank, servers });
+      await addJump();
+      await addJump();
+      const [first, second] = screen.getAllByTestId<HTMLSelectElement>('ssh-server-pick');
+      await fireEvent.change(must(first), { target: { value: 'a' } });
+      await waitFor(() => {
+        expect(field('Jump 1: SSH host').value).toBe('a.example');
+      });
+      expect(screen.getAllByTestId<HTMLSelectElement>('ssh-server-pick')[0]?.value).toBe('a');
+      const options = (select: HTMLSelectElement | undefined) =>
+        [...must(select).options].map((option) => option.value);
+      expect(options(second)).toEqual(['', 'b']);
+      expect(options(first)).toEqual(['', 'a', 'b']);
+      expect(
+        screen.getAllByText('A password is saved; leave empty to keep it').length,
+      ).toBeGreaterThan(0);
+    });
+
+    it('sends the link of a jump, with no secret', async () => {
+      const { host } = await withState({ ...blank, servers });
+      const drafts: ServerDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { serverId: 'x' };
+      });
+      await fillRequired();
+      await addJump();
+      await fireEvent.change(must(screen.getByTestId<HTMLSelectElement>('ssh-server-pick')), {
+        target: { value: 'b' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      const [jump, main] = must(drafts[0]).ssh;
+      expect(jump?.fromServer).toEqual({ serverId: 'b', hopId: 'b-hop' });
+      expect(main).not.toHaveProperty('fromServer');
+      expect(jump?.password).toEqual({ kind: 'keep' });
+    });
   });
 });

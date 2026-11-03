@@ -29,6 +29,8 @@
     /** Saved servers to fill this hop from (V15.1); without them the choice is not shown. */
     servers?: readonly ServerChoice[];
     onPickServer?: (serverId: string) => void;
+    /** The saved server this hop was filled from; picking fills the fields, which stay editable. */
+    selected?: string;
   }
 
   // `hop` is the parent's state: editing its fields here updates the form.
@@ -41,10 +43,9 @@
     onBrowseKey,
     servers = [],
     onPickServer,
+    selected = '',
   }: Props = $props();
 
-  /** What the choice shows; picking fills the fields below, which stay editable. */
-  let picked = $state('');
 
   const problems = $derived(hopProblemsOf(hop));
 
@@ -94,11 +95,11 @@
     <Field label={name('form.ssh.server')} hint={t('form.ssh.serverHint')}>
       <select
         class="control"
-        value={picked}
+        value={selected}
         onchange={(event) => {
-          picked = event.currentTarget.value;
-          if (picked !== '') {
-            onPickServer(picked);
+          const chosen = event.currentTarget.value;
+          if (chosen !== '') {
+            onPickServer(chosen);
           }
         }}
         aria-label={name('form.ssh.server')}

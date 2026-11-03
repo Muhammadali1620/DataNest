@@ -22,10 +22,14 @@
   import type { Translate } from '../../lib/i18n';
   import SshHopEditor from '../connection-form/SshHopEditor.svelte';
   import {
+    applyServerToJump,
+    availableServers,
     fieldsFrom,
     moveJump,
     newHopFields,
     problemsOf,
+    type ServerLinks,
+    serverStoredFor,
     proxyPortAfterKind,
     type ServerFields,
     SERVER_PROBLEM_MESSAGES,
@@ -47,6 +51,8 @@
   // The generic form keeps the declared type: `= $state(undefined)` would narrow it.
   let formState = $state<ServerFormState | undefined>(undefined);
   let fields = $state<ServerFields | undefined>(undefined);
+  /** Which saved server each jump host was filled from (V15.4); ids only. */
+  let links = $state<ServerLinks>({ hops: {} });
   let busy = $state<'test' | 'save' | undefined>(undefined);
   let notice = $state<Notice | undefined>(undefined);
   /** Problems are shown only after the first attempt, so a new form is not all red. */
@@ -65,6 +71,7 @@
       formState = next;
       // The host is the source of truth: a fresh state replaces what is on screen (D21).
       fields = fieldsFrom(next);
+      links = { hops: {} };
       showProblems = false;
       notice = undefined;
     });
@@ -90,7 +97,7 @@
     busy = action;
     notice = undefined;
     try {
-      const draft = toDraft(fields);
+      const draft = toDraft(fields, links);
       if (action === 'test') {
         const { home, hops } = await rpc.request('test', draft);
         notice = {
@@ -113,6 +120,10 @@
 
   /** What is saved for a hop: flags only, the values stay in the host. */
   function storedFor(hopId: string): { password: boolean; passphrase: boolean } {
+    const fromServer = serverStoredFor(links, formState?.servers, hopId);
+    if (fromServer !== undefined) {
+      return fromServer;
+    }
     const found = formState?.storedSsh.find((entry) => entry.hopId === hopId);
     return { password: found?.password ?? false, passphrase: found?.passphrase ?? false };
   }
@@ -126,6 +137,13 @@
       }
     } catch (error) {
       notice = { kind: 'error', text: messageOf(error) };
+    }
+  }
+
+  function pickServerForJump(index: number, serverId: string): void {
+    const found = formState?.servers?.find((entry) => entry.server.id === serverId);
+    if (fields && found) {
+      applyServerToJump(fields, links, index, found);
     }
   }
 
@@ -251,6 +269,11 @@
                 {showProblems}
                 label={name}
                 {t}
+                servers={availableServers(formState?.servers, links, jump.id)}
+                selected={links.hops[jump.id]?.serverId}
+                onPickServer={(serverId: string) => {
+                  pickServerForJump(index, serverId);
+                }}
                 onBrowseKey={() => void browseKey(jump)}
               />
               <div class="row">

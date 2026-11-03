@@ -224,20 +224,20 @@ function sameLogin(a: SshHop, b: SshHop): boolean {
 }
 
 /**
- * The draft with the secrets of the hops (and the proxy) that were filled from a saved
- * server: a secret the user left alone is replaced by the server's own, so the page never
- * sees it. Typing or erasing in the form wins, and so does a login edited after the pick.
+ * The secret changes of hops filled from a saved server, with each secret the user left alone
+ * replaced by the server's own, so the page never sees it. Typing or erasing in the form wins,
+ * and so does a login edited after the pick (V15.1).
  */
-export async function resolveServerSecrets(
-  draft: ConnectionDraft,
-  source: ServerSecretSource | undefined,
-): Promise<ConnectionDraft> {
-  if (source === undefined) {
-    return draft;
+export async function resolveHopSecrets(
+  changes: ConnectionDraft['ssh'],
+  hops: readonly SshHop[],
+  source: ServerSecretSource,
+): Promise<ConnectionDraft['ssh']> {
+  if (changes === undefined) {
+    return undefined;
   }
-  const hops = sshHopsOf(draft.input);
-  const ssh = await Promise.all(
-    (draft.ssh ?? []).map(async (change) => {
+  return await Promise.all(
+    changes.map(async (change) => {
       const { fromServer } = change;
       const server = fromServer === undefined ? undefined : source.get(fromServer.serverId);
       const from =
@@ -263,6 +263,17 @@ export async function resolveServerSecrets(
       return { ...change, password: take('password'), passphrase: take('passphrase') };
     }),
   );
+}
+
+/** The connection draft with the secrets of what was filled from a saved server (V15.1). */
+export async function resolveServerSecrets(
+  draft: ConnectionDraft,
+  source: ServerSecretSource | undefined,
+): Promise<ConnectionDraft> {
+  if (source === undefined) {
+    return draft;
+  }
+  const ssh = await resolveHopSecrets(draft.ssh, sshHopsOf(draft.input), source);
   let result: ConnectionDraft = { ...draft, ...(draft.ssh === undefined ? {} : { ssh }) };
   const proxy = draft.input.proxy;
   const server =

@@ -6,7 +6,7 @@ import { CONNECTION_LIMITS } from '../connection';
 import { sshServerInputSchema } from '../ssh-server';
 import { defineProtocol } from '../rpc';
 import { array, boolean, type Infer, number, object, optional, string } from '../schema';
-import { passwordChangeSchema, sshSecretChangeSchema } from './connection-form';
+import { passwordChangeSchema, serverChoiceSchema, sshSecretChangeSchema } from './connection-form';
 
 /** What the page sends when testing or saving. */
 const draftSchema = object({
@@ -33,6 +33,8 @@ const formStateSchema = object({
     { maxLength: 20 },
   ),
   hasStoredProxyPassword: optional(boolean()),
+  /** The other saved servers a jump host can be filled from (V15.4); never the edited one. */
+  servers: optional(array(serverChoiceSchema, { maxLength: 1000 })),
 });
 
 export const serverFormProtocol = defineProtocol({

@@ -26,6 +26,7 @@ import {
   PROBLEM_MESSAGES,
   secretChange,
   type SecretField,
+  type ServerLinks,
   toHop,
 } from '../connection-form/form-model';
 
@@ -126,10 +127,13 @@ export function toInput(fields: ServerFields): SshServerInput {
 }
 
 /** What Test and Save send: the server and what to do with every secret. */
-export function toDraft(fields: ServerFields): ServerDraft {
+export function toDraft(fields: ServerFields, links?: ServerLinks): ServerDraft {
   return {
     input: toInput(fields),
-    ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)),
+    ssh: [...fields.jumps, fields.ssh].map((hop) => {
+      const fromServer = links?.hops[hop.id];
+      return { ...hopSecretChanges(hop), ...(fromServer === undefined ? {} : { fromServer }) };
+    }),
     // Without a proxy the store drops its password by itself.
     ...(fields.useProxy ? { proxyPassword: secretChange(fields.proxyPassword) } : {}),
   };
@@ -173,4 +177,12 @@ export const SERVER_PROBLEM_MESSAGES: Readonly<Record<ServerProblem, MessageKey>
   'proxy-port-invalid': PROBLEM_MESSAGES['proxy-port-invalid'],
 };
 
-export { moveJump, newHopFields, proxyPortAfterKind } from '../connection-form/form-model';
+export {
+  applyServerToJump,
+  availableServers,
+  moveJump,
+  newHopFields,
+  proxyPortAfterKind,
+  serverStoredFor,
+} from '../connection-form/form-model';
+export type { ServerLinks } from '../connection-form/form-model';

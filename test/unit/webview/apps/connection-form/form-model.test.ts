@@ -37,6 +37,7 @@ import {
   applyServerToJump,
   proxyPortAfterKind,
   serverStoredFor,
+  availableServers,
   type ServerLinks,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
@@ -1704,5 +1705,38 @@ describe('filling a tunnel from a saved server (V15.1)', () => {
     expect(draft.proxyFromServer).toBe('s1');
     expect(toDraft({ ...form, useProxy: false }, links)).not.toHaveProperty('proxyFromServer');
     expect(toDraft(form).ssh?.[0]).not.toHaveProperty('fromServer');
+  });
+});
+
+describe('which saved servers a hop may pick (V15.4)', () => {
+  const choice = (id: string) => ({
+    server: { id, name: id, ssh: { id: `${id}h`, host: id, user: 'u', auth: 'password' as const } },
+    storedSsh: [],
+    proxyPassword: false,
+  });
+  const all = [choice('a'), choice('b'), choice('c')];
+  const ids = (list: { server: { id: string } }[]) => list.map((entry) => entry.server.id);
+
+  it('leaves out what another hop already uses, and keeps the hop its own', () => {
+    const links: ServerLinks = {
+      hops: { h1: { serverId: 'a', hopId: 'x' }, h2: { serverId: 'b', hopId: 'y' } },
+    };
+    expect(ids(availableServers(all, links, 'h1'))).toEqual(['a', 'c']);
+    expect(ids(availableServers(all, links, 'h3'))).toEqual(['c']);
+  });
+
+  it('never offers the server being edited', () => {
+    expect(ids(availableServers(all, { hops: {} }, 'h1', 'b'))).toEqual(['a', 'c']);
+  });
+
+  it('keeps the server of a hop whose neighbours came from the same server', () => {
+    const links: ServerLinks = {
+      hops: { m: { serverId: 'a', hopId: 'x' }, j: { serverId: 'a', hopId: 'z' } },
+    };
+    expect(ids(availableServers(all, links, 'm'))).toEqual(['a', 'b', 'c']);
+  });
+
+  it('offers nothing without servers', () => {
+    expect(availableServers(undefined, { hops: {} }, 'h1')).toEqual([]);
   });
 });

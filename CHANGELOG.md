@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.2.0] - 2026-11-03
+
+### Added
+
+- Servers: the jump hosts of a server can be filled from another saved server ("Saved server" above the jump host's fields), with its saved password. The server being edited is not offered, and a server already picked for another hop of the chain is not offered twice; the same rule holds in the connection form.
+
 ## [2.1.0] - 2026-11-03
 
 ### Added

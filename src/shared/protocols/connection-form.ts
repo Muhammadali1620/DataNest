@@ -60,7 +60,7 @@ const draftSchema = object({
 });
 
 /** A saved server the page may fill an SSH tunnel from; only flags tell about its secrets. */
-const serverChoiceSchema = object({
+export const serverChoiceSchema = object({
   server: sshServerSchema,
   storedSsh: array(
     object({

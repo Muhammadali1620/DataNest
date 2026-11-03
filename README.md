@@ -74,9 +74,9 @@ page is in English; the short summaries below are for everyone else.
 
 **EN** Servers: files over SFTP, editor and terminal · **RU** Серверы: файлы по SFTP, редактор и терминал · **UZ** Serverlar: SFTP orqali fayllar, muharrir va terminal · **ZH** 服务器：通过 SFTP 管理文件，编辑器与终端 · **ES** Servidores: archivos por SFTP, editor y terminal · **TR** Sunucular: SFTP dosyaları, düzenleyici ve terminal · **DE** Server: Dateien über SFTP, Editor und Terminal · **FR** Serveurs : fichiers via SFTP, éditeur et terminal · **PT** Servidores: arquivos via SFTP, editor e terminal · **AR** الخوادم: ملفات عبر SFTP ومحرر وطرفية
 
-![New server: SSH login, jump hosts and a proxy, with the usual ports already filled in](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/server-form.png)
+![New server: jump hosts filled from saved servers, the usual ports already typed in](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/server-form.png)
 
-**EN** Add a server: SSH login, jump hosts, proxy · **RU** Добавление сервера: SSH-вход, промежуточные хосты, прокси · **UZ** Server qo‘shish: SSH kirish, oraliq xostlar, proksi · **ZH** 添加服务器：SSH 登录、跳板机、代理 · **ES** Añadir un servidor: acceso SSH, saltos y proxy · **TR** Sunucu ekleme: SSH girişi, atlama sunucuları, proxy · **DE** Server hinzufügen: SSH-Login, Sprunghosts, Proxy · **FR** Ajouter un serveur : connexion SSH, rebonds, proxy · **PT** Adicionar servidor: login SSH, saltos, proxy · **AR** إضافة خادم: تسجيل دخول SSH ومضيفات وسيطة ووكيل
+**EN** Add a server: jump hosts from saved servers · **RU** Добавление сервера: SSH-вход, промежуточные хосты, прокси · **UZ** Server qo‘shish: SSH kirish, oraliq xostlar, proksi · **ZH** 添加服务器：SSH 登录、跳板机、代理 · **ES** Añadir un servidor: acceso SSH, saltos y proxy · **TR** Sunucu ekleme: SSH girişi, atlama sunucuları, proxy · **DE** Server hinzufügen: SSH-Login, Sprunghosts, Proxy · **FR** Ajouter un serveur : connexion SSH, rebonds, proxy · **PT** Adicionar servidor: login SSH, saltos, proxy · **AR** إضافة خادم: تسجيل دخول SSH ومضيفات وسيطة ووكيل
 
 ![A database connection through a saved server: pick it and the SSH login is filled in](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/tunnel-server.png)
 

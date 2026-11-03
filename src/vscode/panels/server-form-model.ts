@@ -8,12 +8,19 @@ import type { ServerStore } from '../../services/server-store';
 import type { SshHopSecrets } from '../../shared/connection';
 import type { ServerDraft, ServerFormState } from '../../shared/protocols/server-form';
 import { type SshServerInput, serverHops } from '../../shared/ssh-server';
-import { secretsForTest, storedSshFlags, toChange, toSshChanges } from './connection-form-state';
+import {
+  resolveHopSecrets,
+  secretsForTest,
+  serverChoices,
+  storedSshFlags,
+  toChange,
+  toSshChanges,
+} from './connection-form-state';
 
 export interface ServerFormModelDeps {
   readonly store: Pick<
     ServerStore,
-    'add' | 'update' | 'get' | 'getSshSecrets' | 'getProxyPassword'
+    'add' | 'update' | 'get' | 'list' | 'getSshSecrets' | 'getProxyPassword'
   >;
   readonly hub: Pick<SftpHub, 'probe' | 'disconnect'>;
 }
@@ -61,8 +68,13 @@ export class ServerFormModel {
 
   async state(): Promise<ServerFormState> {
     const config = this.serverId === undefined ? undefined : this.deps.store.get(this.serverId);
+    // A server is never offered as a jump host of itself.
+    const servers = (await serverChoices(this.deps.store)).filter(
+      (choice) => choice.server.id !== this.serverId,
+    );
+    const offered = servers.length === 0 ? {} : { servers };
     if (config === undefined) {
-      return { storedSsh: [] };
+      return { storedSsh: [], ...offered };
     }
     const { id: serverId, ...input } = config;
     const saved = await this.deps.store.getSshSecrets(serverId);
@@ -72,11 +84,19 @@ export class ServerFormModel {
       input: dropUndefined(input),
       storedSsh: storedSshFlags(saved),
       ...(hasProxyPassword ? { hasStoredProxyPassword: true } : {}),
+      ...offered,
     };
   }
 
+  /** Jump hosts filled from another server take its secrets, which the page never saw. */
+  private async resolved(draft: ServerDraft): Promise<ServerDraft> {
+    const ssh = await resolveHopSecrets(draft.ssh, serverHops(draft.input), this.deps.store);
+    return { ...draft, ssh: ssh ?? draft.ssh };
+  }
+
   /** Logs in with the draft; a saved password the page did not retype is used as it is. */
-  async test(draft: ServerDraft): Promise<{ home: string; hops: number }> {
+  async test(given: ServerDraft): Promise<{ home: string; hops: number }> {
+    const draft = await this.resolved(given);
     const saved =
       this.serverId === undefined ? {} : await this.deps.store.getSshSecrets(this.serverId);
     const savedProxy =
@@ -92,7 +112,8 @@ export class ServerFormModel {
   }
 
   /** Adds the server, or updates the one being edited; the open session is closed first. */
-  async save(draft: ServerDraft): Promise<string> {
+  async save(given: ServerDraft): Promise<string> {
+    const draft = await this.resolved(given);
     if (this.serverId === undefined) {
       const proxy = proxyPasswordForTest(draft, undefined);
       const added = await this.deps.store.add(draft.input, newSecrets(draft), proxy);

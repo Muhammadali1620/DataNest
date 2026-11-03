@@ -600,6 +600,8 @@ describe('connection form App', () => {
       await waitFor(() => {
         expect(field('Jump 1: SSH host').value).toBe('prod.example.com');
       });
+      // The only saved server is now the jump's, so the SSH server itself has nothing left to pick.
+      expect(screen.getByTestId<HTMLSelectElement>('ssh-server-pick').value).toBe('s1');
       expect(screen.queryByLabelText('Jump 2: SSH host')).toBeNull();
     });
   });

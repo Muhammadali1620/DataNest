@@ -44,6 +44,7 @@
     applyPreset,
     applyServer,
     applyServerToJump,
+    availableServers,
     type ServerLinks,
     serverStoredFor,
     applyUrl,
@@ -1009,7 +1010,8 @@
                   stored={storedFor(fields.ssh.id)}
                   {showProblems}
                   {t}
-                  servers={formState?.servers}
+                  servers={availableServers(formState?.servers, links, fields.ssh.id)}
+                  selected={links.hops[fields.ssh.id]?.serverId}
                   onPickServer={pickServer}
                   onBrowseKey={() => {
                     if (fields) {
@@ -1046,7 +1048,8 @@
                         {showProblems}
                         label={name}
                         {t}
-                        servers={formState?.servers}
+                        servers={availableServers(formState?.servers, links, jump.id)}
+                        selected={links.hops[jump.id]?.serverId}
                         onPickServer={(serverId: string) => {
                           pickServerForJump(index, serverId);
                         }}

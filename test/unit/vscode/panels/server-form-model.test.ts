@@ -54,8 +54,9 @@ function model(id?: string): ServerFormModel {
 
 describe('the state of the form', () => {
   it('has nothing to show for a new server, and the page accepts that', async () => {
-    const state = await model().state();
+    const { servers, ...state } = await model().state();
     expect(state).toEqual({ storedSsh: [] });
+    expect(servers).toHaveLength(world.store.list().length);
     expect(() => serverFormProtocol.webview.events.state.parse(state)).not.toThrow();
   });
 
@@ -97,6 +98,96 @@ describe('the state of the form', () => {
     expect(model(world.serverId).name).toBe('Web');
     expect(model('gone').name).toBe('');
     expect(model().id).toBeUndefined();
+  });
+});
+
+describe('saved servers as jump hosts (V15.4)', () => {
+  it('offers the other servers, never the one being edited', async () => {
+    const other = await world.store.add(
+      { name: 'Gate', ssh: { id: 'g', host: 'gate', user: 'g', auth: 'password' } },
+      { g: { password: 'gate-pw' } },
+    );
+    const everyone = world.store.list().map((entry) => entry.id);
+    const forNew = await model().state();
+    expect(forNew.servers?.map((entry) => entry.server.id).sort()).toEqual([...everyone].sort());
+    const editing = await model(world.serverId).state();
+    expect(editing.servers?.map((entry) => entry.server.id).sort()).toEqual(
+      everyone.filter((id) => id !== world.serverId).sort(),
+    );
+    const gate = editing.servers?.find((entry) => entry.server.id === other.id);
+    expect(gate?.storedSsh).toEqual([{ hopId: 'g', password: true, passphrase: false }]);
+    expect(JSON.stringify(editing)).not.toContain('gate-pw');
+    expect(() => serverFormProtocol.webview.events.state.parse(editing)).not.toThrow();
+  });
+
+  it('offers nothing when the edited server is the only one', async () => {
+    for (const entry of world.store.list()) {
+      if (entry.id !== world.serverId) {
+        await world.store.remove(entry.id);
+      }
+    }
+    expect((await model(world.serverId).state()).servers).toBeUndefined();
+  });
+
+  it('saves a jump host with the secret of the server it was filled from', async () => {
+    const other = await world.store.add(
+      { name: 'Gate', ssh: { id: 'g', host: 'gate', user: 'g', auth: 'password' } },
+      { g: { password: 'gate-pw' } },
+    );
+    const id = await model().save({
+      input: {
+        name: 'Far',
+        ssh: {
+          id: 'main',
+          host: 'inner',
+          user: 'me',
+          auth: 'password',
+          jumps: [{ id: 'j1', host: 'gate', user: 'g', auth: 'password' }],
+        },
+      },
+      ssh: [
+        {
+          hopId: 'j1',
+          password: keep,
+          passphrase: { kind: 'clear' },
+          fromServer: { serverId: other.id, hopId: 'g' },
+        },
+        { hopId: 'main', password: { kind: 'set', value: 'in-pw' }, passphrase: { kind: 'clear' } },
+      ],
+    });
+    expect(await world.store.getSshSecrets(id)).toEqual({
+      j1: { password: 'gate-pw' },
+      main: { password: 'in-pw' },
+    });
+  });
+
+  it('does not hand the secret to a jump host whose address was changed after the pick', async () => {
+    const other = await world.store.add(
+      { name: 'Gate', ssh: { id: 'g', host: 'gate', user: 'g', auth: 'password' } },
+      { g: { password: 'gate-pw' } },
+    );
+    const id = await model().save({
+      input: {
+        name: 'Far',
+        ssh: {
+          id: 'main',
+          host: 'inner',
+          user: 'me',
+          auth: 'password',
+          jumps: [{ id: 'j1', host: 'elsewhere', user: 'g', auth: 'password' }],
+        },
+      },
+      ssh: [
+        {
+          hopId: 'j1',
+          password: keep,
+          passphrase: { kind: 'clear' },
+          fromServer: { serverId: other.id, hopId: 'g' },
+        },
+        { hopId: 'main', password: { kind: 'set', value: 'in-pw' }, passphrase: { kind: 'clear' } },
+      ],
+    });
+    expect((await world.store.getSshSecrets(id)).j1).toEqual({});
   });
 });
 

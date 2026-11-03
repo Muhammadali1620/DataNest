@@ -20,6 +20,7 @@ under the sign-in for old servers that need a weak method.
 - **Route to the server**: add **jump hosts** (up to five, each with its own login, in the
   order they are logged in to) and, if you need one, a **SOCKS5 or HTTP proxy**. Passwords of
   jump hosts and of the proxy go to the editor's secret storage too.
+- A jump host can be filled from another saved server (**Saved server** above its fields). The server you are editing is not offered, and a server already used as a jump is not offered twice.
 - A server you saved here can be picked in the SSH tunnel of a connection, so its login is
   entered once (see *SSH tunnels* in the connections guide).
 - **Edit Server…** opens the same form with the saved values. A saved password is not shown:

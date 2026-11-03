@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- Kafka: the schema registry can be signed in to with a user and password of its own or a Bearer token, kept like the connection's password; the connection's login is not sent to a registry told to use its own.
 - Kafka: Protobuf messages read the types of the files their schema imports (through the registry's references, and the well-known google.protobuf types). RabbitMQ: operator policies next to the ordinary ones, and the description, tags and default queue type of a virtual host. SQLite on a server through the sqlite3 program keeps whole numbers beyond 2^53 whole.
 - The pages of etcd, Kafka, ZooKeeper and RabbitMQ look like the rest of the extension: the mark of the database in the header, colours from the theme, and the shared capsule and danger button.
 - Servers: "Add server" opens a form in the editor, like a new connection, with Test connection (SSH login and SFTP), jump hosts, a proxy and SSH algorithms; "Edit server" opens the same form and keeps a saved password you leave empty.

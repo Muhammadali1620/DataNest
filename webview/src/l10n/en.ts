@@ -778,6 +778,10 @@ export const en = {
   'form.fileRemote': 'Path of the file on the server',
   'form.fileRemoteHint': 'Copied over SFTP when you connect and opened read-only',
   'form.ssh.title': 'SSH server',
+  'form.ssh.server': 'Saved server',
+  'form.ssh.serverManual': 'Enter manually',
+  'form.ssh.serverHint':
+    'Fills the login and jump hosts from Servers, with their saved secrets. Every field stays editable.',
   'form.ssh.host': 'SSH host',
   'form.ssh.port': 'SSH port',
   'form.ssh.user': 'SSH user',

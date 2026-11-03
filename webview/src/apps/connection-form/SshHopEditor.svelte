@@ -13,6 +13,8 @@
     SSH_ALGORITHMS,
     type SshAlgorithmKind,
   } from '../../../../src/shared/ssh-algorithms';
+  import type { ServerChoice } from '../../../../src/shared/protocols/connection-form';
+  import { describeServer } from '../../../../src/shared/ssh-server';
   import { hopProblemsOf, type HopFields, PROBLEM_MESSAGES } from './form-model';
 
   interface Props {
@@ -24,10 +26,25 @@
     label?: string;
     t: Translate;
     onBrowseKey: () => void;
+    /** Saved servers to fill this hop from (V15.1); without them the choice is not shown. */
+    servers?: readonly ServerChoice[];
+    onPickServer?: (serverId: string) => void;
   }
 
   // `hop` is the parent's state: editing its fields here updates the form.
-  const { hop, stored, showProblems, label = '', t, onBrowseKey }: Props = $props();
+  const {
+    hop,
+    stored,
+    showProblems,
+    label = '',
+    t,
+    onBrowseKey,
+    servers = [],
+    onPickServer,
+  }: Props = $props();
+
+  /** What the choice shows; picking fills the fields below, which stay editable. */
+  let picked = $state('');
 
   const problems = $derived(hopProblemsOf(hop));
 
@@ -73,6 +90,29 @@
 </script>
 
 <div class="hop">
+  {#if servers.length > 0 && onPickServer !== undefined}
+    <Field label={name('form.ssh.server')} hint={t('form.ssh.serverHint')}>
+      <select
+        class="control"
+        value={picked}
+        onchange={(event) => {
+          picked = event.currentTarget.value;
+          if (picked !== '') {
+            onPickServer(picked);
+          }
+        }}
+        aria-label={name('form.ssh.server')}
+        data-testid="ssh-server-pick"
+      >
+        <option value="">{t('form.ssh.serverManual')}</option>
+        {#each servers as choice (choice.server.id)}
+          <option value={choice.server.id}>
+            {choice.server.name} — {describeServer(choice.server)}
+          </option>
+        {/each}
+      </select>
+    </Field>
+  {/if}
   <div class="pair">
     <Field label={name('form.ssh.host')} error={errorFor('ssh-host-empty')} required>
       <input

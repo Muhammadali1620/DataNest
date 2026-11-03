@@ -13,6 +13,7 @@ import {
 import { type ConnectionInput, describeTarget, isFileDriver } from '../shared/connection';
 import { connectionInputSchema } from '../shared/connection-schema';
 import { parseConnectionUrl, type UrlProblem } from '../shared/connection-url';
+import type { ServerStore } from '../services/server-store';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
 
 export interface ConnectionImportDeps {
@@ -20,6 +21,7 @@ export interface ConnectionImportDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly logger: Logger;
+  readonly servers?: ServerStore;
 }
 
 function urlProblemText(problem: UrlProblem): string {

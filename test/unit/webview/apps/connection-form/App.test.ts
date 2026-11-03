@@ -9,6 +9,7 @@ import {
 import { RpcPeer } from '../../../../../src/shared/rpc';
 import App from '../../../../../webview/src/apps/connection-form/App.svelte';
 import { createTranslator } from '../../../../../webview/src/lib/i18n';
+import { must } from '../../../../helpers/must';
 import { createLinkedTransports, flush } from '../../../../helpers/rpc';
 
 type HostPeer = RpcPeer<ConnectionFormProtocol['host'], ConnectionFormProtocol['webview']>;
@@ -129,7 +130,9 @@ describe('connection form App', () => {
       }),
     );
     expect(field('Password').value).toBe('');
-    expect(screen.getByText('A password is saved; leave empty to keep it')).toBeTruthy();
+    expect(
+      screen.getAllByText('A password is saved; leave empty to keep it').length,
+    ).toBeGreaterThan(0);
   });
 
   it('swaps the fields when a file driver is chosen', async () => {
@@ -474,6 +477,133 @@ describe('connection form App', () => {
     expect(screen.getByRole('button', { name: 'Сохранить' })).toBeTruthy();
   });
 
+  describe('proxy port', () => {
+    async function enableProxy(): Promise<void> {
+      await fireEvent.click(screen.getByTestId('use-proxy'));
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Proxy host')).not.toBeNull();
+      });
+    }
+
+    it('starts with the port of the default kind and follows the kind until it is typed over', async () => {
+      await withState();
+      await enableProxy();
+      expect(field('Proxy port').value).toBe('1080');
+      const kind = screen.getByLabelText<HTMLSelectElement>('Proxy type');
+      await fireEvent.change(kind, { target: { value: 'http' } });
+      expect(field('Proxy port').value).toBe('8080');
+      await fireEvent.input(field('Proxy port'), { target: { value: '3128' } });
+      await fireEvent.change(kind, { target: { value: 'socks5' } });
+      expect(field('Proxy port').value).toBe('3128');
+    });
+  });
+
+  describe('saved servers', () => {
+    const SERVER = {
+      id: 's1',
+      name: 'Prod box',
+      ssh: {
+        id: 'srv-hop',
+        host: 'prod.example.com',
+        port: 2200,
+        user: 'deploy',
+        auth: 'password' as const,
+        jumps: [{ id: 'srv-jump', host: 'gate', user: 'jump', auth: 'agent' as const }],
+      },
+      proxy: { kind: 'http' as const, host: 'px', user: 'pxu' },
+    };
+    const CHOICE = {
+      server: SERVER,
+      storedSsh: [
+        { hopId: 'srv-hop', password: true, passphrase: false },
+        { hopId: 'srv-jump', password: false, passphrase: false },
+      ],
+      proxyPassword: true,
+    };
+
+    async function openTunnel(state: ConnectionFormState) {
+      const harness = await withState(state);
+      await fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Connect through an SSH tunnel' }),
+      );
+      await waitFor(() => {
+        expect(screen.queryByLabelText('SSH host')).not.toBeNull();
+      });
+      return harness;
+    }
+
+    it('offers no choice when no server is saved', async () => {
+      await openTunnel(newState());
+      expect(screen.queryByTestId('ssh-server-pick')).toBeNull();
+    });
+
+    it('fills the tunnel and the proxy from the chosen server, keeping manual input possible', async () => {
+      await openTunnel(newState({ servers: [CHOICE] }));
+      const pick = screen.getByTestId<HTMLSelectElement>('ssh-server-pick');
+      expect([...pick.options].map((option) => option.textContent.trim())).toEqual([
+        'Enter manually',
+        'Prod box — deploy@prod.example.com:2200',
+      ]);
+      await fireEvent.change(pick, { target: { value: 's1' } });
+      await waitFor(() => {
+        expect(field('SSH host').value).toBe('prod.example.com');
+      });
+      expect(field('SSH port').value).toBe('2200');
+      expect(field('SSH user').value).toBe('deploy');
+      expect(
+        screen.getAllByText('A password is saved; leave empty to keep it').length,
+      ).toBeGreaterThan(0);
+      expect(field('Proxy host').value).toBe('px');
+      expect(field('Proxy port').value).toBe('8080');
+      expect(field('Jump 1: SSH host').value).toBe('gate');
+      await fireEvent.input(field('SSH host'), { target: { value: 'other.example.com' } });
+      expect(field('SSH host').value).toBe('other.example.com');
+    });
+
+    it('links the filled hops and the proxy to the server when saved, without any secret', async () => {
+      const { host } = await openTunnel(newState({ servers: [CHOICE] }));
+      const drafts: ConnectionDraft[] = [];
+      host.handle('save', (draft) => {
+        drafts.push(draft);
+        return { connectionId: 'c1' };
+      });
+      await fireEvent.input(field('Name'), { target: { value: 'Prod' } });
+      await fireEvent.change(screen.getByTestId('ssh-server-pick'), { target: { value: 's1' } });
+      await waitFor(() => {
+        expect(field('SSH host').value).toBe('prod.example.com');
+      });
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(drafts).toHaveLength(1);
+      });
+      const [draft] = drafts;
+      expect(draft?.ssh?.map((change) => change.fromServer)).toEqual([
+        { serverId: 's1', hopId: 'srv-jump' },
+        { serverId: 's1', hopId: 'srv-hop' },
+      ]);
+      expect(
+        draft?.ssh?.every(
+          (change) => change.password.kind === 'keep' || change.password.kind === 'clear',
+        ),
+      ).toBe(true);
+      expect(draft?.proxyFromServer).toBe('s1');
+      expect(draft?.proxyPassword).toEqual({ kind: 'keep' });
+      expect(JSON.stringify(draft)).not.toContain('"value"');
+    });
+
+    it('fills only the login of a jump host from a server, not its jumps', async () => {
+      await openTunnel(newState({ servers: [CHOICE] }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Add jump host' }));
+      const picks = screen.getAllByTestId<HTMLSelectElement>('ssh-server-pick');
+      expect(picks).toHaveLength(2);
+      await fireEvent.change(must(picks[1]), { target: { value: 's1' } });
+      await waitFor(() => {
+        expect(field('Jump 1: SSH host').value).toBe('prod.example.com');
+      });
+      expect(screen.queryByLabelText('Jump 2: SSH host')).toBeNull();
+    });
+  });
+
   describe('SSH tunnel', () => {
     function checkbox(name: string): HTMLInputElement {
       return screen.getByRole<HTMLInputElement>('checkbox', { name });
@@ -490,7 +620,7 @@ describe('connection form App', () => {
       await withState();
       expect(screen.queryByLabelText('SSH host')).toBeNull();
       await enableSsh();
-      expect(field('SSH port').value).toBe('');
+      expect(field('SSH port').value).toBe('22');
       expect(screen.getByText('Default: 22')).toBeTruthy();
     });
 

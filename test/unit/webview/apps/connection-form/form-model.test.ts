@@ -33,6 +33,11 @@ import {
   toElastic,
   toKafka,
   toProxy,
+  applyServer,
+  applyServerToJump,
+  proxyPortAfterKind,
+  serverStoredFor,
+  type ServerLinks,
 } from '../../../../../webview/src/apps/connection-form/form-model';
 import { serverPreset } from '../../../../../src/shared/server-presets';
 import { parseConnectionUrl } from '../../../../../src/shared/connection-url';
@@ -171,7 +176,7 @@ describe('fieldsFrom', () => {
       useProxy: false,
       proxyKind: 'socks5',
       proxyHost: '',
-      proxyPort: '',
+      proxyPort: '1080',
       proxyUser: '',
       proxyPassword: { value: '', touched: false, erase: false },
     });
@@ -331,7 +336,7 @@ describe('SSH fields', () => {
   it('starts a hop empty with a password login and a fresh id', () => {
     const a = newHopFields();
     const b = newHopFields();
-    expect(a).toMatchObject({ host: '', port: '', user: '', auth: 'password' });
+    expect(a).toMatchObject({ host: '', port: '22', user: '', auth: 'password' });
     expect(a.id).not.toBe(b.id);
   });
 
@@ -581,7 +586,7 @@ describe('jump hosts', () => {
       drivers: [],
     });
     expect(result.jumps.map((hop) => [hop.id, hop.host, hop.port])).toEqual([
-      ['a', 'a.example', ''],
+      ['a', 'a.example', '22'],
       ['b', 'b.example', '2200'],
     ]);
   });
@@ -1561,5 +1566,143 @@ describe('socket and proxy fields (V10.2.5)', () => {
       proxyPort: '3128',
       proxyUser: 'me',
     });
+  });
+});
+
+describe('default ports (V15.1)', () => {
+  it('leaves a hop on the usual SSH port without a port when saved, and shows 22 when read back', () => {
+    const hop = { ...newHopFields('h'), host: 'srv', user: 'me' };
+    expect(hop.port).toBe('22');
+    expect(toHop(hop)).not.toHaveProperty('port');
+    expect(toHop({ ...hop, port: '2222' })).toMatchObject({ port: 2222 });
+    expect(hopFieldsFrom({ id: 'h', host: 'srv', user: 'me', auth: 'password' }).port).toBe('22');
+  });
+
+  it('keeps an emptied port blank and a wrong one a problem', () => {
+    const hop = { ...newHopFields('h'), host: 'srv', user: 'me', port: '' };
+    expect(toHop(hop)).not.toHaveProperty('port');
+    expect(hopProblemsOf({ ...hop, port: 'x' })).toContain('ssh-port-invalid');
+  });
+
+  it('starts a proxy on the port of its kind and drops that port when saved', () => {
+    expect(
+      fieldsFrom({
+        input: { name: '', driver: 'mysql', host: 'h', port: 1 },
+        hasStoredPassword: false,
+        storedSsh: [],
+        drivers: [],
+      }).proxyPort,
+    ).toBe('1080');
+    expect(
+      toProxy(fields({ useProxy: true, proxyHost: 'p', proxyKind: 'socks5', proxyPort: '1080' })),
+    ).not.toHaveProperty('port');
+    expect(
+      toProxy(fields({ useProxy: true, proxyHost: 'p', proxyKind: 'http', proxyPort: '1080' })),
+    ).toMatchObject({ port: 1080 });
+  });
+
+  it('moves a default proxy port along with the kind, and leaves a typed one', () => {
+    expect(proxyPortAfterKind('socks5', 'http', '1080')).toBe('8080');
+    expect(proxyPortAfterKind('http', 'socks5', ' 8080 ')).toBe('1080');
+    expect(proxyPortAfterKind('socks5', 'http', '')).toBe('8080');
+    expect(proxyPortAfterKind('socks5', 'http', '3128')).toBe('3128');
+  });
+});
+
+describe('filling a tunnel from a saved server (V15.1)', () => {
+  const server = {
+    id: 's1',
+    name: 'Prod',
+    ssh: {
+      id: 'own',
+      host: 'prod',
+      port: 2200,
+      user: 'deploy',
+      auth: 'key' as const,
+      keyFile: '/k',
+      jumps: [{ id: 'j', host: 'gate', user: 'g', auth: 'agent' as const }],
+    },
+    proxy: { kind: 'http' as const, host: 'px', user: 'u' },
+  };
+  const choice = {
+    server,
+    storedSsh: [{ hopId: 'own', password: false, passphrase: true }],
+    proxyPassword: true,
+  };
+
+  it('copies the server, its jumps and proxy under new ids and remembers where from', () => {
+    const form = fields({ useSsh: true, ssh: newHopFields('old'), jumps: [newHopFields('oldj')] });
+    const links: ServerLinks = { hops: { old: { serverId: 'x', hopId: 'y' } } };
+    applyServer(form, links, choice, true);
+    expect(form.ssh).toMatchObject({
+      host: 'prod',
+      port: '2200',
+      user: 'deploy',
+      auth: 'key',
+      keyFile: '/k',
+    });
+    expect(form.ssh.id).not.toBe('own');
+    expect(form.jumps.map((hop) => hop.host)).toEqual(['gate']);
+    expect(links.hops).toEqual({
+      [form.ssh.id]: { serverId: 's1', hopId: 'own' },
+      [form.jumps[0]?.id ?? '']: { serverId: 's1', hopId: 'j' },
+    });
+    expect(form).toMatchObject({
+      useProxy: true,
+      proxyKind: 'http',
+      proxyHost: 'px',
+      proxyPort: '8080',
+      proxyUser: 'u',
+    });
+    expect(links.proxy).toBe('s1');
+  });
+
+  it('leaves the proxy alone when asked to, or when the server has none', () => {
+    const a = fields({ useProxy: false });
+    applyServer(a, { hops: {} }, choice, false);
+    expect(a.useProxy).toBe(false);
+    const b = fields({ useProxy: true, proxyHost: 'mine' });
+    const links: ServerLinks = { hops: {} };
+    applyServer(b, links, { ...choice, server: { ...server, proxy: undefined } }, true);
+    expect(b.proxyHost).toBe('mine');
+    expect(links.proxy).toBeUndefined();
+  });
+
+  it('fills one jump with the server itself, not its jumps', () => {
+    const form = fields({ jumps: [newHopFields('a'), newHopFields('b')] });
+    const links: ServerLinks = { hops: { a: { serverId: 'x', hopId: 'y' } } };
+    applyServerToJump(form, links, 0, choice);
+    expect(form.jumps).toHaveLength(2);
+    expect(form.jumps[0]).toMatchObject({ host: 'prod', user: 'deploy' });
+    expect(form.jumps[1]?.id).toBe('b');
+    expect(links.hops.a).toBeUndefined();
+    expect(Object.values(links.hops)).toEqual([{ serverId: 's1', hopId: 'own' }]);
+    applyServerToJump(form, links, 9, choice);
+    expect(form.jumps).toHaveLength(2);
+  });
+
+  it('tells which secrets the server has, only for hops filled from it', () => {
+    const links: ServerLinks = {
+      hops: { h1: { serverId: 's1', hopId: 'own' }, h2: { serverId: 'gone', hopId: 'z' } },
+    };
+    expect(serverStoredFor(links, [choice], 'h1')).toEqual({ password: false, passphrase: true });
+    expect(serverStoredFor(links, [choice], 'h2')).toEqual({ password: false, passphrase: false });
+    expect(serverStoredFor(links, undefined, 'h1')).toEqual({ password: false, passphrase: false });
+    expect(serverStoredFor(links, [choice], 'free')).toBeUndefined();
+  });
+
+  it('sends the links in the draft, and the proxy link only while a proxy is on', () => {
+    const form = fields({
+      useSsh: true,
+      ssh: { ...newHopFields('h1'), host: 'prod', user: 'me' },
+      useProxy: true,
+      proxyHost: 'px',
+    });
+    const links: ServerLinks = { hops: { h1: { serverId: 's1', hopId: 'own' } }, proxy: 's1' };
+    const draft = toDraft(form, links);
+    expect(draft.ssh?.[0]?.fromServer).toEqual({ serverId: 's1', hopId: 'own' });
+    expect(draft.proxyFromServer).toBe('s1');
+    expect(toDraft({ ...form, useProxy: false }, links)).not.toHaveProperty('proxyFromServer');
+    expect(toDraft(form).ssh?.[0]).not.toHaveProperty('fromServer');
   });
 });

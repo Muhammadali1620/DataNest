@@ -86,6 +86,7 @@ import { SqlDumper } from '../services/sql-dump';
 import { ScriptRunner } from '../services/script-runner';
 import { policyOf } from '../services/write-policy';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
+import type { ServerStore } from '../services/server-store';
 import type { QueryHistory } from '../services/history';
 import { historyScopeOf, showHistory } from './history/history-picker';
 import { showObjectSearch } from './search/object-search';
@@ -153,6 +154,8 @@ export interface CommandDeps {
   readonly channel: vscode.OutputChannel;
   readonly extensionUri: vscode.Uri;
   readonly store: ConnectionStore;
+  /** Saved SSH servers, to fill a connection's tunnel from (V15.1). */
+  readonly serverStore?: ServerStore;
   readonly manager: ConnectionManager;
   readonly tree: ConnectionsTreeProvider;
   readonly cache: MetadataCache;
@@ -249,6 +252,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     store: deps.store,
     manager: deps.manager,
     logger: deps.logger,
+    servers: deps.serverStore,
     plugins: deps.pluginConnections,
   };
   const connections = connectionCommandHandlers(importDeps);

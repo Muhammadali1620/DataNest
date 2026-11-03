@@ -4,6 +4,7 @@
 
 import {
   type ConnectionColor,
+  DEFAULT_PROXY_PORTS,
   type ProxyKind,
   type ProxySettings,
 } from '../../../../src/shared/connection';
@@ -58,7 +59,7 @@ export function newServerFields(): ServerFields {
     useProxy: false,
     proxyKind: 'socks5',
     proxyHost: '',
-    proxyPort: '',
+    proxyPort: String(DEFAULT_PROXY_PORTS.socks5),
     proxyUser: '',
     proxyPassword: emptySecret(),
   };
@@ -80,7 +81,7 @@ export function fieldsFrom(state: ServerFormState): ServerFields {
     useProxy: input.proxy !== undefined,
     proxyKind: input.proxy?.kind ?? 'socks5',
     proxyHost: input.proxy?.host ?? '',
-    proxyPort: input.proxy?.port === undefined ? '' : String(input.proxy.port),
+    proxyPort: String(input.proxy?.port ?? DEFAULT_PROXY_PORTS[input.proxy?.kind ?? 'socks5']),
     proxyUser: input.proxy?.user ?? '',
     proxyPassword: emptySecret(),
   };
@@ -96,7 +97,8 @@ export function toProxy(fields: ServerFields): ProxySettings | undefined {
   if (!fields.useProxy) {
     return undefined;
   }
-  const port = parsePort(fields.proxyPort);
+  const typed = parsePort(fields.proxyPort);
+  const port = typed === DEFAULT_PROXY_PORTS[fields.proxyKind] ? undefined : typed;
   const user = trimmed(fields.proxyUser);
   return {
     kind: fields.proxyKind,
@@ -171,4 +173,4 @@ export const SERVER_PROBLEM_MESSAGES: Readonly<Record<ServerProblem, MessageKey>
   'proxy-port-invalid': PROBLEM_MESSAGES['proxy-port-invalid'],
 };
 
-export { moveJump, newHopFields } from '../connection-form/form-model';
+export { moveJump, newHopFields, proxyPortAfterKind } from '../connection-form/form-model';

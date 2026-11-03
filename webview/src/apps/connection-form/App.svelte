@@ -13,6 +13,7 @@
   import {
     DEFAULT_PROXY_PORTS,
     type DriverId,
+    type ProxyKind,
     type RedisMode,
     supportsSocket,
   } from '../../../../src/shared/connection';
@@ -41,6 +42,10 @@
   } from '../../../../src/shared/server-presets';
   import {
     applyPreset,
+    applyServer,
+    applyServerToJump,
+    type ServerLinks,
+    serverStoredFor,
     applyUrl,
     changeRedisMode,
     sshAllowed,
@@ -50,6 +55,7 @@
     newHopFields,
     problemMessage,
     problemsOf,
+    proxyPortAfterKind,
     toDraft,
     URL_PROBLEM_MESSAGES,
   } from './form-model';
@@ -75,6 +81,8 @@
   let notice = $state<Notice | undefined>(undefined);
   /** Problems are shown only after the first attempt, so a new form is not all red. */
   let showProblems = $state(false);
+  /** Which saved server each hop and the proxy were filled from (V15.1); ids only. */
+  let links = $state<ServerLinks>({ hops: {} });
   let urlText = $state('');
   let urlError = $state<string | undefined>(undefined);
 
@@ -164,6 +172,7 @@
       formState = next;
       // The host is the source of truth: a fresh state replaces what is on screen (D21).
       fields = fieldsFrom(next);
+      links = { hops: {} };
       choice = fields.driver;
       notice = undefined;
       showProblems = false;
@@ -237,7 +246,7 @@
     busy = action;
     notice = undefined;
     try {
-      const draft = toDraft(fields);
+      const draft = toDraft(fields, links);
       if (action === 'test') {
         await rpc.request('test', draft);
         notice = { kind: 'ok', text: t('form.testOk') };
@@ -254,6 +263,10 @@
 
   /** What is saved for a hop: flags only, the values stay in the host. */
   function storedFor(hopId: string): { password: boolean; passphrase: boolean } {
+    const fromServer = serverStoredFor(links, formState?.servers, hopId);
+    if (fromServer !== undefined) {
+      return fromServer;
+    }
     const found = formState?.storedSsh.find((entry) => entry.hopId === hopId);
     return { password: found?.password ?? false, passphrase: found?.passphrase ?? false };
   }
@@ -272,6 +285,31 @@
     urlError = undefined;
     urlText = '';
     notice = { kind: 'ok', text: t('form.url.filled') };
+  }
+
+  const choiceOf = (serverId: string) =>
+    formState?.servers?.find((entry) => entry.server.id === serverId);
+
+  /** The saved server holds this proxy's password, and the form has not replaced it. */
+  const proxyStored = $derived(
+    fields !== undefined &&
+      !fields.proxyPassword.touched &&
+      (formState?.hasStoredProxyPassword === true ||
+        (links.proxy !== undefined && choiceOf(links.proxy)?.proxyPassword === true)),
+  );
+
+  function pickServer(serverId: string): void {
+    const found = choiceOf(serverId);
+    if (fields && found) {
+      applyServer(fields, links, found, !isFile);
+    }
+  }
+
+  function pickServerForJump(index: number, serverId: string): void {
+    const found = choiceOf(serverId);
+    if (fields && found) {
+      applyServerToJump(fields, links, index, found);
+    }
   }
 
   function addJump(): void {
@@ -971,6 +1009,8 @@
                   stored={storedFor(fields.ssh.id)}
                   {showProblems}
                   {t}
+                  servers={formState?.servers}
+                  onPickServer={pickServer}
                   onBrowseKey={() => {
                     if (fields) {
                       void browseKey(fields.ssh);
@@ -1006,6 +1046,10 @@
                         {showProblems}
                         label={name}
                         {t}
+                        servers={formState?.servers}
+                        onPickServer={(serverId: string) => {
+                          pickServerForJump(index, serverId);
+                        }}
                         onBrowseKey={() => void browseKey(jump)}
                       />
                       <div class="row">
@@ -1069,7 +1113,18 @@
                   <p class="hint" data-testid="kafka-proxy-note">{t('form.kafka.tunnelNote')}</p>
                 {/if}
                 <Field label={t('form.proxy.kind')}>
-                  <select class="control" bind:value={fields.proxyKind} aria-label={t('form.proxy.kind')}>
+                  <select
+                    class="control"
+                    value={fields.proxyKind}
+                    onchange={(event) => {
+                      if (fields) {
+                        const kind = event.currentTarget.value as ProxyKind;
+                        fields.proxyPort = proxyPortAfterKind(fields.proxyKind, kind, fields.proxyPort);
+                        fields.proxyKind = kind;
+                      }
+                    }}
+                    aria-label={t('form.proxy.kind')}
+                  >
                     <option value="socks5">SOCKS5</option>
                     <option value="http">HTTP (CONNECT)</option>
                   </select>
@@ -1114,7 +1169,7 @@
                   </Field>
                   <Field
                     label={t('form.proxy.password')}
-                    hint={formState?.hasStoredProxyPassword && !fields.proxyPassword.touched
+                    hint={proxyStored
                       ? t('form.passwordStored')
                       : undefined}
                   >
@@ -1133,7 +1188,7 @@
                     />
                   </Field>
                 </div>
-                {#if formState?.hasStoredProxyPassword}
+                {#if formState?.hasStoredProxyPassword === true || proxyStored}
                   <label class="check">
                     <input type="checkbox" bind:checked={fields.proxyPassword.erase} />
                     {t('form.erasePassword')}

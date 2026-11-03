@@ -9,13 +9,18 @@ import {
   DEFAULT_PORTS,
   DRIVER_IDS,
   isFileDriver,
+  effectiveProxyPort,
+  effectiveSshPort,
+  type SshHop,
   type SshHopSecrets,
   sshHopsOf,
 } from '../../shared/connection';
+import { serverHops, type SshServerConfig } from '../../shared/ssh-server';
 import type {
   ConnectionDraft,
   ConnectionFormState,
   PasswordChangeMessage,
+  ServerChoice,
 } from '../../shared/protocols/connection-form';
 
 /** What a brand new form starts with. */
@@ -190,4 +195,91 @@ export function storedSshFlags(
     password: secrets.password !== undefined,
     passphrase: secrets.passphrase !== undefined,
   }));
+}
+
+/** What the host reads from the saved servers; `ServerStore` has all of it. */
+export interface ServerSecretSource {
+  list(): SshServerConfig[];
+  get(id: string): SshServerConfig | undefined;
+  getSshSecrets(id: string): Promise<Record<string, SshHopSecrets>>;
+  getProxyPassword(id: string): Promise<string | undefined>;
+}
+
+/** The saved servers a tunnel can be filled from, with flags about their secrets (V15.1). */
+export async function serverChoices(source: ServerSecretSource): Promise<ServerChoice[]> {
+  const choices: ServerChoice[] = [];
+  for (const server of source.list()) {
+    choices.push({
+      server,
+      storedSsh: storedSshFlags(await source.getSshSecrets(server.id)),
+      proxyPassword: (await source.getProxyPassword(server.id)) !== undefined,
+    });
+  }
+  return choices;
+}
+
+/** The same login: a secret of the server is not given to a host the user has since changed. */
+function sameLogin(a: SshHop, b: SshHop): boolean {
+  return a.host === b.host && a.user === b.user && effectiveSshPort(a) === effectiveSshPort(b);
+}
+
+/**
+ * The draft with the secrets of the hops (and the proxy) that were filled from a saved
+ * server: a secret the user left alone is replaced by the server's own, so the page never
+ * sees it. Typing or erasing in the form wins, and so does a login edited after the pick.
+ */
+export async function resolveServerSecrets(
+  draft: ConnectionDraft,
+  source: ServerSecretSource | undefined,
+): Promise<ConnectionDraft> {
+  if (source === undefined) {
+    return draft;
+  }
+  const hops = sshHopsOf(draft.input);
+  const ssh = await Promise.all(
+    (draft.ssh ?? []).map(async (change) => {
+      const { fromServer } = change;
+      const server = fromServer === undefined ? undefined : source.get(fromServer.serverId);
+      const from =
+        server === undefined
+          ? undefined
+          : serverHops(server).find((hop) => hop.id === fromServer?.hopId);
+      const hop = hops.find((candidate) => candidate.id === change.hopId);
+      if (
+        server === undefined ||
+        from === undefined ||
+        hop === undefined ||
+        !sameLogin(from, hop)
+      ) {
+        return change;
+      }
+      const secrets = (await source.getSshSecrets(server.id))[from.id] ?? {};
+      const take = (kind: keyof SshHopSecrets): PasswordChangeMessage => {
+        const value = secrets[kind];
+        return change[kind].kind === 'keep' && value !== undefined
+          ? { kind: 'set', value }
+          : change[kind];
+      };
+      return { ...change, password: take('password'), passphrase: take('passphrase') };
+    }),
+  );
+  let result: ConnectionDraft = { ...draft, ...(draft.ssh === undefined ? {} : { ssh }) };
+  const proxy = draft.input.proxy;
+  const server =
+    draft.proxyFromServer === undefined ? undefined : source.get(draft.proxyFromServer);
+  if (
+    proxy !== undefined &&
+    server?.proxy !== undefined &&
+    (draft.proxyPassword === undefined || draft.proxyPassword.kind === 'keep') &&
+    proxy.kind === server.proxy.kind &&
+    proxy.host === server.proxy.host &&
+    effectiveProxyPort(proxy) === effectiveProxyPort(server.proxy) &&
+    proxy.user === server.proxy.user
+  ) {
+    const value = await source.getProxyPassword(server.id);
+    if (value !== undefined) {
+      result = { ...result, proxyPassword: { kind: 'set', value } };
+    }
+  }
+  return result;
 }

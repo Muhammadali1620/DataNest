@@ -9,6 +9,7 @@ import {
 import { RpcPeer } from '../../shared/rpc';
 import type { ConnectionManager } from '../../services/connection-manager';
 import type { ConnectionStore } from '../../services/connection-store';
+import type { ServerStore } from '../../services/server-store';
 import type { ConnectionInput } from '../../shared/connection';
 import {
   driverOptions,
@@ -18,6 +19,8 @@ import {
   testRegistrySecret,
   testSentinelPassword,
   testSshSecrets,
+  resolveServerSecrets,
+  serverChoices,
   toInput,
   toPasswordChange,
   toProxyChange,
@@ -39,6 +42,8 @@ export interface ConnectionFormDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly logger: Logger;
+  /** Saved SSH servers a tunnel can be filled from (V15.1). */
+  readonly servers?: ServerStore;
 }
 
 /** The create/edit form. One panel per connection, reused if already open. */
@@ -147,7 +152,8 @@ export class ConnectionFormPanel implements vscode.Disposable {
     this.panel.dispose();
   }
 
-  private async test(draft: ConnectionDraft): Promise<void> {
+  private async test(given: ConnectionDraft): Promise<void> {
+    const draft = await resolveServerSecrets(given, this.deps.servers);
     const password = await this.resolveTestPassword(draft);
     const stored =
       this.connectionId === undefined ? {} : await this.deps.store.getSshSecrets(this.connectionId);
@@ -187,7 +193,8 @@ export class ConnectionFormPanel implements vscode.Disposable {
     return await this.deps.store.getPassword(this.connectionId);
   }
 
-  private async save(draft: ConnectionDraft): Promise<string> {
+  private async save(given: ConnectionDraft): Promise<string> {
+    const draft = await resolveServerSecrets(given, this.deps.servers);
     const change = toPasswordChange(draft);
     if (this.connectionId === undefined) {
       const created = await this.deps.store.add(
@@ -256,6 +263,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
         : (await this.deps.store.getRegistrySecret(connectionId)) !== undefined;
     const project =
       connectionId === undefined ? undefined : this.deps.store.projectOf(connectionId);
+    const servers = this.deps.servers === undefined ? [] : await serverChoices(this.deps.servers);
     // The panel may have been closed while the secret was read; stay silent then.
     if (this.disposed) {
       return;
@@ -272,6 +280,7 @@ export class ConnectionFormPanel implements vscode.Disposable {
       projects: this.deps.store.projectFolders().map(({ key, name }) => ({ key, name })),
       ...(project === undefined ? {} : { project: { key: project.key, name: project.name } }),
       folders: this.deps.store.folders(),
+      ...(servers.length === 0 ? {} : { servers }),
       drivers: driverOptions(),
     });
   }

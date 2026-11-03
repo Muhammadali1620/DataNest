@@ -587,6 +587,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DataNe
       extensionUri: context.extensionUri,
       secrets: context.secrets,
       store,
+      serverStore,
       manager,
       tree,
       cache,

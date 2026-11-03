@@ -5,6 +5,7 @@
 import { CONNECTION_LIMITS, DRIVER_IDS } from '../connection';
 import { connectionInputSchema } from '../connection-schema';
 import { defineProtocol } from '../rpc';
+import { sshServerSchema } from '../ssh-server';
 import { array, boolean, type Infer, literal, number, object, optional, string } from '../schema';
 
 export const PASSWORD_MAX_LENGTH = 1000;
@@ -26,6 +27,16 @@ export const sshSecretChangeSchema = object({
   hopId: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
   password: passwordChangeSchema,
   passphrase: passwordChangeSchema,
+  /**
+   * The hop was filled from this saved server (V15.1): a secret left as `keep` is taken from
+   * the server's own, by the host, while host, port and user still match. Values never travel.
+   */
+  fromServer: optional(
+    object({
+      serverId: string({ minLength: 1, maxLength: 100 }),
+      hopId: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
+    }),
+  ),
 });
 
 /** Workspace folders are named by their URI. */
@@ -42,8 +53,24 @@ const draftSchema = object({
   sentinelPassword: optional(passwordChangeSchema),
   /** The password of the connection's proxy (V10.2.5); left out keeps the stored one. */
   proxyPassword: optional(passwordChangeSchema),
+  /** The proxy was filled from this saved server (V15.1); its password is taken by the host. */
+  proxyFromServer: optional(string({ minLength: 1, maxLength: 100 })),
   /** The password or token of a Kafka registry's own sign-in (V13.41); left out keeps it. */
   registrySecret: optional(passwordChangeSchema),
+});
+
+/** A saved server the page may fill an SSH tunnel from; only flags tell about its secrets. */
+const serverChoiceSchema = object({
+  server: sshServerSchema,
+  storedSsh: array(
+    object({
+      hopId: string({ minLength: 1, maxLength: CONNECTION_LIMITS.hopId }),
+      password: boolean(),
+      passphrase: boolean(),
+    }),
+    { maxLength: 20 },
+  ),
+  proxyPassword: boolean(),
 });
 
 const projectSchema = object({ key: projectKeySchema, name: string({ maxLength: 500 }) });
@@ -75,6 +102,8 @@ const formStateSchema = object({
     }),
     { maxLength: 20 },
   ),
+  /** Saved servers (V15.1) a tunnel can be filled from, so a login is not typed twice. */
+  servers: optional(array(serverChoiceSchema, { maxLength: 1000 })),
   /** Projects whose file may take a new connection; empty outside a trusted workspace. */
   projects: optional(array(projectSchema, { maxLength: 100 })),
   /** The project whose file holds the edited connection; absent for the user's own. */
@@ -141,6 +170,9 @@ export type ConnectionFormState = Infer<typeof formStateSchema>;
 
 /** What the page sends when testing or saving. */
 export type ConnectionDraft = Infer<typeof draftSchema>;
+
+/** One saved server offered to the form. */
+export type ServerChoice = Infer<typeof serverChoiceSchema>;
 
 export type PasswordChangeMessage = Infer<typeof passwordChangeSchema>;
 

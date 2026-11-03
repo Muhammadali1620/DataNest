@@ -380,6 +380,23 @@ describe('server form App', () => {
       expect(screen.getByText('Default: 8080')).toBeTruthy();
     });
 
+    it('has the port of the kind typed in already, and follows the kind until it is changed', async () => {
+      await withState();
+      await fireEvent.click(screen.getByTestId('use-proxy'));
+      expect(field('Proxy port').value).toBe('1080');
+      await fireEvent.change(screen.getByLabelText('Proxy type'), { target: { value: 'http' } });
+      expect(field('Proxy port').value).toBe('8080');
+      await fireEvent.input(field('Proxy port'), { target: { value: '3128' } });
+      await fireEvent.change(screen.getByLabelText('Proxy type'), { target: { value: 'socks5' } });
+      expect(field('Proxy port').value).toBe('3128');
+    });
+
+    it('has the usual SSH port typed in already, and offers no saved-server choice here', async () => {
+      await withState();
+      expect(field('SSH port').value).toBe('22');
+      expect(screen.queryByTestId('ssh-server-pick')).toBeNull();
+    });
+
     it('sends the proxy and its password', async () => {
       const { host } = await withState();
       const drafts: ServerDraft[] = [];

@@ -3,6 +3,7 @@ import { DbError } from '../core/errors';
 import type { Logger } from '../core/logging/logger';
 import type { ConnectionManager } from '../services/connection-manager';
 import type { ConnectionStore } from '../services/connection-store';
+import type { ServerStore } from '../services/server-store';
 import { PROJECT_FILE_PATH } from '../services/project-connections';
 import { describeTarget, type ConnectionConfig } from '../shared/connection';
 import { ConnectionFormPanel } from './panels/connection-form-panel';
@@ -15,6 +16,8 @@ export interface ConnectionCommandDeps {
   readonly store: ConnectionStore;
   readonly manager: ConnectionManager;
   readonly logger: Logger;
+  /** Saved SSH servers a tunnel can be filled from (V15.1). */
+  readonly servers?: ServerStore;
   /** Connections of drivers that other extensions registered (V12.7). */
   readonly plugins?: PluginConnectionHandlers;
 }

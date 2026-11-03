@@ -13,9 +13,12 @@ import {
   toProxyChange,
   toRegistryChange,
   toSentinelChange,
+  resolveServerSecrets,
+  serverChoices,
+  type ServerSecretSource,
 } from '../../../../src/vscode/panels/connection-form-state';
 import type { ConnectionDraft } from '../../../../src/shared/protocols/connection-form';
-import { DRIVER_IDS, isFileDriver } from '../../../../src/shared/connection';
+import { DRIVER_IDS, isFileDriver, type SshHopSecrets } from '../../../../src/shared/connection';
 import { connectionFormProtocol } from '../../../../src/shared/protocols/connection-form';
 import { connectionInputShape } from '../../../../src/shared/connection-schema';
 
@@ -384,6 +387,155 @@ describe('registry secret (V13.41)', () => {
         hasStoredRegistrySecret: true,
         storedSsh: [],
         drivers: driverOptions(),
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('saved servers in the form (V15.1)', () => {
+  const server = {
+    id: 's1',
+    name: 'Prod',
+    ssh: {
+      id: 'own',
+      host: 'prod',
+      user: 'deploy',
+      auth: 'password' as const,
+      jumps: [{ id: 'j', host: 'gate', user: 'g', auth: 'key' as const, keyFile: '/k' }],
+    },
+    proxy: { kind: 'socks5' as const, host: 'px', user: 'u' },
+  };
+
+  function source(): ServerSecretSource {
+    return {
+      list: () => [server],
+      get: (id) => (id === 's1' ? server : undefined),
+      getSshSecrets: (id): Promise<Record<string, SshHopSecrets>> =>
+        Promise.resolve<Record<string, SshHopSecrets>>(
+          id === 's1' ? { own: { password: 'srv-pass' }, j: { passphrase: 'srv-phrase' } } : {},
+        ),
+      getProxyPassword: (id) => Promise.resolve(id === 's1' ? 'px-pass' : undefined),
+    };
+  }
+
+  function draft(overrides: Partial<ConnectionDraft> = {}, host = 'prod'): ConnectionDraft {
+    return {
+      input: {
+        name: 'c',
+        driver: 'mysql',
+        host: 'db',
+        ssh: {
+          id: 'h1',
+          host,
+          user: 'deploy',
+          auth: 'password',
+          jumps: [{ id: 'h0', host: 'gate', user: 'g', auth: 'key', keyFile: '/k' }],
+        },
+        proxy: { kind: 'socks5', host: 'px', user: 'u' },
+      },
+      password: { kind: 'keep' },
+      ssh: [
+        {
+          hopId: 'h0',
+          password: { kind: 'clear' },
+          passphrase: { kind: 'keep' },
+          fromServer: { serverId: 's1', hopId: 'j' },
+        },
+        {
+          hopId: 'h1',
+          password: { kind: 'keep' },
+          passphrase: { kind: 'clear' },
+          fromServer: { serverId: 's1', hopId: 'own' },
+        },
+      ],
+      proxyPassword: { kind: 'keep' },
+      proxyFromServer: 's1',
+      ...overrides,
+    };
+  }
+
+  it('offers every server with flags for its secrets, never the values', async () => {
+    const choices = await serverChoices(source());
+    expect(choices).toEqual([
+      {
+        server,
+        storedSsh: [
+          { hopId: 'own', password: true, passphrase: false },
+          { hopId: 'j', password: false, passphrase: true },
+        ],
+        proxyPassword: true,
+      },
+    ]);
+    expect(JSON.stringify(choices)).not.toContain('srv-pass');
+    expect(JSON.stringify(choices)).not.toContain('px-pass');
+  });
+
+  it('takes the secrets of a server for hops and proxy left alone', async () => {
+    const result = await resolveServerSecrets(draft(), source());
+    expect(result.ssh?.[0]?.passphrase).toEqual({ kind: 'set', value: 'srv-phrase' });
+    expect(result.ssh?.[1]?.password).toEqual({ kind: 'set', value: 'srv-pass' });
+    expect(result.proxyPassword).toEqual({ kind: 'set', value: 'px-pass' });
+  });
+
+  it('lets typing or erasing in the form win', async () => {
+    const result = await resolveServerSecrets(
+      draft({
+        ssh: [
+          {
+            hopId: 'h1',
+            password: { kind: 'set', value: 'typed' },
+            passphrase: { kind: 'clear' },
+            fromServer: { serverId: 's1', hopId: 'own' },
+          },
+        ],
+        proxyPassword: { kind: 'clear' },
+      }),
+      source(),
+    );
+    expect(result.ssh?.[0]?.password).toEqual({ kind: 'set', value: 'typed' });
+    expect(result.proxyPassword).toEqual({ kind: 'clear' });
+  });
+
+  it('gives nothing to a login edited after the pick', async () => {
+    const result = await resolveServerSecrets(draft({}, 'elsewhere'), source());
+    expect(result.ssh?.[1]?.password).toEqual({ kind: 'keep' });
+    const proxied = await resolveServerSecrets(
+      draft({ input: { ...draft().input, proxy: { kind: 'socks5', host: 'other' } } }),
+      source(),
+    );
+    expect(proxied.proxyPassword).toEqual({ kind: 'keep' });
+  });
+
+  it('ignores a server that is gone, a hop it does not have, and a missing store', async () => {
+    const gone = draft({
+      ssh: [
+        {
+          hopId: 'h1',
+          password: { kind: 'keep' },
+          passphrase: { kind: 'keep' },
+          fromServer: { serverId: 'nope', hopId: 'own' },
+        },
+        {
+          hopId: 'h0',
+          password: { kind: 'keep' },
+          passphrase: { kind: 'keep' },
+          fromServer: { serverId: 's1', hopId: 'zzz' },
+        },
+      ],
+      proxyFromServer: 'nope',
+    });
+    expect(await resolveServerSecrets(gone, source())).toEqual(gone);
+    expect(await resolveServerSecrets(draft(), undefined)).toEqual(draft());
+  });
+
+  it('accepts the new fields in the protocol', () => {
+    expect(() =>
+      connectionFormProtocol.webview.events.state.parse({
+        input: NEW_CONNECTION,
+        hasStoredPassword: false,
+        storedSsh: [],
+        drivers: driverOptions(),
+        servers: [{ server, storedSsh: [], proxyPassword: false }],
       }),
     ).not.toThrow();
   });

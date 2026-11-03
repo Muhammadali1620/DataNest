@@ -6,6 +6,7 @@
     CONNECTION_LIMITS,
     DEFAULT_PROXY_PORTS,
     MAX_SSH_JUMPS,
+    type ProxyKind,
   } from '../../../../src/shared/connection';
   import {
     PASSWORD_MAX_LENGTH,
@@ -25,6 +26,7 @@
     moveJump,
     newHopFields,
     problemsOf,
+    proxyPortAfterKind,
     type ServerFields,
     SERVER_PROBLEM_MESSAGES,
     toDraft,
@@ -306,7 +308,18 @@
           {#if fields.useProxy}
             <p class="hint">{t('serverForm.proxyHint')}</p>
             <Field label={t('form.proxy.kind')}>
-              <select class="control" bind:value={fields.proxyKind} aria-label={t('form.proxy.kind')}>
+              <select
+              class="control"
+              value={fields.proxyKind}
+              onchange={(event) => {
+                if (fields) {
+                  const kind = event.currentTarget.value as ProxyKind;
+                  fields.proxyPort = proxyPortAfterKind(fields.proxyKind, kind, fields.proxyPort);
+                  fields.proxyKind = kind;
+                }
+              }}
+              aria-label={t('form.proxy.kind')}
+              >
                 <option value="socks5">SOCKS5</option>
                 <option value="http">HTTP (CONNECT)</option>
               </select>

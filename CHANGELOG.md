@@ -3,6 +3,17 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.1.0] - 2026-11-03
+
+### Added
+
+- Connections: an SSH tunnel and each of its jump hosts can be filled from a server saved in Servers: pick it in "Saved server" and the host, port, user, sign-in method, key file, jump hosts and proxy of that server are filled in, with its saved password or key passphrase. "Enter manually" and every field stay available, and a saved password is never sent to a host you changed after picking.
+
+### Changed
+
+- The usual ports are already typed into the port fields of an SSH server (22) and of a proxy (1080 for SOCKS5, 8080 for HTTP; they follow the proxy type until you type your own), instead of only being named under the field.
+- The extension page describes Servers and shows three new screenshots of them.
+
 ## [2.0.1] - 2026-11-03
 
 ### Fixed

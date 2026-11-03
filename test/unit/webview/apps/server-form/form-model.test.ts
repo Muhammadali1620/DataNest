@@ -35,7 +35,7 @@ describe('a blank form', () => {
       useProxy: false,
       proxyKind: 'socks5',
     });
-    expect(fields.ssh).toMatchObject({ auth: 'password', host: '', port: '' });
+    expect(fields.ssh).toMatchObject({ auth: 'password', host: '', port: '22' });
     expect(fields.ssh.id).toMatch(/\S/u);
   });
 

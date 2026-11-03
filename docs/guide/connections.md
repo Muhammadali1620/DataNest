@@ -76,6 +76,16 @@ and the database. The server's host key is checked the way OpenSSH does: the fir
 are asked to trust it, and a changed key is connected to only after a warning and your
 choice.
 
+The port boxes already hold the usual ports (22 for SSH, 1080 for a SOCKS5 proxy, 8080 for an
+HTTP one); change them only when your server listens elsewhere.
+
+**Saved server.** If the machine is already in the **Servers** view, do not type its login
+again: pick it in the **Saved server** list above the SSH host (each jump host has the same
+list). The host, port, user, sign-in method, key file, algorithm rules, jump hosts and proxy of
+that server are filled in, and its saved password or key passphrase is used without ever
+being shown. **Enter manually** and every field stay available; if you change the host, port
+or user after picking, the saved password is no longer sent to the new address.
+
 ### SSH algorithms
 
 An old server may speak only methods that DataNest does not offer by default (SHA-1 key

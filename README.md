@@ -9,6 +9,8 @@
 Windsurf, Antigravity).** Browse and edit data, write SQL, design tables and see an ER diagram
 for **MySQL, MariaDB, PostgreSQL, SQLite, Microsoft SQL Server, Oracle, ClickHouse, MongoDB,
 Redis, Elasticsearch, libSQL and InfluxDB** — with no account, no limits and no telemetry.
+It also works with **servers**: browse and edit their files over SFTP, open a terminal and
+reuse the same saved SSH logins for database tunnels.
 
 ![DataNest: database tree, data grid with filters, record panel](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/overview.png)
 
@@ -67,6 +69,18 @@ page is in English; the short summaries below are for everyone else.
 ![Built-in tools: colours, QR codes, images, network, processes](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/tools.png)
 
 **EN** Built-in tools: colors, QR, images · **RU** Встроенные инструменты: цвета, QR, изображения · **UZ** Ichki vositalar: ranglar, QR, rasmlar · **ZH** 内置工具：颜色、二维码、图片 · **ES** Herramientas: colores, QR, imágenes · **TR** Yerleşik araçlar: renk, QR, görsel · **DE** Werkzeuge: Farben, QR, Bilder · **FR** Outils : couleurs, QR, images · **PT** Ferramentas: cores, QR, imagens · **AR** أدوات مدمجة: الألوان ورمز QR والصور
+
+![Servers: remote files, a file open in the editor and a terminal on the server](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/servers.png)
+
+**EN** Servers: files over SFTP, editor and terminal · **RU** Серверы: файлы по SFTP, редактор и терминал · **UZ** Serverlar: SFTP orqali fayllar, muharrir va terminal · **ZH** 服务器：通过 SFTP 管理文件，编辑器与终端 · **ES** Servidores: archivos por SFTP, editor y terminal · **TR** Sunucular: SFTP dosyaları, düzenleyici ve terminal · **DE** Server: Dateien über SFTP, Editor und Terminal · **FR** Serveurs : fichiers via SFTP, éditeur et terminal · **PT** Servidores: arquivos via SFTP, editor e terminal · **AR** الخوادم: ملفات عبر SFTP ومحرر وطرفية
+
+![New server: SSH login, jump hosts and a proxy, with the usual ports already filled in](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/server-form.png)
+
+**EN** Add a server: SSH login, jump hosts, proxy · **RU** Добавление сервера: SSH-вход, промежуточные хосты, прокси · **UZ** Server qo‘shish: SSH kirish, oraliq xostlar, proksi · **ZH** 添加服务器：SSH 登录、跳板机、代理 · **ES** Añadir un servidor: acceso SSH, saltos y proxy · **TR** Sunucu ekleme: SSH girişi, atlama sunucuları, proxy · **DE** Server hinzufügen: SSH-Login, Sprunghosts, Proxy · **FR** Ajouter un serveur : connexion SSH, rebonds, proxy · **PT** Adicionar servidor: login SSH, saltos, proxy · **AR** إضافة خادم: تسجيل دخول SSH ومضيفات وسيطة ووكيل
+
+![A database connection through a saved server: pick it and the SSH login is filled in](https://raw.githubusercontent.com/Muhammadali1620/DataNest/main/docs/images/tunnel-server.png)
+
+**EN** Reuse a saved server in an SSH tunnel · **RU** Сохранённый сервер в SSH-туннеле подключения · **UZ** Saqlangan serverni SSH tunnelda qayta ishlatish · **ZH** 在 SSH 隧道中复用已保存的服务器 · **ES** Reutiliza un servidor guardado en el túnel SSH · **TR** Kayıtlı sunucuyu SSH tünelinde kullanın · **DE** Gespeicherten Server im SSH-Tunnel wiederverwenden · **FR** Réutiliser un serveur enregistré dans le tunnel SSH · **PT** Reutilize um servidor salvo no túnel SSH · **AR** إعادة استخدام خادم محفوظ في نفق SSH
 
 ## Supported databases
 
@@ -234,6 +248,16 @@ All of them work through SSH tunnels, SOCKS5 and HTTP proxies and TLS where the 
 - Charts of a query result — lines, bars or a pie — saved as SVG or PNG.
 - A Manager page per connection: a log of your statements, a live server dashboard, the process list, dump to SQL and structure sync.
 - A Tools page: hashes and encodings, random values, network checks (ping, DNS, ports), colours, QR codes (read and create), image crop, resize and compress, an SVG editor and designer, a task manager.
+
+**Servers**
+
+- A **Servers** view next to the connections: add a machine once (SSH with a password, a key
+  or an agent, jump hosts and a proxy) and browse its files over SFTP, open, edit and save a
+  file in the editor, upload, download, copy, move, rename, delete and change permissions.
+- A terminal on the server, and "Run Command on Server…" for one-off commands.
+- Pick a saved server in the SSH tunnel of a database connection instead of typing its login
+  again; the saved password is used without being shown.
+- Passwords stay in the editor's secret storage; the server key is checked like OpenSSH does.
 
 **Safety and history**
 

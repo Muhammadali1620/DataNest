@@ -781,6 +781,10 @@ export const ru: Record<MessageKey, string> = {
   'form.fileRemote': 'Путь к файлу на сервере',
   'form.fileRemoteHint': 'Копируется по SFTP при подключении и открывается только для чтения',
   'form.ssh.title': 'SSH-сервер',
+  'form.ssh.server': 'Сохранённый сервер',
+  'form.ssh.serverManual': 'Ввести вручную',
+  'form.ssh.serverHint':
+    'Подставляет логин и промежуточные хосты из раздела «Серверы» вместе с сохранёнными паролями. Любое поле можно изменить.',
   'form.ssh.host': 'SSH-хост',
   'form.ssh.port': 'SSH-порт',
   'form.ssh.user': 'SSH-пользователь',

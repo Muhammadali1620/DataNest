@@ -1,7 +1,9 @@
 // Pure form logic: what the user typed → what the host receives, and which
 // problems block saving. Kept apart from the component so it is tested directly.
 
+import type { ServerChoice } from '../../../../src/shared/protocols/connection-form';
 import {
+  effectiveProxyPort,
   type ProxyKind,
   type ProxySettings,
   supportsSocket,
@@ -9,6 +11,7 @@ import {
   type ConnectionInput,
   type ConnectionProblem,
   connectionProblems,
+  DEFAULT_PROXY_PORTS,
   DEFAULT_SSH_PORT,
   type DriverId,
   isFileDriver,
@@ -82,7 +85,8 @@ export function newHopFields(id: string = newHopId()): HopFields {
   return {
     id,
     host: '',
-    port: '',
+    // The usual port is already typed; whoever's server listens elsewhere changes it (V15.1).
+    port: String(DEFAULT_SSH_PORT),
     user: '',
     auth: 'password',
     keyFile: '',
@@ -97,7 +101,7 @@ export function hopFieldsFrom(hop: SshHop): HopFields {
   return {
     id: hop.id,
     host: hop.host,
-    port: hop.port === undefined ? '' : String(hop.port),
+    port: String(hop.port ?? DEFAULT_SSH_PORT),
     user: hop.user,
     auth: hop.auth,
     keyFile: hop.keyFile ?? '',
@@ -257,7 +261,7 @@ export function fieldsFrom(state: ConnectionFormState): FormFields {
     useProxy: input.proxy !== undefined,
     proxyKind: input.proxy?.kind ?? 'socks5',
     proxyHost: input.proxy?.host ?? '',
-    proxyPort: input.proxy?.port === undefined ? '' : String(input.proxy.port),
+    proxyPort: String(input.proxy?.port ?? DEFAULT_PROXY_PORTS[input.proxy?.kind ?? 'socks5']),
     proxyUser: input.proxy?.user ?? '',
     proxyPassword: emptySecret(),
   };
@@ -268,7 +272,8 @@ export function toProxy(fields: FormFields): ProxySettings | undefined {
   if (!fields.useProxy || isFileDriver(fields.driver)) {
     return undefined;
   }
-  const port = parsePort(fields.proxyPort);
+  const typed = parsePort(fields.proxyPort);
+  const port = typed === DEFAULT_PROXY_PORTS[fields.proxyKind] ? undefined : typed;
   const user = trim(fields.proxyUser);
   return {
     kind: fields.proxyKind,
@@ -545,7 +550,9 @@ function trim(value: string): string | undefined {
 
 /** The hop as the model has it; a port that is not a number is left out (and flagged). */
 export function toHop(hop: HopFields): SshHop {
-  const port = parsePort(hop.port);
+  // The usual port is typed into the box, but a hop on it is saved without one (V15.1).
+  const typed = parsePort(hop.port);
+  const port = typed === DEFAULT_SSH_PORT ? undefined : typed;
   const keyFile = hop.auth === 'key' ? trim(hop.keyFile) : undefined;
   const agentSocket = hop.auth === 'agent' ? trim(hop.agentSocket) : undefined;
   const algorithms = cleanAlgorithms(hop.algorithms);
@@ -662,7 +669,95 @@ export function hopSecretChanges(hop: HopFields): NonNullable<ConnectionDraft['s
   };
 }
 
-export function toDraft(fields: FormFields): ConnectionDraft {
+/**
+ * Where a hop or the proxy was filled from a saved server (V15.1): by the id of the hop in
+ * the form, and for the proxy by the server's id. Only ids; the secrets stay in the host.
+ */
+export interface ServerLinks {
+  hops: Record<string, { serverId: string; hopId: string }>;
+  proxy?: string;
+}
+
+/** The port a proxy of another kind starts with, unless the user has typed their own. */
+export function proxyPortAfterKind(from: ProxyKind, to: ProxyKind, port: string): string {
+  const text = port.trim();
+  return text === '' || text === String(DEFAULT_PROXY_PORTS[from])
+    ? String(DEFAULT_PROXY_PORTS[to])
+    : port;
+}
+
+/** A hop of a saved server as the form edits it: a copy under an id of its own. */
+export function hopFieldsFromServer(hop: SshHop): HopFields {
+  return { ...hopFieldsFrom(hop), id: newHopId() };
+}
+
+function forgetLinks(links: ServerLinks, hops: readonly HopFields[]): void {
+  const gone = new Set(hops.map((hop) => hop.id));
+  links.hops = Object.fromEntries(Object.entries(links.hops).filter(([id]) => !gone.has(id)));
+}
+
+/** Fills the tunnel from a saved server: its login, jump hosts and, if asked, its proxy. */
+export function applyServer(
+  fields: FormFields,
+  links: ServerLinks,
+  choice: ServerChoice,
+  withProxy: boolean,
+): void {
+  const { server } = choice;
+  forgetLinks(links, [fields.ssh, ...fields.jumps]);
+  const link = (copy: HopFields, hopId: string): HopFields => {
+    links.hops[copy.id] = { serverId: server.id, hopId };
+    return copy;
+  };
+  const { jumps = [], ...own } = server.ssh;
+  fields.ssh = link(hopFieldsFromServer(own), own.id);
+  fields.jumps = jumps.map((jump) => link(hopFieldsFromServer(jump), jump.id));
+  if (withProxy && server.proxy !== undefined) {
+    fields.useProxy = true;
+    fields.proxyKind = server.proxy.kind;
+    fields.proxyHost = server.proxy.host;
+    fields.proxyPort = String(effectiveProxyPort(server.proxy));
+    fields.proxyUser = server.proxy.user ?? '';
+    fields.proxyPassword = emptySecret();
+    links.proxy = server.id;
+  }
+}
+
+/** Fills one jump host with the login of a saved server (its own hop, not its jumps). */
+export function applyServerToJump(
+  fields: FormFields,
+  links: ServerLinks,
+  index: number,
+  choice: ServerChoice,
+): void {
+  const old = fields.jumps[index];
+  if (old === undefined) {
+    return;
+  }
+  forgetLinks(links, [old]);
+  const { jumps: _unused, ...own } = choice.server.ssh;
+  const copy = hopFieldsFromServer(own);
+  links.hops[copy.id] = { serverId: choice.server.id, hopId: own.id };
+  fields.jumps[index] = copy;
+}
+
+/** The flags of a hop's secrets in the saved server it was filled from, if it was. */
+export function serverStoredFor(
+  links: ServerLinks,
+  servers: readonly ServerChoice[] | undefined,
+  hopId: string,
+): { password: boolean; passphrase: boolean } | undefined {
+  const link = links.hops[hopId];
+  if (link === undefined) {
+    return undefined;
+  }
+  const found = servers
+    ?.find((choice) => choice.server.id === link.serverId)
+    ?.storedSsh.find((entry) => entry.hopId === link.hopId);
+  return { password: found?.password ?? false, passphrase: found?.passphrase ?? false };
+}
+
+export function toDraft(fields: FormFields, links?: ServerLinks): ConnectionDraft {
   const input = toInput(fields);
   return {
     input,
@@ -674,13 +769,24 @@ export function toDraft(fields: FormFields): ConnectionDraft {
       : {}),
     ...(input.ssh === undefined
       ? {}
-      : { ssh: [...fields.jumps, fields.ssh].map((hop) => hopSecretChanges(hop)) }),
+      : {
+          ssh: [...fields.jumps, fields.ssh].map((hop) => {
+            const fromServer = links?.hops[hop.id];
+            return {
+              ...hopSecretChanges(hop),
+              ...(fromServer === undefined ? {} : { fromServer }),
+            };
+          }),
+        }),
     // Only a registry with a sign-in of its own has the secret; the store drops it otherwise.
     ...(input.kafka?.registryAuth === 'basic' || input.kafka?.registryAuth === 'bearer'
       ? { registrySecret: secretChange(fields.kafkaRegistrySecret) }
       : {}),
     // Without a proxy the store drops its password by itself.
     ...(input.proxy === undefined ? {} : { proxyPassword: secretChange(fields.proxyPassword) }),
+    ...(input.proxy === undefined || links?.proxy === undefined
+      ? {}
+      : { proxyFromServer: links.proxy }),
   };
 }
 

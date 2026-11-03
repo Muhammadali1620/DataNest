@@ -711,7 +711,7 @@
   .charts {
     display: grid;
     flex: none;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
     gap: var(--dn-gap);
     padding: 0 var(--dn-gap) var(--dn-gap);
   }

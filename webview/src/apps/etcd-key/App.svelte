@@ -464,7 +464,6 @@
     display: inline-flex;
     gap: 4px;
     align-items: center;
-    white-space: nowrap;
   }
 
   .problem {

@@ -304,7 +304,8 @@ input[type='radio']:disabled {
   padding: 0 7px;
   color: var(--vscode-badge-foreground);
   background: var(--vscode-badge-background);
-  border: 1px solid transparent;
+  /* A high contrast theme draws every filled thing with a border. */
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   border-radius: 9px;
   font-size: 11px;
   font-weight: 500;

@@ -67,6 +67,32 @@ describe('the shared toolbar', () => {
   it('wraps, so a row of icon buttons never pushes a narrow page sideways', () => {
     const toolbar = sheet.find((rule) => rule.selector === '.toolbar');
     expect(toolbar?.body).toContain('flex-wrap: wrap');
+    // `flex: none` would keep it as wide as all its buttons and so never let it wrap.
+    expect(toolbar?.body).not.toContain('flex: none');
+  });
+
+  it('keeps the text for screen readers anchored, so it cannot stretch the page', () => {
+    const hidden = rulesOf('webview/src/styles/base.css').find(
+      (rule) => rule.selector === '.sr-only',
+    );
+    expect(hidden?.body).toContain('left: 0');
+  });
+});
+
+describe('grids of cards', () => {
+  it('never ask a column to be wider than a narrow page', () => {
+    const offenders: string[] = [];
+    for (const file of svelteFiles) {
+      for (const rule of rulesOf(file)) {
+        for (const match of rule.body.matchAll(/minmax\((\d+)px,/gu)) {
+          if (Number(match[1]) >= 300) {
+            offenders.push(`${file}: ${rule.selector} minmax(${match[1]}px, …)`);
+          }
+        }
+      }
+    }
+    // `minmax(min(380px, 100%), 1fr)` is the form that shrinks with the page.
+    expect(offenders).toEqual([]);
   });
 });
 

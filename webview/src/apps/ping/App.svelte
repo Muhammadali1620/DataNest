@@ -108,6 +108,7 @@
 
   form {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--dn-gap);
     align-items: flex-end;
     align-self: stretch;

@@ -56,6 +56,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Fixed
 
+- Servers: aborting a command that runs on a server now returns at once (it used to wait for the command to end) and asks it to stop; "make a folder" and "remove a folder" say that the name is taken or the folder is not empty instead of the server's bare "Failure".
 - The Servers view and SSH tunnels failed with "openSftp is not a function" ("openTunnel is not a function"): the SSH module was loaded wrapped in its export object.
 
 ## [1.7.0] - 2026-11-01

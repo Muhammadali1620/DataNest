@@ -234,16 +234,55 @@ class Session implements SftpSession {
 
   async mkdir(path: string): Promise<void> {
     this.alive(path);
-    await call<undefined>(path, (done) => {
-      this.sftp.mkdir(path, done);
-    });
+    try {
+      await call<undefined>(path, (done) => {
+        this.sftp.mkdir(path, done);
+      });
+    } catch (error) {
+      // A server answers "failure" and nothing more for a name that is taken.
+      if (error instanceof DbError && error.code === 'unsupported' && (await this.taken(path))) {
+        throw new DbError('unsupported', msg('{0} already exists on the server', path), {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   async rmdir(path: string): Promise<void> {
     this.alive(path);
-    await call<undefined>(path, (done) => {
-      this.sftp.rmdir(path, done);
-    });
+    try {
+      await call<undefined>(path, (done) => {
+        this.sftp.rmdir(path, done);
+      });
+    } catch (error) {
+      // The same bare "failure" is what a folder with something in it gets.
+      if (error instanceof DbError && error.code === 'unsupported' && (await this.filled(path))) {
+        throw new DbError('unsupported', msg('The folder {0} is not empty', path), {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+  }
+
+  private async taken(path: string): Promise<boolean> {
+    try {
+      return (await this.stat(path)) !== undefined;
+    } catch {
+      return false;
+    }
+  }
+
+  private async filled(path: string): Promise<boolean> {
+    try {
+      const items = await call<FileEntryWithStats[]>(path, (done) => {
+        this.sftp.readdir(path, done);
+      });
+      return items.some((item) => item.filename !== '.' && item.filename !== '..');
+    } catch {
+      return false;
+    }
   }
 
   async unlink(path: string): Promise<void> {

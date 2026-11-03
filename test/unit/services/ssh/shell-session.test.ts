@@ -1,7 +1,7 @@
 // The shell and one-shot commands of the SSH terminal (V13.18) against an SSH server inside
 // the test process: real logins, real pseudo-terminal and window-change requests.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DbError } from '../../../../src/core/errors';
 import type { RemoteFileSpec } from '../../../../src/services/remote-snapshots';
 import type { ShellSession } from '../../../../src/services/shell-types';
@@ -285,6 +285,31 @@ describe('execRemoteCommand', () => {
     );
     expect(await pending).toEqual({});
     expect(out.join('')).toBe('started\n');
+  });
+
+  it('asks the command to stop with a TERM signal when the call is aborted', async () => {
+    server = await startSshServer({
+      users,
+      exec: (_command, channel) => {
+        channel.write('started\n');
+      },
+    });
+    const abort = new AbortController();
+    const pending = execRemoteCommand(
+      specFor(server),
+      'sleep 1000',
+      {
+        signal: abort.signal,
+        onData: () => {
+          abort.abort();
+        },
+      },
+      new RecordingLogger(),
+    );
+    expect(await pending).toEqual({});
+    await vi.waitFor(() => {
+      expect(server?.signals).toEqual(['TERM']);
+    });
   });
 
   it('does not even run a command that was aborted before it started', async () => {

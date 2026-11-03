@@ -46,6 +46,8 @@ export interface TestSshServer {
   readonly windowChanges: { cols: number; rows: number }[];
   /** Commands run with `exec`, in order (V13.18). */
   readonly execs: string[];
+  /** Signals asked of a command, e.g. `TERM` when its call was aborted. */
+  readonly signals: string[];
   /** Shells that were opened (V13.18). */
   shells: number;
   /** Drops every client connection, as a server restart would. */
@@ -133,6 +135,7 @@ export async function startSshServer(options: {
   const ptys: { term: string; cols: number; rows: number }[] = [];
   const windowChanges: { cols: number; rows: number }[] = [];
   const execs: string[] = [];
+  const signals: string[] = [];
   const counters = { shells: 0 };
   const clients = new Set<{ end(): void }>();
   const key = testHostKey();
@@ -231,6 +234,10 @@ export async function startSshServer(options: {
             counters.shells += 1;
             options.shell(acceptShell());
           });
+          session.on('signal', (accept, _reject, info) => {
+            signals.push(info.name);
+            accept();
+          });
           session.on('exec', (acceptExec, rejectExec, info) => {
             if (options.exec === undefined) {
               rejectExec();
@@ -274,6 +281,7 @@ export async function startSshServer(options: {
     ptys,
     windowChanges,
     execs,
+    signals,
     get shells() {
       return counters.shells;
     },

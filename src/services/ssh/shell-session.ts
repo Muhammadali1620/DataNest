@@ -203,11 +203,22 @@ export async function execRemoteCommand(
       let aborted = false;
       const abort = (): void => {
         aborted = true;
+        // Without a terminal OpenSSH keeps the channel open until the command ends, so closing
+        // it is not enough: ask the command to stop, close, and answer at once (the chain is
+        // closed behind the answer, which is what ends the link).
+        try {
+          channel.signal('TERM');
+        } catch {
+          // The server may not take signals (OpenSSH before 7.9).
+        }
         try {
           channel.close();
         } catch {
           // Already gone.
         }
+        queueMicrotask(() => {
+          settle();
+        });
       };
       if (control.signal?.aborted === true) {
         abort();

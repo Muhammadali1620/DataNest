@@ -134,8 +134,18 @@ describe('SFTP session', () => {
     await expect(session.unlink('/srv/a.txt')).rejects.toMatchObject({ code: 'not-found' });
   });
 
-  it('refuses to remove a folder that is not empty', async () => {
-    await expect(session.rmdir('/srv/sub')).rejects.toMatchObject({ code: 'unsupported' });
+  it('refuses to remove a folder that is not empty, and says so', async () => {
+    await expect(session.rmdir('/srv/sub')).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('is not empty') as string,
+    });
+  });
+
+  it('says a folder already exists instead of the server\'s bare "failure"', async () => {
+    await expect(session.mkdir('/srv/sub')).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('already exists') as string,
+    });
   });
 
   it('renames a file and a folder with everything in it', async () => {

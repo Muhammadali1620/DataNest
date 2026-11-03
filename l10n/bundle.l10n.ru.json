@@ -2042,5 +2042,6 @@
   "Delete the operator policy \"{0}\"?": "Удалить политику оператора «{0}»?",
   "Change the settings of the virtual host \"{0}\"?": "Изменить настройки виртуального хоста «{0}»?",
   "A tag is one word, without commas or spaces": "Метка — одно слово, без запятых и пробелов",
-  "The default queue type is classic, quorum or stream": "Тип очереди по умолчанию — classic, quorum или stream"
+  "The default queue type is classic, quorum or stream": "Тип очереди по умолчанию — classic, quorum или stream",
+  "The folder {0} is not empty": "Папка {0} не пуста"
 }

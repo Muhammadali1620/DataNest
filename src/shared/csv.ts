@@ -31,16 +31,30 @@ export function csvField(text: string, delimiter: string = DEFAULT_DELIMITER): s
   return needsQuoting(text, delimiter) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
+/**
+ * One line of fields. A line with a single empty field is a blank line to every reader
+ * (they skip it, and the row is lost), so that field is written as `""`.
+ */
+function csvLine(fields: readonly string[], delimiter: string): string {
+  if (fields.length === 1 && fields[0] === '') {
+    return '""';
+  }
+  return fields.map((text) => csvField(text, delimiter)).join(delimiter);
+}
+
 export function toCsv(rows: readonly (readonly CellValue[])[], options: CsvOptions = {}): string {
   const delimiter = options.delimiter ?? DEFAULT_DELIMITER;
   const nullText = options.nullText ?? '';
   const lines: string[] = [];
   if (options.header !== undefined) {
-    lines.push(options.header.map((name) => csvField(name, delimiter)).join(delimiter));
+    lines.push(csvLine(options.header, delimiter));
   }
   for (const row of rows) {
     lines.push(
-      row.map((value) => csvField(cellText(value, { nullText }), delimiter)).join(delimiter),
+      csvLine(
+        row.map((value) => cellText(value, { nullText })),
+        delimiter,
+      ),
     );
   }
   // A trailing newline is what most tools expect at the end of a text file.

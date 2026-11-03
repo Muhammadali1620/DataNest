@@ -436,3 +436,23 @@ describe('scriptTerminator (V6.4)', () => {
     }
   });
 });
+
+describe('ClickHouse names with a backslash escape (V14.3)', () => {
+  const kinds = (sql: string): string[] =>
+    tokenize(sql, syntaxOf('clickhouse')).map((token) => token.kind);
+
+  it('keeps `a\\`b` and "a\\"b" as one name each', () => {
+    expect(kinds('`a\\`b`')).toEqual(['quoted-identifier']);
+    expect(kinds('"a\\"b"')).toEqual(['quoted-identifier']);
+  });
+
+  it('does not let such a name swallow the semicolon after it', () => {
+    const tokens = tokenize('SELECT `a\\`;b`; SELECT 2', syntaxOf('clickhouse'));
+    expect(tokens.filter((token) => token.kind === 'punctuation').length).toBe(1);
+  });
+
+  it('leaves MySQL alone: a backslash in a backtick name is just a character', () => {
+    expect(kinds('`a\\`')).toEqual(['quoted-identifier']);
+    expect(tokenize('`a\\` b', syntaxOf('mysql')).length).toBe(3);
+  });
+});

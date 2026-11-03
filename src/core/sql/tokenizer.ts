@@ -56,6 +56,8 @@ export interface SqlSyntax {
   readonly slashTerminator: boolean;
   /** `q'[…]'` strings with a delimiter of one's choice (Oracle). */
   readonly quoteOperator: boolean;
+  /** `\` hides the next character inside quoted names too (ClickHouse writes `` `a\`b` ``). */
+  readonly identifierBackslashEscapes?: boolean;
   /** `//` starts a line comment (Flux, V13.20). */
   readonly slashComments?: boolean;
   /** `--` starts a line comment; absent means it does. In Cypher it is a relationship, `(a)--(b)`. */
@@ -152,6 +154,7 @@ const CLICKHOUSE: SqlSyntax = {
   batchSeparator: false,
   slashTerminator: false,
   quoteOperator: false,
+  identifierBackslashEscapes: true,
 };
 
 const ORACLE: SqlSyntax = {
@@ -331,12 +334,13 @@ function readToken(sql: string, start: number, syntax: SqlSyntax): Token {
       sql,
       start,
       '"',
-      syntax.backslashEscapes && !syntax.doubleQuoteIdentifiers,
+      (syntax.backslashEscapes && !syntax.doubleQuoteIdentifiers) ||
+        (syntax.doubleQuoteIdentifiers && syntax.identifierBackslashEscapes === true),
       syntax.doubleQuoteIdentifiers ? 'quoted-identifier' : 'string',
     );
   }
   if (char === '`' && syntax.backtickIdentifiers) {
-    return quoted(sql, start, '`', false, 'quoted-identifier');
+    return quoted(sql, start, '`', syntax.identifierBackslashEscapes === true, 'quoted-identifier');
   }
   if (char === '[' && syntax.bracketIdentifiers) {
     return bracketed(sql, start);

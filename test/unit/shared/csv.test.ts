@@ -89,4 +89,11 @@ describe('toCsv', () => {
     ];
     expect(toCsv([row])).toBe('2024-12-31 23:59:59,"{""a"":1}",0xabcd\r\n');
   });
+
+  it('writes an empty value of a one-column table as "" so that no reader drops the row', () => {
+    expect(toCsv([[null], ['a'], ['']], { header: ['id'] })).toBe('id\r\n""\r\na\r\n""\r\n');
+    // Two columns: an empty value among others is already unmistakable.
+    expect(toCsv([[null, '']], { header: ['a', 'b'] })).toBe('a,b\r\n,\r\n');
+    expect(toCsv([[null]], { header: [''] })).toBe('""\r\n""\r\n');
+  });
 });

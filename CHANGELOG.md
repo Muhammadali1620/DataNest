@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 
 ### Added
 
+- The pages of etcd, Kafka, ZooKeeper and RabbitMQ look like the rest of the extension: the mark of the database in the header, colours from the theme, and the shared capsule and danger button.
+- Servers: "Add server" opens a form in the editor, like a new connection, with Test connection (SSH login and SFTP), jump hosts, a proxy and SSH algorithms; "Edit server" opens the same form and keeps a saved password you leave empty.
 - etcd: watch every key under a folder from the tree, "etcd Cluster and Snapshot…" (members, alarms, and the whole store saved to a file with its checksum checked). RabbitMQ: a cluster page with nodes and how much of their memory, file descriptors, sockets and processes they use, limits of connections and queues for a virtual host, and policies made from fields.
 - Kafka: show Avro, Protobuf and JSON Schema messages decoded through a schema registry (a Confluent-compatible one, set in the connection), manage the cluster's access rules (ACLs), and look at and change the settings of a topic or a broker.
 - Servers: compare a file with a file of another server, and give or read owners and groups by name (taken from the server's own passwd and group files). SQLite files on a server can be changed through the sqlite3 program when Python 3 is missing, and reads inside an open transaction now show its changes.
@@ -49,6 +51,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 - Public API for other extensions: they register a database (`registerDriver`) and it works in the tree, the SQL editor and the result grid. New Connection (Database from Another Extension)… makes a connection to it. The guide is in `docs/contributing/plugin-api.md`.
 - SQLite file on a server: turn on SSH for a SQLite connection and give the path on the server; the file (and its `-wal`) is copied over SFTP and opened read-only. Larger than `datanest.sqlite.remoteMaxSizeMb` (512 MB) is refused.
 - Fill selected cells: Delete, Set NULL and Fill down (Ctrl+D) act on the whole selection; Fill Selection… writes one value, NULL, the default, the top cell copied down, or a series of numbers or dates.
+
+### Fixed
+
+- The Servers view and SSH tunnels failed with "openSftp is not a function" ("openTunnel is not a function"): the SSH module was loaded wrapped in its export object.
 
 ## [1.7.0] - 2026-11-01
 

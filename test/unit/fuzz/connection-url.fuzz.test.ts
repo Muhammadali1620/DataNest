@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  parseConnectionUrl,
-  suggestedName,
-  urlDriver,
-} from '../../../src/shared/connection-url';
+import { parseConnectionUrl, suggestedName, urlDriver } from '../../../src/shared/connection-url';
 import { pick, pieces, seeded } from '../../helpers/fuzz';
 
 const SCHEMES = [

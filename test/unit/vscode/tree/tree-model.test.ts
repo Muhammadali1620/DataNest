@@ -915,15 +915,24 @@ describe('TreeModel', () => {
   });
 
   describe('Security folder (V11.12)', () => {
-    const accounts = [
+    // Made again for each test: one of them empties it.
+    const makeAccounts = (): {
+      name: string;
+      host?: string;
+      login: boolean;
+      role: boolean;
+      flags: string[];
+    }[] => [
       { name: 'app', host: '%', login: true, role: false, flags: [] },
       { name: 'admin', login: true, role: false, flags: ['superuser'] },
       { name: 'readers', login: false, role: true, flags: [] },
     ];
+    let accounts = makeAccounts();
     let loads: number;
     let withAccounts: TreeModel;
 
     beforeEach(() => {
+      accounts = makeAccounts();
       loads = 0;
       drivers.driver('mysql').sessionMetadata.databases = ['app'];
       withAccounts = new TreeModel({

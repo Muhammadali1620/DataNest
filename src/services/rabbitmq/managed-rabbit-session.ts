@@ -18,6 +18,7 @@ import type {
   RabbitPermissionInfo,
   RabbitPolicyDeclaration,
   RabbitPolicyInfo,
+  RabbitVhostSettings,
   RabbitPublishRequest,
   RabbitQueueDeclaration,
   RabbitQueueInfo,
@@ -179,8 +180,12 @@ export class ManagedRabbitSession implements RabbitSession {
     return this.call(() => this.inner.setPolicy(policy));
   }
 
-  deletePolicy(vhost: string, name: string): Promise<void> {
-    return this.call(() => this.inner.deletePolicy(vhost, name));
+  deletePolicy(vhost: string, name: string, operator?: boolean): Promise<void> {
+    return this.call(() =>
+      operator === undefined
+        ? this.inner.deletePolicy(vhost, name)
+        : this.inner.deletePolicy(vhost, name, operator),
+    );
   }
 
   readCluster(): Promise<RabbitClusterInfo> {
@@ -189,6 +194,14 @@ export class ManagedRabbitSession implements RabbitSession {
 
   listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]> {
     return this.call(() => this.inner.listGlobalParameters());
+  }
+
+  readVhostSettings(vhost: string): Promise<RabbitVhostSettings> {
+    return this.call(() => this.inner.readVhostSettings(vhost));
+  }
+
+  setVhostSettings(vhost: string, settings: RabbitVhostSettings): Promise<void> {
+    return this.call(() => this.inner.setVhostSettings(vhost, settings));
   }
 
   listVhostLimits(vhost: string): Promise<RabbitVhostLimits> {

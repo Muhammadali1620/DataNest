@@ -169,6 +169,39 @@ describe('RabbitMQ administration (V13.28)', () => {
     });
   });
 
+  describe('the settings of a virtual host (V13.39)', () => {
+    it('sets and reads the description, the tags and the default queue type', async () => {
+      const vhost = unique('settings');
+      await session.createVhost(vhost);
+      try {
+        expect(await session.readVhostSettings(vhost)).toMatchObject({ tags: [] });
+        await session.setVhostSettings(vhost, {
+          description: 'Billing — тест',
+          tags: ['prod', 'eu'],
+          defaultQueueType: 'quorum',
+        });
+        expect(await session.readVhostSettings(vhost)).toEqual({
+          description: 'Billing — тест',
+          tags: ['prod', 'eu'],
+          defaultQueueType: 'quorum',
+        });
+        // A new queue without a type takes the default of its host.
+        await session.declareQueue({ vhost, name: 'q', durable: true, autoDelete: false });
+        expect((await session.getQueue(vhost, 'q')).type).toBe('quorum');
+        await session.setVhostSettings(vhost, {
+          description: '',
+          tags: [],
+          defaultQueueType: '',
+        });
+        const cleared = await session.readVhostSettings(vhost);
+        expect(cleared.description).toBe('');
+        expect(cleared.tags).toEqual([]);
+      } finally {
+        await session.deleteVhost(vhost).catch(() => undefined);
+      }
+    });
+  });
+
   describe('policies', () => {
     it('sets, reads, changes and deletes a policy', async () => {
       const name = unique('policy');
@@ -206,6 +239,40 @@ describe('RabbitMQ administration (V13.28)', () => {
       await session.deletePolicy('/', name);
       expect((await session.listPolicies('/')).some((policy) => policy.name === name)).toBe(false);
       await expect(session.deletePolicy('/', name)).rejects.toMatchObject({ code: 'not-found' });
+    });
+
+    it('keeps an operator policy apart from the ordinary one of the same name (V13.39)', async () => {
+      const name = unique('operator');
+      policies.push(name);
+      await session.setPolicy({
+        vhost: '/',
+        name,
+        pattern: '^dn-it-operator-nothing$',
+        applyTo: 'queues',
+        priority: 1,
+        definition: { 'message-ttl': 60_000 },
+      });
+      await session.setPolicy({
+        vhost: '/',
+        name,
+        pattern: '^dn-it-operator-nothing$',
+        applyTo: 'queues',
+        priority: 2,
+        definition: { 'max-length': 50 },
+        operator: true,
+      });
+      const listed = (await session.listPolicies('/')).filter((policy) => policy.name === name);
+      expect(listed.map((policy) => [policy.operator === true, policy.priority])).toEqual([
+        [false, 1],
+        [true, 2],
+      ]);
+      expect(listed[1]?.definition).toEqual({ 'max-length': 50 });
+      await session.deletePolicy('/', name, true);
+      const rest = (await session.listPolicies('/')).filter((policy) => policy.name === name);
+      expect(rest.map((policy) => policy.operator === true)).toEqual([false]);
+      await expect(session.deletePolicy('/', name, true)).rejects.toMatchObject({
+        code: 'not-found',
+      });
     });
 
     it('applies a policy to a queue it matches', async () => {

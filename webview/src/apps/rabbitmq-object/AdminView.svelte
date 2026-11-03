@@ -5,7 +5,7 @@
     RabbitPolicyView,
     RabbitUserView,
   } from '../../../../src/shared/protocols/rabbitmq-object';
-  import { RABBIT_POLICY_TARGETS } from '../../../../src/shared/protocols/rabbitmq-object';
+  import { RABBIT_POLICY_TARGETS, RABBIT_QUEUE_TYPES } from '../../../../src/shared/protocols/rabbitmq-object';
   import type { RpcPeer } from '../../../../src/shared/rpc';
   import Icon from '../../components/Icon.svelte';
   import IconButton from '../../components/IconButton.svelte';
@@ -55,12 +55,38 @@
   let policyPattern = $state('');
   let policyApplyTo = $state<(typeof RABBIT_POLICY_TARGETS)[number]>('all');
   let policyPriority = $state(0);
+  let policyOperator = $state(false);
   /** The fields of the definition (message TTL, length limits, dead lettering…). */
   let policyValues = $state<PolicyValues>({});
   /** The keys the fields do not cover, as JSON. */
   let policyExtra = $state('');
   let policyProblem = $state<string | undefined>(undefined);
   const fields = $derived(visibleFields(policyApplyTo, policyValues));
+
+  // The settings of the virtual host: what is typed over what the broker said, until saved.
+  let settingsEdit = $state<{ description: string; tags: string; queueType: string } | undefined>(
+    undefined,
+  );
+  const settingsNow = $derived({
+    description: settingsEdit?.description ?? admin.settings?.description ?? '',
+    tags: settingsEdit?.tags ?? (admin.settings?.tags ?? []).join(', '),
+    queueType: settingsEdit?.queueType ?? admin.settings?.defaultQueueType ?? '',
+  });
+
+  function saveSettings(): void {
+    const queueType = RABBIT_QUEUE_TYPES.find((one) => one === settingsNow.queueType) ?? '';
+    void run(
+      () =>
+        rpc.request('setVhostSettings', {
+          description: settingsNow.description,
+          tags: settingsNow.tags.split(',').map((tag) => tag.trim()).filter((tag) => tag !== ''),
+          defaultQueueType: queueType,
+        }),
+      () => {
+        settingsEdit = undefined;
+      },
+    );
+  }
 
   // The form that sets the limits of the virtual host.
   const limitInputs = $state<Record<string, string>>({ 'max-connections': '', 'max-queues': '' });
@@ -120,6 +146,7 @@
     policyPattern = policy.pattern;
     policyApplyTo = RABBIT_POLICY_TARGETS.find((one) => one === policy.applyTo) ?? 'all';
     policyPriority = policy.priority;
+    policyOperator = policy.operator === true;
     const parts = splitDefinition(policy.definition);
     policyValues = parts.values;
     policyExtra = parts.extra;
@@ -132,6 +159,7 @@
     policyPattern = '';
     policyApplyTo = 'all';
     policyPriority = 0;
+    policyOperator = false;
     policyValues = {};
     policyExtra = '';
     policyProblem = undefined;
@@ -170,6 +198,7 @@
           applyTo: policyApplyTo,
           priority: Number.isFinite(policyPriority) ? Math.trunc(policyPriority) : 0,
           definition: joined.json,
+          ...(policyOperator ? { operator: true } : {}),
         }),
       () => {
         editingPolicy = false;
@@ -390,6 +419,63 @@
   {/if}
 </section>
 
+<section class="block" aria-label={t('rabbit.admin.settings')} data-testid="settings">
+  <h2 class="section"><Icon name="settings-gear" tone="blue" />{t('rabbit.admin.settings')}</h2>
+  {#if admin.settingsError !== undefined}
+    <p class="notice error" role="alert"><Icon name="error" /><span>{admin.settingsError}</span></p>
+  {:else if admin.settings !== undefined}
+    <div class="form">
+      <label class="field grow">
+        <span>{t('rabbit.admin.description')}</span>
+        <input
+          class="control"
+          value={settingsNow.description}
+          disabled={readOnly}
+          aria-label={t('rabbit.admin.description')}
+          oninput={(event) => {
+            settingsEdit = { ...settingsNow, description: event.currentTarget.value };
+          }}
+          autocomplete="off"
+        />
+      </label>
+      <label class="field">
+        <span>{t('rabbit.admin.vhostTags')}</span>
+        <input
+          class="control mono"
+          value={settingsNow.tags}
+          disabled={readOnly}
+          aria-label={t('rabbit.admin.vhostTags')}
+          oninput={(event) => {
+            settingsEdit = { ...settingsNow, tags: event.currentTarget.value };
+          }}
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </label>
+      <label class="field">
+        <span>{t('rabbit.admin.queueType')}</span>
+        <select
+          class="control"
+          value={settingsNow.queueType}
+          disabled={readOnly}
+          aria-label={t('rabbit.admin.queueType')}
+          onchange={(event) => {
+            settingsEdit = { ...settingsNow, queueType: event.currentTarget.value };
+          }}
+        >
+          {#each RABBIT_QUEUE_TYPES as kind (kind)}
+            <option value={kind}>{kind === '' ? t('rabbit.admin.queueTypeBroker') : kind}</option>
+          {/each}
+        </select>
+      </label>
+      {#if !readOnly}
+        <button type="button" class="button" disabled={busy || settingsEdit === undefined} onclick={saveSettings}><Icon name="save" />{t('rabbit.admin.saveSettings')}</button>
+      {/if}
+    </div>
+    <p class="hint">{t('rabbit.admin.settingsHint')}</p>
+  {/if}
+</section>
+
 <section class="block" aria-label={t('rabbit.admin.limits')} data-testid="limits">
   <h2 class="section"><Icon name="dashboard" tone="orange" />{t('rabbit.admin.limits')}</h2>
   {#if admin.limitsError !== undefined}
@@ -452,9 +538,9 @@
           </tr>
         </thead>
         <tbody>
-          {#each admin.policies as policy (policy.name)}
+          {#each admin.policies as policy (`${policy.operator === true ? 'o' : 'p'}/${policy.name}`)}
             <tr>
-              <td class="mono">{policy.name}</td>
+              <td class="mono">{policy.name}{#if policy.operator === true} <span class="badge outline" data-testid="operator-badge">{t('rabbit.admin.operatorBadge')}</span>{/if}</td>
               <td class="mono">{policy.pattern}</td>
               <td><span class="badge outline">{policy.applyTo}</span></td>
               <td class="num">{policy.priority}</td>
@@ -475,7 +561,7 @@
                     tone="red"
                     label={t('rabbit.admin.deletePolicy')}
                     disabled={busy}
-                    onclick={() => void run(() => rpc.request('deletePolicy', { name: policy.name }))}
+                    onclick={() => void run(() => rpc.request('deletePolicy', { name: policy.name, ...(policy.operator === true ? { operator: true } : {}) }))}
                   />
                 {/if}
               </td>
@@ -508,6 +594,13 @@
             <input class="control" type="number" bind:value={policyPriority} aria-label={t('rabbit.admin.priority')} />
           </label>
         </div>
+        <label class="check">
+          <input type="checkbox" bind:checked={policyOperator} data-testid="policy-operator" />
+          <span>{t('rabbit.admin.operatorPolicy')}</span>
+        </label>
+        {#if policyOperator}
+          <p class="hint">{t('rabbit.admin.operatorHint')}</p>
+        {/if}
         <div class="fields-box" role="group" aria-label={t('rabbit.admin.policy.settings')}>
           <span class="legend">{t('rabbit.admin.policy.settings')}</span>
           <div class="fields" data-testid="policy-fields">

@@ -90,7 +90,12 @@ export const rabbitPolicySchema = object({
   priority: number({ integer: true }),
   /** The definition as indented JSON. */
   definition: string({ maxLength: 1_000_000 }),
+  /** An operator policy (V13.39); left out for an ordinary one. */
+  operator: optional(boolean()),
 });
+
+/** The default queue types a virtual host may name; empty leaves it to the broker (V13.39). */
+export const RABBIT_QUEUE_TYPES = ['', 'classic', 'quorum', 'stream'] as const;
 
 /** The limits set on a virtual host; one that is left out has none (V13.35). */
 export const RABBIT_VHOST_LIMITS = ['max-connections', 'max-queues'] as const;
@@ -167,6 +172,15 @@ export const rabbitAdminSchema = object({
     }),
   ),
   limitsError: optional(string({ maxLength: 10_000 })),
+  /** The description, tags and default queue type of the virtual host (V13.39). */
+  settings: optional(
+    object({
+      description: string({ maxLength: 10_000 }),
+      tags: array(string({ maxLength: 1000 }), { maxLength: 100 }),
+      defaultQueueType: string({ maxLength: 100 }),
+    }),
+  ),
+  settingsError: optional(string({ maxLength: 10_000 })),
 });
 
 /** One reading of a queue for the live graphs: the counts and the broker's rates per second. */
@@ -330,11 +344,16 @@ export const rabbitObjectProtocol = defineProtocol({
           priority: number({ integer: true, min: -1_000_000, max: 1_000_000 }),
           /** A JSON object. */
           definition: string({ maxLength: 1_000_000 }),
+          /** Saves an operator policy (V13.39). */
+          operator: optional(boolean()),
         }),
         result: object({ done: boolean() }),
       },
       deletePolicy: {
-        params: object({ name: string({ minLength: 1, maxLength: 1000 }) }),
+        params: object({
+          name: string({ minLength: 1, maxLength: 1000 }),
+          operator: optional(boolean()),
+        }),
         result: object({ done: boolean() }),
       },
       /** Sets a limit of the virtual host, or lifts it when `value` is left out (V13.35). */
@@ -342,6 +361,15 @@ export const rabbitObjectProtocol = defineProtocol({
         params: object({
           limit: literal(...RABBIT_VHOST_LIMITS),
           value: optional(number({ integer: true, min: 0, max: 2_000_000_000 })),
+        }),
+        result: object({ done: boolean() }),
+      },
+      /** Changes the description, tags and default queue type of the virtual host (V13.39). */
+      setVhostSettings: {
+        params: object({
+          description: string({ maxLength: 1000 }),
+          tags: array(string({ maxLength: 100 }), { maxLength: 50 }),
+          defaultQueueType: literal(...RABBIT_QUEUE_TYPES),
         }),
         result: object({ done: boolean() }),
       },

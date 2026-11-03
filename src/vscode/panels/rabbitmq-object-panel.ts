@@ -202,18 +202,30 @@ export class RabbitObjectPanel implements vscode.Disposable {
     );
     this.rpc.handle('setPolicy', async (params) =>
       this.change(
-        vscode.l10n.t('Save the policy "{0}" in the virtual host "{1}"?', params.name, model.name),
+        params.operator === true
+          ? vscode.l10n.t(
+              'Save the operator policy "{0}" in the virtual host "{1}"?',
+              params.name,
+              model.name,
+            )
+          : vscode.l10n.t(
+              'Save the policy "{0}" in the virtual host "{1}"?',
+              params.name,
+              model.name,
+            ),
         vscode.l10n.t('Save'),
         false,
         async () => model.setPolicy(params),
       ),
     );
-    this.rpc.handle('deletePolicy', async ({ name }) =>
+    this.rpc.handle('deletePolicy', async ({ name, operator }) =>
       this.change(
-        vscode.l10n.t('Delete the policy "{0}"?', name),
+        operator === true
+          ? vscode.l10n.t('Delete the operator policy "{0}"?', name)
+          : vscode.l10n.t('Delete the policy "{0}"?', name),
         vscode.l10n.t('Delete'),
         true,
-        async () => model.deletePolicy(name),
+        async () => model.deletePolicy(name, operator === true),
       ),
     );
     this.rpc.handle('setLimit', async ({ limit, value }) =>
@@ -230,6 +242,14 @@ export class RabbitObjectPanel implements vscode.Disposable {
         false,
         async () => model.setLimit(limit, value),
         value === undefined ? undefined : vscode.l10n.t('Clients over the limit are refused.'),
+      ),
+    );
+    this.rpc.handle('setVhostSettings', async (params) =>
+      this.change(
+        vscode.l10n.t('Change the settings of the virtual host "{0}"?', model.name),
+        vscode.l10n.t('Change'),
+        false,
+        async () => model.setVhostSettings(params),
       ),
     );
     this.rpc.handle('setLive', async ({ on }) => {

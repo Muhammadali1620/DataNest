@@ -137,6 +137,8 @@ export interface RabbitPolicyInfo {
   readonly applyTo: string;
   readonly priority: number;
   readonly definition: Readonly<Record<string, unknown>>;
+  /** An operator policy (V13.39): set by the operator, it caps what ordinary policies give. */
+  readonly operator?: boolean;
 }
 
 export interface RabbitPolicyDeclaration extends RabbitPolicyInfo {
@@ -208,6 +210,13 @@ export type VhostLimitName = 'max-connections' | 'max-queues';
 export interface RabbitVhostLimits {
   readonly maxConnections?: number;
   readonly maxQueues?: number;
+}
+
+/** What a virtual host says about itself (V13.39). An empty queue type is the broker's own default. */
+export interface RabbitVhostSettings {
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly defaultQueueType: string;
 }
 
 /** A list the broker may have cut: `total` is how many there are. */
@@ -322,13 +331,18 @@ export interface RabbitSession {
   listPermissions(vhost: string): Promise<readonly RabbitPermissionInfo[]>;
   setPermission(vhost: string, permission: RabbitPermissionInfo): Promise<void>;
   clearPermission(vhost: string, user: string): Promise<void>;
+  /** The policies of a virtual host and, after them, its operator policies (V13.39). */
   listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]>;
   setPolicy(policy: RabbitPolicyDeclaration): Promise<void>;
-  deletePolicy(vhost: string, name: string): Promise<void>;
+  deletePolicy(vhost: string, name: string, operator?: boolean): Promise<void>;
   /** The broker's version, totals, listeners and every node with its resources (V13.35). */
   readCluster(): Promise<RabbitClusterInfo>;
   /** The settings of the broker as a whole. Needs the administrator tag. */
   listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]>;
+  /** The description, tags and default queue type of a virtual host (V13.39). */
+  readVhostSettings(vhost: string): Promise<RabbitVhostSettings>;
+  /** Changes them; a virtual host that exists keeps its queues and everything else. */
+  setVhostSettings(vhost: string, settings: RabbitVhostSettings): Promise<void>;
   /** The limits set on a virtual host. */
   listVhostLimits(vhost: string): Promise<RabbitVhostLimits>;
   /** Sets one limit of a virtual host; a negative value means no limit to the broker, so use `clearVhostLimit`. */

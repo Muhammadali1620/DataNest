@@ -20,6 +20,7 @@ import type {
   RabbitPermissionInfo,
   RabbitPolicyDeclaration,
   RabbitPolicyInfo,
+  RabbitVhostSettings,
   RabbitPublishRequest,
   RabbitQueueDeclaration,
   RabbitQueueInfo,
@@ -110,6 +111,11 @@ export class FakeBroker {
   version = '3.13.7';
   clusterName = 'rabbit@fake';
   readonly vhosts = new Set<string>(['/']);
+  /** The description, tags and default queue type of a virtual host (V13.39). */
+  readonly vhostSettings = new Map<
+    string,
+    { description: string; tags: string[]; defaultQueueType: string }
+  >();
   readonly queues: FakeQueue[] = [];
   readonly exchanges: FakeExchange[] = [
     { vhost: '/', name: '', type: 'direct', durable: true },
@@ -153,6 +159,12 @@ export class FakeBroker {
     priority: number;
     definition: Record<string, unknown>;
   }[] = [];
+  /** Operator policies (V13.39): the same shape, kept apart as the broker keeps them. */
+  readonly operatorPolicies: FakeBroker['policies'] = [];
+  /** False for a broker that predates operator policies: it answers 404 for them. */
+  operatorPoliciesSupported = true;
+  /** A status the operator policies answer with, to test a failure that is not a missing page. */
+  operatorPoliciesFailure: number | undefined;
 
   /** The nodes as the API words them; one by default. */
   nodes: Record<string, unknown>[] = [
@@ -480,6 +492,18 @@ export class FakeRabbitServer {
     if (kind === 'vhosts' && vhost !== undefined && method === 'PUT') {
       const existed = broker.vhosts.has(vhost);
       broker.vhosts.add(vhost);
+      const sent = (body ?? {}) as {
+        description?: string;
+        tags?: string;
+        default_queue_type?: string;
+      };
+      if (body !== undefined) {
+        broker.vhostSettings.set(vhost, {
+          description: sent.description ?? '',
+          tags: (sent.tags ?? '').split(',').filter((tag) => tag !== ''),
+          defaultQueueType: sent.default_queue_type ?? '',
+        });
+      }
       answer(existed ? 204 : 201);
       return;
     }
@@ -503,7 +527,16 @@ export class FakeRabbitServer {
           })),
         );
       } else if (broker.vhosts.has(vhost)) {
-        answer(200, { name: vhost, messages: 0 });
+        const settings = broker.vhostSettings.get(vhost);
+        answer(200, {
+          name: vhost,
+          messages: 0,
+          description: settings?.description ?? '',
+          tags: settings?.tags ?? [],
+          ...(settings?.defaultQueueType === undefined || settings.defaultQueueType === ''
+            ? {}
+            : { default_queue_type: settings.defaultQueueType }),
+        });
       } else {
         answer(404, { error: 'Object Not Found', reason: 'Not Found' });
       }
@@ -670,12 +703,21 @@ export class FakeRabbitServer {
       }
       return;
     }
-    if (kind === 'policies' && first !== undefined) {
+    if (kind === 'operator-policies' && broker.operatorPoliciesFailure !== undefined) {
+      answer(broker.operatorPoliciesFailure, { error: 'boom' });
+      return;
+    }
+    if (kind === 'operator-policies' && !broker.operatorPoliciesSupported) {
+      missing();
+      return;
+    }
+    if ((kind === 'policies' || kind === 'operator-policies') && first !== undefined) {
+      const store = kind === 'policies' ? broker.policies : broker.operatorPolicies;
       if (second === undefined && method === 'GET') {
-        answer(200, broker.policies.filter((p) => p.vhost === first).map(policyJson));
+        answer(200, store.filter((p) => p.vhost === first).map(policyJson));
         return;
       }
-      const index = broker.policies.findIndex((p) => p.vhost === first && p.name === second);
+      const index = store.findIndex((p) => p.vhost === first && p.name === second);
       if (second !== undefined && method === 'PUT') {
         const request = body as {
           pattern: string;
@@ -692,10 +734,10 @@ export class FakeRabbitServer {
           definition: request.definition,
         };
         if (index < 0) {
-          broker.policies.push(policy);
+          store.push(policy);
           answer(201);
         } else {
-          broker.policies[index] = policy;
+          store[index] = policy;
           answer(204);
         }
         return;
@@ -704,7 +746,7 @@ export class FakeRabbitServer {
         if (index < 0) {
           missing();
         } else {
-          broker.policies.splice(index, 1);
+          store.splice(index, 1);
           answer(204);
         }
         return;
@@ -1276,32 +1318,37 @@ export class FakeRabbitSession implements RabbitSession {
 
   listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]> {
     this.note('listPolicies');
-    return Promise.resolve(
-      this.broker.policies
+    const named = (list: typeof this.broker.policies, operator: boolean): RabbitPolicyInfo[] =>
+      list
         .filter((p) => p.vhost === vhost)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    );
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((p) => (operator ? { ...p, operator: true } : p));
+    return Promise.resolve([
+      ...named(this.broker.policies, false),
+      ...named(this.broker.operatorPolicies, true),
+    ]);
   }
 
   setPolicy(policy: RabbitPolicyDeclaration): Promise<void> {
     this.note('setPolicy');
-    const index = this.broker.policies.findIndex(
-      (p) => p.vhost === policy.vhost && p.name === policy.name,
-    );
-    const stored = { ...policy, definition: { ...policy.definition } };
+    const list = policy.operator === true ? this.broker.operatorPolicies : this.broker.policies;
+    const index = list.findIndex((p) => p.vhost === policy.vhost && p.name === policy.name);
+    const { operator: _operator, ...plain } = policy;
+    const stored = { ...plain, definition: { ...policy.definition } };
     if (index < 0) {
-      this.broker.policies.push(stored);
+      list.push(stored);
     } else {
-      this.broker.policies[index] = stored;
+      list[index] = stored;
     }
     return Promise.resolve();
   }
 
-  deletePolicy(vhost: string, name: string): Promise<void> {
+  deletePolicy(vhost: string, name: string, operator = false): Promise<void> {
     this.note('deletePolicy');
-    const index = this.broker.policies.findIndex((p) => p.vhost === vhost && p.name === name);
+    const list = operator ? this.broker.operatorPolicies : this.broker.policies;
+    const index = list.findIndex((p) => p.vhost === vhost && p.name === name);
     if (index >= 0) {
-      this.broker.policies.splice(index, 1);
+      list.splice(index, 1);
     }
     return Promise.resolve();
   }
@@ -1343,6 +1390,26 @@ export class FakeRabbitSession implements RabbitSession {
   listGlobalParameters(): Promise<readonly RabbitGlobalParameter[]> {
     this.note('listGlobalParameters');
     return Promise.resolve(this.broker.globalParameters.map((one) => ({ ...one })));
+  }
+
+  readVhostSettings(vhost: string): Promise<RabbitVhostSettings> {
+    this.note('readVhostSettings');
+    const settings = this.broker.vhostSettings.get(vhost);
+    return Promise.resolve({
+      description: settings?.description ?? '',
+      tags: [...(settings?.tags ?? [])],
+      defaultQueueType: settings?.defaultQueueType ?? '',
+    });
+  }
+
+  setVhostSettings(vhost: string, settings: RabbitVhostSettings): Promise<void> {
+    this.note('setVhostSettings');
+    this.broker.vhostSettings.set(vhost, {
+      description: settings.description,
+      tags: [...settings.tags],
+      defaultQueueType: settings.defaultQueueType,
+    });
+    return Promise.resolve();
   }
 
   listVhostLimits(vhost: string): Promise<RabbitVhostLimits> {

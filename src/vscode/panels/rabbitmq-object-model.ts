@@ -28,6 +28,7 @@ import {
   type RabbitObjectState,
   type RabbitSampleView,
   MAX_RABBIT_SAMPLES,
+  RABBIT_QUEUE_TYPES,
   RABBIT_VHOST_LIMITS,
 } from '../../shared/protocols/rabbitmq-object';
 import { redisValueBytes, type RedisValue, redisValueOf } from '../../shared/redis-value';
@@ -77,6 +78,8 @@ export interface RabbitPolicyParams {
   readonly priority: number;
   /** A JSON object. */
   readonly definition: string;
+  /** An operator policy (V13.39). */
+  readonly operator?: boolean;
 }
 
 /** `2026-11-02 10:15:00 UTC`; empty when the broker did not say. */
@@ -435,6 +438,7 @@ export class RabbitObjectModel {
         applyTo: policy.applyTo,
         priority: policy.priority,
         definition: jsonText(policy.definition),
+        ...(policy.operator === true ? { operator: true } : {}),
       }));
     } catch (error) {
       admin.policiesError = failed(error);
@@ -447,6 +451,16 @@ export class RabbitObjectModel {
       };
     } catch (error) {
       admin.limitsError = failed(error);
+    }
+    try {
+      const settings = await session.readVhostSettings(vhost);
+      admin.settings = {
+        description: settings.description,
+        tags: [...settings.tags],
+        defaultQueueType: settings.defaultQueueType,
+      };
+    } catch (error) {
+      admin.settingsError = failed(error);
     }
     this.bindingList = [];
     return {
@@ -724,6 +738,32 @@ export class RabbitObjectModel {
     return this.state();
   }
 
+  /** Changes the description, tags and default queue type of the virtual host (V13.39). */
+  async setVhostSettings(params: {
+    readonly description: string;
+    readonly tags: readonly string[];
+    readonly defaultQueueType: string;
+  }): Promise<RabbitObjectState> {
+    this.requireWritable();
+    this.requireVhostPage();
+    const tags = params.tags.map((tag) => tag.trim()).filter((tag) => tag !== '');
+    if (tags.some((tag) => /[,\s]/u.test(tag))) {
+      throw new DbError('syntax', msg('A tag is one word, without commas or spaces'));
+    }
+    if (!(RABBIT_QUEUE_TYPES as readonly string[]).includes(params.defaultQueueType)) {
+      throw new DbError('syntax', msg('The default queue type is classic, quorum or stream'));
+    }
+    await (
+      await this.deps.session()
+    ).setVhostSettings(this.deps.vhost, {
+      description: params.description.trim(),
+      tags: [...new Set(tags)],
+      defaultQueueType: params.defaultQueueType,
+    });
+    await this.refresh();
+    return this.state();
+  }
+
   async setPolicy(params: RabbitPolicyParams): Promise<RabbitObjectState> {
     this.requireWritable();
     this.requireVhostPage();
@@ -754,15 +794,16 @@ export class RabbitObjectModel {
       applyTo: params.applyTo,
       priority: params.priority,
       definition,
+      ...(params.operator === true ? { operator: true } : {}),
     });
     await this.refresh();
     return this.state();
   }
 
-  async deletePolicy(name: string): Promise<RabbitObjectState> {
+  async deletePolicy(name: string, operator = false): Promise<RabbitObjectState> {
     this.requireWritable();
     this.requireVhostPage();
-    await (await this.deps.session()).deletePolicy(this.deps.vhost, name);
+    await (await this.deps.session()).deletePolicy(this.deps.vhost, name, operator);
     await this.refresh();
     return this.state();
   }

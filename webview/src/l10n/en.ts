@@ -370,6 +370,18 @@ export const en = {
   'rabbit.admin.policies': 'Policies',
   'rabbit.admin.newPolicy': 'New policy',
   'rabbit.admin.noPolicies': 'No policies in this virtual host',
+  'rabbit.admin.operatorBadge': 'operator',
+  'rabbit.admin.settings': 'Settings',
+  'rabbit.admin.description': 'Description',
+  'rabbit.admin.vhostTags': 'Tags (separated by commas)',
+  'rabbit.admin.queueType': 'Default queue type',
+  'rabbit.admin.queueTypeBroker': "the broker's own",
+  'rabbit.admin.saveSettings': 'Save the settings',
+  'rabbit.admin.settingsHint':
+    'The default queue type is used for a queue declared without a type in this virtual host.',
+  'rabbit.admin.operatorPolicy': 'Operator policy',
+  'rabbit.admin.operatorHint':
+    'An operator policy is kept apart from the ordinary ones and caps what they give (for example a largest message TTL or queue length); the broker takes the smaller value.',
   'rabbit.admin.pattern': 'Pattern',
   'rabbit.admin.appliesTo': 'Applies to',
   'rabbit.admin.priority': 'Priority',

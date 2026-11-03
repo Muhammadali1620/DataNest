@@ -12,8 +12,10 @@
 // - Standard error is merged into standard output (`2>&1`), so an error stays in its place
 //   between the markers. Each statement is framed by random markers printed with `.print`.
 // - Answers are JSON (`-json`). That is what the shell can do: the names of the columns of a
-//   result with no rows are not known, a BLOB comes back as text, and a whole number beyond
-//   2^53 loses its last digits. The Python helper has none of those limits.
+//   result with no rows are not known (no output mode of the shell prints them), and a BLOB
+//   comes back as text, a byte for a character, which cannot be told from text. A whole number
+//   beyond 2^53 is kept whole: it is read from the text of the answer before it becomes a JS
+//   number (`bigIntegersAsText`). The Python helper has none of the first two limits.
 // - The shell cannot say whether a transaction is open. It is followed from the statements
 //   (`BEGIN`, `COMMIT`, `ROLLBACK`) and, when it may differ — after a failed statement or a
 //   savepoint — asked from the file: `BEGIN` fails exactly when one is open.
@@ -93,6 +95,48 @@ function refusalError(reason: string): DbError {
     default:
       return new DbError('syntax', msg('The statement is empty'));
   }
+}
+
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+/** A JSON number, read from where `lastIndex` points. */
+const NUMBER = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/uy;
+
+/**
+ * The answer text with every whole number beyond 2^53 written as `{"i":"digits"}` (the form the
+ * Python helper uses), so reading it as JSON loses nothing. Strings, with their keys, are
+ * skipped as they are: only a number outside quotes is looked at, and only a whole one (no
+ * point, no exponent).
+ */
+export function bigIntegersAsText(json: string): string {
+  let out = '';
+  let at = 0;
+  while (at < json.length) {
+    const char = json.charAt(at);
+    if (char === '"') {
+      let end = at + 1;
+      while (end < json.length && json.charAt(end) !== '"') {
+        end += json.charAt(end) === '\\' ? 2 : 1;
+      }
+      out += json.slice(at, end + 1);
+      at = end + 1;
+      continue;
+    }
+    if (char === '-' || (char >= '0' && char <= '9')) {
+      NUMBER.lastIndex = at;
+      const token = NUMBER.exec(json)?.[0] ?? char;
+      const big = /^-?\d+$/u.test(token) && token.length > 15 && absolute(BigInt(token)) > MAX_SAFE;
+      out += big ? `{"i":"${token}"}` : token;
+      at += token.length;
+      continue;
+    }
+    out += char;
+    at += 1;
+  }
+  return out;
+}
+
+function absolute(value: bigint): bigint {
+  return value < 0n ? -value : value;
 }
 
 interface Segments {
@@ -237,7 +281,7 @@ export class SqliteCliWriter implements SqliteWriter {
     let rows: Record<string, unknown>[] | undefined;
     if (text.startsWith('[')) {
       try {
-        rows = JSON.parse(text) as Record<string, unknown>[];
+        rows = JSON.parse(bigIntegersAsText(text)) as Record<string, unknown>[];
       } catch {
         rows = undefined;
       }

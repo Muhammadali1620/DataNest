@@ -45,11 +45,20 @@ async function waitForRegistry(): Promise<void> {
   }
 }
 
-async function register(subject: string, schema: string, schemaType?: string): Promise<number> {
+async function register(
+  subject: string,
+  schema: string,
+  schemaType?: string,
+  references?: { name: string; subject: string; version: number }[],
+): Promise<number> {
   const response = await fetch(`${TEST_REGISTRY.url}/subjects/${subject}/versions`, {
     method: 'POST',
     headers: { 'content-type': 'application/vnd.schemaregistry.v1+json' },
-    body: JSON.stringify({ schema, ...(schemaType === undefined ? {} : { schemaType }) }),
+    body: JSON.stringify({
+      schema,
+      ...(schemaType === undefined ? {} : { schemaType }),
+      ...(references === undefined ? {} : { references }),
+    }),
   });
   if (!response.ok) {
     throw new Error(`Registering ${subject}: ${response.status} ${await response.text()}`);
@@ -71,6 +80,14 @@ const PROTO = `syntax = "proto3";
 package demo;
 message Order { int32 id = 1; string item = 2; repeated int32 qty = 3; Status st = 4; enum Status { NEW = 0; DONE = 1; } }
 message Refund { int32 order = 1; }`;
+const MONEY_PROTO = `syntax = "proto3";
+package common;
+message Money { string cur = 1; int64 units = 2; }`;
+const SHOP_PROTO = `syntax = "proto3";
+package shop;
+import "common/money.proto";
+import "google/protobuf/timestamp.proto";
+message Sale { common.Money price = 1; google.protobuf.Timestamp at = 2; string note = 3; }`;
 const JSON_SCHEMA = '{"type":"object","properties":{"a":{"type":"string"}}}';
 
 describe('Kafka through a schema registry (V13.34)', () => {
@@ -90,6 +107,11 @@ describe('Kafka through a schema registry (V13.34)', () => {
     const avro = await register(`${topic}-avro`, AVRO);
     const proto = await register(`${topic}-proto`, PROTO, 'PROTOBUF');
     const json = await register(`${topic}-json`, JSON_SCHEMA, 'JSON');
+    const moneySubject = `${topic}-money`;
+    await register(moneySubject, MONEY_PROTO, 'PROTOBUF');
+    const sale = await register(`${topic}-sale`, SHOP_PROTO, 'PROTOBUF', [
+      { name: 'common/money.proto', subject: moneySubject, version: 1 },
+    ]);
     const producer = outside.producer();
     await producer.connect();
     await producer.send({
@@ -112,6 +134,15 @@ describe('Kafka through a schema registry (V13.34)', () => {
         { value: framed(json, Buffer.from('{"a":"b"}')) },
         { value: Buffer.from('plain text, no schema') },
         { value: framed(987654, Buffer.from('unknown id')) },
+        {
+          value: framed(
+            sale,
+            pbIndexes([0]),
+            pbBytes(1, Buffer.concat([pbBytes(1, 'EUR'), pbVarint(2, 12)])),
+            pbBytes(2, pbVarint(1, 1_700_000_000)),
+            pbBytes(3, 'paid'),
+          ),
+        },
       ],
     });
     await producer.disconnect();
@@ -147,6 +178,23 @@ describe('Kafka through a schema registry (V13.34)', () => {
     expect(shown[4]).toEqual({ value: 'plain text, no schema', schema: undefined });
     expect(shown[5]?.schema).toBeUndefined();
     expect(messages[5]?.value?.[0]).toBe(0);
+  });
+
+  it('reads the types of the files a Protobuf schema imports (V13.39)', async () => {
+    const messages = await session.readMessages({
+      topic,
+      partition: 0,
+      count: 10,
+      maxBytes: 1_000_000,
+      fromOffset: '6',
+    });
+    const [sale] = messages;
+    expect(sale?.schema?.format).toBe('PROTOBUF');
+    expect(JSON.parse(Buffer.from(sale?.value ?? []).toString('utf8'))).toEqual({
+      price: { cur: 'EUR', units: 12 },
+      at: { seconds: 1_700_000_000 },
+      note: 'paid',
+    });
   });
 
   it('takes no decoding from a connection without a registry', async () => {

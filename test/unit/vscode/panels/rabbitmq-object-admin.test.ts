@@ -418,6 +418,77 @@ describe('a virtual host page', () => {
     expect(session.broker.policies.map((p) => p.name)).toEqual(['limit']);
   });
 
+  it('lists, saves and deletes an operator policy apart from the ordinary ones (V13.39)', async () => {
+    const { vhost, session } = seeded();
+    const state = await vhost.setPolicy({
+      name: 'cap',
+      pattern: '.*',
+      applyTo: 'queues',
+      priority: 0,
+      definition: '{"max-length": 100}',
+      operator: true,
+    });
+    expect(session.broker.operatorPolicies.map((p) => p.name)).toEqual(['cap']);
+    expect(session.broker.policies.map((p) => p.name)).toEqual(['ttl']);
+    expect(state.admin?.policies.map((p) => [p.name, p.operator === true])).toEqual([
+      ['ttl', false],
+      ['cap', true],
+    ]);
+    // The same name may be an ordinary policy as well: the two kinds are kept apart.
+    await vhost.setPolicy({
+      name: 'cap',
+      pattern: '.*',
+      applyTo: 'all',
+      priority: 1,
+      definition: '{"message-ttl": 5}',
+    });
+    expect(session.broker.policies.map((p) => p.name)).toEqual(['ttl', 'cap']);
+    await vhost.deletePolicy('cap', true);
+    expect(session.broker.operatorPolicies).toEqual([]);
+    expect(session.broker.policies.map((p) => p.name)).toEqual(['ttl', 'cap']);
+    await vhost.deletePolicy('cap');
+    expect(session.broker.policies.map((p) => p.name)).toEqual(['ttl']);
+  });
+
+  it('shows and changes the description, tags and default queue type of a host (V13.39)', async () => {
+    const { vhost, session } = seeded();
+    const first = await vhost.refresh();
+    expect(first.admin?.settings).toEqual({ description: '', tags: [], defaultQueueType: '' });
+    const state = await vhost.setVhostSettings({
+      description: '  Billing  ',
+      tags: [' prod ', 'prod', ''],
+      defaultQueueType: 'quorum',
+    });
+    expect(session.broker.vhostSettings.get('/')).toEqual({
+      description: 'Billing',
+      tags: ['prod'],
+      defaultQueueType: 'quorum',
+    });
+    expect(state.admin?.settings).toEqual({
+      description: 'Billing',
+      tags: ['prod'],
+      defaultQueueType: 'quorum',
+    });
+    await expect(
+      vhost.setVhostSettings({ description: '', tags: ['a b'], defaultQueueType: '' }),
+    ).rejects.toThrow(/one word/u);
+    await expect(
+      vhost.setVhostSettings({ description: '', tags: ['a,b'], defaultQueueType: '' }),
+    ).rejects.toThrow(/one word/u);
+    await expect(
+      vhost.setVhostSettings({ description: '', tags: [], defaultQueueType: 'lazy' }),
+    ).rejects.toThrow(/classic, quorum or stream/u);
+  });
+
+  it('says why the settings of a host cannot be read, and the rest still shows (V13.39)', async () => {
+    const { vhost, session } = seeded();
+    session.failures.set('readVhostSettings', new Error('plain'));
+    const state = await vhost.refresh();
+    expect(state.admin?.settingsError).toBe('plain');
+    expect(state.admin?.settings).toBeUndefined();
+    expect(state.admin?.policies.length).toBeGreaterThan(0);
+  });
+
   it('is refused on a read-only connection, and its changes belong to a host page only', async () => {
     const { vhost, session } = setup({ readOnly: true });
     await expect(vhost.closeConnection('c')).rejects.toMatchObject({ code: 'permission-denied' });

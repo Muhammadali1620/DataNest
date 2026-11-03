@@ -1070,6 +1070,114 @@ describe('RabbitMQ administration over HTTP (V13.28)', () => {
     expect((await failure(session.deletePolicy('/', 'ttl'))).code).toBe('not-found');
   });
 
+  it('sets, lists and deletes operator policies apart from the ordinary ones (V13.39)', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    await session.setPolicy({
+      vhost: '/',
+      name: 'cap',
+      pattern: '.*',
+      applyTo: 'queues',
+      priority: 0,
+      definition: { 'max-length': 100 },
+      operator: true,
+    });
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/operator-policies/%2F/cap',
+      body: { pattern: '.*', 'apply-to': 'queues', definition: { 'max-length': 100 } },
+    });
+    await session.setPolicy({
+      vhost: '/',
+      name: 'cap',
+      pattern: '.*',
+      applyTo: 'all',
+      priority: 1,
+      definition: { 'message-ttl': 5 },
+    });
+    expect(server.requests.at(-1)?.path).toBe('/api/policies/%2F/cap');
+    const listed = await session.listPolicies('/');
+    expect(listed.map((policy) => [policy.name, policy.operator === true])).toEqual([
+      ['cap', false],
+      ['cap', true],
+    ]);
+    await session.deletePolicy('/', 'cap', true);
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'DELETE',
+      path: '/api/operator-policies/%2F/cap',
+    });
+    expect((await session.listPolicies('/')).map((policy) => policy.operator === true)).toEqual([
+      false,
+    ]);
+    expect((await failure(session.deletePolicy('/', 'cap', true))).code).toBe('not-found');
+  });
+
+  it('lists the policies of a broker that knows no operator policies', async () => {
+    const { server, port } = await start();
+    server.broker.operatorPoliciesSupported = false;
+    const session = await openRabbitSession(config(port));
+    await session.setPolicy({
+      vhost: '/',
+      name: 'ttl',
+      pattern: '.*',
+      applyTo: 'all',
+      priority: 0,
+      definition: { 'message-ttl': 1 },
+    });
+    expect((await session.listPolicies('/')).map((policy) => policy.name)).toEqual(['ttl']);
+  });
+
+  it('does not hide a failure of the operator policies that is not a missing page', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    server.broker.operatorPoliciesFailure = 500;
+    await expect(session.listPolicies('/')).rejects.toBeDefined();
+  });
+
+  it('reads and changes the settings of a virtual host (V13.39)', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    expect(await session.readVhostSettings('/')).toEqual({
+      description: '',
+      tags: [],
+      defaultQueueType: '',
+    });
+    await session.setVhostSettings('/', {
+      description: 'Billing',
+      tags: ['prod', 'eu'],
+      defaultQueueType: 'quorum',
+    });
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'PUT',
+      path: '/api/vhosts/%2F',
+      body: { description: 'Billing', tags: 'prod,eu', default_queue_type: 'quorum' },
+    });
+    expect(await session.readVhostSettings('/')).toEqual({
+      description: 'Billing',
+      tags: ['prod', 'eu'],
+      defaultQueueType: 'quorum',
+    });
+    // Without a type, none is sent: the broker keeps its own default.
+    await session.setVhostSettings('/', { description: '', tags: [], defaultQueueType: '' });
+    expect(server.requests.at(-1)?.body).toEqual({ description: '', tags: '' });
+  });
+
+  it('reads the tags of a host when an older broker words them as one text (V13.39)', async () => {
+    const { server, port } = await start();
+    const session = await openRabbitSession(config(port));
+    server.failWith = {
+      status: 200,
+      body: JSON.stringify({ name: '/', description: 7, tags: 'a, b,,c' }),
+    };
+    expect(await session.readVhostSettings('/')).toEqual({
+      description: '',
+      tags: ['a', 'b', 'c'],
+      defaultQueueType: '',
+    });
+    server.failWith = { status: 200, body: JSON.stringify({ name: '/', tags: 5 }) };
+    expect((await session.readVhostSettings('/')).tags).toEqual([]);
+  });
+
   it('reads a policy without an apply-to as one for everything', () => {
     expect(policyOf({ name: 'p', pattern: '.*', definition: { x: 1 } })).toEqual({
       name: 'p',

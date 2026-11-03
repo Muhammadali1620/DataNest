@@ -64,6 +64,8 @@ function inner(overrides: Partial<RabbitSession> = {}): RabbitSession {
     listPolicies: () => Promise.resolve([]),
     setPolicy: () => Promise.resolve(),
     deletePolicy: () => Promise.resolve(),
+    readVhostSettings: () => Promise.resolve({ description: '', tags: [], defaultQueueType: '' }),
+    setVhostSettings: () => Promise.resolve(),
     readCluster: () =>
       Promise.resolve({
         clusterName: '',
@@ -124,6 +126,7 @@ describe('ManagedRabbitSession', () => {
         clearPermission: note('clearPermission'),
         setPolicy: note('setPolicy'),
         deletePolicy: note('deletePolicy'),
+        setVhostSettings: note('setVhostSettings'),
       }),
       { onLinkLost: () => undefined },
     );
@@ -190,6 +193,13 @@ describe('ManagedRabbitSession', () => {
     };
     await managed.setPolicy(policy);
     await managed.deletePolicy('/', 'p');
+    expect(await managed.readVhostSettings('/')).toEqual({
+      description: '',
+      tags: [],
+      defaultQueueType: '',
+    });
+    const settings = { description: 'd', tags: ['t'], defaultQueueType: 'quorum' };
+    await managed.setVhostSettings('/', settings);
     expect(calls).toEqual([
       'deleteQueue "/" "q"',
       'purgeQueue "/" "q"',
@@ -208,6 +218,26 @@ describe('ManagedRabbitSession', () => {
       'clearPermission "/" "u"',
       `setPolicy ${JSON.stringify(policy)}`,
       'deletePolicy "/" "p"',
+      `setVhostSettings "/" ${JSON.stringify(settings)}`,
+    ]);
+  });
+
+  it('passes the operator flag of a policy to the session (V13.39)', async () => {
+    const calls: unknown[][] = [];
+    const managed = new ManagedRabbitSession(
+      inner({
+        deletePolicy: (...args: unknown[]) => {
+          calls.push(args);
+          return Promise.resolve();
+        },
+      }),
+      { onLinkLost: () => undefined },
+    );
+    await managed.deletePolicy('/', 'p', true);
+    await managed.deletePolicy('/', 'p');
+    expect(calls).toEqual([
+      ['/', 'p', true],
+      ['/', 'p'],
     ]);
   });
 

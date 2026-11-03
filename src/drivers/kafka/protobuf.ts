@@ -1,8 +1,8 @@
 // Protobuf decoding by the `.proto` text the schema registry keeps (V13.34). A small parser
 // reads what a message needs (messages, nested messages, enums, `repeated`, `map<,>`,
-// `oneof`); imports and options are skipped, and a field whose type cannot be found (it
-// lives in an imported file) is shown by its number with the plain wire value. Only reading
-// is done. The message is chosen by the index path that the Confluent wire format carries.
+// `oneof`); options are skipped. Imports are read by the registry client, which adds the types
+// of the imported files; a field whose type still cannot be found is shown by its number with
+// the plain wire value. Only reading is done. The message is chosen by the index path that the Confluent wire format carries.
 
 const MAX_DEPTH = 32;
 
@@ -67,6 +67,53 @@ function tokens(text: string): string[] {
     }
   }
   return found;
+}
+
+/**
+ * The well-known types that schemas import (`google/protobuf/*.proto`). A registry may or may
+ * not list them among a schema's references, so they are always known here.
+ */
+const WELL_KNOWN_PROTO = `
+syntax = "proto3";
+package google.protobuf;
+message Timestamp { int64 seconds = 1; int32 nanos = 2; }
+message Duration { int64 seconds = 1; int32 nanos = 2; }
+message Empty {}
+message Any { string type_url = 1; bytes value = 2; }
+message FieldMask { repeated string paths = 1; }
+message DoubleValue { double value = 1; }
+message FloatValue { float value = 1; }
+message Int64Value { int64 value = 1; }
+message UInt64Value { uint64 value = 1; }
+message Int32Value { int32 value = 1; }
+message UInt32Value { uint32 value = 1; }
+message BoolValue { bool value = 1; }
+message StringValue { string value = 1; }
+message BytesValue { bytes value = 1; }
+`;
+
+/** The file names (as written in an `import`) that the built-in well-known types stand for. */
+export function isWellKnownImport(name: string): boolean {
+  return /^google\/protobuf\/(timestamp|duration|empty|any|field_mask|wrappers)\.proto$/u.test(
+    name,
+  );
+}
+
+/**
+ * Makes the types of `extra` known to `file`, so a field of an imported type decodes as that
+ * type. A name `file` already has is kept (the schema's own wins over an import).
+ */
+export function addTypes(file: ProtoFile, extra: ProtoFile): void {
+  for (const [name, def] of extra.byName) {
+    if (!file.byName.has(name)) {
+      file.byName.set(name, def);
+    }
+  }
+}
+
+/** Adds the built-in well-known types to a file. */
+export function addWellKnownTypes(file: ProtoFile): void {
+  addTypes(file, parseProto(WELL_KNOWN_PROTO));
 }
 
 /** Reads the messages and enums of a `.proto` text. */

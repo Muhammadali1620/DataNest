@@ -371,6 +371,18 @@ export const ru: Record<MessageKey, string> = {
   'rabbit.admin.policies': 'Политики',
   'rabbit.admin.newPolicy': 'Новая политика',
   'rabbit.admin.noPolicies': 'В этом виртуальном хосте нет политик',
+  'rabbit.admin.operatorBadge': 'оператор',
+  'rabbit.admin.settings': 'Настройки',
+  'rabbit.admin.description': 'Описание',
+  'rabbit.admin.vhostTags': 'Метки (через запятую)',
+  'rabbit.admin.queueType': 'Тип очереди по умолчанию',
+  'rabbit.admin.queueTypeBroker': 'выбор брокера',
+  'rabbit.admin.saveSettings': 'Сохранить настройки',
+  'rabbit.admin.settingsHint':
+    'Тип очереди по умолчанию берётся для очереди, объявленной без типа в этом виртуальном хосте.',
+  'rabbit.admin.operatorPolicy': 'Политика оператора',
+  'rabbit.admin.operatorHint':
+    'Политика оператора хранится отдельно от обычных и ограничивает то, что они дают (например, наибольший срок жизни сообщения или длину очереди); брокер берёт меньшее значение.',
   'rabbit.admin.pattern': 'Шаблон',
   'rabbit.admin.appliesTo': 'Действует на',
   'rabbit.admin.priority': 'Приоритет',

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DbError } from '../../../src/core/errors';
 import type { RemoteFileSpec } from '../../../src/services/remote-snapshots';
 import {
+  bigIntegersAsText,
   CLI_COMMAND,
   CLI_SCRIPT,
   cliRefusal,
@@ -73,6 +74,43 @@ describe('what is refused before it is sent', () => {
 
   it('does not refuse a dot inside a line', () => {
     expect(cliRefusal('SELECT t.a, 1.5 FROM main.t')).toBeUndefined();
+  });
+});
+
+describe('bigIntegersAsText (V13.39)', () => {
+  it('writes a whole number beyond 2^53 in the form of the Python helper, and nothing else', () => {
+    const text = bigIntegersAsText(
+      '[{"a":9223372036854775807,"b":-9223372036854775808,"c":9007199254740991,"d":9007199254740993}]',
+    );
+    expect(JSON.parse(text)).toEqual([
+      {
+        a: { i: '9223372036854775807' },
+        b: { i: '-9223372036854775808' },
+        c: 9007199254740991,
+        d: { i: '9007199254740993' },
+      },
+    ]);
+  });
+
+  it('leaves small numbers, floats and exponents as they are', () => {
+    const json = '[{"x":0,"y":-5,"z":1.499999999999999781e+300,"w":123456789012345678.5,"v":1e22}]';
+    expect(bigIntegersAsText(json)).toBe(json);
+  });
+
+  it('does not look inside a string, a key or an escaped quote', () => {
+    const json =
+      '[{"9223372036854775807":"id 9223372036854775807 \\" 9223372036854775807","n":null}]';
+    expect(bigIntegersAsText(json)).toBe(json);
+    expect(JSON.parse(bigIntegersAsText(json))).toEqual([
+      { '9223372036854775807': 'id 9223372036854775807 " 9223372036854775807', n: null },
+    ]);
+  });
+
+  it('handles an empty answer, true, false and nested arrays', () => {
+    expect(bigIntegersAsText('')).toBe('');
+    expect(bigIntegersAsText('[{"a":[1,[9223372036854775806],true,false]}]')).toBe(
+      '[{"a":[1,[{"i":"9223372036854775806"}],true,false]}]',
+    );
   });
 });
 
@@ -221,6 +259,25 @@ describe.skipIf(!HAS_SQLITE_CLI)('with a real sqlite3 program', () => {
       const outcome = await writer.run('SELECT * FROM t');
       expect(outcome.columns).toBeUndefined();
       expect(outcome.rows).toBeUndefined();
+    });
+
+    it('keeps a whole number beyond 2^53 whole (V13.39)', async () => {
+      const writer = await open();
+      await writer.run('CREATE TABLE big (id INTEGER, note TEXT)');
+      await writer.run(
+        "INSERT INTO big VALUES (9223372036854775807, 'id 9223372036854775807'), (-9223372036854775808, 'low'), (9007199254740993, 'edge'), (42, 'small')",
+      );
+      const outcome = await writer.run('SELECT id, note FROM big ORDER BY rowid');
+      expect(outcome.rows).toEqual([
+        [{ kind: 'bigint', text: '9223372036854775807' }, 'id 9223372036854775807'],
+        [{ kind: 'bigint', text: '-9223372036854775808' }, 'low'],
+        [{ kind: 'bigint', text: '9007199254740993' }, 'edge'],
+        [42, 'small'],
+      ]);
+      const returned = await writer.run(
+        'INSERT INTO big VALUES (9223372036854775806, NULL) RETURNING id',
+      );
+      expect(returned.rows).toEqual([[{ kind: 'bigint', text: '9223372036854775806' }]]);
     });
 
     it('does not report a stale count for a statement that changes no rows', async () => {

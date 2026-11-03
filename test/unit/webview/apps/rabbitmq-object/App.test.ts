@@ -110,6 +110,7 @@ async function open(
     'clearPermission',
     'setPolicy',
     'deletePolicy',
+    'setVhostSettings',
   ] as const) {
     host.handle(method, reply(method, { done: true }));
   }
@@ -718,6 +719,94 @@ describe('RabbitMQ page: a virtual host', () => {
         },
       ]);
     });
+  });
+
+  it('marks an operator policy, deletes it as one, and saves a new one as one (V13.39)', async () => {
+    const operator = {
+      name: 'cap',
+      pattern: '.*',
+      applyTo: 'queues',
+      priority: 0,
+      definition: '{\n  "max-length": 100\n}',
+      operator: true,
+    };
+    const opened = await open(
+      vhostState({
+        policies: [
+          { name: 'ttl', pattern: '^tmp\\.', applyTo: 'queues', priority: 5, definition: '{}' },
+          operator,
+        ],
+      }),
+    );
+    const table = within(screen.getByTestId('policies'));
+    expect(table.getAllByTestId('operator-badge')).toHaveLength(1);
+    const operatorRow = within(
+      table.getByTestId('operator-badge').closest<HTMLElement>('tr') ?? document.body,
+    );
+    await fireEvent.click(operatorRow.getByRole('button', { name: 'Delete the policy' }));
+    await waitFor(() => {
+      expect(sent(opened, 'deletePolicy')).toEqual([{ name: 'cap', operator: true }]);
+    });
+    await fireEvent.click(operatorRow.getByRole('button', { name: 'Edit the policy' }));
+    const form = within(screen.getByTestId('policy-form'));
+    expect(form.getByTestId<HTMLInputElement>('policy-operator').checked).toBe(true);
+    expect(form.getByText(/caps what they give/u)).toBeTruthy();
+    await fireEvent.click(form.getByRole('button', { name: 'Save the policy' }));
+    await waitFor(() => {
+      expect(sent(opened, 'setPolicy')).toEqual([
+        expect.objectContaining({ name: 'cap', operator: true }),
+      ]);
+    });
+  });
+
+  it('saves an ordinary policy without the operator flag after the box is cleared', async () => {
+    const opened = await open(vhostState());
+    await fireEvent.click(
+      within(screen.getByTestId('policies')).getByRole('button', { name: 'New policy' }),
+    );
+    const form = within(screen.getByTestId('policy-form'));
+    expect(form.getByTestId<HTMLInputElement>('policy-operator').checked).toBe(false);
+    await fireEvent.input(form.getByLabelText('Name'), { target: { value: 'plain' } });
+    await fireEvent.input(form.getByLabelText('Pattern'), { target: { value: '.*' } });
+    await fireEvent.click(form.getByTestId('policy-operator'));
+    await fireEvent.click(form.getByTestId('policy-operator'));
+    await fireEvent.click(form.getByRole('button', { name: 'Save the policy' }));
+    await waitFor(() => {
+      expect(sent(opened, 'setPolicy')).toHaveLength(1);
+    });
+    expect(sent(opened, 'setPolicy')[0]).not.toHaveProperty('operator');
+  });
+
+  it('shows the settings of a host and saves what was changed (V13.39)', async () => {
+    const opened = await open(
+      vhostState({
+        settings: { description: 'Billing', tags: ['prod'], defaultQueueType: 'quorum' },
+      }),
+    );
+    const block = within(screen.getByTestId('settings'));
+    expect(block.getByLabelText<HTMLInputElement>('Description').value).toBe('Billing');
+    expect(block.getByLabelText<HTMLInputElement>('Tags (separated by commas)').value).toBe('prod');
+    expect(block.getByLabelText<HTMLSelectElement>('Default queue type').value).toBe('quorum');
+    const save = block.getByRole('button', { name: 'Save the settings' });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.input(block.getByLabelText('Tags (separated by commas)'), {
+      target: { value: 'prod, eu ,,' },
+    });
+    await fireEvent.change(block.getByLabelText('Default queue type'), { target: { value: '' } });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    await fireEvent.click(save);
+    await waitFor(() => {
+      expect(sent(opened, 'setVhostSettings')).toEqual([
+        { description: 'Billing', tags: ['prod', 'eu'], defaultQueueType: '' },
+      ]);
+    });
+  });
+
+  it('shows why the settings of a host are missing (V13.39)', async () => {
+    await open(vhostState({ settingsError: 'no right' }));
+    expect(within(screen.getByTestId('settings')).getByRole('alert').textContent).toContain(
+      'no right',
+    );
   });
 
   it('deletes a policy', async () => {

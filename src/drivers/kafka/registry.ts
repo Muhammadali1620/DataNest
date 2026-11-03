@@ -5,13 +5,28 @@
 // registry cannot explain stays as it is: the page never loses the bytes.
 
 import { decodeAvro, parseAvroSchema, type AvroType } from './avro';
-import { decodeProtobuf, parseProto, type ProtoFile } from './protobuf';
+import {
+  addTypes,
+  addWellKnownTypes,
+  decodeProtobuf,
+  isWellKnownImport,
+  parseProto,
+  type ProtoFile,
+} from './protobuf';
 
 export type RegistryFormat = 'AVRO' | 'PROTOBUF' | 'JSON';
+
+/** A schema another one refers to: the subject and version it is kept under, and its import name. */
+export interface RegistryReference {
+  readonly name: string;
+  readonly subject: string;
+  readonly version: number;
+}
 
 export interface RegistrySchema {
   readonly format: RegistryFormat;
   readonly text: string;
+  readonly references: readonly RegistryReference[];
 }
 
 /** What the page shows next to a message that was decoded. */
@@ -31,6 +46,9 @@ const REQUEST_TIMEOUT_MS = 10_000;
 /** How long a failed lookup is remembered, so a topic of unknown ids does not ask for each. */
 const FAILURE_MEMORY_MS = 30_000;
 const MAX_CACHED = 500;
+/** A schema that imports others is followed this deep and this wide, so a loop or a flood ends. */
+const MAX_REFERENCE_DEPTH = 8;
+const MAX_REFERENCED_FILES = 40;
 
 interface Parsed {
   readonly format: RegistryFormat;
@@ -57,6 +75,24 @@ function formatOf(type: unknown): RegistryFormat {
     default:
       return 'AVRO';
   }
+}
+
+function referencesOf(value: unknown): RegistryReference[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const found: RegistryReference[] = [];
+  for (const entry of value as unknown[]) {
+    const item = entry as { name?: unknown; subject?: unknown; version?: unknown };
+    if (
+      typeof item.name === 'string' &&
+      typeof item.subject === 'string' &&
+      typeof item.version === 'number'
+    ) {
+      found.push({ name: item.name, subject: item.subject, version: item.version });
+    }
+  }
+  return found;
 }
 
 /** Reads the index path of a Protobuf message (the zig-zag varints after the id). */
@@ -108,6 +144,18 @@ export class SchemaRegistry {
 
   /** Asks the registry for the schema of an id. */
   async schemaOf(id: number): Promise<RegistrySchema> {
+    return await this.read(`/schemas/ids/${id}`, `schema ${id}`);
+  }
+
+  /** Asks for a schema by the subject and version a reference names. */
+  async schemaOfSubject(subject: string, version: number): Promise<RegistrySchema> {
+    return await this.read(
+      `/subjects/${encodeURIComponent(subject)}/versions/${version}`,
+      `schema ${subject} version ${version}`,
+    );
+  }
+
+  private async read(path: string, what: string): Promise<RegistrySchema> {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       controller.abort();
@@ -119,21 +167,69 @@ export class SchemaRegistry {
       if (this.auth !== undefined) {
         headers.authorization = this.auth;
       }
-      const response = await this.fetcher(`${this.base}/schemas/ids/${id}`, {
+      const response = await this.fetcher(`${this.base}${path}`, {
         headers,
         signal: controller.signal,
       });
       if (!response.ok) {
-        throw new Error(`The registry answered ${response.status} for schema ${id}`);
+        throw new Error(`The registry answered ${response.status} for ${what}`);
       }
-      const body = (await response.json()) as { schema?: unknown; schemaType?: unknown };
+      const body = (await response.json()) as {
+        schema?: unknown;
+        schemaType?: unknown;
+        references?: unknown;
+      };
       if (typeof body.schema !== 'string') {
-        throw new Error(`The registry sent no schema for ${id}`);
+        throw new Error(`The registry sent no ${what}`);
       }
-      return { format: formatOf(body.schemaType), text: body.schema };
+      return {
+        format: formatOf(body.schemaType),
+        text: body.schema,
+        references: referencesOf(body.references),
+      };
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * The types of the files a Protobuf schema imports: the references the registry lists, one
+   * by one and the ones they list in turn. A file that cannot be read is left out, and its
+   * fields then show by number like before.
+   */
+  private async withImports(file: ProtoFile, schema: RegistrySchema): Promise<void> {
+    addWellKnownTypes(file);
+    const seen = new Set<string>();
+    let reads = 0;
+    const follow = async (
+      references: readonly RegistryReference[],
+      depth: number,
+    ): Promise<void> => {
+      for (const reference of references) {
+        const key = `${reference.subject}/${reference.version}`;
+        if (
+          seen.has(key) ||
+          isWellKnownImport(reference.name) ||
+          depth > MAX_REFERENCE_DEPTH ||
+          reads >= MAX_REFERENCED_FILES
+        ) {
+          continue;
+        }
+        seen.add(key);
+        reads += 1;
+        try {
+          const imported = await this.schemaOfSubject(reference.subject, reference.version);
+          if (imported.format !== 'PROTOBUF') {
+            continue;
+          }
+          addTypes(file, parseProto(imported.text));
+          await follow(imported.references, depth + 1);
+        } catch {
+          // An import that cannot be read only costs the names of its types.
+        }
+      }
+    };
+    await follow(schema.references, 1);
   }
 
   private async parsed(id: number): Promise<Parsed> {
@@ -153,7 +249,11 @@ export class SchemaRegistry {
           parsed = { format: 'AVRO', avro: parseAvroSchema(JSON.parse(schema.text)) };
           break;
         case 'PROTOBUF':
-          parsed = { format: 'PROTOBUF', proto: parseProto(schema.text) };
+          {
+            const proto = parseProto(schema.text);
+            await this.withImports(proto, schema);
+            parsed = { format: 'PROTOBUF', proto };
+          }
           break;
         case 'JSON':
           parsed = { format: 'JSON' };

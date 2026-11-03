@@ -30,6 +30,7 @@ import type {
   RabbitPermissionInfo,
   RabbitPolicyDeclaration,
   RabbitPolicyInfo,
+  RabbitVhostSettings,
   RabbitPublishRequest,
   RabbitQueueDeclaration,
   RabbitQueueInfo,
@@ -604,14 +605,27 @@ class ManagementSession implements RabbitSession {
   }
 
   async listPolicies(vhost: string): Promise<readonly RabbitPolicyInfo[]> {
-    const raw = await this.call('GET', `policies/${enc(vhost)}`);
-    return (Array.isArray(raw) ? raw : [])
-      .map(policyOf)
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const read = async (path: string, operator: boolean): Promise<RabbitPolicyInfo[]> => {
+      const raw = await this.call('GET', `${path}/${enc(vhost)}`);
+      return (Array.isArray(raw) ? raw : [])
+        .map(policyOf)
+        .map((policy) => (operator ? { ...policy, operator: true } : policy))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    };
+    const ordinary = await read('policies', false);
+    // A broker that does not know operator policies answers 404: it has none.
+    const operator = await read('operator-policies', true).catch((error: unknown) => {
+      if (error instanceof DbError && error.code === 'not-found') {
+        return [];
+      }
+      throw error;
+    });
+    return [...ordinary, ...operator];
   }
 
   async setPolicy(policy: RabbitPolicyDeclaration): Promise<void> {
-    await this.call('PUT', `policies/${enc(policy.vhost)}/${enc(policy.name)}`, {
+    const path = policy.operator === true ? 'operator-policies' : 'policies';
+    await this.call('PUT', `${path}/${enc(policy.vhost)}/${enc(policy.name)}`, {
       pattern: policy.pattern,
       definition: policy.definition,
       priority: policy.priority,
@@ -619,8 +633,9 @@ class ManagementSession implements RabbitSession {
     });
   }
 
-  async deletePolicy(vhost: string, name: string): Promise<void> {
-    await this.call('DELETE', `policies/${enc(vhost)}/${enc(name)}`);
+  async deletePolicy(vhost: string, name: string, operator = false): Promise<void> {
+    const path = operator ? 'operator-policies' : 'policies';
+    await this.call('DELETE', `${path}/${enc(vhost)}/${enc(name)}`);
   }
 
   async readCluster(): Promise<RabbitClusterInfo> {
@@ -653,6 +668,31 @@ class ManagementSession implements RabbitSession {
       .map((item) => asObject(item))
       .map((parameter) => ({ name: text(parameter.name), value: parameter.value }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async readVhostSettings(vhost: string): Promise<RabbitVhostSettings> {
+    const raw = asObject(await this.call('GET', `vhosts/${enc(vhost)}`));
+    // The broker words the tags as a list, or as one comma-separated text on older versions.
+    const tags = Array.isArray(raw.tags)
+      ? raw.tags
+      : typeof raw.tags === 'string'
+        ? raw.tags.split(',')
+        : [];
+    return {
+      description: text(raw.description),
+      tags: tags.map((tag) => text(tag).trim()).filter((tag) => tag !== ''),
+      defaultQueueType: text(raw.default_queue_type),
+    };
+  }
+
+  async setVhostSettings(vhost: string, settings: RabbitVhostSettings): Promise<void> {
+    await this.call('PUT', `vhosts/${enc(vhost)}`, {
+      description: settings.description,
+      tags: settings.tags.join(','),
+      ...(settings.defaultQueueType === ''
+        ? {}
+        : { default_queue_type: settings.defaultQueueType }),
+    });
   }
 
   async listVhostLimits(vhost: string): Promise<RabbitVhostLimits> {

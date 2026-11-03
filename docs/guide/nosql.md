@@ -222,7 +222,9 @@ when the listener is encrypted.
   format and the id. A message the registry cannot explain (no zero byte, an unknown id, the
   registry is down) shows as the bytes it is. The bytes on the topic never change. The
   connection's user and password, if set, sign in to the registry with Basic. Protobuf is
-  read by the `.proto` text the registry keeps; a field whose type lives in an imported file
+  read by the `.proto` text the registry keeps, and the files it imports are read too (the
+  references the registry lists, and the well-known types such as `google.protobuf.Timestamp`),
+  so a field of an imported type decodes as that type; one whose file the registry cannot give
   shows by its number.
 - **Access rules (ACLs).** **Access Rules of Kafka…** on a connected connection lists who may
   (or may not) do what, and offers **New rule…**: who (`User:alice`, `User:*`), what it
@@ -264,6 +266,11 @@ tree shows only that virtual host, which is what a user who may see just one nee
   routing key and arguments (a JSON object). **Remove the binding** asks first. The binding every
   queue has to the default exchange is the broker's and cannot be removed; the default exchange
   cannot be bound.
+- **Settings of a virtual host** (a block on its Administration page): the description, the tags
+  and the **default queue type** (classic, quorum or stream) that a queue declared without a type
+  takes. **Operator policies** are listed with the policies and marked *operator*; tick
+  **Operator policy** in the form to save one. An operator policy is kept apart from the ordinary
+  ones and caps what they give; a broker that knows none just lists the ordinary ones.
 - **Administration** (the last item of a virtual host, with a shield) opens the page of the virtual
   host: its **connections** (client, user, address, state, channels, since when, traffic; close one
   after a question), its **users and permissions** (tags, and the three patterns of names each user
@@ -310,5 +317,3 @@ tree shows only that virtual host, which is what a user who may see just one nee
   dead-letter exchange and routing key, delivery limit, queue mode, alternate exchange), with the
   keys that fit what the policy applies to; any other key goes in the box of JSON below the fields,
   and nothing a policy already has is lost when you edit it.
-
-Not here (yet): parameters of a single virtual host and operator policies.

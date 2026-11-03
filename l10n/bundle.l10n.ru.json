@@ -2037,5 +2037,10 @@
   "Clients over the limit are refused.": "Клиентам сверх лимита брокер откажет.",
   "the proxy host is empty": "не указан хост прокси",
   "the proxy port must be 1–65535": "порт прокси — число от 1 до 65535",
-  "New Server": "Новый сервер"
+  "New Server": "Новый сервер",
+  "Save the operator policy \"{0}\" in the virtual host \"{1}\"?": "Сохранить политику оператора «{0}» в виртуальном хосте «{1}»?",
+  "Delete the operator policy \"{0}\"?": "Удалить политику оператора «{0}»?",
+  "Change the settings of the virtual host \"{0}\"?": "Изменить настройки виртуального хоста «{0}»?",
+  "A tag is one word, without commas or spaces": "Метка — одно слово, без запятых и пробелов",
+  "The default queue type is classic, quorum or stream": "Тип очереди по умолчанию — classic, quorum или stream"
 }
